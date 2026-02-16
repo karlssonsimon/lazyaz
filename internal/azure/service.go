@@ -1,0 +1,637 @@
+package azure
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+)
+
+const hierarchyDelimiter = "/"
+
+type Account struct {
+	Name           string
+	SubscriptionID string
+	ResourceGroup  string
+	BlobEndpoint   string
+}
+
+type ContainerInfo struct {
+	Name         string
+	LastModified time.Time
+}
+
+type BlobEntry struct {
+	Name          string
+	IsPrefix      bool
+	Size          int64
+	ContentType   string
+	LastModified  time.Time
+	AccessTier    string
+	MetadataCount int
+}
+
+type BlobDownloadResult struct {
+	BlobName    string
+	Destination string
+	Err         error
+}
+
+type Service struct {
+	cred             azcore.TokenCredential
+	mu               sync.Mutex
+	aadClients       map[string]*service.Client
+	sharedKeyClients map[string]*service.Client
+}
+
+func NewDefaultCredential() (azcore.TokenCredential, error) {
+	return azidentity.NewDefaultAzureCredential(nil)
+}
+
+func NewService(cred azcore.TokenCredential) *Service {
+	return &Service{
+		cred:             cred,
+		aadClients:       make(map[string]*service.Client),
+		sharedKeyClients: make(map[string]*service.Client),
+	}
+}
+
+func (s *Service) DiscoverAccounts(ctx context.Context) ([]Account, error) {
+	subscriptionsClient, err := armsubscriptions.NewClient(s.cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create subscriptions client: %w", err)
+	}
+
+	accounts := make([]Account, 0)
+	subscriptionsPager := subscriptionsClient.NewListPager(nil)
+	for subscriptionsPager.More() {
+		subscriptionsPage, err := subscriptionsPager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list subscriptions: %w", err)
+		}
+
+		for _, subscription := range subscriptionsPage.Value {
+			if subscription == nil || subscription.SubscriptionID == nil {
+				continue
+			}
+
+			storageAccountsClient, err := armstorage.NewAccountsClient(*subscription.SubscriptionID, s.cred, nil)
+			if err != nil {
+				return nil, fmt.Errorf("create accounts client for subscription %s: %w", *subscription.SubscriptionID, err)
+			}
+
+			storageAccountsPager := storageAccountsClient.NewListPager(nil)
+			for storageAccountsPager.More() {
+				storageAccountsPage, err := storageAccountsPager.NextPage(ctx)
+				if err != nil {
+					return nil, fmt.Errorf("list storage accounts for subscription %s: %w", *subscription.SubscriptionID, err)
+				}
+
+				for _, account := range storageAccountsPage.Value {
+					if account == nil || account.Name == nil || account.Properties == nil || account.Properties.PrimaryEndpoints == nil || account.Properties.PrimaryEndpoints.Blob == nil {
+						continue
+					}
+
+					accounts = append(accounts, Account{
+						Name:           *account.Name,
+						SubscriptionID: *subscription.SubscriptionID,
+						ResourceGroup:  parseResourceGroup(account.ID),
+						BlobEndpoint:   strings.TrimRight(*account.Properties.PrimaryEndpoints.Blob, "/"),
+					})
+				}
+			}
+		}
+	}
+
+	sort.Slice(accounts, func(i, j int) bool {
+		if accounts[i].Name == accounts[j].Name {
+			if accounts[i].SubscriptionID == accounts[j].SubscriptionID {
+				return accounts[i].ResourceGroup < accounts[j].ResourceGroup
+			}
+			return accounts[i].SubscriptionID < accounts[j].SubscriptionID
+		}
+		return accounts[i].Name < accounts[j].Name
+	})
+
+	return accounts, nil
+}
+
+func (s *Service) ListContainers(ctx context.Context, account Account) ([]ContainerInfo, error) {
+	serviceClient, err := s.getAADServiceClient(account.BlobEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	containers, err := s.listContainersWithClient(ctx, serviceClient, account)
+	if err == nil {
+		return containers, nil
+	}
+	if !isDataPlaneAuthError(err) {
+		return nil, err
+	}
+
+	fallbackClient, fallbackErr := s.getSharedKeyServiceClient(ctx, account)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("list containers for %s with AAD failed: %v; shared key fallback failed: %w", account.Name, err, fallbackErr)
+	}
+
+	containers, err = s.listContainersWithClient(ctx, fallbackClient, account)
+	if err != nil {
+		return nil, fmt.Errorf("list containers for %s with shared key fallback: %w", account.Name, err)
+	}
+
+	return containers, nil
+}
+
+func (s *Service) listContainersWithClient(ctx context.Context, serviceClient *service.Client, account Account) ([]ContainerInfo, error) {
+
+	containers := make([]ContainerInfo, 0)
+	pager := serviceClient.NewListContainersPager(nil)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list containers for %s: %w", account.Name, err)
+		}
+
+		for _, containerItem := range page.ContainerItems {
+			if containerItem.Name == nil {
+				continue
+			}
+
+			containerInfo := ContainerInfo{Name: *containerItem.Name}
+			if containerItem.Properties != nil && containerItem.Properties.LastModified != nil {
+				containerInfo.LastModified = *containerItem.Properties.LastModified
+			}
+
+			containers = append(containers, containerInfo)
+		}
+	}
+
+	sort.Slice(containers, func(i, j int) bool {
+		return containers[i].Name < containers[j].Name
+	})
+
+	return containers, nil
+}
+
+func (s *Service) ListBlobs(ctx context.Context, account Account, containerName, prefix string) ([]BlobEntry, error) {
+	serviceClient, err := s.getAADServiceClient(account.BlobEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	entries, err := s.listBlobsWithClient(ctx, serviceClient, account, containerName, prefix)
+	if err == nil {
+		return entries, nil
+	}
+	if !isDataPlaneAuthError(err) {
+		return nil, err
+	}
+
+	fallbackClient, fallbackErr := s.getSharedKeyServiceClient(ctx, account)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("list blobs for %s/%s with AAD failed: %v; shared key fallback failed: %w", account.Name, containerName, err, fallbackErr)
+	}
+
+	entries, err = s.listBlobsWithClient(ctx, fallbackClient, account, containerName, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("list blobs for %s/%s with shared key fallback: %w", account.Name, containerName, err)
+	}
+
+	return entries, nil
+}
+
+func (s *Service) listBlobsWithClient(ctx context.Context, serviceClient *service.Client, account Account, containerName, prefix string) ([]BlobEntry, error) {
+
+	containerClient := serviceClient.NewContainerClient(containerName)
+
+	options := &container.ListBlobsHierarchyOptions{}
+	if prefix != "" {
+		options.Prefix = &prefix
+	}
+
+	entries := make([]BlobEntry, 0)
+	pager := containerClient.NewListBlobsHierarchyPager(hierarchyDelimiter, options)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list blobs for %s/%s with prefix %q: %w", account.Name, containerName, prefix, err)
+		}
+
+		for _, blobPrefix := range page.Segment.BlobPrefixes {
+			if blobPrefix.Name == nil {
+				continue
+			}
+
+			entries = append(entries, BlobEntry{
+				Name:     *blobPrefix.Name,
+				IsPrefix: true,
+			})
+		}
+
+		for _, blobItem := range page.Segment.BlobItems {
+			if blobItem.Name == nil {
+				continue
+			}
+
+			entry := BlobEntry{
+				Name: *blobItem.Name,
+			}
+			if blobItem.Properties != nil {
+				if blobItem.Properties.ContentLength != nil {
+					entry.Size = *blobItem.Properties.ContentLength
+				}
+				if blobItem.Properties.ContentType != nil {
+					entry.ContentType = *blobItem.Properties.ContentType
+				}
+				if blobItem.Properties.LastModified != nil {
+					entry.LastModified = *blobItem.Properties.LastModified
+				}
+				if blobItem.Properties.AccessTier != nil {
+					entry.AccessTier = string(*blobItem.Properties.AccessTier)
+				}
+			}
+			entry.MetadataCount = len(blobItem.Metadata)
+
+			entries = append(entries, entry)
+		}
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].IsPrefix != entries[j].IsPrefix {
+			return entries[i].IsPrefix
+		}
+		return entries[i].Name < entries[j].Name
+	})
+
+	return entries, nil
+}
+
+func (s *Service) SearchBlobsContains(ctx context.Context, account Account, containerName, query string, limit int) ([]BlobEntry, error) {
+	if strings.TrimSpace(query) == "" {
+		return nil, nil
+	}
+
+	serviceClient, err := s.getAADServiceClient(account.BlobEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := s.searchBlobsContainsWithClient(ctx, serviceClient, account, containerName, query, limit)
+	if err == nil {
+		return results, nil
+	}
+	if !isDataPlaneAuthError(err) {
+		return nil, err
+	}
+
+	fallbackClient, fallbackErr := s.getSharedKeyServiceClient(ctx, account)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("search blobs in %s/%s with AAD failed: %v; shared key fallback failed: %w", account.Name, containerName, err, fallbackErr)
+	}
+
+	results, err = s.searchBlobsContainsWithClient(ctx, fallbackClient, account, containerName, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("search blobs in %s/%s with shared key fallback: %w", account.Name, containerName, err)
+	}
+
+	return results, nil
+}
+
+func (s *Service) searchBlobsContainsWithClient(ctx context.Context, serviceClient *service.Client, account Account, containerName, query string, limit int) ([]BlobEntry, error) {
+
+	containerClient := serviceClient.NewContainerClient(containerName)
+	needle := strings.ToLower(query)
+
+	results := make([]BlobEntry, 0)
+	pager := containerClient.NewListBlobsFlatPager(nil)
+	for pager.More() {
+		if limit > 0 && len(results) >= limit {
+			break
+		}
+
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("search blobs in %s/%s for %q: %w", account.Name, containerName, query, err)
+		}
+
+		for _, blobItem := range page.Segment.BlobItems {
+			if blobItem.Name == nil {
+				continue
+			}
+
+			if !strings.Contains(strings.ToLower(*blobItem.Name), needle) {
+				continue
+			}
+
+			entry := BlobEntry{Name: *blobItem.Name}
+			if blobItem.Properties != nil {
+				if blobItem.Properties.ContentLength != nil {
+					entry.Size = *blobItem.Properties.ContentLength
+				}
+				if blobItem.Properties.ContentType != nil {
+					entry.ContentType = *blobItem.Properties.ContentType
+				}
+				if blobItem.Properties.LastModified != nil {
+					entry.LastModified = *blobItem.Properties.LastModified
+				}
+				if blobItem.Properties.AccessTier != nil {
+					entry.AccessTier = string(*blobItem.Properties.AccessTier)
+				}
+			}
+			entry.MetadataCount = len(blobItem.Metadata)
+
+			results = append(results, entry)
+
+			if limit > 0 && len(results) >= limit {
+				break
+			}
+		}
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Name < results[j].Name
+	})
+
+	return results, nil
+}
+
+func (s *Service) DownloadBlobs(ctx context.Context, account Account, containerName string, blobNames []string, destinationRoot string) ([]BlobDownloadResult, error) {
+	if strings.TrimSpace(containerName) == "" {
+		return nil, fmt.Errorf("container name is required")
+	}
+	if strings.TrimSpace(destinationRoot) == "" {
+		return nil, fmt.Errorf("destination root is required")
+	}
+
+	names := dedupeAndSortBlobNames(blobNames)
+	if len(names) == 0 {
+		return nil, fmt.Errorf("no blob names provided")
+	}
+
+	root := filepath.Clean(destinationRoot)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return nil, fmt.Errorf("create destination root %s: %w", root, err)
+	}
+
+	aadClient, err := s.getAADServiceClient(account.BlobEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]BlobDownloadResult, 0, len(names))
+	var sharedKeyClient *service.Client
+	for _, blobName := range names {
+		if ctx.Err() != nil {
+			return results, ctx.Err()
+		}
+
+		destinationPath, pathErr := destinationPathForBlob(root, blobName)
+		if pathErr != nil {
+			results = append(results, BlobDownloadResult{BlobName: blobName, Err: pathErr})
+			continue
+		}
+
+		downloadErr := s.downloadBlobWithClient(ctx, aadClient, containerName, blobName, destinationPath)
+		if downloadErr != nil && isDataPlaneAuthError(downloadErr) {
+			if sharedKeyClient == nil {
+				var sharedErr error
+				sharedKeyClient, sharedErr = s.getSharedKeyServiceClient(ctx, account)
+				if sharedErr != nil {
+					downloadErr = fmt.Errorf("aad auth failed: %v; shared key fallback failed: %w", downloadErr, sharedErr)
+				}
+			}
+			if sharedKeyClient != nil {
+				downloadErr = s.downloadBlobWithClient(ctx, sharedKeyClient, containerName, blobName, destinationPath)
+			}
+		}
+
+		results = append(results, BlobDownloadResult{
+			BlobName:    blobName,
+			Destination: destinationPath,
+			Err:         downloadErr,
+		})
+	}
+
+	return results, nil
+}
+
+func (s *Service) downloadBlobWithClient(ctx context.Context, serviceClient *service.Client, containerName, blobName, destinationPath string) error {
+	containerClient := serviceClient.NewContainerClient(containerName)
+	blobClient := containerClient.NewBlobClient(blobName)
+
+	downloadResponse, err := blobClient.DownloadStream(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("download blob %s: %w", blobName, err)
+	}
+	defer downloadResponse.Body.Close()
+
+	if err := os.MkdirAll(filepath.Dir(destinationPath), 0o755); err != nil {
+		return fmt.Errorf("create destination directory for %s: %w", destinationPath, err)
+	}
+
+	file, err := os.Create(destinationPath)
+	if err != nil {
+		return fmt.Errorf("create destination file %s: %w", destinationPath, err)
+	}
+
+	if _, err := io.Copy(file, downloadResponse.Body); err != nil {
+		file.Close()
+		_ = os.Remove(destinationPath)
+		return fmt.Errorf("write blob %s to %s: %w", blobName, destinationPath, err)
+	}
+
+	if err := file.Close(); err != nil {
+		_ = os.Remove(destinationPath)
+		return fmt.Errorf("close destination file %s: %w", destinationPath, err)
+	}
+
+	return nil
+}
+
+func dedupeAndSortBlobNames(blobNames []string) []string {
+	if len(blobNames) == 0 {
+		return nil
+	}
+
+	uniqueNames := make(map[string]struct{}, len(blobNames))
+	for _, name := range blobNames {
+		trimmed := strings.TrimSpace(name)
+		if trimmed == "" {
+			continue
+		}
+		uniqueNames[trimmed] = struct{}{}
+	}
+
+	names := make([]string, 0, len(uniqueNames))
+	for name := range uniqueNames {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func destinationPathForBlob(root, blobName string) (string, error) {
+	normalized := strings.TrimSpace(strings.ReplaceAll(blobName, "\\", "/"))
+	normalized = strings.TrimPrefix(normalized, "/")
+	if normalized == "" {
+		return "", fmt.Errorf("blob name is empty")
+	}
+
+	relativePath := filepath.Clean(filepath.FromSlash(normalized))
+	if relativePath == "." || relativePath == ".." {
+		return "", fmt.Errorf("invalid blob name %q", blobName)
+	}
+	if strings.HasPrefix(relativePath, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("blob name escapes destination root: %q", blobName)
+	}
+
+	cleanRoot := filepath.Clean(root)
+	destinationPath := filepath.Join(cleanRoot, relativePath)
+	relativeToRoot, err := filepath.Rel(cleanRoot, destinationPath)
+	if err != nil {
+		return "", fmt.Errorf("compute destination path for %q: %w", blobName, err)
+	}
+	if relativeToRoot == ".." || strings.HasPrefix(relativeToRoot, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("blob name escapes destination root: %q", blobName)
+	}
+
+	return destinationPath, nil
+}
+
+func (s *Service) getAADServiceClient(blobEndpoint string) (*service.Client, error) {
+	endpoint := strings.TrimRight(strings.TrimSpace(blobEndpoint), "/")
+	if endpoint == "" {
+		return nil, fmt.Errorf("empty blob endpoint")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if client, ok := s.aadClients[endpoint]; ok {
+		return client, nil
+	}
+
+	client, err := service.NewClient(endpoint, s.cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create blob service client for endpoint %s: %w", endpoint, err)
+	}
+
+	s.aadClients[endpoint] = client
+	return client, nil
+}
+
+func (s *Service) getSharedKeyServiceClient(ctx context.Context, account Account) (*service.Client, error) {
+	if strings.TrimSpace(account.SubscriptionID) == "" || strings.TrimSpace(account.ResourceGroup) == "" || strings.TrimSpace(account.Name) == "" {
+		return nil, fmt.Errorf("insufficient account metadata for shared key fallback")
+	}
+
+	endpoint := strings.TrimRight(strings.TrimSpace(account.BlobEndpoint), "/")
+	if endpoint == "" {
+		return nil, fmt.Errorf("empty blob endpoint")
+	}
+
+	s.mu.Lock()
+	if client, ok := s.sharedKeyClients[endpoint]; ok {
+		s.mu.Unlock()
+		return client, nil
+	}
+	s.mu.Unlock()
+
+	accountsClient, err := armstorage.NewAccountsClient(account.SubscriptionID, s.cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create ARM accounts client for subscription %s: %w", account.SubscriptionID, err)
+	}
+
+	listKeysResponse, err := accountsClient.ListKeys(ctx, account.ResourceGroup, account.Name, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list keys for %s/%s: %w", account.ResourceGroup, account.Name, err)
+	}
+
+	keyValue, err := pickAccountKey(listKeysResponse.Keys)
+	if err != nil {
+		return nil, fmt.Errorf("select key for %s: %w", account.Name, err)
+	}
+
+	sharedKeyCredential, err := service.NewSharedKeyCredential(account.Name, keyValue)
+	if err != nil {
+		return nil, fmt.Errorf("create shared key credential for %s: %w", account.Name, err)
+	}
+
+	sharedKeyClient, err := service.NewClientWithSharedKeyCredential(endpoint, sharedKeyCredential, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create shared key service client for endpoint %s: %w", endpoint, err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if existing, ok := s.sharedKeyClients[endpoint]; ok {
+		return existing, nil
+	}
+
+	s.sharedKeyClients[endpoint] = sharedKeyClient
+	return sharedKeyClient, nil
+}
+
+func pickAccountKey(keys []*armstorage.AccountKey) (string, error) {
+	fallback := ""
+	for _, key := range keys {
+		if key == nil || key.Value == nil || *key.Value == "" {
+			continue
+		}
+
+		value := *key.Value
+		if key.Permissions != nil && *key.Permissions == armstorage.KeyPermissionFull {
+			return value, nil
+		}
+
+		if fallback == "" {
+			fallback = value
+		}
+	}
+
+	if fallback == "" {
+		return "", fmt.Errorf("no usable storage account key returned")
+	}
+
+	return fallback, nil
+}
+
+func isDataPlaneAuthError(err error) bool {
+	var responseErr *azcore.ResponseError
+	if !errors.As(err, &responseErr) {
+		return false
+	}
+
+	return responseErr.StatusCode == http.StatusUnauthorized || responseErr.StatusCode == http.StatusForbidden
+}
+
+func parseResourceGroup(resourceID *string) string {
+	if resourceID == nil {
+		return ""
+	}
+
+	segments := strings.Split(*resourceID, "/")
+	for i := 0; i < len(segments)-1; i++ {
+		if strings.EqualFold(segments[i], "resourceGroups") {
+			return segments[i+1]
+		}
+	}
+
+	return ""
+}

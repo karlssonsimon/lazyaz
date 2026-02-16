@@ -1,0 +1,25 @@
+# Binaries and build outputs
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Coverage and profiling
+*.coverprofile
+coverage.out
+cpu.prof
+mem.prof
+
+# Local downloads from blob actions
+downloads/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
