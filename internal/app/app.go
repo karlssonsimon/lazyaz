@@ -25,6 +25,7 @@ const (
 	accountsPane
 	containersPane
 	blobsPane
+	previewPane
 )
 
 const (
@@ -68,6 +69,8 @@ type Model struct {
 	prefix          string
 	blobLoadAll     bool
 	blobSearchQuery string
+	preview         previewState
+	pendingPreviewG bool
 
 	loading bool
 	status  string
@@ -111,6 +114,19 @@ type blobsDownloadedMsg struct {
 	failed          int
 	failures        []string
 	err             error
+}
+
+type previewWindowLoadedMsg struct {
+	requestID   int
+	account     azure.Account
+	container   string
+	blobName    string
+	blobSize    int64
+	contentType string
+	windowStart int64
+	cursor      int64
+	data        []byte
+	err         error
 }
 
 func NewModel(svc *azure.Service) Model {
@@ -179,6 +195,7 @@ func NewModel(svc *azure.Service) Model {
 		containersList:    containers,
 		blobsList:         blobs,
 		markedBlobs:       make(map[string]azure.BlobEntry),
+		preview:           newPreviewState(),
 		focus:             subscriptionsPane,
 		status:            "Loading Azure subscriptions...",
 		loading:           true,
@@ -228,6 +245,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "No subscriptions found. Verify az login context and tenant access."
 			m.clearBlobSelectionState()
 			m.resetBlobLoadState()
+			m.resetPreviewState()
 			m.accounts = nil
 			m.containers = nil
 			m.blobs = nil
@@ -249,6 +267,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.hasAccount = false
 		m.hasContainer = false
 		m.resetBlobLoadState()
+		m.resetPreviewState()
 		m.status = fmt.Sprintf("Loaded %d subscriptions. Select one and press Enter.", len(msg.subscriptions))
 		return m, nil
 
@@ -276,6 +295,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = fmt.Sprintf("No storage accounts found in %s", subscriptionDisplayName(m.currentSub))
 			m.clearBlobSelectionState()
 			m.resetBlobLoadState()
+			m.resetPreviewState()
 			m.containers = nil
 			m.blobs = nil
 			m.containersList.ResetFilter()
@@ -292,6 +312,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentAccount = azure.Account{}
 		m.clearBlobSelectionState()
 		m.resetBlobLoadState()
+		m.resetPreviewState()
 		m.containers = nil
 		m.blobs = nil
 		m.containersList.ResetFilter()
@@ -314,6 +335,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = fmt.Sprintf("Failed to load containers for %s", msg.account.Name)
 			m.clearBlobSelectionState()
 			m.resetBlobLoadState()
+			m.resetPreviewState()
 			m.containers = nil
 			m.blobs = nil
 			m.containersList.ResetFilter()
@@ -339,6 +361,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.prefix = ""
 			m.clearBlobSelectionState()
 			m.resetBlobLoadState()
+			m.resetPreviewState()
 			m.blobs = nil
 			m.blobsList.ResetFilter()
 			m.blobsList.SetItems(nil)
@@ -352,6 +375,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.prefix = ""
 		m.clearBlobSelectionState()
 		m.resetBlobLoadState()
+		m.resetPreviewState()
 		m.blobs = nil
 		m.blobsList.ResetFilter()
 		m.blobsList.SetItems(nil)
@@ -424,7 +448,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = fmt.Sprintf("Downloaded %d blob(s) to %s", msg.downloaded, msg.destinationRoot)
 		return m, nil
 
+	case previewWindowLoadedMsg:
+		return m.handlePreviewWindowLoaded(msg)
+
 	case tea.KeyMsg:
+		if m.preview.open && m.focus == previewPane {
+			return m.handlePreviewKey(msg)
+		}
+
 		focusedFilterActive := m.focusedListSettingFilter()
 		if m.focus == blobsPane && m.visualLineMode && msg.String() == "/" {
 			m.visualLineMode = false
@@ -536,6 +567,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.containersList, cmd = m.containersList.Update(msg)
 	case blobsPane:
 		m.blobsList, cmd = m.blobsList.Update(msg)
+	case previewPane:
+		cmd = nil
 	}
 
 	if markVisualAfterListUpdate && m.focus == blobsPane && m.visualLineMode {
@@ -605,6 +638,9 @@ func (m Model) View() string {
 	m.accountsList.Title = m.accountsPaneTitle()
 	m.containersList.Title = m.containersPaneTitle()
 	m.blobsList.Title = m.blobsPaneTitle()
+	if m.preview.open {
+		m.preview.viewport.SetContent(m.preview.rendered)
+	}
 
 	clampListSelection(&m.subscriptionsList)
 	clampListSelection(&m.accountsList)
@@ -615,11 +651,16 @@ func (m Model) View() string {
 	accountsView := m.accountsList.View()
 	containersView := m.containersList.View()
 	blobsView := m.blobsList.View()
+	previewView := ""
+	if m.preview.open {
+		previewView = m.preview.viewport.View()
+	}
 
 	subscriptionsPaneStyle := paneStyle.Copy().MarginRight(1)
 	accountsPaneStyle := paneStyle.Copy().MarginRight(1)
 	containersPaneStyle := paneStyle.Copy().MarginRight(1)
 	blobsPaneStyle := paneStyle.Copy()
+	previewPaneStyle := paneStyle.Copy()
 
 	if m.focus == subscriptionsPane {
 		subscriptionsPaneStyle = focusedPaneStyle.Copy().MarginRight(1)
@@ -633,14 +674,26 @@ func (m Model) View() string {
 	if m.focus == blobsPane {
 		blobsPaneStyle = focusedPaneStyle.Copy()
 	}
+	if m.preview.open && m.focus == previewPane {
+		previewPaneStyle = focusedPaneStyle.Copy()
+	}
 
-	panes := lipgloss.JoinHorizontal(
-		lipgloss.Top,
+	paneParts := []string{
 		subscriptionsPaneStyle.Render(subscriptionsView),
 		accountsPaneStyle.Render(accountsView),
 		containersPaneStyle.Render(containersView),
 		blobsPaneStyle.Render(blobsView),
-	)
+	}
+	if m.preview.open {
+		previewTitle := m.preview.title()
+		previewPaneContent := lipgloss.JoinVertical(lipgloss.Left,
+			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(colorAccent)).Render(previewTitle),
+			previewView,
+		)
+		paneParts = append(paneParts, previewPaneStyle.Render(previewPaneContent))
+	}
+
+	panes := lipgloss.JoinHorizontal(lipgloss.Top, paneParts...)
 
 	filterHint := "Press / to filter the focused pane (fzf-style live filter)."
 	if m.focusedListSettingFilter() {
@@ -665,7 +718,7 @@ func (m Model) View() string {
 	}
 	statusLine := statusStyle.Width(m.width).Render(trimToWidth(statusText, m.width-2))
 
-	help := "keys: tab/shift+tab focus | / filter pane | enter/l/right open->focus right | h/left left/up | a toggle load-all blobs | space toggle mark | v/V visual-line range | D download selection | ctrl+d/ctrl+u half-page | backspace up folder | r refresh scope | d reload subscriptions | q quit"
+	help := "keys: tab/shift+tab focus | / filter pane | enter/l/right open->focus right | h/left left/up | a toggle load-all blobs | space toggle mark | v/V visual-line range | D download selection | preview: j/k ctrl+d/u gg G h | backspace up folder | r refresh scope | d reload subscriptions | q quit"
 	helpLine := helpStyle.Width(m.width).Render(trimToWidth(help, m.width-2))
 
 	parts := []string{header, headerMeta, panes, filterLine}
@@ -694,9 +747,21 @@ func (m *Model) resize() {
 	if con < 24 {
 		con = 24
 	}
-	blob := m.width - sub - acc - con - 12
+	marginBudget := 12
+	if m.preview.open {
+		marginBudget = 14
+	}
+	blob := m.width - sub - acc - con - marginBudget
+	preview := 0
+	if m.preview.open {
+		preview = blob / 2
+		blob = blob - preview
+	}
 	if blob < 40 {
 		blob = 40
+	}
+	if m.preview.open && preview < 40 {
+		preview = 40
 	}
 
 	height := m.height - 10
@@ -708,6 +773,10 @@ func (m *Model) resize() {
 	m.accountsList.SetSize(acc, height)
 	m.containersList.SetSize(con, height)
 	m.blobsList.SetSize(blob, height)
+	if m.preview.open {
+		m.preview.viewport.Width = preview
+		m.preview.viewport.Height = height
+	}
 }
 
 func (m *Model) nextFocus() {
@@ -717,7 +786,11 @@ func (m *Model) nextFocus() {
 		m.refreshBlobItems()
 	}
 	m.blurAllFilters()
-	m.focus = (m.focus + 1) % 4
+	count := 4
+	if m.preview.open {
+		count = 5
+	}
+	m.focus = (m.focus + 1) % count
 }
 
 func (m *Model) previousFocus() {
@@ -730,6 +803,9 @@ func (m *Model) previousFocus() {
 	m.focus--
 	if m.focus < 0 {
 		m.focus = 3
+		if m.preview.open {
+			m.focus = 4
+		}
 	}
 }
 
@@ -1158,6 +1234,9 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.status = fmt.Sprintf("Loading containers in %s", m.currentAccount.Name)
 		return m, tea.Batch(spinner.Tick, loadContainersCmd(m.service, m.currentAccount))
 	}
+	if m.focus == previewPane && m.preview.open {
+		return m.ensurePreviewWindowAtCursor()
+	}
 
 	m.loading = true
 	m.lastErr = ""
@@ -1177,6 +1256,10 @@ func (m Model) refresh() (Model, tea.Cmd) {
 
 func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
+	case previewPane:
+		m.focus = blobsPane
+		m.status = "Focus: blobs"
+		return m, nil
 	case blobsPane:
 		if m.hasContainer && !m.blobLoadAll && m.prefix != "" {
 			m.prefix = parentPrefix(m.prefix)
@@ -1222,6 +1305,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.prefix = ""
 		m.clearBlobSelectionState()
 		m.resetBlobLoadState()
+		m.resetPreviewState()
 		m.focus = accountsPane
 
 		m.accounts = nil
@@ -1255,6 +1339,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.prefix = ""
 		m.clearBlobSelectionState()
 		m.resetBlobLoadState()
+		m.resetPreviewState()
 		m.focus = containersPane
 
 		m.containers = nil
@@ -1282,6 +1367,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.prefix = ""
 		m.clearBlobSelectionState()
 		m.resetBlobLoadState()
+		m.resetPreviewState()
 		m.focus = blobsPane
 
 		m.blobs = nil
@@ -1313,16 +1399,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 		}
 
-		details := fmt.Sprintf("Blob %s | size: %s | modified: %s | type: %s | tier: %s | metadata: %d",
-			item.blob.Name,
-			humanSize(item.blob.Size),
-			formatTime(item.blob.LastModified),
-			emptyToDash(item.blob.ContentType),
-			emptyToDash(item.blob.AccessTier),
-			item.blob.MetadataCount,
-		)
-		m.status = details
-		return m, nil
+		return m.openPreview(item.blob)
 	}
 
 	return m, nil
@@ -1651,6 +1728,8 @@ func paneName(pane int) string {
 		return "containers"
 	case blobsPane:
 		return "blobs"
+	case previewPane:
+		return "preview"
 	default:
 		return "items"
 	}

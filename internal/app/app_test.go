@@ -67,3 +67,31 @@ func TestBlobSearchPrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestComputePreviewWindow(t *testing.T) {
+	tests := []struct {
+		name         string
+		totalSize    int64
+		cursor       int64
+		visibleLines int
+	}{
+		{name: "small blob", totalSize: 1024, cursor: 0, visibleLines: 20},
+		{name: "middle of large blob", totalSize: 10 * 1024 * 1024, cursor: 5 * 1024 * 1024, visibleLines: 30},
+		{name: "near end", totalSize: 10 * 1024 * 1024, cursor: 10*1024*1024 - 10, visibleLines: 25},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			start, count := computePreviewWindow(tc.totalSize, tc.cursor, tc.visibleLines)
+			if start < 0 {
+				t.Fatalf("expected non-negative start, got %d", start)
+			}
+			if count < 0 {
+				t.Fatalf("expected non-negative count, got %d", count)
+			}
+			if start+count > tc.totalSize {
+				t.Fatalf("window exceeds blob bounds: start=%d count=%d total=%d", start, count, tc.totalSize)
+			}
+		})
+	}
+}
