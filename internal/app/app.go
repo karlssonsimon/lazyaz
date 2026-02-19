@@ -606,6 +606,11 @@ func (m Model) View() string {
 	m.containersList.Title = m.containersPaneTitle()
 	m.blobsList.Title = m.blobsPaneTitle()
 
+	clampListSelection(&m.subscriptionsList)
+	clampListSelection(&m.accountsList)
+	clampListSelection(&m.containersList)
+	clampListSelection(&m.blobsList)
+
 	subscriptionsView := m.subscriptionsList.View()
 	accountsView := m.accountsList.View()
 	containersView := m.containersList.View()
@@ -789,6 +794,23 @@ func applyFilterState(l *list.Model) {
 	l.SetFilterState(list.FilterApplied)
 }
 
+func clampListSelection(l *list.Model) {
+	items := l.Items()
+	if len(items) == 0 {
+		l.Select(0)
+		return
+	}
+
+	idx := l.Index()
+	if idx < 0 {
+		l.Select(0)
+		return
+	}
+	if idx >= len(items) {
+		l.Select(len(items) - 1)
+	}
+}
+
 func (m *Model) clearBlobSelectionState() {
 	m.visualLineMode = false
 	m.visualAnchor = ""
@@ -808,6 +830,7 @@ func (m *Model) resetBlobLoadState() {
 
 func (m *Model) refreshBlobItems() {
 	m.blobsList.SetItems(blobsToItems(m.blobs, m.prefix, m.markedBlobs, m.visualSelectionNames()))
+	clampListSelection(&m.blobsList)
 }
 
 func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
