@@ -9,8 +9,10 @@ Small Azure Storage Explorer variant focused on Blob Storage, built with Bubble 
 - Multi-subscription and multi-account browsing
 - Container listing
 - Blob browsing with virtual folder navigation (`/` delimiter)
-- Blobs load only after opening a container (no auto-open on account switch)
-- Live fuzzy filtering in all panes (accounts, containers, blobs) with `/`
+- Blob load modes: hierarchical browse by default, optional full container load on demand
+- Blobs load a capped initial subset on container open; use prefix search to narrow or `a` for full load
+- Live fuzzy filtering in subscriptions/accounts/containers and in blobs when full-load mode is active
+- Prefix search in blobs pane when not in full-load mode (press `/`, type prefix, `enter`; server-side, limited)
 - Blob multi-selection in blob pane: `space` toggles mark, `v` enters visual line marking mode
 - Download marked blobs with `D` to `downloads/<account>/<container>/...`
 - Auth mode similar to Storage Explorer: Azure AD first, Shared Key fallback via ARM `ListKeys`
@@ -36,6 +38,7 @@ go run ./cmd/azblob-tui
 - `ctrl+d` / `ctrl+u`: scroll half-page down/up in the focused pane
 - `backspace`: go to parent folder in blobs
 - `/`: filter the focused pane live (fzf-style), `enter` applies and exits filter input
+- `a`: toggle blob load-all mode for current container
 - `space`: toggle mark on current blob
 - `v` / `V`: visual line mode in blobs (move to mark multiple)
 - `D`: download all marked blobs (or current blob if none marked)
@@ -47,6 +50,7 @@ go run ./cmd/azblob-tui
 
 - This tool is Blob-only for now.
 - Filtering is local to the currently loaded list in each pane.
+- In blobs pane: default mode uses server-side prefix search; full-load mode uses local fuzzy filtering.
 - Discovery uses ARM list APIs (subscriptions -> storage accounts), while browsing uses Blob data-plane APIs.
 - Shared Key fallback requires permission to list storage account keys and that Shared Key access is allowed on the account.
 - Marked selection is container-scoped and intentionally action-oriented so more bulk actions can be added later.

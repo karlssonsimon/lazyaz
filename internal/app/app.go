@@ -17,6 +17,8 @@ import (
 )
 
 const defaultDownloadRoot = "downloads"
+const defaultBlobPrefixSearchLimit = 500
+const defaultHierarchyBlobLoadLimit = 500
 
 const (
 	subscriptionsPane = iota
@@ -64,6 +66,8 @@ type Model struct {
 	hasContainer    bool
 	containerName   string
 	prefix          string
+	blobLoadAll     bool
+	blobSearchQuery string
 
 	loading bool
 	status  string
@@ -94,6 +98,8 @@ type blobsLoadedMsg struct {
 	account   azure.Account
 	container string
 	prefix    string
+	loadAll   bool
+	query     string
 	blobs     []azure.BlobEntry
 	err       error
 }
@@ -221,6 +227,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hasContainer = false
 			m.status = "No subscriptions found. Verify az login context and tenant access."
 			m.clearBlobSelectionState()
+			m.resetBlobLoadState()
 			m.accounts = nil
 			m.containers = nil
 			m.blobs = nil
@@ -241,6 +248,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentSub = azure.Subscription{}
 		m.hasAccount = false
 		m.hasContainer = false
+		m.resetBlobLoadState()
 		m.status = fmt.Sprintf("Loaded %d subscriptions. Select one and press Enter.", len(msg.subscriptions))
 		return m, nil
 
@@ -267,6 +275,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hasContainer = false
 			m.status = fmt.Sprintf("No storage accounts found in %s", subscriptionDisplayName(m.currentSub))
 			m.clearBlobSelectionState()
+			m.resetBlobLoadState()
 			m.containers = nil
 			m.blobs = nil
 			m.containersList.ResetFilter()
@@ -282,6 +291,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.hasAccount = false
 		m.currentAccount = azure.Account{}
 		m.clearBlobSelectionState()
+		m.resetBlobLoadState()
 		m.containers = nil
 		m.blobs = nil
 		m.containersList.ResetFilter()
@@ -303,6 +313,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load containers for %s", msg.account.Name)
 			m.clearBlobSelectionState()
+			m.resetBlobLoadState()
 			m.containers = nil
 			m.blobs = nil
 			m.containersList.ResetFilter()
@@ -327,6 +338,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.containerName = ""
 			m.prefix = ""
 			m.clearBlobSelectionState()
+			m.resetBlobLoadState()
 			m.blobs = nil
 			m.blobsList.ResetFilter()
 			m.blobsList.SetItems(nil)
@@ -339,6 +351,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.containerName = ""
 		m.prefix = ""
 		m.clearBlobSelectionState()
+		m.resetBlobLoadState()
 		m.blobs = nil
 		m.blobsList.ResetFilter()
 		m.blobsList.SetItems(nil)
@@ -356,11 +369,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.prefix != msg.prefix {
 			return m, nil
 		}
+		if m.blobLoadAll != msg.loadAll {
+			return m, nil
+		}
+		if m.blobSearchQuery != msg.query {
+			return m, nil
+		}
 
 		m.loading = false
 		if msg.err != nil {
 			m.lastErr = msg.err.Error()
-			m.status = fmt.Sprintf("Failed to browse blobs in %s/%s", msg.account.Name, msg.container)
+			m.status = fmt.Sprintf("Failed to load blobs in %s/%s", msg.account.Name, msg.container)
 			m.visualLineMode = false
 			m.visualAnchor = ""
 			m.blobs = nil
@@ -377,7 +396,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.blobsList.ResetFilter()
 		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(msg.blobs))
 		m.refreshBlobItems()
-		m.status = fmt.Sprintf("%d entries in %s/%s under %q", len(msg.blobs), msg.account.Name, msg.container, msg.prefix)
+		if msg.loadAll {
+			m.status = fmt.Sprintf("Loaded all %d blobs in %s/%s", len(msg.blobs), msg.account.Name, msg.container)
+		} else if msg.query != "" {
+			effectivePrefix := blobSearchPrefix(m.prefix, msg.query)
+			m.status = fmt.Sprintf("Found %d blobs by prefix %q in %s/%s", len(msg.blobs), effectivePrefix, msg.account.Name, msg.container)
+		} else {
+			m.status = fmt.Sprintf("Loaded %d entries (max %d) in %s/%s under %q", len(msg.blobs), defaultHierarchyBlobLoadLimit, msg.account.Name, msg.container, msg.prefix)
+		}
 		return m, nil
 
 	case blobsDownloadedMsg:
@@ -423,6 +449,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == blobsPane && !focusedFilterActive {
 				return m.startMarkedAction("download")
 			}
+		case "a", "A":
+			if m.focus == blobsPane && !focusedFilterActive {
+				return m.toggleBlobLoadAllMode()
+			}
 		case "v", "V":
 			if m.focus == blobsPane && !focusedFilterActive {
 				m.toggleVisualLineMode()
@@ -464,9 +494,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			if focusedFilterActive {
-				m.commitFocusedFilter()
-				m.status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
-				return m, nil
+				cmd := m.commitFocusedFilter()
+				return m, cmd
 			}
 			return m.handleEnter()
 		case "l":
@@ -487,11 +516,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "backspace":
 			if !focusedFilterActive {
-				if m.focus == blobsPane && m.hasContainer && m.prefix != "" {
+				if m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != "" {
 					m.prefix = parentPrefix(m.prefix)
+					m.blobSearchQuery = ""
 					m.loading = true
-					m.status = fmt.Sprintf("Browsing %q", m.prefix)
-					return m, tea.Batch(spinner.Tick, loadBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix))
+					m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+					return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 				}
 			}
 		}
@@ -609,7 +639,11 @@ func (m Model) View() string {
 
 	filterHint := "Press / to filter the focused pane (fzf-style live filter)."
 	if m.focusedListSettingFilter() {
-		filterHint = fmt.Sprintf("Filtering %s: type to narrow, up/down to move, Enter applies filter.", paneName(m.focus))
+		if m.focus == blobsPane && !m.blobLoadAll {
+			filterHint = "Blob search mode: type a prefix, Enter runs server-side prefix search."
+		} else {
+			filterHint = fmt.Sprintf("Filtering %s: type to narrow, up/down to move, Enter applies filter.", paneName(m.focus))
+		}
 	} else if m.focus == blobsPane && m.visualLineMode {
 		filterHint = "Visual mode: move to select a line range, Space toggles persistent marks, D downloads selection, v/V exits."
 	}
@@ -626,7 +660,7 @@ func (m Model) View() string {
 	}
 	statusLine := statusStyle.Width(m.width).Render(trimToWidth(statusText, m.width-2))
 
-	help := "keys: tab/shift+tab focus | / filter pane | enter/l/right open->focus right | h/left left/up | space toggle mark | v/V visual-line range | D download selection | ctrl+d/ctrl+u half-page | backspace up folder | r refresh scope | d reload subscriptions | q quit"
+	help := "keys: tab/shift+tab focus | / filter pane | enter/l/right open->focus right | h/left left/up | a toggle load-all blobs | space toggle mark | v/V visual-line range | D download selection | ctrl+d/ctrl+u half-page | backspace up folder | r refresh scope | d reload subscriptions | q quit"
 	helpLine := helpStyle.Width(m.width).Render(trimToWidth(help, m.width-2))
 
 	parts := []string{header, headerMeta, panes, filterLine}
@@ -701,19 +735,50 @@ func (m *Model) blurAllFilters() {
 	m.blobsList.FilterInput.Blur()
 }
 
-func (m *Model) commitFocusedFilter() {
+func (m *Model) commitFocusedFilter() tea.Cmd {
 	m.blurAllFilters()
 
 	switch m.focus {
 	case subscriptionsPane:
 		applyFilterState(&m.subscriptionsList)
+		m.status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
+		return nil
 	case accountsPane:
 		applyFilterState(&m.accountsList)
+		m.status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
+		return nil
 	case containersPane:
 		applyFilterState(&m.containersList)
+		m.status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
+		return nil
 	case blobsPane:
-		applyFilterState(&m.blobsList)
+		if !m.hasContainer {
+			m.status = "Open a container before searching blobs"
+			return nil
+		}
+
+		if m.blobLoadAll {
+			applyFilterState(&m.blobsList)
+			m.status = "Filter applied for blobs"
+			return nil
+		}
+
+		query := strings.TrimSpace(m.blobsList.FilterValue())
+		if query == "" {
+			m.blobsList.ResetFilter()
+			m.blobSearchQuery = ""
+			m.loading = true
+			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+			return tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+		}
+
+		m.blobSearchQuery = query
+		m.loading = true
+		m.status = fmt.Sprintf("Searching blobs by prefix %q...", blobSearchPrefix(m.prefix, query))
+		return tea.Batch(spinner.Tick, searchBlobsByPrefixCmd(m.service, m.currentAccount, m.containerName, m.prefix, query, defaultBlobPrefixSearchLimit))
 	}
+
+	return nil
 }
 
 func applyFilterState(l *list.Model) {
@@ -736,8 +801,35 @@ func (m *Model) clearBlobSelectionState() {
 	}
 }
 
+func (m *Model) resetBlobLoadState() {
+	m.blobLoadAll = false
+	m.blobSearchQuery = ""
+}
+
 func (m *Model) refreshBlobItems() {
 	m.blobsList.SetItems(blobsToItems(m.blobs, m.prefix, m.markedBlobs, m.visualSelectionNames()))
+}
+
+func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
+	if !m.hasContainer {
+		m.status = "Open a container before loading blobs"
+		return m, nil
+	}
+
+	m.blobsList.ResetFilter()
+	m.blobSearchQuery = ""
+	m.loading = true
+	m.lastErr = ""
+
+	if m.blobLoadAll {
+		m.blobLoadAll = false
+		m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+		return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+	}
+
+	m.blobLoadAll = true
+	m.status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
+	return m, tea.Batch(spinner.Tick, loadAllBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix))
 }
 
 func (m *Model) toggleVisualLineMode() {
@@ -1046,18 +1138,29 @@ func (m Model) refresh() (Model, tea.Cmd) {
 
 	m.loading = true
 	m.lastErr = ""
-	m.status = fmt.Sprintf("Browsing %s/%s", m.currentAccount.Name, m.containerName)
-	return m, tea.Batch(spinner.Tick, loadBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix))
+	if m.blobLoadAll {
+		m.status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
+		return m, tea.Batch(spinner.Tick, loadAllBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix))
+	}
+	if m.blobSearchQuery != "" {
+		effectivePrefix := blobSearchPrefix(m.prefix, m.blobSearchQuery)
+		m.status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
+		return m, tea.Batch(spinner.Tick, searchBlobsByPrefixCmd(m.service, m.currentAccount, m.containerName, m.prefix, m.blobSearchQuery, defaultBlobPrefixSearchLimit))
+	}
+	m.loading = true
+	m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+	return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 }
 
 func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case blobsPane:
-		if m.hasContainer && m.prefix != "" {
+		if m.hasContainer && !m.blobLoadAll && m.prefix != "" {
 			m.prefix = parentPrefix(m.prefix)
+			m.blobSearchQuery = ""
 			m.loading = true
-			m.status = fmt.Sprintf("Browsing %q", m.prefix)
-			return m, tea.Batch(spinner.Tick, loadBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix))
+			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+			return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 		}
 		if m.visualLineMode {
 			m.visualLineMode = false
@@ -1095,6 +1198,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.containerName = ""
 		m.prefix = ""
 		m.clearBlobSelectionState()
+		m.resetBlobLoadState()
 		m.focus = accountsPane
 
 		m.accounts = nil
@@ -1127,6 +1231,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.containerName = ""
 		m.prefix = ""
 		m.clearBlobSelectionState()
+		m.resetBlobLoadState()
 		m.focus = containersPane
 
 		m.containers = nil
@@ -1153,6 +1258,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.hasContainer = true
 		m.prefix = ""
 		m.clearBlobSelectionState()
+		m.resetBlobLoadState()
 		m.focus = blobsPane
 
 		m.blobs = nil
@@ -1161,8 +1267,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.blobsList.Title = "Blobs"
 
 		m.loading = true
-		m.status = fmt.Sprintf("Browsing %s/%s", m.currentAccount.Name, m.containerName)
-		return m, tea.Batch(spinner.Tick, loadBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix))
+		m.status = fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName)
+		return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 	}
 
 	if m.focus == blobsPane {
@@ -1172,11 +1278,16 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		}
 
 		if item.blob.IsPrefix {
+			if m.blobLoadAll {
+				m.status = "Directory navigation is unavailable when all blobs are loaded"
+				return m, nil
+			}
 			m.prefix = item.blob.Name
-			m.loading = true
+			m.blobSearchQuery = ""
 			m.blobsList.ResetFilter()
-			m.status = fmt.Sprintf("Browsing %q", m.prefix)
-			return m, tea.Batch(spinner.Tick, loadBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix))
+			m.loading = true
+			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+			return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 		}
 
 		details := fmt.Sprintf("Blob %s | size: %s | modified: %s | type: %s | tier: %s | metadata: %d",
@@ -1377,6 +1488,21 @@ func parentPrefix(prefix string) string {
 	return prefix[:idx+1]
 }
 
+func blobSearchPrefix(currentPrefix, query string) string {
+	needle := strings.TrimSpace(strings.ReplaceAll(query, "\\", "/"))
+	if needle == "" {
+		return strings.TrimSpace(currentPrefix)
+	}
+	if strings.HasPrefix(needle, "/") {
+		return strings.TrimPrefix(needle, "/")
+	}
+	base := strings.TrimSpace(currentPrefix)
+	if base == "" || strings.HasPrefix(needle, base) {
+		return needle
+	}
+	return base + needle
+}
+
 func loadSubscriptionsCmd(svc *azure.Service) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -1407,13 +1533,34 @@ func loadContainersCmd(svc *azure.Service, account azure.Account) tea.Cmd {
 	}
 }
 
-func loadBlobsCmd(svc *azure.Service, account azure.Account, containerName, prefix string) tea.Cmd {
+func loadHierarchyBlobsCmd(svc *azure.Service, account azure.Account, containerName, prefix string, limit int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		blobs, err := svc.ListBlobs(ctx, account, containerName, prefix)
-		return blobsLoadedMsg{account: account, container: containerName, prefix: prefix, blobs: blobs, err: err}
+		blobs, err := svc.ListBlobsLimited(ctx, account, containerName, prefix, limit)
+		return blobsLoadedMsg{account: account, container: containerName, prefix: prefix, loadAll: false, query: "", blobs: blobs, err: err}
+	}
+}
+
+func loadAllBlobsCmd(svc *azure.Service, account azure.Account, containerName, prefix string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		blobs, err := svc.ListAllBlobs(ctx, account, containerName)
+		return blobsLoadedMsg{account: account, container: containerName, prefix: prefix, loadAll: true, query: "", blobs: blobs, err: err}
+	}
+}
+
+func searchBlobsByPrefixCmd(svc *azure.Service, account azure.Account, containerName, currentPrefix, query string, limit int) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+
+		effectivePrefix := blobSearchPrefix(currentPrefix, query)
+		blobs, err := svc.SearchBlobsByPrefix(ctx, account, containerName, effectivePrefix, limit)
+		return blobsLoadedMsg{account: account, container: containerName, prefix: currentPrefix, loadAll: false, query: strings.TrimSpace(query), blobs: blobs, err: err}
 	}
 }
 
@@ -1548,6 +1695,13 @@ func (m Model) blobsPaneTitle() string {
 	}
 	if m.hasContainer && m.blobs != nil {
 		title = fmt.Sprintf("%s (%d)", title, len(m.blobs))
+	}
+	if m.hasContainer {
+		if m.blobLoadAll {
+			title = fmt.Sprintf("%s | ALL", title)
+		} else if m.blobSearchQuery != "" {
+			title = fmt.Sprintf("%s | PREFIX:%s", title, blobSearchPrefix(m.prefix, m.blobSearchQuery))
+		}
 	}
 	if len(m.markedBlobs) > 0 {
 		title = fmt.Sprintf("%s | marked:%d", title, len(m.markedBlobs))
