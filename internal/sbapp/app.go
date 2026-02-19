@@ -502,7 +502,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.activeThemeIdx = m.themeIdx
 				m.applyTheme(m.themes[m.activeThemeIdx])
 				m.selectingTheme = false
-				m.status = fmt.Sprintf("Theme: %s", m.themes[m.activeThemeIdx].Name)
+				SaveThemeName(m.themes[m.activeThemeIdx].Name)
 			case "esc", "q":
 				m.selectingTheme = false
 			}

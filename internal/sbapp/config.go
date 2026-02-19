@@ -172,6 +172,30 @@ func loadUserThemes(themesDir string) []Theme {
 	return themes
 }
 
+func SaveThemeName(name string) {
+	dir := configDir()
+	if dir == "" {
+		return
+	}
+	path := filepath.Join(dir, "config.yaml")
+
+	cfg := make(map[string]any)
+	if data, err := os.ReadFile(path); err == nil {
+		yaml.Unmarshal(data, &cfg)
+	}
+	if cfg == nil {
+		cfg = make(map[string]any)
+	}
+	cfg["theme"] = name
+
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return
+	}
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(path, data, 0o644)
+}
+
 func (c Config) ActiveTheme() Theme {
 	for _, t := range c.Themes {
 		if t.Name == c.ThemeName {
