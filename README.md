@@ -5,8 +5,8 @@ Small Azure Storage Explorer variant focused on Blob Storage, built with Bubble 
 ## Features
 
 - Azure authentication via `DefaultAzureCredential` (works with `az login`)
-- Auto-discovery of Blob storage accounts across all visible subscriptions
-- Multi-account browsing
+- Subscription-first navigation: select a subscription, then browse its storage accounts
+- Multi-subscription and multi-account browsing
 - Container listing
 - Blob browsing with virtual folder navigation (`/` delimiter)
 - Blobs load only after opening a container (no auto-open on account switch)
@@ -40,13 +40,13 @@ go run ./cmd/azblob-tui
 - `v` / `V`: visual line mode in blobs (move to mark multiple)
 - `D`: download all marked blobs (or current blob if none marked)
 - `r`: refresh current view
-- `d`: re-discover accounts from subscriptions
+- `d`: reload subscriptions
 - `q`: quit
 
 ## Notes
 
 - This tool is Blob-only for now.
 - Filtering is local to the currently loaded list in each pane.
-- Discovery uses ARM list APIs, while browsing uses Blob data-plane APIs.
+- Discovery uses ARM list APIs (subscriptions -> storage accounts), while browsing uses Blob data-plane APIs.
 - Shared Key fallback requires permission to list storage account keys and that Shared Key access is allowed on the account.
 - Marked selection is container-scoped and intentionally action-oriented so more bulk actions can be added later.

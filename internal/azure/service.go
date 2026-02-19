@@ -30,6 +30,12 @@ type Account struct {
 	BlobEndpoint   string
 }
 
+type Subscription struct {
+	ID    string
+	Name  string
+	State string
+}
+
 type ContainerInfo struct {
 	Name         string
 	LastModified time.Time
@@ -70,50 +76,113 @@ func NewService(cred azcore.TokenCredential) *Service {
 	}
 }
 
-func (s *Service) DiscoverAccounts(ctx context.Context) ([]Account, error) {
+func (s *Service) ListSubscriptions(ctx context.Context) ([]Subscription, error) {
 	subscriptionsClient, err := armsubscriptions.NewClient(s.cred, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create subscriptions client: %w", err)
 	}
 
-	accounts := make([]Account, 0)
-	subscriptionsPager := subscriptionsClient.NewListPager(nil)
-	for subscriptionsPager.More() {
-		subscriptionsPage, err := subscriptionsPager.NextPage(ctx)
+	subscriptions := make([]Subscription, 0)
+	pager := subscriptionsClient.NewListPager(nil)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("list subscriptions: %w", err)
 		}
 
-		for _, subscription := range subscriptionsPage.Value {
+		for _, subscription := range page.Value {
 			if subscription == nil || subscription.SubscriptionID == nil {
 				continue
 			}
 
-			storageAccountsClient, err := armstorage.NewAccountsClient(*subscription.SubscriptionID, s.cred, nil)
-			if err != nil {
-				return nil, fmt.Errorf("create accounts client for subscription %s: %w", *subscription.SubscriptionID, err)
+			entry := Subscription{ID: *subscription.SubscriptionID}
+			if subscription.DisplayName != nil {
+				entry.Name = *subscription.DisplayName
+			}
+			if subscription.State != nil {
+				entry.State = string(*subscription.State)
 			}
 
-			storageAccountsPager := storageAccountsClient.NewListPager(nil)
-			for storageAccountsPager.More() {
-				storageAccountsPage, err := storageAccountsPager.NextPage(ctx)
-				if err != nil {
-					return nil, fmt.Errorf("list storage accounts for subscription %s: %w", *subscription.SubscriptionID, err)
-				}
+			subscriptions = append(subscriptions, entry)
+		}
+	}
 
-				for _, account := range storageAccountsPage.Value {
-					if account == nil || account.Name == nil || account.Properties == nil || account.Properties.PrimaryEndpoints == nil || account.Properties.PrimaryEndpoints.Blob == nil {
-						continue
-					}
+	sort.Slice(subscriptions, func(i, j int) bool {
+		nameI := strings.ToLower(strings.TrimSpace(subscriptions[i].Name))
+		nameJ := strings.ToLower(strings.TrimSpace(subscriptions[j].Name))
+		if nameI == nameJ {
+			return subscriptions[i].ID < subscriptions[j].ID
+		}
+		if nameI == "" {
+			return false
+		}
+		if nameJ == "" {
+			return true
+		}
+		return nameI < nameJ
+	})
 
-					accounts = append(accounts, Account{
-						Name:           *account.Name,
-						SubscriptionID: *subscription.SubscriptionID,
-						ResourceGroup:  parseResourceGroup(account.ID),
-						BlobEndpoint:   strings.TrimRight(*account.Properties.PrimaryEndpoints.Blob, "/"),
-					})
-				}
+	return subscriptions, nil
+}
+
+func (s *Service) DiscoverAccounts(ctx context.Context) ([]Account, error) {
+	subscriptions, err := s.ListSubscriptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	accounts := make([]Account, 0)
+	for _, subscription := range subscriptions {
+		subscriptionAccounts, err := s.DiscoverAccountsForSubscription(ctx, subscription.ID)
+		if err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, subscriptionAccounts...)
+	}
+
+	sort.Slice(accounts, func(i, j int) bool {
+		if accounts[i].Name == accounts[j].Name {
+			if accounts[i].SubscriptionID == accounts[j].SubscriptionID {
+				return accounts[i].ResourceGroup < accounts[j].ResourceGroup
 			}
+			return accounts[i].SubscriptionID < accounts[j].SubscriptionID
+		}
+		return accounts[i].Name < accounts[j].Name
+	})
+
+	return accounts, nil
+}
+
+func (s *Service) DiscoverAccountsForSubscription(ctx context.Context, subscriptionID string) ([]Account, error) {
+	id := strings.TrimSpace(subscriptionID)
+	if id == "" {
+		return nil, fmt.Errorf("subscription ID is required")
+	}
+
+	storageAccountsClient, err := armstorage.NewAccountsClient(id, s.cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create accounts client for subscription %s: %w", id, err)
+	}
+
+	accounts := make([]Account, 0)
+	pager := storageAccountsClient.NewListPager(nil)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list storage accounts for subscription %s: %w", id, err)
+		}
+
+		for _, account := range page.Value {
+			if account == nil || account.Name == nil || account.Properties == nil || account.Properties.PrimaryEndpoints == nil || account.Properties.PrimaryEndpoints.Blob == nil {
+				continue
+			}
+
+			accounts = append(accounts, Account{
+				Name:           *account.Name,
+				SubscriptionID: id,
+				ResourceGroup:  parseResourceGroup(account.ID),
+				BlobEndpoint:   strings.TrimRight(*account.Properties.PrimaryEndpoints.Blob, "/"),
+			})
 		}
 	}
 

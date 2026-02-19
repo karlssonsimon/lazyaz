@@ -19,7 +19,8 @@ import (
 const defaultDownloadRoot = "downloads"
 
 const (
-	accountsPane = iota
+	subscriptionsPane = iota
+	accountsPane
 	containersPane
 	blobsPane
 )
@@ -42,23 +43,27 @@ type Model struct {
 
 	spinner spinner.Model
 
-	accountsList   list.Model
-	containersList list.Model
-	blobsList      list.Model
+	subscriptionsList list.Model
+	accountsList      list.Model
+	containersList    list.Model
+	blobsList         list.Model
 
 	focus int
 
-	accounts       []azure.Account
-	containers     []azure.ContainerInfo
-	blobs          []azure.BlobEntry
-	markedBlobs    map[string]azure.BlobEntry
-	visualLineMode bool
-	visualAnchor   string
-	hasAccount     bool
-	currentAccount azure.Account
-	hasContainer   bool
-	containerName  string
-	prefix         string
+	subscriptions   []azure.Subscription
+	accounts        []azure.Account
+	containers      []azure.ContainerInfo
+	blobs           []azure.BlobEntry
+	markedBlobs     map[string]azure.BlobEntry
+	visualLineMode  bool
+	visualAnchor    string
+	hasSubscription bool
+	currentSub      azure.Subscription
+	hasAccount      bool
+	currentAccount  azure.Account
+	hasContainer    bool
+	containerName   string
+	prefix          string
 
 	loading bool
 	status  string
@@ -68,9 +73,15 @@ type Model struct {
 	height int
 }
 
+type subscriptionsLoadedMsg struct {
+	subscriptions []azure.Subscription
+	err           error
+}
+
 type accountsLoadedMsg struct {
-	accounts []azure.Account
-	err      error
+	subscriptionID string
+	accounts       []azure.Account
+	err            error
 }
 
 type containersLoadedMsg struct {
@@ -110,6 +121,16 @@ func NewModel(svc *azure.Service) Model {
 		Background(lipgloss.Color(colorSelectedBg))
 	delegate.Styles.FilterMatch = delegate.Styles.FilterMatch.Foreground(lipgloss.Color(colorFilterMatch)).Underline(true)
 
+	subscriptions := list.New([]list.Item{}, delegate, 28, 10)
+	subscriptions.Title = "Subscriptions"
+	subscriptions.SetShowHelp(false)
+	subscriptions.SetShowPagination(false)
+	subscriptions.SetShowStatusBar(true)
+	subscriptions.SetStatusBarItemName("subscription", "subscriptions")
+	subscriptions.SetFilteringEnabled(true)
+	subscriptions.DisableQuitKeybindings()
+	styleList(&subscriptions)
+
 	accounts := list.New([]list.Item{}, delegate, 24, 10)
 	accounts.Title = "Storage Accounts"
 	accounts.SetShowHelp(false)
@@ -145,20 +166,21 @@ func NewModel(svc *azure.Service) Model {
 	spin.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAccentStrong))
 
 	return Model{
-		service:        svc,
-		spinner:        spin,
-		accountsList:   accounts,
-		containersList: containers,
-		blobsList:      blobs,
-		markedBlobs:    make(map[string]azure.BlobEntry),
-		focus:          accountsPane,
-		status:         "Discovering storage accounts from Azure subscriptions...",
-		loading:        true,
+		service:           svc,
+		spinner:           spin,
+		subscriptionsList: subscriptions,
+		accountsList:      accounts,
+		containersList:    containers,
+		blobsList:         blobs,
+		markedBlobs:       make(map[string]azure.BlobEntry),
+		focus:             subscriptionsPane,
+		status:            "Loading Azure subscriptions...",
+		loading:           true,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(spinner.Tick, discoverAccountsCmd(m.service))
+	return tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -179,11 +201,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
-	case accountsLoadedMsg:
+	case subscriptionsLoadedMsg:
 		m.loading = false
 		if msg.err != nil {
 			m.lastErr = msg.err.Error()
-			m.status = "Failed to discover storage accounts"
+			m.status = "Failed to load subscriptions"
+			return m, nil
+		}
+
+		m.lastErr = ""
+		m.subscriptions = msg.subscriptions
+		m.subscriptionsList.ResetFilter()
+		m.subscriptionsList.SetItems(subscriptionsToItems(msg.subscriptions))
+		m.subscriptionsList.Title = fmt.Sprintf("Subscriptions (%d)", len(msg.subscriptions))
+
+		if len(msg.subscriptions) == 0 {
+			m.hasSubscription = false
+			m.hasAccount = false
+			m.hasContainer = false
+			m.status = "No subscriptions found. Verify az login context and tenant access."
+			m.clearBlobSelectionState()
+			m.accounts = nil
+			m.containers = nil
+			m.blobs = nil
+			m.accountsList.ResetFilter()
+			m.containersList.ResetFilter()
+			m.blobsList.ResetFilter()
+			m.accountsList.SetItems(nil)
+			m.containersList.SetItems(nil)
+			m.blobsList.SetItems(nil)
+			m.accountsList.Title = "Storage Accounts"
+			m.containersList.Title = "Containers"
+			m.blobsList.Title = "Blobs"
+			return m, nil
+		}
+
+		m.subscriptionsList.Select(0)
+		m.hasSubscription = false
+		m.currentSub = azure.Subscription{}
+		m.hasAccount = false
+		m.hasContainer = false
+		m.status = fmt.Sprintf("Loaded %d subscriptions. Select one and press Enter.", len(msg.subscriptions))
+		return m, nil
+
+	case accountsLoadedMsg:
+		if !m.hasSubscription || m.currentSub.ID != msg.subscriptionID {
+			return m, nil
+		}
+
+		m.loading = false
+		if msg.err != nil {
+			m.lastErr = msg.err.Error()
+			m.status = fmt.Sprintf("Failed to load storage accounts in %s", subscriptionDisplayName(m.currentSub))
 			return m, nil
 		}
 
@@ -196,7 +265,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.accounts) == 0 {
 			m.hasAccount = false
 			m.hasContainer = false
-			m.status = "No storage accounts discovered. Verify az login context and RBAC visibility."
+			m.status = fmt.Sprintf("No storage accounts found in %s", subscriptionDisplayName(m.currentSub))
 			m.clearBlobSelectionState()
 			m.containers = nil
 			m.blobs = nil
@@ -210,17 +279,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.accountsList.Select(0)
-		selected, ok := m.accountsList.SelectedItem().(accountItem)
-		if !ok {
-			selected = accountItem{account: msg.accounts[0]}
-		}
-
-		m.hasAccount = true
-		m.currentAccount = selected.account
+		m.hasAccount = false
+		m.currentAccount = azure.Account{}
 		m.clearBlobSelectionState()
-		m.status = fmt.Sprintf("Discovered %d storage accounts", len(msg.accounts))
-		m.loading = true
-		return m, tea.Batch(spinner.Tick, loadContainersCmd(m.service, m.currentAccount))
+		m.containers = nil
+		m.blobs = nil
+		m.containersList.ResetFilter()
+		m.blobsList.ResetFilter()
+		m.containersList.SetItems(nil)
+		m.blobsList.SetItems(nil)
+		m.containersList.Title = "Containers"
+		m.blobsList.Title = "Blobs"
+		m.status = fmt.Sprintf("Loaded %d storage accounts from %s. Open an account to view containers.", len(msg.accounts), subscriptionDisplayName(m.currentSub))
+		return m, nil
 
 	case containersLoadedMsg:
 		if !m.hasAccount || !sameAccount(m.currentAccount, msg.account) {
@@ -384,8 +455,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !focusedFilterActive {
 				m.loading = true
 				m.lastErr = ""
-				m.status = "Refreshing account discovery across subscriptions..."
-				return m, tea.Batch(spinner.Tick, discoverAccountsCmd(m.service))
+				m.status = "Refreshing subscriptions..."
+				return m, tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
 			}
 		case "r":
 			if !focusedFilterActive {
@@ -427,6 +498,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.focus {
+	case subscriptionsPane:
+		m.subscriptionsList, cmd = m.subscriptionsList.Update(msg)
 	case accountsPane:
 		m.accountsList, cmd = m.accountsList.Update(msg)
 	case containersPane:
@@ -482,8 +555,12 @@ func (m Model) View() string {
 		Foreground(lipgloss.Color(colorAccent)).
 		Padding(0, 1)
 
+	subscriptionName := "-"
 	accountName := "-"
 	containerName := "-"
+	if m.hasSubscription {
+		subscriptionName = subscriptionDisplayName(m.currentSub)
+	}
 	if m.hasAccount {
 		accountName = m.currentAccount.Name
 	}
@@ -492,20 +569,26 @@ func (m Model) View() string {
 	}
 
 	header := headerStyle.Width(m.width).Render(trimToWidth("Azure Blob Explorer", m.width-2))
-	headerMeta := metaStyle.Width(m.width).Render(trimToWidth(fmt.Sprintf("Account: %s | Container: %s | Prefix: %q", accountName, containerName, m.prefix), m.width-2))
+	headerMeta := metaStyle.Width(m.width).Render(trimToWidth(fmt.Sprintf("Subscription: %s | Account: %s | Container: %s | Prefix: %q", subscriptionName, accountName, containerName, m.prefix), m.width-2))
 
+	m.subscriptionsList.Title = m.subscriptionsPaneTitle()
 	m.accountsList.Title = m.accountsPaneTitle()
 	m.containersList.Title = m.containersPaneTitle()
 	m.blobsList.Title = m.blobsPaneTitle()
 
+	subscriptionsView := m.subscriptionsList.View()
 	accountsView := m.accountsList.View()
 	containersView := m.containersList.View()
 	blobsView := m.blobsList.View()
 
+	subscriptionsPaneStyle := paneStyle.Copy().MarginRight(1)
 	accountsPaneStyle := paneStyle.Copy().MarginRight(1)
 	containersPaneStyle := paneStyle.Copy().MarginRight(1)
 	blobsPaneStyle := paneStyle.Copy()
 
+	if m.focus == subscriptionsPane {
+		subscriptionsPaneStyle = focusedPaneStyle.Copy().MarginRight(1)
+	}
 	if m.focus == accountsPane {
 		accountsPaneStyle = focusedPaneStyle.Copy().MarginRight(1)
 	}
@@ -518,6 +601,7 @@ func (m Model) View() string {
 
 	panes := lipgloss.JoinHorizontal(
 		lipgloss.Top,
+		subscriptionsPaneStyle.Render(subscriptionsView),
 		accountsPaneStyle.Render(accountsView),
 		containersPaneStyle.Render(containersView),
 		blobsPaneStyle.Render(blobsView),
@@ -542,7 +626,7 @@ func (m Model) View() string {
 	}
 	statusLine := statusStyle.Width(m.width).Render(trimToWidth(statusText, m.width-2))
 
-	help := "keys: tab/shift+tab focus | / filter pane | enter/l/right open->focus right | h/left left/up | space toggle mark | v/V visual-line range | D download selection | ctrl+d/ctrl+u half-page | backspace up folder | r refresh | d rediscover | q quit"
+	help := "keys: tab/shift+tab focus | / filter pane | enter/l/right open->focus right | h/left left/up | space toggle mark | v/V visual-line range | D download selection | ctrl+d/ctrl+u half-page | backspace up folder | r refresh scope | d reload subscriptions | q quit"
 	helpLine := helpStyle.Width(m.width).Render(trimToWidth(help, m.width-2))
 
 	parts := []string{header, headerMeta, panes, filterLine}
@@ -559,17 +643,21 @@ func (m *Model) resize() {
 		return
 	}
 
-	left := m.width / 4
-	mid := m.width / 4
-	right := m.width - left - mid - 8
-	if left < 26 {
-		left = 26
+	sub := m.width / 5
+	acc := m.width / 5
+	con := m.width / 5
+	if sub < 24 {
+		sub = 24
 	}
-	if mid < 26 {
-		mid = 26
+	if acc < 24 {
+		acc = 24
 	}
-	if right < 40 {
-		right = 40
+	if con < 24 {
+		con = 24
+	}
+	blob := m.width - sub - acc - con - 12
+	if blob < 40 {
+		blob = 40
 	}
 
 	height := m.height - 10
@@ -577,9 +665,10 @@ func (m *Model) resize() {
 		height = 8
 	}
 
-	m.accountsList.SetSize(left, height)
-	m.containersList.SetSize(mid, height)
-	m.blobsList.SetSize(right, height)
+	m.subscriptionsList.SetSize(sub, height)
+	m.accountsList.SetSize(acc, height)
+	m.containersList.SetSize(con, height)
+	m.blobsList.SetSize(blob, height)
 }
 
 func (m *Model) nextFocus() {
@@ -589,7 +678,7 @@ func (m *Model) nextFocus() {
 		m.refreshBlobItems()
 	}
 	m.blurAllFilters()
-	m.focus = (m.focus + 1) % 3
+	m.focus = (m.focus + 1) % 4
 }
 
 func (m *Model) previousFocus() {
@@ -601,11 +690,12 @@ func (m *Model) previousFocus() {
 	m.blurAllFilters()
 	m.focus--
 	if m.focus < 0 {
-		m.focus = 2
+		m.focus = 3
 	}
 }
 
 func (m *Model) blurAllFilters() {
+	m.subscriptionsList.FilterInput.Blur()
 	m.accountsList.FilterInput.Blur()
 	m.containersList.FilterInput.Blur()
 	m.blobsList.FilterInput.Blur()
@@ -615,6 +705,8 @@ func (m *Model) commitFocusedFilter() {
 	m.blurAllFilters()
 
 	switch m.focus {
+	case subscriptionsPane:
+		applyFilterState(&m.subscriptionsList)
 	case accountsPane:
 		applyFilterState(&m.accountsList)
 	case containersPane:
@@ -872,6 +964,8 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 
 	var target *list.Model
 	switch m.focus {
+	case subscriptionsPane:
+		target = &m.subscriptionsList
 	case accountsPane:
 		target = &m.accountsList
 	case containersPane:
@@ -915,6 +1009,8 @@ func halfPageStep(l list.Model) int {
 
 func (m Model) focusedListSettingFilter() bool {
 	switch m.focus {
+	case subscriptionsPane:
+		return m.subscriptionsList.SettingFilter()
 	case accountsPane:
 		return m.accountsList.SettingFilter()
 	case containersPane:
@@ -927,11 +1023,18 @@ func (m Model) focusedListSettingFilter() bool {
 }
 
 func (m Model) refresh() (Model, tea.Cmd) {
+	if m.focus == subscriptionsPane || !m.hasSubscription {
+		m.loading = true
+		m.lastErr = ""
+		m.status = "Refreshing subscriptions..."
+		return m, tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
+	}
+
 	if !m.hasAccount || m.focus == accountsPane {
 		m.loading = true
 		m.lastErr = ""
-		m.status = "Refreshing account discovery..."
-		return m, tea.Batch(spinner.Tick, discoverAccountsCmd(m.service))
+		m.status = fmt.Sprintf("Loading storage accounts in %s", subscriptionDisplayName(m.currentSub))
+		return m, tea.Batch(spinner.Tick, loadAccountsForSubscriptionCmd(m.service, m.currentSub.ID))
 	}
 
 	if m.focus == containersPane || !m.hasContainer {
@@ -968,12 +1071,50 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 		m.focus = accountsPane
 		m.status = "Focus: storage accounts"
 		return m, nil
+	case accountsPane:
+		m.focus = subscriptionsPane
+		m.status = "Focus: subscriptions"
+		return m, nil
 	default:
 		return m, nil
 	}
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
+	if m.focus == subscriptionsPane {
+		item, ok := m.subscriptionsList.SelectedItem().(subscriptionItem)
+		if !ok {
+			return m, nil
+		}
+
+		m.currentSub = item.subscription
+		m.hasSubscription = true
+		m.hasAccount = false
+		m.hasContainer = false
+		m.currentAccount = azure.Account{}
+		m.containerName = ""
+		m.prefix = ""
+		m.clearBlobSelectionState()
+		m.focus = accountsPane
+
+		m.accounts = nil
+		m.containers = nil
+		m.blobs = nil
+		m.accountsList.ResetFilter()
+		m.containersList.ResetFilter()
+		m.blobsList.ResetFilter()
+		m.accountsList.SetItems(nil)
+		m.containersList.SetItems(nil)
+		m.blobsList.SetItems(nil)
+		m.accountsList.Title = "Storage Accounts"
+		m.containersList.Title = "Containers"
+		m.blobsList.Title = "Blobs"
+
+		m.loading = true
+		m.status = fmt.Sprintf("Loading storage accounts in %s", subscriptionDisplayName(item.subscription))
+		return m, tea.Batch(spinner.Tick, loadAccountsForSubscriptionCmd(m.service, item.subscription.ID))
+	}
+
 	if m.focus == accountsPane {
 		item, ok := m.accountsList.SelectedItem().(accountItem)
 		if !ok {
@@ -1055,6 +1196,33 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 type accountItem struct {
 	account azure.Account
+}
+
+type subscriptionItem struct {
+	subscription azure.Subscription
+}
+
+func (i subscriptionItem) Title() string {
+	if strings.TrimSpace(i.subscription.Name) != "" {
+		return i.subscription.Name
+	}
+	return i.subscription.ID
+}
+
+func (i subscriptionItem) Description() string {
+	id := i.subscription.ID
+	if len(id) > 12 {
+		id = id[:12]
+	}
+	state := strings.TrimSpace(i.subscription.State)
+	if state == "" {
+		return fmt.Sprintf("id %s", id)
+	}
+	return fmt.Sprintf("%s | id %s", state, id)
+}
+
+func (i subscriptionItem) FilterValue() string {
+	return i.subscription.Name + " " + i.subscription.ID + " " + i.subscription.State
 }
 
 func (i accountItem) Title() string {
@@ -1144,6 +1312,14 @@ func accountsToItems(accounts []azure.Account) []list.Item {
 	return items
 }
 
+func subscriptionsToItems(subscriptions []azure.Subscription) []list.Item {
+	items := make([]list.Item, 0, len(subscriptions))
+	for _, subscription := range subscriptions {
+		items = append(items, subscriptionItem{subscription: subscription})
+	}
+	return items
+}
+
 func containersToItems(containers []azure.ContainerInfo) []list.Item {
 	items := make([]list.Item, 0, len(containers))
 	for _, containerInfo := range containers {
@@ -1201,13 +1377,23 @@ func parentPrefix(prefix string) string {
 	return prefix[:idx+1]
 }
 
-func discoverAccountsCmd(svc *azure.Service) tea.Cmd {
+func loadSubscriptionsCmd(svc *azure.Service) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		accounts, err := svc.DiscoverAccounts(ctx)
-		return accountsLoadedMsg{accounts: accounts, err: err}
+		subscriptions, err := svc.ListSubscriptions(ctx)
+		return subscriptionsLoadedMsg{subscriptions: subscriptions, err: err}
+	}
+}
+
+func loadAccountsForSubscriptionCmd(svc *azure.Service, subscriptionID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		accounts, err := svc.DiscoverAccountsForSubscription(ctx, subscriptionID)
+		return accountsLoadedMsg{subscriptionID: subscriptionID, accounts: accounts, err: err}
 	}
 }
 
@@ -1287,6 +1473,8 @@ func styleList(l *list.Model) {
 
 func paneName(pane int) string {
 	switch pane {
+	case subscriptionsPane:
+		return "subscriptions"
 	case accountsPane:
 		return "storage accounts"
 	case containersPane:
@@ -1298,6 +1486,16 @@ func paneName(pane int) string {
 	}
 }
 
+func subscriptionDisplayName(sub azure.Subscription) string {
+	if strings.TrimSpace(sub.Name) != "" {
+		return sub.Name
+	}
+	if strings.TrimSpace(sub.ID) == "" {
+		return "-"
+	}
+	return sub.ID
+}
+
 func isBlobNavigationKey(key string) bool {
 	switch key {
 	case "up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G":
@@ -1307,10 +1505,21 @@ func isBlobNavigationKey(key string) bool {
 	}
 }
 
+func (m Model) subscriptionsPaneTitle() string {
+	title := "Subscriptions"
+	if len(m.subscriptions) > 0 {
+		title = fmt.Sprintf("Subscriptions (%d)", len(m.subscriptions))
+	}
+	return title
+}
+
 func (m Model) accountsPaneTitle() string {
 	title := "Storage Accounts"
+	if m.hasSubscription {
+		title = fmt.Sprintf("Storage Accounts · %s", subscriptionDisplayName(m.currentSub))
+	}
 	if len(m.accounts) > 0 {
-		title = fmt.Sprintf("Storage Accounts (%d)", len(m.accounts))
+		title = fmt.Sprintf("%s (%d)", title, len(m.accounts))
 	}
 	return title
 }
