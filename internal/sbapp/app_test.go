@@ -107,7 +107,7 @@ func TestEntityDisplayName(t *testing.T) {
 
 func TestHighlightJSON_ValidJSON(t *testing.T) {
 	input := `{"name":"test","count":42,"active":true,"data":null}`
-	styles := defaultConfig().JSONColors.styles()
+	styles := defaultTheme().JSONColors.styles()
 	result := styles.highlightJSON(input)
 
 	if !strings.Contains(result, "name") {
@@ -129,7 +129,7 @@ func TestHighlightJSON_ValidJSON(t *testing.T) {
 
 func TestHighlightJSON_InvalidJSON(t *testing.T) {
 	input := "this is not json"
-	styles := defaultConfig().JSONColors.styles()
+	styles := defaultTheme().JSONColors.styles()
 	result := styles.highlightJSON(input)
 	if result != input {
 		t.Fatalf("expected plain text passthrough, got %q", result)
@@ -138,7 +138,7 @@ func TestHighlightJSON_InvalidJSON(t *testing.T) {
 
 func TestHighlightJSON_EmptyObject(t *testing.T) {
 	input := `{}`
-	styles := defaultConfig().JSONColors.styles()
+	styles := defaultTheme().JSONColors.styles()
 	result := styles.highlightJSON(input)
 	if !strings.Contains(result, "{}") {
 		t.Fatalf("expected result to contain '{}', got %q", result)

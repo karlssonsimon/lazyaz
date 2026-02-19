@@ -1,13 +1,19 @@
 package sbapp
 
 import (
+	"embed"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"gopkg.in/yaml.v3"
 )
+
+//go:embed themes/*.yaml
+var stockThemesFS embed.FS
 
 type JSONColors struct {
 	Key         string `yaml:"key"`
@@ -31,13 +37,20 @@ type UIColors struct {
 	SelectedText  string `yaml:"selected_text"`
 }
 
-type Config struct {
+type Theme struct {
+	Name       string     `yaml:"name"`
 	JSONColors JSONColors `yaml:"json_colors"`
 	UIColors   UIColors   `yaml:"ui_colors"`
 }
 
-func defaultConfig() Config {
-	return Config{
+type Config struct {
+	ThemeName string `yaml:"theme"`
+	Themes    []Theme
+}
+
+func defaultTheme() Theme {
+	return Theme{
+		Name: "default",
 		JSONColors: JSONColors{
 			Key:         "#C084FC",
 			String:      "#4ADE80",
@@ -75,27 +88,97 @@ func configDir() string {
 func LoadConfig() Config {
 	dir := configDir()
 	if dir == "" {
-		return defaultConfig()
+		return Config{ThemeName: "default", Themes: []Theme{defaultTheme()}}
 	}
 	return loadConfigFromDir(dir)
 }
 
 func loadConfigFromDir(dir string) Config {
-	cfg := defaultConfig()
+	cfg := Config{
+		ThemeName: "default",
+	}
 
 	data, err := os.ReadFile(filepath.Join(dir, "config.yaml"))
+	if err == nil {
+		var fileCfg struct {
+			ThemeName string `yaml:"theme"`
+		}
+		if yaml.Unmarshal(data, &fileCfg) == nil && fileCfg.ThemeName != "" {
+			cfg.ThemeName = fileCfg.ThemeName
+		}
+	}
+
+	themesDir := filepath.Join(dir, "themes")
+	ensureStockThemes(themesDir)
+
+	themes := loadUserThemes(themesDir)
+	def := defaultTheme()
+	for i := range themes {
+		mergeStringFields(&def.JSONColors, &themes[i].JSONColors)
+		mergeStringFields(&def.UIColors, &themes[i].UIColors)
+	}
+	cfg.Themes = themes
+
+	if len(cfg.Themes) == 0 {
+		cfg.Themes = []Theme{defaultTheme()}
+	}
+
+	return cfg
+}
+
+func ensureStockThemes(themesDir string) {
+	if err := os.MkdirAll(themesDir, 0o755); err != nil {
+		return
+	}
+	entries, err := fs.ReadDir(stockThemesFS, "themes")
 	if err != nil {
-		return cfg
+		return
+	}
+	for _, e := range entries {
+		dest := filepath.Join(themesDir, e.Name())
+		if _, err := os.Stat(dest); err == nil {
+			continue
+		}
+		data, err := stockThemesFS.ReadFile("themes/" + e.Name())
+		if err != nil {
+			continue
+		}
+		os.WriteFile(dest, data, 0o644)
+	}
+}
+
+func loadUserThemes(themesDir string) []Theme {
+	entries, err := filepath.Glob(filepath.Join(themesDir, "*.yaml"))
+	if err != nil {
+		return nil
 	}
 
-	var fileCfg Config
-	if err := yaml.Unmarshal(data, &fileCfg); err != nil {
-		return cfg
+	var themes []Theme
+	for _, path := range entries {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var t Theme
+		if yaml.Unmarshal(data, &t) != nil {
+			continue
+		}
+		if t.Name == "" {
+			stem := filepath.Base(path)
+			t.Name = strings.TrimSuffix(stem, filepath.Ext(stem))
+		}
+		themes = append(themes, t)
 	}
+	return themes
+}
 
-	mergeStringFields(&cfg.JSONColors, &fileCfg.JSONColors)
-	mergeStringFields(&cfg.UIColors, &fileCfg.UIColors)
-	return fileCfg
+func (c Config) ActiveTheme() Theme {
+	for _, t := range c.Themes {
+		if t.Name == c.ThemeName {
+			return t
+		}
+	}
+	return defaultTheme()
 }
 
 func mergeStringFields(defaults, target any) {

@@ -1,0 +1,19 @@
+name: default
+json_colors:
+  key: "#C084FC"
+  string: "#4ADE80"
+  number: "#F59E0B"
+  bool: "#38BDF8"
+  "null": "#F87171"
+  punctuation: "#94A3B8"
+ui_colors:
+  border: "#4B5563"
+  border_focused: "#22C55E"
+  text: "#E5E7EB"
+  muted: "#94A3B8"
+  accent: "#60A5FA"
+  accent_strong: "#38BDF8"
+  danger: "#F87171"
+  filter_match: "#F59E0B"
+  selected_bg: "#334155"
+  selected_text: "#F8FAFC"

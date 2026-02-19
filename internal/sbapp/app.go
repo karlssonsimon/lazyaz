@@ -75,6 +75,11 @@ type Model struct {
 	ui         UIColors
 	jsonStyles jsonStyles
 
+	themes         []Theme
+	activeThemeIdx int
+	selectingTheme bool
+	themeIdx       int
+
 	loading bool
 	status  string
 	lastErr string
@@ -131,7 +136,80 @@ type entitiesRefreshedMsg struct {
 }
 
 func NewModel(svc *servicebus.Service, cfg Config) Model {
-	ui := cfg.UIColors
+	active := cfg.ActiveTheme()
+	activeIdx := 0
+	for i, t := range cfg.Themes {
+		if t.Name == active.Name {
+			activeIdx = i
+			break
+		}
+	}
+
+	delegate := list.NewDefaultDelegate()
+	delegate.SetSpacing(0)
+
+	subscriptions := list.New([]list.Item{}, delegate, 28, 10)
+	subscriptions.Title = "Subscriptions"
+	subscriptions.SetShowHelp(false)
+	subscriptions.SetShowPagination(false)
+	subscriptions.SetShowStatusBar(true)
+	subscriptions.SetStatusBarItemName("subscription", "subscriptions")
+	subscriptions.SetFilteringEnabled(true)
+	subscriptions.DisableQuitKeybindings()
+
+	namespaces := list.New([]list.Item{}, delegate, 24, 10)
+	namespaces.Title = "Namespaces"
+	namespaces.SetShowHelp(false)
+	namespaces.SetShowPagination(false)
+	namespaces.SetShowStatusBar(true)
+	namespaces.SetStatusBarItemName("namespace", "namespaces")
+	namespaces.SetFilteringEnabled(true)
+	namespaces.DisableQuitKeybindings()
+
+	entities := list.New([]list.Item{}, delegate, 24, 10)
+	entities.Title = "Entities"
+	entities.SetShowHelp(false)
+	entities.SetShowPagination(false)
+	entities.SetShowStatusBar(true)
+	entities.SetStatusBarItemName("entity", "entities")
+	entities.SetFilteringEnabled(true)
+	entities.DisableQuitKeybindings()
+
+	detail := list.New([]list.Item{}, delegate, 40, 10)
+	detail.Title = "Detail"
+	detail.SetShowHelp(false)
+	detail.SetShowPagination(false)
+	detail.SetShowStatusBar(true)
+	detail.SetStatusBarItemName("item", "items")
+	detail.SetFilteringEnabled(true)
+	detail.DisableQuitKeybindings()
+
+	spin := spinner.New()
+	spin.Spinner = spinner.Dot
+
+	m := Model{
+		service:           svc,
+		spinner:           spin,
+		subscriptionsList: subscriptions,
+		namespacesList:    namespaces,
+		entitiesList:      entities,
+		detailList:        detail,
+		focus:             subscriptionsPane,
+		markedMessages:    make(map[string]struct{}),
+		duplicateMessages: make(map[string]struct{}),
+		themes:            cfg.Themes,
+		activeThemeIdx:    activeIdx,
+		status:            "Loading Azure subscriptions...",
+		loading:           true,
+	}
+	m.applyTheme(active)
+	return m
+}
+
+func (m *Model) applyTheme(theme Theme) {
+	ui := theme.UIColors
+	m.ui = ui
+	m.jsonStyles = theme.JSONColors.styles()
 
 	delegate := list.NewDefaultDelegate()
 	delegate.SetSpacing(0)
@@ -146,65 +224,17 @@ func NewModel(svc *servicebus.Service, cfg Config) Model {
 		Background(lipgloss.Color(ui.SelectedBg))
 	delegate.Styles.FilterMatch = delegate.Styles.FilterMatch.Foreground(lipgloss.Color(ui.FilterMatch)).Underline(true)
 
-	subscriptions := list.New([]list.Item{}, delegate, 28, 10)
-	subscriptions.Title = "Subscriptions"
-	subscriptions.SetShowHelp(false)
-	subscriptions.SetShowPagination(false)
-	subscriptions.SetShowStatusBar(true)
-	subscriptions.SetStatusBarItemName("subscription", "subscriptions")
-	subscriptions.SetFilteringEnabled(true)
-	subscriptions.DisableQuitKeybindings()
-	styleList(&subscriptions, ui)
+	m.subscriptionsList.SetDelegate(delegate)
+	m.namespacesList.SetDelegate(delegate)
+	m.entitiesList.SetDelegate(delegate)
+	m.detailList.SetDelegate(delegate)
 
-	namespaces := list.New([]list.Item{}, delegate, 24, 10)
-	namespaces.Title = "Namespaces"
-	namespaces.SetShowHelp(false)
-	namespaces.SetShowPagination(false)
-	namespaces.SetShowStatusBar(true)
-	namespaces.SetStatusBarItemName("namespace", "namespaces")
-	namespaces.SetFilteringEnabled(true)
-	namespaces.DisableQuitKeybindings()
-	styleList(&namespaces, ui)
+	styleList(&m.subscriptionsList, ui)
+	styleList(&m.namespacesList, ui)
+	styleList(&m.entitiesList, ui)
+	styleList(&m.detailList, ui)
 
-	entities := list.New([]list.Item{}, delegate, 24, 10)
-	entities.Title = "Entities"
-	entities.SetShowHelp(false)
-	entities.SetShowPagination(false)
-	entities.SetShowStatusBar(true)
-	entities.SetStatusBarItemName("entity", "entities")
-	entities.SetFilteringEnabled(true)
-	entities.DisableQuitKeybindings()
-	styleList(&entities, ui)
-
-	detail := list.New([]list.Item{}, delegate, 40, 10)
-	detail.Title = "Detail"
-	detail.SetShowHelp(false)
-	detail.SetShowPagination(false)
-	detail.SetShowStatusBar(true)
-	detail.SetStatusBarItemName("item", "items")
-	detail.SetFilteringEnabled(true)
-	detail.DisableQuitKeybindings()
-	styleList(&detail, ui)
-
-	spin := spinner.New()
-	spin.Spinner = spinner.Dot
-	spin.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ui.AccentStrong))
-
-	return Model{
-		service:           svc,
-		spinner:           spin,
-		subscriptionsList: subscriptions,
-		namespacesList:    namespaces,
-		entitiesList:      entities,
-		detailList:        detail,
-		focus:             subscriptionsPane,
-		markedMessages:    make(map[string]struct{}),
-		duplicateMessages: make(map[string]struct{}),
-		ui:                ui,
-		jsonStyles:        cfg.JSONColors.styles(),
-		status:            "Loading Azure subscriptions...",
-		loading:           true,
-	}
+	m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ui.AccentStrong))
 }
 
 func (m Model) Init() tea.Cmd {
@@ -458,6 +488,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.selectingTheme {
+			switch msg.String() {
+			case "up", "k":
+				if m.themeIdx > 0 {
+					m.themeIdx--
+				}
+			case "down", "j":
+				if m.themeIdx < len(m.themes)-1 {
+					m.themeIdx++
+				}
+			case "enter":
+				m.activeThemeIdx = m.themeIdx
+				m.applyTheme(m.themes[m.activeThemeIdx])
+				m.selectingTheme = false
+				m.status = fmt.Sprintf("Theme: %s", m.themes[m.activeThemeIdx].Name)
+			case "esc", "q":
+				m.selectingTheme = false
+			}
+			return m, nil
+		}
+
 		if m.viewingMessage {
 			switch msg.String() {
 			case "ctrl+c", "q":
@@ -580,6 +631,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastErr = ""
 				m.status = "Deleting duplicate message..."
 				return m, tea.Batch(spinner.Tick, deleteDuplicateCmd(m.service, m.currentNS, m.currentEntity, m.viewingTopicSub, m.currentTopicSub, item.message.MessageID))
+			}
+		case "T":
+			if !focusedFilterActive && !m.selectingTheme {
+				m.selectingTheme = true
+				m.themeIdx = m.activeThemeIdx
+				return m, nil
 			}
 		case "backspace":
 			if !focusedFilterActive {
@@ -738,7 +795,7 @@ func (m Model) View() string {
 	}
 	statusLine := statusStyle.Width(m.width).Render(trimToWidth(statusText, m.width-2))
 
-	help := "keys: tab/shift+tab focus | / filter | enter/l open | h/left back | backspace up | [/] active/dlq | space mark | R requeue(dlq) | D delete(dup) | ctrl+d/u half-page | r refresh | d reload | q quit"
+	help := "keys: tab/shift+tab focus | / filter | enter/l open | h/left back | backspace up | [/] active/dlq | space mark | R requeue(dlq) | D delete(dup) | ctrl+d/u half-page | T theme | r refresh | d reload | q quit"
 	helpLine := helpStyle.Width(m.width).Render(trimToWidth(help, m.width-2))
 
 	parts := []string{header, headerMeta, panes, filterLine}
@@ -747,7 +804,135 @@ func (m Model) View() string {
 	}
 	parts = append(parts, statusLine, helpLine)
 
-	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
+
+	if m.selectingTheme {
+		view = m.overlayThemeSelector(view)
+	}
+
+	return view
+}
+
+func (m Model) overlayThemeSelector(base string) string {
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(m.ui.Accent)).
+		Padding(0, 1)
+
+	normalStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.ui.Text)).
+		Padding(0, 1)
+
+	cursorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.ui.SelectedText)).
+		Background(lipgloss.Color(m.ui.SelectedBg)).
+		Bold(true).
+		Padding(0, 1)
+
+	hintStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.ui.Muted)).
+		Padding(0, 1)
+
+	var rows []string
+	rows = append(rows, titleStyle.Render("Select Theme"))
+	rows = append(rows, "")
+
+	maxNameLen := 0
+	for _, t := range m.themes {
+		if len(t.Name) > maxNameLen {
+			maxNameLen = len(t.Name)
+		}
+	}
+
+	for i, t := range m.themes {
+		marker := "  "
+		if i == m.activeThemeIdx {
+			marker = "* "
+		}
+		label := marker + t.Name
+		if i == m.themeIdx {
+			rows = append(rows, cursorStyle.Render(label))
+		} else {
+			rows = append(rows, normalStyle.Render(label))
+		}
+	}
+
+	rows = append(rows, "")
+	rows = append(rows, hintStyle.Render("j/k navigate | enter apply | esc cancel"))
+
+	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(m.ui.BorderFocused)).
+		Padding(1, 2)
+
+	box := boxStyle.Render(content)
+
+	return placeOverlay(m.width, m.height, box, base)
+}
+
+func placeOverlay(width, height int, overlay, base string) string {
+	overlayLines := strings.Split(overlay, "\n")
+	baseLines := strings.Split(base, "\n")
+
+	for len(baseLines) < height {
+		baseLines = append(baseLines, "")
+	}
+
+	oH := len(overlayLines)
+	oW := 0
+	for _, l := range overlayLines {
+		if w := lipgloss.Width(l); w > oW {
+			oW = w
+		}
+	}
+
+	startY := (height - oH) / 2
+	startX := (width - oW) / 2
+	if startY < 0 {
+		startY = 0
+	}
+	if startX < 0 {
+		startX = 0
+	}
+
+	for i, ol := range overlayLines {
+		row := startY + i
+		if row >= len(baseLines) {
+			break
+		}
+		line := baseLines[row]
+		lineW := lipgloss.Width(line)
+
+		var out strings.Builder
+		if startX > 0 {
+			if lineW >= startX {
+				out.WriteString(truncateAnsi(line, startX))
+			} else {
+				out.WriteString(line)
+				out.WriteString(strings.Repeat(" ", startX-lineW))
+			}
+		}
+		out.WriteString(ol)
+		baseLines[row] = out.String()
+	}
+
+	return strings.Join(baseLines[:height], "\n")
+}
+
+func truncateAnsi(s string, maxWidth int) string {
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	runes := []rune(s)
+	for i := len(runes); i > 0; i-- {
+		candidate := string(runes[:i])
+		if lipgloss.Width(candidate) <= maxWidth {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func (m *Model) resize() {

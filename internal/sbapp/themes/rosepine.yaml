@@ -1,0 +1,19 @@
+name: rosepine
+json_colors:
+  key: "#c4a7e7"
+  string: "#31748f"
+  number: "#f6c177"
+  bool: "#9ccfd8"
+  "null": "#eb6f92"
+  punctuation: "#908caa"
+ui_colors:
+  border: "#26233a"
+  border_focused: "#31748f"
+  text: "#e0def4"
+  muted: "#908caa"
+  accent: "#c4a7e7"
+  accent_strong: "#9ccfd8"
+  danger: "#eb6f92"
+  filter_match: "#f6c177"
+  selected_bg: "#26233a"
+  selected_text: "#e0def4"
