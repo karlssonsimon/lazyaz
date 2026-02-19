@@ -418,6 +418,237 @@ func (s *Service) peekSubscription(ctx context.Context, client *azservicebus.Cli
 	return peekMessages(ctx, receiver, maxCount)
 }
 
+type DuplicateError struct {
+	MessageID string
+	Err       error
+}
+
+func (e *DuplicateError) Error() string {
+	return fmt.Sprintf("message %s sent but not removed from DLQ (possible duplicate): %v", e.MessageID, e.Err)
+}
+
+func (e *DuplicateError) Unwrap() error { return e.Err }
+
+func (s *Service) RequeueFromDLQ(ctx context.Context, ns Namespace, queueName string, messageIDs []string) (int, error) {
+	client, err := s.getClient(ns.FQDN)
+	if err != nil {
+		return 0, err
+	}
+
+	n, err := s.requeueFromDLQ(ctx, client, queueName, messageIDs)
+	if err == nil || !isAuthError(err) {
+		return n, err
+	}
+
+	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
+	if fallbackErr != nil {
+		return n, fmt.Errorf("requeue from DLQ %s with AAD failed: %v; connection string fallback failed: %w", queueName, err, fallbackErr)
+	}
+
+	return s.requeueFromDLQ(ctx, fallbackClient, queueName, messageIDs)
+}
+
+func (s *Service) requeueFromDLQ(ctx context.Context, client *azservicebus.Client, queueName string, messageIDs []string) (int, error) {
+	receiver, err := client.NewReceiverForQueue(queueName, &azservicebus.ReceiverOptions{
+		ReceiveMode: azservicebus.ReceiveModePeekLock,
+		SubQueue:    azservicebus.SubQueueDeadLetter,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("create DLQ receiver for %s: %w", queueName, err)
+	}
+	defer receiver.Close(ctx)
+
+	sender, err := client.NewSender(queueName, nil)
+	if err != nil {
+		return 0, fmt.Errorf("create sender for %s: %w", queueName, err)
+	}
+	defer sender.Close(ctx)
+
+	return requeueMessages(ctx, receiver, sender, messageIDs)
+}
+
+func (s *Service) RequeueFromSubscriptionDLQ(ctx context.Context, ns Namespace, topicName string, subName string, messageIDs []string) (int, error) {
+	client, err := s.getClient(ns.FQDN)
+	if err != nil {
+		return 0, err
+	}
+
+	n, err := s.requeueFromSubscriptionDLQ(ctx, client, topicName, subName, messageIDs)
+	if err == nil || !isAuthError(err) {
+		return n, err
+	}
+
+	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
+	if fallbackErr != nil {
+		return n, fmt.Errorf("requeue from subscription DLQ %s/%s with AAD failed: %v; connection string fallback failed: %w", topicName, subName, err, fallbackErr)
+	}
+
+	return s.requeueFromSubscriptionDLQ(ctx, fallbackClient, topicName, subName, messageIDs)
+}
+
+func (s *Service) requeueFromSubscriptionDLQ(ctx context.Context, client *azservicebus.Client, topicName string, subName string, messageIDs []string) (int, error) {
+	receiver, err := client.NewReceiverForSubscription(topicName, subName, &azservicebus.ReceiverOptions{
+		ReceiveMode: azservicebus.ReceiveModePeekLock,
+		SubQueue:    azservicebus.SubQueueDeadLetter,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("create DLQ receiver for %s/%s: %w", topicName, subName, err)
+	}
+	defer receiver.Close(ctx)
+
+	sender, err := client.NewSender(topicName, nil)
+	if err != nil {
+		return 0, fmt.Errorf("create sender for %s: %w", topicName, err)
+	}
+	defer sender.Close(ctx)
+
+	return requeueMessages(ctx, receiver, sender, messageIDs)
+}
+
+func requeueMessages(ctx context.Context, receiver *azservicebus.Receiver, sender *azservicebus.Sender, messageIDs []string) (int, error) {
+	target := make(map[string]struct{}, len(messageIDs))
+	for _, id := range messageIDs {
+		target[id] = struct{}{}
+	}
+
+	requeued := 0
+	seen := make(map[string]struct{})
+
+	for len(target) > 0 {
+		messages, err := receiver.ReceiveMessages(ctx, 1, nil)
+		if err != nil {
+			return requeued, fmt.Errorf("receive DLQ messages: %w", err)
+		}
+		if len(messages) == 0 {
+			break
+		}
+
+		msg := messages[0]
+		if _, ok := target[msg.MessageID]; ok {
+			if err := sender.SendMessage(ctx, &azservicebus.Message{Body: msg.Body}, nil); err != nil {
+				_ = receiver.AbandonMessage(ctx, msg, nil)
+				return requeued, fmt.Errorf("send message %s: %w", msg.MessageID, err)
+			}
+			if err := receiver.CompleteMessage(ctx, msg, nil); err != nil {
+				return requeued, &DuplicateError{MessageID: msg.MessageID, Err: err}
+			}
+			requeued++
+			delete(target, msg.MessageID)
+			seen = make(map[string]struct{})
+		} else {
+			if _, alreadySeen := seen[msg.MessageID]; alreadySeen {
+				_ = receiver.AbandonMessage(ctx, msg, nil)
+				break
+			}
+			seen[msg.MessageID] = struct{}{}
+			_ = receiver.AbandonMessage(ctx, msg, nil)
+		}
+	}
+
+	if len(target) > 0 {
+		return requeued, fmt.Errorf("%d message(s) not found in DLQ", len(target))
+	}
+
+	return requeued, nil
+}
+
+func (s *Service) DeleteFromDLQ(ctx context.Context, ns Namespace, queueName string, messageID string) error {
+	client, err := s.getClient(ns.FQDN)
+	if err != nil {
+		return err
+	}
+
+	err = s.deleteFromDLQ(ctx, client, queueName, messageID)
+	if err == nil || !isAuthError(err) {
+		return err
+	}
+
+	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
+	if fallbackErr != nil {
+		return fmt.Errorf("delete from DLQ %s with AAD failed: %v; connection string fallback failed: %w", queueName, err, fallbackErr)
+	}
+
+	return s.deleteFromDLQ(ctx, fallbackClient, queueName, messageID)
+}
+
+func (s *Service) deleteFromDLQ(ctx context.Context, client *azservicebus.Client, queueName string, messageID string) error {
+	receiver, err := client.NewReceiverForQueue(queueName, &azservicebus.ReceiverOptions{
+		ReceiveMode: azservicebus.ReceiveModePeekLock,
+		SubQueue:    azservicebus.SubQueueDeadLetter,
+	})
+	if err != nil {
+		return fmt.Errorf("create DLQ receiver for %s: %w", queueName, err)
+	}
+	defer receiver.Close(ctx)
+
+	msg, err := receiveByID(ctx, receiver, messageID)
+	if err != nil {
+		return err
+	}
+
+	return receiver.CompleteMessage(ctx, msg, nil)
+}
+
+func (s *Service) DeleteFromSubscriptionDLQ(ctx context.Context, ns Namespace, topicName string, subName string, messageID string) error {
+	client, err := s.getClient(ns.FQDN)
+	if err != nil {
+		return err
+	}
+
+	err = s.deleteFromSubscriptionDLQ(ctx, client, topicName, subName, messageID)
+	if err == nil || !isAuthError(err) {
+		return err
+	}
+
+	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
+	if fallbackErr != nil {
+		return fmt.Errorf("delete from subscription DLQ %s/%s with AAD failed: %v; connection string fallback failed: %w", topicName, subName, err, fallbackErr)
+	}
+
+	return s.deleteFromSubscriptionDLQ(ctx, fallbackClient, topicName, subName, messageID)
+}
+
+func (s *Service) deleteFromSubscriptionDLQ(ctx context.Context, client *azservicebus.Client, topicName string, subName string, messageID string) error {
+	receiver, err := client.NewReceiverForSubscription(topicName, subName, &azservicebus.ReceiverOptions{
+		ReceiveMode: azservicebus.ReceiveModePeekLock,
+		SubQueue:    azservicebus.SubQueueDeadLetter,
+	})
+	if err != nil {
+		return fmt.Errorf("create DLQ receiver for %s/%s: %w", topicName, subName, err)
+	}
+	defer receiver.Close(ctx)
+
+	msg, err := receiveByID(ctx, receiver, messageID)
+	if err != nil {
+		return err
+	}
+
+	return receiver.CompleteMessage(ctx, msg, nil)
+}
+
+func receiveByID(ctx context.Context, receiver *azservicebus.Receiver, messageID string) (*azservicebus.ReceivedMessage, error) {
+	seen := make(map[string]struct{})
+	for {
+		messages, err := receiver.ReceiveMessages(ctx, 1, nil)
+		if err != nil {
+			return nil, fmt.Errorf("receive DLQ messages: %w", err)
+		}
+		if len(messages) == 0 {
+			return nil, fmt.Errorf("message %s not found in DLQ", messageID)
+		}
+		msg := messages[0]
+		if msg.MessageID == messageID {
+			return msg, nil
+		}
+		if _, ok := seen[msg.MessageID]; ok {
+			_ = receiver.AbandonMessage(ctx, msg, nil)
+			return nil, fmt.Errorf("message %s not found in DLQ", messageID)
+		}
+		seen[msg.MessageID] = struct{}{}
+		_ = receiver.AbandonMessage(ctx, msg, nil)
+	}
+}
+
 func isAuthError(err error) bool {
 	var sbErr *azservicebus.Error
 	if errors.As(err, &sbErr) {

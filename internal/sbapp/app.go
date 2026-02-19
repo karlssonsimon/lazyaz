@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -65,9 +66,11 @@ type Model struct {
 	currentTopicSub   servicebus.TopicSubscription
 	deadLetter        bool
 
-	messageViewport viewport.Model
-	viewingMessage  bool
-	selectedMessage servicebus.PeekedMessage
+	messageViewport   viewport.Model
+	viewingMessage    bool
+	selectedMessage   servicebus.PeekedMessage
+	markedMessages    map[string]struct{}
+	duplicateMessages map[string]struct{}
 
 	ui         UIColors
 	jsonStyles jsonStyles
@@ -109,6 +112,22 @@ type messagesLoadedMsg struct {
 	source    string
 	messages  []servicebus.PeekedMessage
 	err       error
+}
+
+type requeueDoneMsg struct {
+	requeued int
+	total    int
+	err      error
+}
+
+type deleteDuplicateDoneMsg struct {
+	messageID string
+	err       error
+}
+
+type entitiesRefreshedMsg struct {
+	entities []servicebus.Entity
+	err      error
 }
 
 func NewModel(svc *servicebus.Service, cfg Config) Model {
@@ -179,6 +198,8 @@ func NewModel(svc *servicebus.Service, cfg Config) Model {
 		entitiesList:      entities,
 		detailList:        detail,
 		focus:             subscriptionsPane,
+		markedMessages:    make(map[string]struct{}),
+		duplicateMessages: make(map[string]struct{}),
 		ui:                ui,
 		jsonStyles:        cfg.JSONColors.styles(),
 		status:            "Loading Azure subscriptions...",
@@ -382,13 +403,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewingMessage = false
 		m.selectedMessage = servicebus.PeekedMessage{}
 		m.detailList.ResetFilter()
-		m.detailList.SetItems(messagesToItems(msg.messages))
+		m.detailList.SetItems(messagesToItems(msg.messages, m.markedMessages, m.duplicateMessages))
 		m.detailList.Title = fmt.Sprintf("Messages (%d)", len(msg.messages))
 		if len(msg.messages) > 0 {
 			m.detailList.Select(0)
 		}
 		m.resize()
 		m.status = fmt.Sprintf("Peeked %d messages from %s", len(msg.messages), msg.source)
+		return m, nil
+
+	case requeueDoneMsg:
+		m.loading = false
+		m.markedMessages = make(map[string]struct{})
+		if msg.err != nil {
+			var dupErr *servicebus.DuplicateError
+			if errors.As(msg.err, &dupErr) {
+				m.duplicateMessages[dupErr.MessageID] = struct{}{}
+				m.lastErr = fmt.Sprintf("message %s sent but not removed from DLQ (possible duplicate)", dupErr.MessageID)
+			} else {
+				m.lastErr = msg.err.Error()
+			}
+		} else {
+			m.lastErr = ""
+		}
+		if msg.requeued > 0 {
+			m.status = fmt.Sprintf("%d of %d message(s) requeued", msg.requeued, msg.total)
+		} else {
+			m.status = "Failed to requeue messages"
+		}
+		var peekCmd tea.Cmd
+		m, peekCmd = m.rePeekMessages()
+		return m, tea.Batch(peekCmd, refreshEntitiesCmd(m.service, m.currentNS))
+
+	case deleteDuplicateDoneMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.lastErr = msg.err.Error()
+			m.status = "Failed to delete duplicate message"
+			return m, nil
+		}
+		m.lastErr = ""
+		delete(m.duplicateMessages, msg.messageID)
+		m.status = "Duplicate message deleted"
+		var peekCmd tea.Cmd
+		m, peekCmd = m.rePeekMessages()
+		return m, tea.Batch(peekCmd, refreshEntitiesCmd(m.service, m.currentNS))
+
+	case entitiesRefreshedMsg:
+		if msg.err != nil {
+			return m, nil
+		}
+		m.entities = msg.entities
+		m.entitiesList.SetItems(entitiesToItems(msg.entities))
 		return m, nil
 
 	case tea.KeyMsg:
@@ -455,10 +521,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !focusedFilterActive {
 				return m.navigateLeft()
 			}
+		case " ":
+			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages {
+				item, ok := m.detailList.SelectedItem().(messageItem)
+				if !ok {
+					return m, nil
+				}
+				if item.duplicate {
+					return m, nil
+				}
+				id := item.message.MessageID
+				if _, marked := m.markedMessages[id]; marked {
+					delete(m.markedMessages, id)
+					m.status = fmt.Sprintf("Unmarked %s (%d marked)", id, len(m.markedMessages))
+				} else {
+					m.markedMessages[id] = struct{}{}
+					m.status = fmt.Sprintf("Marked %s (%d marked)", id, len(m.markedMessages))
+				}
+				m.refreshMessageItems()
+				return m, nil
+			}
 		case "[":
 			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages {
 				if m.deadLetter {
 					m.deadLetter = false
+					m.markedMessages = make(map[string]struct{})
+					m.duplicateMessages = make(map[string]struct{})
 					return m.rePeekMessages()
 				}
 			}
@@ -466,8 +554,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages {
 				if !m.deadLetter {
 					m.deadLetter = true
+					m.markedMessages = make(map[string]struct{})
+					m.duplicateMessages = make(map[string]struct{})
 					return m.rePeekMessages()
 				}
+			}
+		case "R":
+			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages && m.deadLetter {
+				messageIDs := m.collectRequeueIDs()
+				if len(messageIDs) == 0 {
+					return m, nil
+				}
+				m.loading = true
+				m.lastErr = ""
+				m.status = fmt.Sprintf("Requeuing %d message(s)...", len(messageIDs))
+				return m, tea.Batch(spinner.Tick, requeueMessagesCmd(m.service, m.currentNS, m.currentEntity, m.viewingTopicSub, m.currentTopicSub, messageIDs))
+			}
+		case "D":
+			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages && m.deadLetter {
+				item, ok := m.detailList.SelectedItem().(messageItem)
+				if !ok || !item.duplicate {
+					return m, nil
+				}
+				m.loading = true
+				m.lastErr = ""
+				m.status = "Deleting duplicate message..."
+				return m, tea.Batch(spinner.Tick, deleteDuplicateCmd(m.service, m.currentNS, m.currentEntity, m.viewingTopicSub, m.currentTopicSub, item.message.MessageID))
 			}
 		case "backspace":
 			if !focusedFilterActive {
@@ -626,7 +738,7 @@ func (m Model) View() string {
 	}
 	statusLine := statusStyle.Width(m.width).Render(trimToWidth(statusText, m.width-2))
 
-	help := "keys: tab/shift+tab focus | / filter | enter/l open | h/left back | backspace up | [/] active/dlq | ctrl+d/u half-page | r refresh | d reload | q quit"
+	help := "keys: tab/shift+tab focus | / filter | enter/l open | h/left back | backspace up | [/] active/dlq | space mark | R requeue(dlq) | D delete(dup) | ctrl+d/u half-page | r refresh | d reload | q quit"
 	helpLine := helpStyle.Width(m.width).Render(trimToWidth(help, m.width-2))
 
 	parts := []string{header, headerMeta, panes, filterLine}
@@ -738,6 +850,35 @@ func (m *Model) clearDetailState() {
 	m.currentTopicSub = servicebus.TopicSubscription{}
 	m.detailMode = detailMessages
 	m.deadLetter = false
+	m.markedMessages = make(map[string]struct{})
+	m.duplicateMessages = make(map[string]struct{})
+}
+
+func (m Model) collectRequeueIDs() []string {
+	if len(m.markedMessages) > 0 {
+		var ids []string
+		for _, msg := range m.peekedMessages {
+			if _, ok := m.markedMessages[msg.MessageID]; !ok {
+				continue
+			}
+			if _, isDup := m.duplicateMessages[msg.MessageID]; isDup {
+				continue
+			}
+			ids = append(ids, msg.MessageID)
+		}
+		return ids
+	}
+	item, ok := m.detailList.SelectedItem().(messageItem)
+	if !ok || item.duplicate {
+		return nil
+	}
+	return []string{item.message.MessageID}
+}
+
+func (m *Model) refreshMessageItems() {
+	idx := m.detailList.Index()
+	m.detailList.SetItems(messagesToItems(m.peekedMessages, m.markedMessages, m.duplicateMessages))
+	m.detailList.Select(idx)
 }
 
 func (m *Model) scrollFocusedHalfPage(direction int) {
@@ -1124,7 +1265,9 @@ func (i topicSubItem) Description() string {
 func (i topicSubItem) FilterValue() string { return i.sub.Name }
 
 type messageItem struct {
-	message servicebus.PeekedMessage
+	message   servicebus.PeekedMessage
+	marked    bool
+	duplicate bool
 }
 
 func (i messageItem) Title() string {
@@ -1132,7 +1275,13 @@ func (i messageItem) Title() string {
 	if id == "" {
 		id = "(no id)"
 	}
-	return id
+	if i.duplicate {
+		return "[DUP] " + id
+	}
+	if i.marked {
+		return "* " + id
+	}
+	return "  " + id
 }
 
 func (i messageItem) Description() string {
@@ -1185,10 +1334,12 @@ func topicSubsToItems(subs []servicebus.TopicSubscription) []list.Item {
 	return items
 }
 
-func messagesToItems(messages []servicebus.PeekedMessage) []list.Item {
+func messagesToItems(messages []servicebus.PeekedMessage, marked, duplicates map[string]struct{}) []list.Item {
 	items := make([]list.Item, 0, len(messages))
 	for _, msg := range messages {
-		items = append(items, messageItem{message: msg})
+		_, isMarked := marked[msg.MessageID]
+		_, isDup := duplicates[msg.MessageID]
+		items = append(items, messageItem{message: msg, marked: isMarked, duplicate: isDup})
 	}
 	return items
 }
@@ -1242,6 +1393,47 @@ func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queu
 
 		messages, err := svc.PeekQueueMessages(ctx, ns, queueName, peekMaxMessages, deadLetter)
 		return messagesLoadedMsg{namespace: ns, source: queueName, messages: messages, err: err}
+	}
+}
+
+func refreshEntitiesCmd(svc *servicebus.Service, ns servicebus.Namespace) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		entities, err := svc.ListEntities(ctx, ns)
+		return entitiesRefreshedMsg{entities: entities, err: err}
+	}
+}
+
+func requeueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, entity servicebus.Entity, isTopicSub bool, topicSub servicebus.TopicSubscription, messageIDs []string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		var requeued int
+		var err error
+		if entity.Kind == servicebus.EntityQueue {
+			requeued, err = svc.RequeueFromDLQ(ctx, ns, entity.Name, messageIDs)
+		} else if isTopicSub {
+			requeued, err = svc.RequeueFromSubscriptionDLQ(ctx, ns, entity.Name, topicSub.Name, messageIDs)
+		}
+		return requeueDoneMsg{requeued: requeued, total: len(messageIDs), err: err}
+	}
+}
+
+func deleteDuplicateCmd(svc *servicebus.Service, ns servicebus.Namespace, entity servicebus.Entity, isTopicSub bool, topicSub servicebus.TopicSubscription, messageID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		var err error
+		if entity.Kind == servicebus.EntityQueue {
+			err = svc.DeleteFromDLQ(ctx, ns, entity.Name, messageID)
+		} else if isTopicSub {
+			err = svc.DeleteFromSubscriptionDLQ(ctx, ns, entity.Name, topicSub.Name, messageID)
+		}
+		return deleteDuplicateDoneMsg{messageID: messageID, err: err}
 	}
 }
 
