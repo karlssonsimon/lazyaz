@@ -157,9 +157,9 @@ func TestActiveTheme_FallbackToDefault(t *testing.T) {
 
 func TestJSONColors_Styles(t *testing.T) {
 	theme := defaultTheme()
-	s := theme.JSONColors.styles()
+	s := syntaxStylesForTheme(theme)
 
-	rendered := s.key.Render("test")
+	rendered := s.HighlightJSON(`{"key":"value"}`)
 	if rendered == "" {
 		t.Fatal("expected non-empty rendered output from key style")
 	}

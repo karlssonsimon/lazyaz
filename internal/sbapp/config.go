@@ -8,7 +8,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	ui "azure-storage/internal/ui"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -216,22 +217,17 @@ func mergeStringFields(defaults, target any) {
 	}
 }
 
-type jsonStyles struct {
-	key    lipgloss.Style
-	str    lipgloss.Style
-	number lipgloss.Style
-	bool   lipgloss.Style
-	null   lipgloss.Style
-	punct  lipgloss.Style
-}
-
-func (c JSONColors) styles() jsonStyles {
-	return jsonStyles{
-		key:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.Key)),
-		str:    lipgloss.NewStyle().Foreground(lipgloss.Color(c.String)),
-		number: lipgloss.NewStyle().Foreground(lipgloss.Color(c.Number)),
-		bool:   lipgloss.NewStyle().Foreground(lipgloss.Color(c.Bool)),
-		null:   lipgloss.NewStyle().Foreground(lipgloss.Color(c.Null)),
-		punct:  lipgloss.NewStyle().Foreground(lipgloss.Color(c.Punctuation)),
-	}
+func syntaxStylesForTheme(theme Theme) ui.SyntaxStyles {
+	return ui.NewSyntaxStyles(ui.SyntaxPalette{
+		Key:         theme.JSONColors.Key,
+		String:      theme.JSONColors.String,
+		Number:      theme.JSONColors.Number,
+		Bool:        theme.JSONColors.Bool,
+		Null:        theme.JSONColors.Null,
+		Punctuation: theme.JSONColors.Punctuation,
+		XMLTag:      theme.UIColors.Accent,
+		XMLAttr:     theme.UIColors.FilterMatch,
+		CSVCellA:    theme.UIColors.Text,
+		CSVCellB:    theme.UIColors.AccentStrong,
+	})
 }

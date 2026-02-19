@@ -1,16 +1,14 @@
-package app
+package blobapp
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"azure-storage/internal/azure"
+	ui "azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -45,18 +43,6 @@ var (
 	previewTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(colorAccent))
 	previewMetaStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted))
 	previewTagStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(colorFilterMatch))
-	jsonKeyStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAccent))
-	jsonStringStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAccentStrong))
-	jsonNumberStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(colorFilterMatch))
-	jsonNullStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDanger))
-	jsonPunctStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted))
-	xmlTagStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAccent))
-	xmlAttrStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color(colorFilterMatch))
-	xmlPunctStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted))
-	csvCellStyleA     = lipgloss.NewStyle().Foreground(lipgloss.Color(colorText))
-	csvCellStyleB     = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAccentStrong))
-	xmlTagPattern     = regexp.MustCompile(`<(?:"[^"]*"|'[^']*'|[^'">])*>`)
-	xmlAttrPattern    = regexp.MustCompile(`\s([A-Za-z_:][A-Za-z0-9_.:-]*)=`)
 )
 
 func newPreviewState() previewState {
@@ -77,8 +63,8 @@ func (p previewState) title() string {
 	if !p.open {
 		return "Preview"
 	}
-	label := trimToWidth(p.blobName, 50)
-	meta := fmt.Sprintf("%s | %s", emptyToDash(p.language), humanSize(p.blobSize))
+	label := ui.TrimToWidth(p.blobName, 50)
+	meta := fmt.Sprintf("%s | %s", ui.EmptyToDash(p.language), humanSize(p.blobSize))
 	if p.binary {
 		meta += " | binary"
 	}
@@ -97,7 +83,7 @@ func (m Model) openPreview(blob azure.BlobEntry) (Model, tea.Cmd) {
 	m.preview.blobName = blob.Name
 	m.preview.blobSize = blob.Size
 	m.preview.contentType = blob.ContentType
-	m.preview.language = detectPreviewLanguage(blob.Name, blob.ContentType)
+	m.preview.language = ui.DetectLanguage(blob.Name, blob.ContentType)
 	m.preview.binary = false
 	m.preview.cursor = 0
 	m.preview.windowStart = 0
@@ -152,10 +138,10 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 	m.preview.windowStart = msg.windowStart
 	m.preview.windowData = msg.data
 	m.preview.cursor = clampInt64(msg.cursor, 0, maxInt64(0, msg.blobSize-1))
-	m.preview.binary = isProbablyBinary(msg.data)
-	m.preview.language = detectPreviewLanguage(msg.blobName, m.preview.contentType)
+	m.preview.binary = ui.IsProbablyBinary(msg.data)
+	m.preview.language = ui.DetectLanguage(msg.blobName, m.preview.contentType)
 	m.preview.lineStarts = computeLineStarts(msg.data)
-	m.preview.rendered = renderPreviewContent(msg.data, m.preview.language, m.preview.binary)
+	m.preview.rendered = renderPreviewContent(msg.data, m.preview.language, m.preview.binary, m.syntaxStyles)
 	m.preview.viewport.SetContent(m.preview.rendered)
 	m.preview.viewport.YOffset = m.previewLocalLine()
 
@@ -170,40 +156,40 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 
 func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
-	switch key {
-	case "ctrl+c", "q":
+	switch {
+	case m.keymap.Quit.Matches(key):
 		return m, tea.Quit
-	case "h", "left", "esc":
+	case m.keymap.PreviewBack.Matches(key):
 		m.pendingPreviewG = false
 		m.focus = blobsPane
 		m.status = "Focus: blobs"
 		return m, nil
-	case "tab":
+	case m.keymap.PreviewNextFocus.Matches(key):
 		m.pendingPreviewG = false
 		m.nextFocus()
 		return m, nil
-	case "shift+tab":
+	case m.keymap.PreviewPreviousFocus.Matches(key):
 		m.pendingPreviewG = false
 		m.previousFocus()
 		return m, nil
-	case "j", "down":
+	case m.keymap.PreviewDown.Matches(key):
 		m.pendingPreviewG = false
 		return m.movePreviewCursorByLines(1)
-	case "k", "up":
+	case m.keymap.PreviewUp.Matches(key):
 		m.pendingPreviewG = false
 		return m.movePreviewCursorByLines(-1)
-	case "ctrl+d":
+	case m.keymap.HalfPageDown.Matches(key):
 		m.pendingPreviewG = false
 		step := max(1, m.preview.viewport.Height/2)
 		return m.movePreviewCursorByLines(step)
-	case "ctrl+u":
+	case m.keymap.HalfPageUp.Matches(key):
 		m.pendingPreviewG = false
 		step := max(1, m.preview.viewport.Height/2)
 		return m.movePreviewCursorByLines(-step)
-	case "G":
+	case m.keymap.PreviewBottom.Matches(key):
 		m.pendingPreviewG = false
 		return m.jumpPreviewToBottom()
-	case "g":
+	case m.keymap.PreviewTopPrefix.Matches(key):
 		if m.pendingPreviewG {
 			m.pendingPreviewG = false
 			return m.jumpPreviewToTop()
@@ -409,23 +395,7 @@ func computePreviewWindow(totalSize, cursor int64, visibleLines int) (int64, int
 	return start, windowSize
 }
 
-func detectPreviewLanguage(blobName, contentType string) string {
-	lowerName := strings.ToLower(blobName)
-	lowerType := strings.ToLower(contentType)
-
-	switch {
-	case strings.HasSuffix(lowerName, ".json") || strings.Contains(lowerType, "json"):
-		return "json"
-	case strings.HasSuffix(lowerName, ".xml") || strings.Contains(lowerType, "xml"):
-		return "xml"
-	case strings.HasSuffix(lowerName, ".csv") || strings.Contains(lowerType, "csv"):
-		return "csv"
-	default:
-		return "text"
-	}
-}
-
-func renderPreviewContent(data []byte, language string, binary bool) string {
+func renderPreviewContent(data []byte, language string, binary bool, syntaxStyles ui.SyntaxStyles) string {
 	if binary {
 		return previewTagStyle.Render("Binary content preview is not supported.")
 	}
@@ -435,144 +405,8 @@ func renderPreviewContent(data []byte, language string, binary bool) string {
 	}
 
 	text := string(data)
-	switch language {
-	case "json":
-		return highlightJSONPreview(text)
-	case "xml":
-		return highlightXMLPreview(text)
-	case "csv":
-		return highlightCSVPreview(text)
-	default:
-		return text
-	}
+	return syntaxStyles.Highlight(language, text)
 }
-
-func highlightJSONPreview(input string) string {
-	var buf strings.Builder
-	formatted := input
-	var indented bytes.Buffer
-	if json.Indent(&indented, []byte(input), "", "  ") == nil {
-		formatted = indented.String()
-	}
-
-	lines := strings.Split(formatted, "\n")
-	for i, line := range lines {
-		if i > 0 {
-			buf.WriteByte('\n')
-		}
-		buf.WriteString(colorizeJSONLine(line))
-	}
-
-	return buf.String()
-}
-
-func colorizeJSONLine(line string) string {
-	trimmed := strings.TrimLeft(line, " \t")
-	indent := line[:len(line)-len(trimmed)]
-	if trimmed == "" {
-		return line
-	}
-
-	var out strings.Builder
-	out.WriteString(indent)
-	if strings.HasPrefix(trimmed, "\"") {
-		colonIdx := strings.Index(trimmed, "\":")
-		if colonIdx > 0 {
-			out.WriteString(jsonKeyStyle.Render(trimmed[:colonIdx+1]))
-			out.WriteString(jsonPunctStyle.Render(":"))
-			val := strings.TrimSpace(trimmed[colonIdx+2:])
-			if val != "" {
-				out.WriteByte(' ')
-				out.WriteString(colorizeJSONValue(val))
-			}
-			return out.String()
-		}
-	}
-	out.WriteString(colorizeJSONValue(trimmed))
-	return out.String()
-}
-
-func colorizeJSONValue(v string) string {
-	trailing := ""
-	clean := v
-	for strings.HasSuffix(clean, ",") {
-		trailing = "," + trailing
-		clean = strings.TrimSuffix(clean, ",")
-	}
-
-	var styled string
-	switch {
-	case clean == "{" || clean == "}" || clean == "[" || clean == "]" || clean == "{}" || clean == "[]":
-		styled = jsonPunctStyle.Render(clean)
-	case clean == "null":
-		styled = jsonNullStyle.Render(clean)
-	case clean == "true" || clean == "false":
-		styled = jsonNumberStyle.Render(clean)
-	case strings.HasPrefix(clean, "\""):
-		styled = jsonStringStyle.Render(clean)
-	default:
-		styled = jsonNumberStyle.Render(clean)
-	}
-
-	if trailing != "" {
-		return styled + jsonPunctStyle.Render(trailing)
-	}
-	return styled
-}
-
-func highlightXMLPreview(input string) string {
-	return xmlTagPattern.ReplaceAllStringFunc(input, func(tag string) string {
-		colored := xmlTagStyle.Render(tag)
-		colored = xmlAttrPattern.ReplaceAllString(colored, " "+xmlAttrStyle.Render("$1")+xmlPunctStyle.Render("="))
-		return colored
-	})
-}
-
-func highlightCSVPreview(input string) string {
-	lines := strings.Split(input, "\n")
-	var out strings.Builder
-	for i, line := range lines {
-		if i > 0 {
-			out.WriteByte('\n')
-		}
-		if line == "" {
-			continue
-		}
-		parts := strings.Split(line, ",")
-		for idx, part := range parts {
-			if idx > 0 {
-				out.WriteString(xmlPunctStyle.Render(","))
-			}
-			if idx%2 == 0 {
-				out.WriteString(csvCellStyleA.Render(part))
-			} else {
-				out.WriteString(csvCellStyleB.Render(part))
-			}
-		}
-	}
-	return out.String()
-}
-
-func isProbablyBinary(data []byte) bool {
-	if len(data) == 0 {
-		return false
-	}
-	if strings.Contains(string(data), "\x00") {
-		return true
-	}
-	control := 0
-	for _, b := range data {
-		if b < 0x09 {
-			control++
-			continue
-		}
-		if b > 0x0D && b < 0x20 {
-			control++
-		}
-	}
-	return float64(control)/float64(len(data)) > 0.05
-}
-
 func clampInt64(v, minVal, maxVal int64) int64 {
 	if v < minVal {
 		return minVal

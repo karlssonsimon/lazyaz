@@ -1,0 +1,228 @@
+package blobapp
+
+import (
+	"fmt"
+
+	"azure-storage/internal/azure"
+	"azure-storage/internal/ui"
+
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+func (m Model) refresh() (Model, tea.Cmd) {
+	if m.focus == subscriptionsPane || !m.hasSubscription {
+		m.loading = true
+		m.lastErr = ""
+		m.status = "Refreshing subscriptions..."
+		return m, tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
+	}
+
+	if !m.hasAccount || m.focus == accountsPane {
+		m.loading = true
+		m.lastErr = ""
+		m.status = fmt.Sprintf("Loading storage accounts in %s", subscriptionDisplayName(m.currentSub))
+		return m, tea.Batch(spinner.Tick, loadAccountsForSubscriptionCmd(m.service, m.currentSub.ID))
+	}
+
+	if m.focus == containersPane || !m.hasContainer {
+		m.loading = true
+		m.lastErr = ""
+		m.status = fmt.Sprintf("Loading containers in %s", m.currentAccount.Name)
+		return m, tea.Batch(spinner.Tick, loadContainersCmd(m.service, m.currentAccount))
+	}
+	if m.focus == previewPane && m.preview.open {
+		return m.ensurePreviewWindowAtCursor()
+	}
+
+	m.loading = true
+	m.lastErr = ""
+	if m.blobLoadAll {
+		m.status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
+		return m, tea.Batch(spinner.Tick, loadAllBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix))
+	}
+	if m.blobSearchQuery != "" {
+		effectivePrefix := blobSearchPrefix(m.prefix, m.blobSearchQuery)
+		m.status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
+		return m, tea.Batch(spinner.Tick, searchBlobsByPrefixCmd(m.service, m.currentAccount, m.containerName, m.prefix, m.blobSearchQuery, defaultBlobPrefixSearchLimit))
+	}
+	m.loading = true
+	m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+	return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+}
+
+func (m Model) navigateLeft() (Model, tea.Cmd) {
+	switch m.focus {
+	case previewPane:
+		m.focus = blobsPane
+		m.status = "Focus: blobs"
+		return m, nil
+	case blobsPane:
+		if m.hasContainer && !m.blobLoadAll && m.prefix != "" {
+			m.prefix = parentPrefix(m.prefix)
+			m.blobSearchQuery = ""
+			m.loading = true
+			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+			return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+		}
+		if m.visualLineMode {
+			m.visualLineMode = false
+			m.visualAnchor = ""
+			m.refreshBlobItems()
+		}
+		m.focus = containersPane
+		m.status = "Focus: containers"
+		return m, nil
+	case containersPane:
+		m.focus = accountsPane
+		m.status = "Focus: storage accounts"
+		return m, nil
+	case accountsPane:
+		m.focus = subscriptionsPane
+		m.status = "Focus: subscriptions"
+		return m, nil
+	default:
+		return m, nil
+	}
+}
+
+func (m Model) handleEnter() (Model, tea.Cmd) {
+	if m.focus == subscriptionsPane {
+		item, ok := m.subscriptionsList.SelectedItem().(subscriptionItem)
+		if !ok {
+			return m, nil
+		}
+
+		m.currentSub = item.subscription
+		m.hasSubscription = true
+		m.hasAccount = false
+		m.hasContainer = false
+		m.currentAccount = azure.Account{}
+		m.containerName = ""
+		m.prefix = ""
+		m.clearBlobSelectionState()
+		m.resetBlobLoadState()
+		m.resetPreviewState()
+		m.focus = accountsPane
+
+		m.accounts = nil
+		m.containers = nil
+		m.blobs = nil
+		m.accountsList.ResetFilter()
+		m.containersList.ResetFilter()
+		m.blobsList.ResetFilter()
+		m.accountsList.SetItems(nil)
+		m.containersList.SetItems(nil)
+		m.blobsList.SetItems(nil)
+		m.accountsList.Title = "Storage Accounts"
+		m.containersList.Title = "Containers"
+		m.blobsList.Title = "Blobs"
+
+		m.loading = true
+		m.status = fmt.Sprintf("Loading storage accounts in %s", subscriptionDisplayName(item.subscription))
+		return m, tea.Batch(spinner.Tick, loadAccountsForSubscriptionCmd(m.service, item.subscription.ID))
+	}
+
+	if m.focus == accountsPane {
+		item, ok := m.accountsList.SelectedItem().(accountItem)
+		if !ok {
+			return m, nil
+		}
+
+		m.currentAccount = item.account
+		m.hasAccount = true
+		m.hasContainer = false
+		m.containerName = ""
+		m.prefix = ""
+		m.clearBlobSelectionState()
+		m.resetBlobLoadState()
+		m.resetPreviewState()
+		m.focus = containersPane
+
+		m.containers = nil
+		m.blobs = nil
+		m.containersList.ResetFilter()
+		m.blobsList.ResetFilter()
+		m.containersList.SetItems(nil)
+		m.blobsList.SetItems(nil)
+		m.containersList.Title = "Containers"
+		m.blobsList.Title = "Blobs"
+
+		m.loading = true
+		m.status = fmt.Sprintf("Loading containers in %s", item.account.Name)
+		return m, tea.Batch(spinner.Tick, loadContainersCmd(m.service, item.account))
+	}
+
+	if m.focus == containersPane {
+		item, ok := m.containersList.SelectedItem().(containerItem)
+		if !ok {
+			return m, nil
+		}
+
+		m.containerName = item.container.Name
+		m.hasContainer = true
+		m.prefix = ""
+		m.clearBlobSelectionState()
+		m.resetBlobLoadState()
+		m.resetPreviewState()
+		m.focus = blobsPane
+
+		m.blobs = nil
+		m.blobsList.ResetFilter()
+		m.blobsList.SetItems(nil)
+		m.blobsList.Title = "Blobs"
+
+		m.loading = true
+		m.status = fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName)
+		return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+	}
+
+	if m.focus == blobsPane {
+		item, ok := m.blobsList.SelectedItem().(blobItem)
+		if !ok {
+			return m, nil
+		}
+
+		if item.blob.IsPrefix {
+			if m.blobLoadAll {
+				m.status = "Directory navigation is unavailable when all blobs are loaded"
+				return m, nil
+			}
+			m.prefix = item.blob.Name
+			m.blobSearchQuery = ""
+			m.blobsList.ResetFilter()
+			m.loading = true
+			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+			return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+		}
+
+		return m.openPreview(item.blob)
+	}
+
+	return m, nil
+}
+
+func paneName(pane int) string {
+	switch pane {
+	case subscriptionsPane:
+		return "subscriptions"
+	case accountsPane:
+		return "storage accounts"
+	case containersPane:
+		return "containers"
+	case blobsPane:
+		return "blobs"
+	case previewPane:
+		return "preview"
+	default:
+		return "items"
+	}
+}
+
+func subscriptionDisplayName(sub azure.Subscription) string {
+	return ui.SubscriptionDisplayName(sub)
+}
+
+func sameAccount(a, b azure.Account) bool {
+	return a.Name == b.Name && a.SubscriptionID == b.SubscriptionID
+}
