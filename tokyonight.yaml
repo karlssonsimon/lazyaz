@@ -1,0 +1,27 @@
+# Tokyonight (Night) theme for azsb-tui
+#
+# Copy this file to your config directory as config.yaml:
+#   cp tokyonight.yaml ~/.config/azsb/config.yaml
+#
+# Or with XDG_CONFIG_HOME set:
+#   cp tokyonight.yaml $XDG_CONFIG_HOME/azsb/config.yaml
+
+json_colors:
+  key: "#9d7cd8"
+  string: "#9ece6a"
+  number: "#ff9e64"
+  bool: "#7dcfff"
+  "null": "#f7768e"
+  punctuation: "#565f89"
+
+ui_colors:
+  border: "#414868"
+  border_focused: "#73daca"
+  text: "#c0caf5"
+  muted: "#737aa2"
+  accent: "#7aa2f7"
+  accent_strong: "#2ac3de"
+  danger: "#f7768e"
+  filter_match: "#e0af68"
+  selected_bg: "#283457"
+  selected_text: "#c0caf5"

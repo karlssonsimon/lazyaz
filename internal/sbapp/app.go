@@ -28,19 +28,6 @@ const (
 	detailPane
 )
 
-const (
-	colorBorder        = "#4B5563"
-	colorBorderFocused = "#22C55E"
-	colorText          = "#E5E7EB"
-	colorMuted         = "#94A3B8"
-	colorAccent        = "#60A5FA"
-	colorAccentStrong  = "#38BDF8"
-	colorDanger        = "#F87171"
-	colorFilterMatch   = "#F59E0B"
-	colorSelectedBg    = "#334155"
-	colorSelectedText  = "#F8FAFC"
-)
-
 type detailView int
 
 const (
@@ -82,6 +69,9 @@ type Model struct {
 	viewingMessage  bool
 	selectedMessage servicebus.PeekedMessage
 
+	ui         UIColors
+	jsonStyles jsonStyles
+
 	loading bool
 	status  string
 	lastErr string
@@ -121,19 +111,21 @@ type messagesLoadedMsg struct {
 	err       error
 }
 
-func NewModel(svc *servicebus.Service) Model {
+func NewModel(svc *servicebus.Service, cfg Config) Model {
+	ui := cfg.UIColors
+
 	delegate := list.NewDefaultDelegate()
 	delegate.SetSpacing(0)
-	delegate.Styles.NormalTitle = delegate.Styles.NormalTitle.Foreground(lipgloss.Color(colorText))
-	delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.Foreground(lipgloss.Color(colorMuted))
+	delegate.Styles.NormalTitle = delegate.Styles.NormalTitle.Foreground(lipgloss.Color(ui.Text))
+	delegate.Styles.NormalDesc = delegate.Styles.NormalDesc.Foreground(lipgloss.Color(ui.Muted))
 	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
-		Foreground(lipgloss.Color(colorSelectedText)).
-		Background(lipgloss.Color(colorSelectedBg)).
+		Foreground(lipgloss.Color(ui.SelectedText)).
+		Background(lipgloss.Color(ui.SelectedBg)).
 		Bold(true)
 	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
-		Foreground(lipgloss.Color(colorSelectedText)).
-		Background(lipgloss.Color(colorSelectedBg))
-	delegate.Styles.FilterMatch = delegate.Styles.FilterMatch.Foreground(lipgloss.Color(colorFilterMatch)).Underline(true)
+		Foreground(lipgloss.Color(ui.SelectedText)).
+		Background(lipgloss.Color(ui.SelectedBg))
+	delegate.Styles.FilterMatch = delegate.Styles.FilterMatch.Foreground(lipgloss.Color(ui.FilterMatch)).Underline(true)
 
 	subscriptions := list.New([]list.Item{}, delegate, 28, 10)
 	subscriptions.Title = "Subscriptions"
@@ -143,7 +135,7 @@ func NewModel(svc *servicebus.Service) Model {
 	subscriptions.SetStatusBarItemName("subscription", "subscriptions")
 	subscriptions.SetFilteringEnabled(true)
 	subscriptions.DisableQuitKeybindings()
-	styleList(&subscriptions)
+	styleList(&subscriptions, ui)
 
 	namespaces := list.New([]list.Item{}, delegate, 24, 10)
 	namespaces.Title = "Namespaces"
@@ -153,7 +145,7 @@ func NewModel(svc *servicebus.Service) Model {
 	namespaces.SetStatusBarItemName("namespace", "namespaces")
 	namespaces.SetFilteringEnabled(true)
 	namespaces.DisableQuitKeybindings()
-	styleList(&namespaces)
+	styleList(&namespaces, ui)
 
 	entities := list.New([]list.Item{}, delegate, 24, 10)
 	entities.Title = "Entities"
@@ -163,7 +155,7 @@ func NewModel(svc *servicebus.Service) Model {
 	entities.SetStatusBarItemName("entity", "entities")
 	entities.SetFilteringEnabled(true)
 	entities.DisableQuitKeybindings()
-	styleList(&entities)
+	styleList(&entities, ui)
 
 	detail := list.New([]list.Item{}, delegate, 40, 10)
 	detail.Title = "Detail"
@@ -173,11 +165,11 @@ func NewModel(svc *servicebus.Service) Model {
 	detail.SetStatusBarItemName("item", "items")
 	detail.SetFilteringEnabled(true)
 	detail.DisableQuitKeybindings()
-	styleList(&detail)
+	styleList(&detail, ui)
 
 	spin := spinner.New()
 	spin.Spinner = spinner.Dot
-	spin.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAccentStrong))
+	spin.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(ui.AccentStrong))
 
 	return Model{
 		service:           svc,
@@ -187,6 +179,8 @@ func NewModel(svc *servicebus.Service) Model {
 		entitiesList:      entities,
 		detailList:        detail,
 		focus:             subscriptionsPane,
+		ui:                ui,
+		jsonStyles:        cfg.JSONColors.styles(),
 		status:            "Loading Azure subscriptions...",
 		loading:           true,
 	}
@@ -502,37 +496,37 @@ func (m Model) View() string {
 	}
 
 	headerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorAccent)).
+		Foreground(lipgloss.Color(m.ui.Accent)).
 		Bold(true).
 		Padding(0, 1)
 
 	metaStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorMuted)).
+		Foreground(lipgloss.Color(m.ui.Muted)).
 		Padding(0, 1)
 
 	paneStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorText)).
+		Foreground(lipgloss.Color(m.ui.Text)).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(colorBorder)).
+		BorderForeground(lipgloss.Color(m.ui.Border)).
 		Padding(0, 1)
 
 	focusedPaneStyle := paneStyle.Copy().
-		BorderForeground(lipgloss.Color(colorBorderFocused))
+		BorderForeground(lipgloss.Color(m.ui.BorderFocused))
 
 	statusStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorText)).
+		Foreground(lipgloss.Color(m.ui.Text)).
 		Padding(0, 1)
 
 	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorMuted)).
+		Foreground(lipgloss.Color(m.ui.Muted)).
 		Padding(0, 1)
 
 	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorDanger)).
+		Foreground(lipgloss.Color(m.ui.Danger)).
 		Padding(0, 1)
 
 	filterHintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorAccent)).
+		Foreground(lipgloss.Color(m.ui.Accent)).
 		Padding(0, 1)
 
 	subscriptionName := "-"
@@ -558,10 +552,10 @@ func (m Model) View() string {
 
 	if m.deadLetter && m.detailMode == detailMessages {
 		m.detailList.Styles.Title = m.detailList.Styles.Title.
-			Foreground(lipgloss.Color(colorDanger))
+			Foreground(lipgloss.Color(m.ui.Danger))
 	} else {
 		m.detailList.Styles.Title = m.detailList.Styles.Title.
-			Foreground(lipgloss.Color(colorAccent))
+			Foreground(lipgloss.Color(m.ui.Accent))
 	}
 
 	subscriptionsView := m.subscriptionsList.View()
@@ -585,7 +579,7 @@ func (m Model) View() string {
 	}
 
 	if m.deadLetter && m.detailMode == detailMessages {
-		detailPaneStyle = paneStyle.Copy().BorderForeground(lipgloss.Color(colorDanger))
+		detailPaneStyle = paneStyle.Copy().BorderForeground(lipgloss.Color(m.ui.Danger))
 	} else if m.focus == detailPane && !m.viewingMessage {
 		detailPaneStyle = focusedPaneStyle.Copy()
 	}
@@ -603,7 +597,7 @@ func (m Model) View() string {
 	if m.viewingMessage {
 		previewTitleStyle := lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color(colorAccent)).
+			Foreground(lipgloss.Color(m.ui.Accent)).
 			Padding(0, 1)
 		msgID := emptyToDash(m.selectedMessage.MessageID)
 		previewTitle := previewTitleStyle.Render(fmt.Sprintf("Message: %s", msgID))
@@ -1033,7 +1027,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.selectedMessage = item.message
 			m.viewingMessage = true
 			m.resize()
-			m.messageViewport.SetContent(highlightJSON(item.message.FullBody))
+			m.messageViewport.SetContent(m.jsonStyles.highlightJSON(item.message.FullBody))
 			m.messageViewport.GotoTop()
 			m.status = fmt.Sprintf("Viewing message %s (Esc/h to go back)", emptyToDash(item.message.MessageID))
 			return m, nil
@@ -1263,24 +1257,24 @@ func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespac
 
 // --- Helpers ---
 
-func styleList(l *list.Model) {
+func styleList(l *list.Model, ui UIColors) {
 	l.Styles.TitleBar = l.Styles.TitleBar.
-		Foreground(lipgloss.Color(colorMuted)).
+		Foreground(lipgloss.Color(ui.Muted)).
 		Padding(0, 1)
 	l.Styles.Title = l.Styles.Title.
 		Bold(true).
-		Foreground(lipgloss.Color(colorAccent))
-	l.Styles.Spinner = l.Styles.Spinner.Foreground(lipgloss.Color(colorAccentStrong))
-	l.Styles.FilterPrompt = l.Styles.FilterPrompt.Foreground(lipgloss.Color(colorAccent))
-	l.Styles.FilterCursor = l.Styles.FilterCursor.Foreground(lipgloss.Color(colorAccentStrong))
-	l.Styles.DefaultFilterCharacterMatch = l.Styles.DefaultFilterCharacterMatch.Foreground(lipgloss.Color(colorFilterMatch)).Underline(true)
+		Foreground(lipgloss.Color(ui.Accent))
+	l.Styles.Spinner = l.Styles.Spinner.Foreground(lipgloss.Color(ui.AccentStrong))
+	l.Styles.FilterPrompt = l.Styles.FilterPrompt.Foreground(lipgloss.Color(ui.Accent))
+	l.Styles.FilterCursor = l.Styles.FilterCursor.Foreground(lipgloss.Color(ui.AccentStrong))
+	l.Styles.DefaultFilterCharacterMatch = l.Styles.DefaultFilterCharacterMatch.Foreground(lipgloss.Color(ui.FilterMatch)).Underline(true)
 	l.Styles.StatusBar = l.Styles.StatusBar.
-		Foreground(lipgloss.Color(colorMuted))
-	l.Styles.StatusBarActiveFilter = l.Styles.StatusBarActiveFilter.Foreground(lipgloss.Color(colorAccent)).Bold(true)
-	l.Styles.StatusBarFilterCount = l.Styles.StatusBarFilterCount.Foreground(lipgloss.Color(colorAccentStrong)).Bold(true)
-	l.Styles.NoItems = l.Styles.NoItems.Foreground(lipgloss.Color(colorMuted))
-	l.Styles.PaginationStyle = l.Styles.PaginationStyle.Foreground(lipgloss.Color(colorMuted))
-	l.Styles.HelpStyle = l.Styles.HelpStyle.Foreground(lipgloss.Color(colorMuted))
+		Foreground(lipgloss.Color(ui.Muted))
+	l.Styles.StatusBarActiveFilter = l.Styles.StatusBarActiveFilter.Foreground(lipgloss.Color(ui.Accent)).Bold(true)
+	l.Styles.StatusBarFilterCount = l.Styles.StatusBarFilterCount.Foreground(lipgloss.Color(ui.AccentStrong)).Bold(true)
+	l.Styles.NoItems = l.Styles.NoItems.Foreground(lipgloss.Color(ui.Muted))
+	l.Styles.PaginationStyle = l.Styles.PaginationStyle.Foreground(lipgloss.Color(ui.Muted))
+	l.Styles.HelpStyle = l.Styles.HelpStyle.Foreground(lipgloss.Color(ui.Muted))
 }
 
 func paneName(pane int) string {
@@ -1414,15 +1408,7 @@ func truncateForStatus(s string, max int) string {
 	return s[:max] + "..."
 }
 
-var (
-	jsonKeyStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAccent))
-	jsonStringStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorAccentStrong))
-	jsonNumberStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(colorFilterMatch))
-	jsonNullStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(colorDanger))
-	jsonPunctStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted))
-)
-
-func highlightJSON(body string) string {
+func (s jsonStyles) highlightJSON(body string) string {
 	var buf bytes.Buffer
 	if err := json.Indent(&buf, []byte(body), "", "  "); err != nil {
 		return body
@@ -1436,13 +1422,13 @@ func highlightJSON(body string) string {
 		if i > 0 {
 			out.WriteByte('\n')
 		}
-		out.WriteString(colorizeLine(line))
+		out.WriteString(s.colorizeLine(line))
 	}
 
 	return out.String()
 }
 
-func colorizeLine(line string) string {
+func (s jsonStyles) colorizeLine(line string) string {
 	trimmed := strings.TrimLeftFunc(line, unicode.IsSpace)
 	indent := line[:len(line)-len(trimmed)]
 
@@ -1458,24 +1444,24 @@ func colorizeLine(line string) string {
 		if colonIdx > 0 {
 			key := trimmed[:colonIdx+1]
 			rest := trimmed[colonIdx+1:]
-			out.WriteString(jsonKeyStyle.Render(key))
-			out.WriteString(jsonPunctStyle.Render(":"))
+			out.WriteString(s.key.Render(key))
+			out.WriteString(s.punct.Render(":"))
 			val := strings.TrimSpace(rest[1:])
 			if val != "" {
 				out.WriteString(" ")
-				out.WriteString(colorizeValue(val))
+				out.WriteString(s.colorizeValue(val))
 			}
 			return out.String()
 		}
-		out.WriteString(colorizeValue(trimmed))
+		out.WriteString(s.colorizeValue(trimmed))
 		return out.String()
 	}
 
-	out.WriteString(colorizeValue(trimmed))
+	out.WriteString(s.colorizeValue(trimmed))
 	return out.String()
 }
 
-func colorizeValue(val string) string {
+func (s jsonStyles) colorizeValue(val string) string {
 	if val == "" {
 		return val
 	}
@@ -1491,19 +1477,19 @@ func colorizeValue(val string) string {
 	switch {
 	case clean == "{" || clean == "}" || clean == "[" || clean == "]" ||
 		clean == "{}" || clean == "[]":
-		styled = jsonPunctStyle.Render(clean)
+		styled = s.punct.Render(clean)
 	case clean == "null":
-		styled = jsonNullStyle.Render(clean)
+		styled = s.null.Render(clean)
 	case clean == "true" || clean == "false":
-		styled = jsonNumberStyle.Render(clean)
+		styled = s.bool.Render(clean)
 	case len(clean) > 0 && clean[0] == '"':
-		styled = jsonStringStyle.Render(clean)
+		styled = s.str.Render(clean)
 	default:
-		styled = jsonNumberStyle.Render(clean)
+		styled = s.number.Render(clean)
 	}
 
 	if trailing != "" {
-		return styled + jsonPunctStyle.Render(trailing)
+		return styled + s.punct.Render(trailing)
 	}
 	return styled
 }
