@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	ui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"

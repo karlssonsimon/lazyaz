@@ -6,6 +6,7 @@ import (
 
 	"azure-storage/internal/azure"
 	"azure-storage/internal/servicebus"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -259,23 +260,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		key := msg.String()
-		if m.selectingTheme {
-			switch {
-			case m.keymap.ThemeUp.Matches(key):
-				if m.themeIdx > 0 {
-					m.themeIdx--
-				}
-			case m.keymap.ThemeDown.Matches(key):
-				if m.themeIdx < len(m.themes)-1 {
-					m.themeIdx++
-				}
-			case m.keymap.ThemeApply.Matches(key):
-				m.activeThemeIdx = m.themeIdx
-				m.applyTheme(m.themes[m.activeThemeIdx])
-				m.selectingTheme = false
-				SaveThemeName(m.themes[m.activeThemeIdx].Name)
-			case m.keymap.ThemeCancel.Matches(key):
-				m.selectingTheme = false
+		if m.themeOverlay.Active {
+			if m.themeOverlay.HandleKey(key, ui.ThemeKeyBindings{
+				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
+				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
+			}, m.themes) {
+				m.applyTheme(m.themes[m.themeOverlay.ActiveThemeIdx])
+				ui.SaveThemeName(m.appName, m.themes[m.themeOverlay.ActiveThemeIdx].Name)
 			}
 			return m, nil
 		}
@@ -404,9 +395,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(spinner.Tick, deleteDuplicateCmd(m.service, m.currentNS, m.currentEntity, m.viewingTopicSub, m.currentTopicSub, item.message.MessageID))
 			}
 		case m.keymap.ToggleThemePicker.Matches(key):
-			if !focusedFilterActive && !m.selectingTheme {
-				m.selectingTheme = true
-				m.themeIdx = m.activeThemeIdx
+			if !focusedFilterActive && !m.themeOverlay.Active {
+				m.themeOverlay.Open()
 				return m, nil
 			}
 		case m.keymap.BackspaceUp.Matches(key):

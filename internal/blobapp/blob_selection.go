@@ -6,7 +6,7 @@ import (
 	"sort"
 
 	"azure-storage/internal/azure"
-	ui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"

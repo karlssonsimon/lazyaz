@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"azure-storage/internal/azure"
-	ui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 )

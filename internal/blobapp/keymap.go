@@ -50,6 +50,12 @@ type KeyMap struct {
 	DownloadSelection   KeyBinding
 	FilterInput         KeyBinding
 	BlobVisualMove      KeyBinding
+	ToggleThemePicker   KeyBinding
+
+	ThemeUp     KeyBinding
+	ThemeDown   KeyBinding
+	ThemeApply  KeyBinding
+	ThemeCancel KeyBinding
 
 	PreviewBack          KeyBinding
 	PreviewNextFocus     KeyBinding
@@ -80,6 +86,12 @@ func DefaultKeyMap() KeyMap {
 		DownloadSelection:   NewKeyBinding("D"),
 		FilterInput:         NewKeyBinding("/"),
 		BlobVisualMove:      NewKeyBinding("up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G"),
+		ToggleThemePicker:   NewKeyBinding("T"),
+
+		ThemeUp:     NewKeyBinding("up", "k"),
+		ThemeDown:   NewKeyBinding("down", "j"),
+		ThemeApply:  NewKeyBinding("enter"),
+		ThemeCancel: NewKeyBinding("esc", "q"),
 
 		PreviewBack:          NewKeyBinding("h", "left", "esc"),
 		PreviewNextFocus:     NewKeyBinding("tab"),
@@ -104,6 +116,7 @@ func (k KeyMap) HelpText() string {
 		k.DownloadSelection.Label() + " download selection",
 		"preview: " + k.PreviewUp.Label() + " " + k.HalfPageDown.Label() + "/" + k.HalfPageUp.Label() + " gg " + k.PreviewBottom.Label() + " " + k.PreviewBack.Label(),
 		k.BackspaceUp.Label() + " up folder",
+		k.ToggleThemePicker.Label() + " theme",
 		k.RefreshScope.Label() + " refresh scope",
 		k.ReloadSubscriptions.Label() + " reload subscriptions",
 		k.Quit.Label() + " quit",

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"azure-storage/internal/azure"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -257,6 +258,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		key := msg.String()
+
+		if m.themeOverlay.Active {
+			if m.themeOverlay.HandleKey(key, ui.ThemeKeyBindings{
+				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
+				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
+			}, m.themes) {
+				m.applyTheme(m.themes[m.themeOverlay.ActiveThemeIdx])
+				ui.SaveThemeName(m.appName, m.themes[m.themeOverlay.ActiveThemeIdx].Name)
+			}
+			return m, nil
+		}
+
 		if m.preview.open && m.focus == previewPane {
 			return m.handlePreviewKey(msg)
 		}
@@ -341,6 +354,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.keymap.NavigateLeft.Matches(key):
 			if !focusedFilterActive {
 				return m.navigateLeft()
+			}
+		case m.keymap.ToggleThemePicker.Matches(key):
+			if !focusedFilterActive && !m.themeOverlay.Active {
+				m.themeOverlay.Open()
+				return m, nil
 			}
 		case m.keymap.BackspaceUp.Matches(key):
 			if !focusedFilterActive {

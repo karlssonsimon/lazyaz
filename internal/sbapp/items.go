@@ -6,7 +6,7 @@ import (
 
 	"azure-storage/internal/azure"
 	"azure-storage/internal/servicebus"
-	ui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 )

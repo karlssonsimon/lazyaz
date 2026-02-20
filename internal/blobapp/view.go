@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	ui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -14,7 +14,7 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	styles := ui.NewChromeStyles(blobPalette())
+	styles := ui.NewChromeStyles(m.palette)
 
 	subscriptionName := "-"
 	accountName := "-"
@@ -83,9 +83,9 @@ func (m Model) View() string {
 		blobsPaneStyle.Render(blobsView),
 	}
 	if m.preview.open {
-		previewTitle := m.preview.title()
+		previewTitle := m.preview.title(m.palette)
 		previewPaneContent := lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(colorAccent)).Render(previewTitle),
+			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.palette.Accent)).Render(previewTitle),
 			previewView,
 		)
 		paneParts = append(paneParts, previewPaneStyle.Render(previewPaneContent))
@@ -124,7 +124,13 @@ func (m Model) View() string {
 	}
 	parts = append(parts, statusLine, helpLine)
 
-	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
+
+	if m.themeOverlay.Active {
+		view = ui.RenderThemeOverlay(m.themeOverlay, m.themes, m.palette, m.width, m.height, view)
+	}
+
+	return view
 }
 
 func (m Model) subscriptionsPaneTitle() string {

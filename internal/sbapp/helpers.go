@@ -5,7 +5,7 @@ import (
 
 	"azure-storage/internal/azure"
 	"azure-storage/internal/servicebus"
-	ui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 )
 
 func paneName(pane int) string {

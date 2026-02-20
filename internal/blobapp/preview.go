@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"azure-storage/internal/azure"
-	ui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -39,12 +39,6 @@ type previewState struct {
 	viewport    viewport.Model
 }
 
-var (
-	previewTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(colorAccent))
-	previewMetaStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(colorMuted))
-	previewTagStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(colorFilterMatch))
-)
-
 func newPreviewState() previewState {
 	vp := viewport.New(40, 10)
 	vp.SetContent("")
@@ -59,16 +53,19 @@ func (m *Model) resetPreviewState() {
 	}
 }
 
-func (p previewState) title() string {
+func (p previewState) title(palette ui.Palette) string {
 	if !p.open {
 		return "Preview"
 	}
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(palette.Accent))
+	metaStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(palette.Muted))
+
 	label := ui.TrimToWidth(p.blobName, 50)
 	meta := fmt.Sprintf("%s | %s", ui.EmptyToDash(p.language), humanSize(p.blobSize))
 	if p.binary {
 		meta += " | binary"
 	}
-	return previewTitleStyle.Render("Preview") + " " + previewMetaStyle.Render(label+" | "+meta)
+	return titleStyle.Render("Preview") + " " + metaStyle.Render(label+" | "+meta)
 }
 
 func (m Model) openPreview(blob azure.BlobEntry) (Model, tea.Cmd) {
@@ -76,6 +73,8 @@ func (m Model) openPreview(blob azure.BlobEntry) (Model, tea.Cmd) {
 		m.status = "Open a blob file to preview"
 		return m, nil
 	}
+
+	metaStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.palette.Muted))
 
 	if !m.preview.open {
 		m.preview.open = true
@@ -89,7 +88,7 @@ func (m Model) openPreview(blob azure.BlobEntry) (Model, tea.Cmd) {
 	m.preview.windowStart = 0
 	m.preview.windowData = nil
 	m.preview.lineStarts = nil
-	m.preview.rendered = previewMetaStyle.Render("Loading preview...")
+	m.preview.rendered = metaStyle.Render("Loading preview...")
 	m.preview.requestID++
 	m.pendingPreviewG = false
 	m.focus = previewPane
@@ -141,7 +140,7 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 	m.preview.binary = ui.IsProbablyBinary(msg.data)
 	m.preview.language = ui.DetectLanguage(msg.blobName, m.preview.contentType)
 	m.preview.lineStarts = computeLineStarts(msg.data)
-	m.preview.rendered = renderPreviewContent(msg.data, m.preview.language, m.preview.binary, m.syntaxStyles)
+	m.preview.rendered = renderPreviewContent(msg.data, m.preview.language, m.preview.binary, m.syntaxStyles, m.palette)
 	m.preview.viewport.SetContent(m.preview.rendered)
 	m.preview.viewport.YOffset = m.previewLocalLine()
 
@@ -395,18 +394,21 @@ func computePreviewWindow(totalSize, cursor int64, visibleLines int) (int64, int
 	return start, windowSize
 }
 
-func renderPreviewContent(data []byte, language string, binary bool, syntaxStyles ui.SyntaxStyles) string {
+func renderPreviewContent(data []byte, language string, binary bool, syntaxStyles ui.SyntaxStyles, palette ui.Palette) string {
 	if binary {
-		return previewTagStyle.Render("Binary content preview is not supported.")
+		tagStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(palette.FilterMatch))
+		return tagStyle.Render("Binary content preview is not supported.")
 	}
 
 	if len(data) == 0 {
-		return previewMetaStyle.Render("(empty blob)")
+		metaStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(palette.Muted))
+		return metaStyle.Render("(empty blob)")
 	}
 
 	text := string(data)
 	return syntaxStyles.Highlight(language, text)
 }
+
 func clampInt64(v, minVal, maxVal int64) int64 {
 	if v < minVal {
 		return minVal

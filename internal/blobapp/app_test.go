@@ -1,6 +1,14 @@
 package blobapp
 
-import "testing"
+import (
+	"azure-storage/internal/ui"
+	"testing"
+)
+
+var testConfig = ui.Config{
+	ThemeName: "default",
+	Themes:    []ui.Theme{ui.DefaultTheme()},
+}
 
 func TestParentPrefix(t *testing.T) {
 	tests := []struct {

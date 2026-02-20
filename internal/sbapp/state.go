@@ -3,13 +3,12 @@ package sbapp
 import (
 	"azure-storage/internal/azure"
 	"azure-storage/internal/servicebus"
-	ui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 const peekMaxMessages = 50
@@ -64,14 +63,13 @@ type Model struct {
 	markedMessages    map[string]struct{}
 	duplicateMessages map[string]struct{}
 
-	ui           UIColors
+	palette      ui.Palette
 	syntaxStyles ui.SyntaxStyles
 	keymap       KeyMap
 
-	themes         []Theme
-	activeThemeIdx int
-	selectingTheme bool
-	themeIdx       int
+	appName      string
+	themes       []ui.Theme
+	themeOverlay ui.ThemeOverlayState
 
 	loading bool
 	status  string
@@ -128,21 +126,12 @@ type entitiesRefreshedMsg struct {
 	err      error
 }
 
-func NewModel(svc *servicebus.Service, cfg Config) Model {
+func NewModel(svc *servicebus.Service, cfg ui.Config) Model {
 	return NewModelWithKeyMap(svc, cfg, DefaultKeyMap())
 }
 
-func NewModelWithKeyMap(svc *servicebus.Service, cfg Config, keymap KeyMap) Model {
-	active := cfg.ActiveTheme()
-	activeIdx := 0
-	for i, t := range cfg.Themes {
-		if t.Name == active.Name {
-			activeIdx = i
-			break
-		}
-	}
-
-	delegate := ui.NewDefaultDelegate(uiPalette(active.UIColors))
+func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, keymap KeyMap) Model {
+	delegate := list.NewDefaultDelegate()
 
 	subscriptions := list.New([]list.Item{}, delegate, 28, 10)
 	subscriptions.Title = "Subscriptions"
@@ -193,50 +182,23 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg Config, keymap KeyMap) Mode
 		focus:             subscriptionsPane,
 		markedMessages:    make(map[string]struct{}),
 		duplicateMessages: make(map[string]struct{}),
+		appName:           cfg.AppName,
 		themes:            cfg.Themes,
-		activeThemeIdx:    activeIdx,
-		keymap:            keymap,
-		status:            "Loading Azure subscriptions...",
-		loading:           true,
+		themeOverlay: ui.ThemeOverlayState{
+			ActiveThemeIdx: ui.ActiveThemeIndex(cfg),
+		},
+		keymap:  keymap,
+		status:  "Loading Azure subscriptions...",
+		loading: true,
 	}
-	m.applyTheme(active)
+	m.applyTheme(cfg.ActiveTheme())
 	return m
 }
 
-func uiPalette(colors UIColors) ui.Palette {
-	return ui.Palette{
-		Border:        colors.Border,
-		BorderFocused: colors.BorderFocused,
-		Text:          colors.Text,
-		Muted:         colors.Muted,
-		Accent:        colors.Accent,
-		AccentStrong:  colors.AccentStrong,
-		Danger:        colors.Danger,
-		FilterMatch:   colors.FilterMatch,
-		SelectedBg:    colors.SelectedBg,
-		SelectedText:  colors.SelectedText,
-	}
-}
-
-func (m *Model) applyTheme(theme Theme) {
-	uiColors := theme.UIColors
-	m.ui = uiColors
-	m.syntaxStyles = syntaxStylesForTheme(theme)
-
-	palette := uiPalette(uiColors)
-	delegate := ui.NewDefaultDelegate(palette)
-
-	m.subscriptionsList.SetDelegate(delegate)
-	m.namespacesList.SetDelegate(delegate)
-	m.entitiesList.SetDelegate(delegate)
-	m.detailList.SetDelegate(delegate)
-
-	ui.StyleList(&m.subscriptionsList, palette)
-	ui.StyleList(&m.namespacesList, palette)
-	ui.StyleList(&m.entitiesList, palette)
-	ui.StyleList(&m.detailList, palette)
-
-	m.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(uiColors.AccentStrong))
+func (m *Model) applyTheme(theme ui.Theme) {
+	m.palette, m.syntaxStyles = ui.ApplyThemeToLists(theme, []*list.Model{
+		&m.subscriptionsList, &m.namespacesList, &m.entitiesList, &m.detailList,
+	}, &m.spinner)
 }
 
 func (m Model) Init() tea.Cmd {

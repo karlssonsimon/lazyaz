@@ -2,9 +2,8 @@ package sbapp
 
 import (
 	"fmt"
-	"strings"
 
-	commonui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -14,7 +13,7 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	styles := commonui.NewChromeStyles(uiPalette(m.ui))
+	styles := ui.NewChromeStyles(m.palette)
 
 	subscriptionName := "-"
 	namespaceName := "-"
@@ -29,8 +28,8 @@ func (m Model) View() string {
 		entityName = entityDisplayName(m.currentEntity)
 	}
 
-	header := styles.Header.Width(m.width).Render(commonui.TrimToWidth("Azure Service Bus Explorer", m.width-2))
-	headerMeta := styles.Meta.Width(m.width).Render(commonui.TrimToWidth(fmt.Sprintf("Subscription: %s | Namespace: %s | Entity: %s", subscriptionName, namespaceName, entityName), m.width-2))
+	header := styles.Header.Width(m.width).Render(ui.TrimToWidth("Azure Service Bus Explorer", m.width-2))
+	headerMeta := styles.Meta.Width(m.width).Render(ui.TrimToWidth(fmt.Sprintf("Subscription: %s | Namespace: %s | Entity: %s", subscriptionName, namespaceName, entityName), m.width-2))
 
 	m.subscriptionsList.Title = m.subscriptionsPaneTitle()
 	m.namespacesList.Title = m.namespacesPaneTitle()
@@ -39,10 +38,10 @@ func (m Model) View() string {
 
 	if m.deadLetter && m.detailMode == detailMessages {
 		m.detailList.Styles.Title = m.detailList.Styles.Title.
-			Foreground(lipgloss.Color(m.ui.Danger))
+			Foreground(lipgloss.Color(m.palette.Danger))
 	} else {
 		m.detailList.Styles.Title = m.detailList.Styles.Title.
-			Foreground(lipgloss.Color(m.ui.Accent))
+			Foreground(lipgloss.Color(m.palette.Accent))
 	}
 
 	subscriptionsView := m.subscriptionsList.View()
@@ -66,7 +65,7 @@ func (m Model) View() string {
 	}
 
 	if m.deadLetter && m.detailMode == detailMessages {
-		detailPaneStyle = styles.Pane.Copy().BorderForeground(lipgloss.Color(m.ui.Danger))
+		detailPaneStyle = styles.Pane.Copy().BorderForeground(lipgloss.Color(m.palette.Danger))
 	} else if m.focus == detailPane && !m.viewingMessage {
 		detailPaneStyle = styles.FocusedPane.Copy()
 	}
@@ -84,9 +83,9 @@ func (m Model) View() string {
 	if m.viewingMessage {
 		previewTitleStyle := lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color(m.ui.Accent)).
+			Foreground(lipgloss.Color(m.palette.Accent)).
 			Padding(0, 1)
-		msgID := commonui.EmptyToDash(m.selectedMessage.MessageID)
+		msgID := ui.EmptyToDash(m.selectedMessage.MessageID)
 		previewTitle := previewTitleStyle.Render(fmt.Sprintf("Message: %s", msgID))
 		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, m.messageViewport.View())
 
@@ -100,20 +99,20 @@ func (m Model) View() string {
 	if m.focusedListSettingFilter() {
 		filterHint = fmt.Sprintf("Filtering %s: type to narrow, up/down to move, Enter applies filter.", paneName(m.focus))
 	}
-	filterLine := styles.FilterHint.Width(m.width).Render(commonui.TrimToWidth(filterHint, m.width-2))
+	filterLine := styles.FilterHint.Width(m.width).Render(ui.TrimToWidth(filterHint, m.width-2))
 
 	errorLine := ""
 	if m.lastErr != "" {
-		errorLine = styles.Error.Width(m.width).Render(commonui.TrimToWidth("Error: "+m.lastErr, m.width-2))
+		errorLine = styles.Error.Width(m.width).Render(ui.TrimToWidth("Error: "+m.lastErr, m.width-2))
 	}
 
 	statusText := m.status
 	if m.loading {
 		statusText = fmt.Sprintf("%s %s", m.spinner.View(), m.status)
 	}
-	statusLine := styles.Status.Width(m.width).Render(commonui.TrimToWidth(statusText, m.width-2))
+	statusLine := styles.Status.Width(m.width).Render(ui.TrimToWidth(statusText, m.width-2))
 
-	helpLine := styles.Help.Width(m.width).Render(commonui.TrimToWidth(m.keymap.HelpText(), m.width-2))
+	helpLine := styles.Help.Width(m.width).Render(ui.TrimToWidth(m.keymap.HelpText(), m.width-2))
 
 	parts := []string{header, headerMeta, panes, filterLine}
 	if errorLine != "" {
@@ -123,132 +122,9 @@ func (m Model) View() string {
 
 	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
-	if m.selectingTheme {
-		view = m.overlayThemeSelector(view)
+	if m.themeOverlay.Active {
+		view = ui.RenderThemeOverlay(m.themeOverlay, m.themes, m.palette, m.width, m.height, view)
 	}
 
 	return view
-}
-
-func (m Model) overlayThemeSelector(base string) string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(m.ui.Accent)).
-		Padding(0, 1)
-
-	normalStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.ui.Text)).
-		Padding(0, 1)
-
-	cursorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.ui.SelectedText)).
-		Background(lipgloss.Color(m.ui.SelectedBg)).
-		Bold(true).
-		Padding(0, 1)
-
-	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.ui.Muted)).
-		Padding(0, 1)
-
-	var rows []string
-	rows = append(rows, titleStyle.Render("Select Theme"))
-	rows = append(rows, "")
-
-	maxNameLen := 0
-	for _, t := range m.themes {
-		if len(t.Name) > maxNameLen {
-			maxNameLen = len(t.Name)
-		}
-	}
-	_ = maxNameLen
-
-	for i, t := range m.themes {
-		marker := "  "
-		if i == m.activeThemeIdx {
-			marker = "* "
-		}
-		label := marker + t.Name
-		if i == m.themeIdx {
-			rows = append(rows, cursorStyle.Render(label))
-		} else {
-			rows = append(rows, normalStyle.Render(label))
-		}
-	}
-
-	rows = append(rows, "")
-	rows = append(rows, hintStyle.Render("j/k navigate | enter apply | esc cancel"))
-
-	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(m.ui.BorderFocused)).
-		Padding(1, 2)
-
-	box := boxStyle.Render(content)
-
-	return placeOverlay(m.width, m.height, box, base)
-}
-
-func placeOverlay(width, height int, overlay, base string) string {
-	overlayLines := strings.Split(overlay, "\n")
-	baseLines := strings.Split(base, "\n")
-
-	for len(baseLines) < height {
-		baseLines = append(baseLines, "")
-	}
-
-	oH := len(overlayLines)
-	oW := 0
-	for _, l := range overlayLines {
-		if w := lipgloss.Width(l); w > oW {
-			oW = w
-		}
-	}
-
-	startY := (height - oH) / 2
-	startX := (width - oW) / 2
-	if startY < 0 {
-		startY = 0
-	}
-	if startX < 0 {
-		startX = 0
-	}
-
-	for i, ol := range overlayLines {
-		row := startY + i
-		if row >= len(baseLines) {
-			break
-		}
-		line := baseLines[row]
-		lineW := lipgloss.Width(line)
-
-		var out strings.Builder
-		if startX > 0 {
-			if lineW >= startX {
-				out.WriteString(truncateAnsi(line, startX))
-			} else {
-				out.WriteString(line)
-				out.WriteString(strings.Repeat(" ", startX-lineW))
-			}
-		}
-		out.WriteString(ol)
-		baseLines[row] = out.String()
-	}
-
-	return strings.Join(baseLines[:height], "\n")
-}
-
-func truncateAnsi(s string, maxWidth int) string {
-	if lipgloss.Width(s) <= maxWidth {
-		return s
-	}
-	runes := []rune(s)
-	for i := len(runes); i > 0; i-- {
-		candidate := string(runes[:i])
-		if lipgloss.Width(candidate) <= maxWidth {
-			return candidate
-		}
-	}
-	return ""
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"azure-storage/internal/servicebus"
-	commonui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -172,7 +172,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.resize()
 			m.messageViewport.SetContent(m.syntaxStyles.HighlightJSON(item.message.FullBody))
 			m.messageViewport.GotoTop()
-			m.status = fmt.Sprintf("Viewing message %s (Esc/h to go back)", commonui.EmptyToDash(item.message.MessageID))
+			m.status = fmt.Sprintf("Viewing message %s (Esc/h to go back)", ui.EmptyToDash(item.message.MessageID))
 			return m, nil
 		}
 	}

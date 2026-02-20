@@ -2,20 +2,21 @@ package ui
 
 import (
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type Palette struct {
-	Border        string
-	BorderFocused string
-	Text          string
-	Muted         string
-	Accent        string
-	AccentStrong  string
-	Danger        string
-	FilterMatch   string
-	SelectedBg    string
-	SelectedText  string
+	Border        string `yaml:"border"`
+	BorderFocused string `yaml:"border_focused"`
+	Text          string `yaml:"text"`
+	Muted         string `yaml:"muted"`
+	Accent        string `yaml:"accent"`
+	AccentStrong  string `yaml:"accent_strong"`
+	Danger        string `yaml:"danger"`
+	FilterMatch   string `yaml:"filter_match"`
+	SelectedBg    string `yaml:"selected_bg"`
+	SelectedText  string `yaml:"selected_text"`
 }
 
 func NewDefaultDelegate(p Palette) list.DefaultDelegate {
@@ -52,4 +53,26 @@ func StyleList(l *list.Model, p Palette) {
 	l.Styles.NoItems = l.Styles.NoItems.Foreground(lipgloss.Color(p.Muted))
 	l.Styles.PaginationStyle = l.Styles.PaginationStyle.Foreground(lipgloss.Color(p.Muted))
 	l.Styles.HelpStyle = l.Styles.HelpStyle.Foreground(lipgloss.Color(p.Muted))
+}
+
+func ApplyThemeToLists(theme Theme, lists []*list.Model, spin *spinner.Model) (Palette, SyntaxStyles) {
+	palette := theme.Colors
+	styles := SyntaxStylesForTheme(theme)
+	delegate := NewDefaultDelegate(palette)
+	for _, l := range lists {
+		l.SetDelegate(delegate)
+		StyleList(l, palette)
+	}
+	spin.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(palette.AccentStrong))
+	return palette, styles
+}
+
+func ActiveThemeIndex(cfg Config) int {
+	active := cfg.ActiveTheme()
+	for i, t := range cfg.Themes {
+		if t.Name == active.Name {
+			return i
+		}
+	}
+	return 0
 }

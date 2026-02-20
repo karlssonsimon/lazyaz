@@ -6,6 +6,7 @@ import (
 
 	"azure-storage/internal/azure"
 	"azure-storage/internal/blobapp"
+	"azure-storage/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -17,7 +18,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	program := tea.NewProgram(blobapp.NewModel(azure.NewService(cred)), tea.WithAltScreen())
+	cfg := ui.LoadConfig("azblob")
+	program := tea.NewProgram(blobapp.NewModel(azure.NewService(cred), cfg), tea.WithAltScreen())
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "application error: %v\n", err)
 		os.Exit(1)

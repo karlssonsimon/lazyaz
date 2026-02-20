@@ -1,7 +1,7 @@
 package sbapp
 
 import (
-	ui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 )

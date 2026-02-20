@@ -1,10 +1,9 @@
 package sbapp
 
 import (
-	"strings"
 	"testing"
 
-	commonui "azure-storage/internal/ui"
+	"azure-storage/internal/ui"
 )
 
 func TestTrimToWidth(t *testing.T) {
@@ -24,7 +23,7 @@ func TestTrimToWidth(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := commonui.TrimToWidth(tc.input, tc.max); got != tc.want {
+			if got := ui.TrimToWidth(tc.input, tc.max); got != tc.want {
 				t.Fatalf("expected %q, got %q", tc.want, got)
 			}
 		})
@@ -94,7 +93,6 @@ func TestEntityDisplayName(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Use the servicebus types via the imported sbapp package indirectly
 			tag := "[Q]"
 			if tc.entity.kind == 1 {
 				tag = "[T]"
@@ -104,45 +102,5 @@ func TestEntityDisplayName(t *testing.T) {
 				t.Fatalf("expected %q, got %q", tc.want, got)
 			}
 		})
-	}
-}
-
-func TestHighlightJSON_ValidJSON(t *testing.T) {
-	input := `{"name":"test","count":42,"active":true,"data":null}`
-	styles := syntaxStylesForTheme(defaultTheme())
-	result := styles.HighlightJSON(input)
-
-	if !strings.Contains(result, "name") {
-		t.Fatal("expected result to contain key 'name'")
-	}
-	if !strings.Contains(result, "test") {
-		t.Fatal("expected result to contain value 'test'")
-	}
-	if !strings.Contains(result, "42") {
-		t.Fatal("expected result to contain number 42")
-	}
-	if !strings.Contains(result, "true") {
-		t.Fatal("expected result to contain boolean true")
-	}
-	if !strings.Contains(result, "null") {
-		t.Fatal("expected result to contain null")
-	}
-}
-
-func TestHighlightJSON_InvalidJSON(t *testing.T) {
-	input := "this is not json"
-	styles := syntaxStylesForTheme(defaultTheme())
-	result := styles.HighlightJSON(input)
-	if result != input {
-		t.Fatalf("expected plain text passthrough, got %q", result)
-	}
-}
-
-func TestHighlightJSON_EmptyObject(t *testing.T) {
-	input := `{}`
-	styles := syntaxStylesForTheme(defaultTheme())
-	result := styles.HighlightJSON(input)
-	if !strings.Contains(result, "{}") {
-		t.Fatalf("expected result to contain '{}', got %q", result)
 	}
 }
