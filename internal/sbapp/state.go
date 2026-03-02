@@ -56,6 +56,7 @@ type Model struct {
 	viewingTopicSub bool
 	currentTopicSub servicebus.TopicSubscription
 	deadLetter      bool
+	dlqFilter       bool
 
 	messageViewport   viewport.Model
 	viewingMessage    bool

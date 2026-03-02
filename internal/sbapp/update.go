@@ -139,10 +139,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.lastErr = ""
 		m.entities = msg.entities
-		m.entitiesList.ResetFilter()
-		m.entitiesList.SetItems(entitiesToItems(msg.entities))
-		m.entitiesList.Title = fmt.Sprintf("Entities (%d)", len(msg.entities))
-		m.entitiesList.Select(0)
+		m.applyEntityFilter()
 
 		if len(msg.entities) == 0 {
 			m.hasEntity = false
@@ -255,7 +252,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.entities = msg.entities
-		m.entitiesList.SetItems(entitiesToItems(msg.entities))
+		m.applyEntityFilter()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -393,6 +390,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lastErr = ""
 				m.status = "Deleting duplicate message..."
 				return m, tea.Batch(spinner.Tick, deleteDuplicateCmd(m.service, m.currentNS, m.currentEntity, m.viewingTopicSub, m.currentTopicSub, item.message.MessageID))
+			}
+		case m.keymap.ToggleDLQFilter.Matches(key):
+			if !focusedFilterActive {
+				m.dlqFilter = !m.dlqFilter
+				m.applyEntityFilter()
+				if m.dlqFilter {
+					m.status = "DLQ filter enabled – showing only entities with dead-letter messages"
+				} else {
+					m.status = "DLQ filter disabled – showing all entities"
+				}
+				return m, nil
 			}
 		case m.keymap.ToggleThemePicker.Matches(key):
 			if !focusedFilterActive && !m.themeOverlay.Active {

@@ -49,6 +49,7 @@ type KeyMap struct {
 	ShowDeadLetterQueue KeyBinding
 	RequeueDLQ          KeyBinding
 	DeleteDuplicate     KeyBinding
+	ToggleDLQFilter     KeyBinding
 	ToggleThemePicker   KeyBinding
 
 	ThemeUp     KeyBinding
@@ -78,6 +79,7 @@ func DefaultKeyMap() KeyMap {
 		ShowDeadLetterQueue: NewKeyBinding("]"),
 		RequeueDLQ:          NewKeyBinding("R"),
 		DeleteDuplicate:     NewKeyBinding("D"),
+		ToggleDLQFilter:     NewKeyBinding("f"),
 		ToggleThemePicker:   NewKeyBinding("T"),
 
 		ThemeUp:     NewKeyBinding("up", "k"),
@@ -100,6 +102,7 @@ func (k KeyMap) HelpText() string {
 		k.ShowActiveQueue.Label() + "/" + k.ShowDeadLetterQueue.Label() + " active/dlq",
 		k.ToggleMark.Label() + " mark",
 		k.RequeueDLQ.Label() + " requeue(dlq)",
+		k.ToggleDLQFilter.Label() + " dlq-filter",
 		k.DeleteDuplicate.Label() + " delete(dup)",
 		k.HalfPageDown.Label() + "/" + k.HalfPageUp.Label() + " half-page",
 		k.ToggleThemePicker.Label() + " theme",

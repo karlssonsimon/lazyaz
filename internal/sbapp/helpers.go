@@ -56,11 +56,15 @@ func (m Model) namespacesPaneTitle() string {
 
 func (m Model) entitiesPaneTitle() string {
 	title := "Entities"
+	if m.dlqFilter {
+		title = "Entities [DLQ]"
+	}
 	if m.hasNamespace {
-		title = fmt.Sprintf("Entities · %s", m.currentNS.Name)
+		title = fmt.Sprintf("%s · %s", title, m.currentNS.Name)
 	}
 	if m.entities != nil {
-		title = fmt.Sprintf("%s (%d)", title, len(m.entities))
+		filtered := len(entitiesToFilteredItems(m.entities, m.dlqFilter))
+		title = fmt.Sprintf("%s (%d)", title, filtered)
 	}
 	return title
 }
@@ -96,6 +100,15 @@ func (m Model) detailPaneTitle() string {
 		title = fmt.Sprintf("%s (%d)", title, len(m.topicSubs))
 	}
 	return title
+}
+
+func (m *Model) applyEntityFilter() {
+	items := entitiesToFilteredItems(m.entities, m.dlqFilter)
+	m.entitiesList.ResetFilter()
+	m.entitiesList.SetItems(items)
+	if len(items) > 0 {
+		m.entitiesList.Select(0)
+	}
 }
 
 func truncateForStatus(s string, max int) string {

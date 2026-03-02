@@ -155,6 +155,17 @@ func entitiesToItems(entities []servicebus.Entity) []list.Item {
 	return items
 }
 
+func entitiesToFilteredItems(entities []servicebus.Entity, dlqOnly bool) []list.Item {
+	items := make([]list.Item, 0, len(entities))
+	for _, e := range entities {
+		if dlqOnly && e.DeadLetterCount == 0 {
+			continue
+		}
+		items = append(items, entityItem{entity: e})
+	}
+	return items
+}
+
 func topicSubsToItems(subs []servicebus.TopicSubscription) []list.Item {
 	items := make([]list.Item, 0, len(subs))
 	for _, s := range subs {
