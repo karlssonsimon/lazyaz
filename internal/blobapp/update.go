@@ -286,7 +286,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch {
-		case m.keymap.Quit.Matches(key):
+		case ui.ShouldQuit(key, m.keymap.Quit, focusedFilterActive):
 			return m, tea.Quit
 		case m.keymap.HalfPageDown.Matches(key):
 			m.scrollFocusedHalfPage(1)

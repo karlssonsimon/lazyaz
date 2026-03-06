@@ -270,7 +270,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.viewingMessage {
 			switch {
-			case m.keymap.Quit.Matches(key):
+			case ui.ShouldQuit(key, m.keymap.Quit, false):
 				return m, tea.Quit
 			case m.keymap.MessageBack.Matches(key):
 				m.viewingMessage = false
@@ -287,7 +287,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		focusedFilterActive := m.focusedListSettingFilter()
 
 		switch {
-		case m.keymap.Quit.Matches(key):
+		case ui.ShouldQuit(key, m.keymap.Quit, focusedFilterActive):
 			return m, tea.Quit
 		case m.keymap.HalfPageDown.Matches(key):
 			m.scrollFocusedHalfPage(1)

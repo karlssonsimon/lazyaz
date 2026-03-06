@@ -156,7 +156,7 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 	switch {
-	case m.keymap.Quit.Matches(key):
+	case ui.ShouldQuit(key, m.keymap.Quit, false):
 		return m, tea.Quit
 	case m.keymap.PreviewBack.Matches(key):
 		m.pendingPreviewG = false

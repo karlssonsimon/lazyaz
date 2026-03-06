@@ -4,7 +4,15 @@ import (
 	"testing"
 
 	"azure-storage/internal/ui"
+
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 )
+
+var testConfig = ui.Config{
+	ThemeName: "default",
+	Themes:    []ui.Theme{ui.DefaultTheme()},
+}
 
 func TestTrimToWidth(t *testing.T) {
 	tests := []struct {
@@ -103,4 +111,32 @@ func TestEntityDisplayName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
+	m := NewModel(nil, testConfig)
+	m.focus = subscriptionsPane
+	m.subscriptionsList.SetFilterState(list.Filtering)
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	model, ok := updated.(Model)
+	if !ok {
+		t.Fatalf("expected updated model type %T, got %T", Model{}, updated)
+	}
+
+	if isQuitCmd(cmd) {
+		t.Fatal("expected typing q in active filter not to quit")
+	}
+
+	if model.subscriptionsList.FilterValue() != "q" {
+		t.Fatalf("expected filter value %q, got %q", "q", model.subscriptionsList.FilterValue())
+	}
+}
+
+func isQuitCmd(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	_, ok := cmd().(tea.QuitMsg)
+	return ok
 }

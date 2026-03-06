@@ -3,6 +3,9 @@ package blobapp
 import (
 	"azure-storage/internal/ui"
 	"testing"
+
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 var testConfig = ui.Config{
@@ -102,4 +105,32 @@ func TestComputePreviewWindow(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
+	m := NewModel(nil, testConfig)
+	m.focus = blobsPane
+	m.blobsList.SetFilterState(list.Filtering)
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	model, ok := updated.(Model)
+	if !ok {
+		t.Fatalf("expected updated model type %T, got %T", Model{}, updated)
+	}
+
+	if isQuitCmd(cmd) {
+		t.Fatal("expected typing q in active filter not to quit")
+	}
+
+	if model.blobsList.FilterValue() != "q" {
+		t.Fatalf("expected filter value %q, got %q", "q", model.blobsList.FilterValue())
+	}
+}
+
+func isQuitCmd(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	_, ok := cmd().(tea.QuitMsg)
+	return ok
 }
