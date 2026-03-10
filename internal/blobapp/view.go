@@ -116,7 +116,7 @@ func (m Model) View() string {
 	}
 	statusLine := styles.Status.Width(m.width).Render(ui.TrimToWidth(statusText, m.width-2))
 
-	helpLine := styles.Help.Width(m.width).Render(ui.TrimToWidth(m.keymap.HelpText(), m.width-2))
+	helpLine := styles.Help.Width(m.width).Render(ui.TrimToWidth(m.keymap.FooterHelpText(), m.width-2))
 
 	parts := []string{header, headerMeta, panes, filterLine}
 	if errorLine != "" {
@@ -128,6 +128,9 @@ func (m Model) View() string {
 
 	if m.themeOverlay.Active {
 		view = ui.RenderThemeOverlay(m.themeOverlay, m.themes, m.palette, m.width, m.height, view)
+	}
+	if m.helpOverlay.Active {
+		view = ui.RenderHelpOverlay("Azure Blob Explorer Help", m.keymap.HelpSections(), m.palette, m.width, m.height, view)
 	}
 
 	return view

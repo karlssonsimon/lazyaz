@@ -4,6 +4,8 @@ import "slices"
 
 import "strings"
 
+import "azure-storage/internal/ui"
+
 type KeyBinding struct {
 	Keys []string
 }
@@ -51,6 +53,7 @@ type KeyMap struct {
 	DeleteDuplicate     KeyBinding
 	ToggleDLQFilter     KeyBinding
 	ToggleThemePicker   KeyBinding
+	ToggleHelp          KeyBinding
 
 	ThemeUp     KeyBinding
 	ThemeDown   KeyBinding
@@ -81,6 +84,7 @@ func DefaultKeyMap() KeyMap {
 		DeleteDuplicate:     NewKeyBinding("D"),
 		ToggleDLQFilter:     NewKeyBinding("f"),
 		ToggleThemePicker:   NewKeyBinding("T"),
+		ToggleHelp:          NewKeyBinding("?"),
 
 		ThemeUp:     NewKeyBinding("up", "k"),
 		ThemeDown:   NewKeyBinding("down", "j"),
@@ -91,23 +95,48 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
-func (k KeyMap) HelpText() string {
-	return strings.Join([]string{
-		"keys:",
-		k.NextFocus.Label() + " focus",
-		k.FilterInput.Label() + " filter",
-		k.OpenFocused.Label() + "/" + k.OpenFocusedAlt.Label() + " open",
-		k.NavigateLeft.Label() + " back",
-		k.BackspaceUp.Label() + " up",
-		k.ShowActiveQueue.Label() + "/" + k.ShowDeadLetterQueue.Label() + " active/dlq",
-		k.ToggleMark.Label() + " mark",
-		k.RequeueDLQ.Label() + " requeue(dlq)",
-		k.ToggleDLQFilter.Label() + " dlq-filter",
-		k.DeleteDuplicate.Label() + " delete(dup)",
-		k.HalfPageDown.Label() + "/" + k.HalfPageUp.Label() + " half-page",
-		k.ToggleThemePicker.Label() + " theme",
-		k.RefreshScope.Label() + " refresh",
-		k.ReloadSubscriptions.Label() + " reload",
-		k.Quit.Label() + " quit",
-	}, " | ")
+func (k KeyMap) FooterHelpText() string {
+	return k.ToggleHelp.Label() + ": help"
+}
+
+func (k KeyMap) HelpSections() []ui.HelpSection {
+	return []ui.HelpSection{
+		{
+			Title: "Navigation",
+			Items: []string{
+				helpEntry(k.NextFocus, "next focus"),
+				helpEntry(k.PreviousFocus, "previous focus"),
+				helpEntry(k.FilterInput, "filter focused pane"),
+				helpEntry(NewKeyBinding(k.OpenFocused.Label()+"/"+k.OpenFocusedAlt.Label()), "open selected item"),
+				helpEntry(k.NavigateLeft, "go back"),
+				helpEntry(k.BackspaceUp, "backspace navigation"),
+				helpEntry(NewKeyBinding(k.HalfPageDown.Label()+"/"+k.HalfPageUp.Label()), "half-page scroll"),
+			},
+		},
+		{
+			Title: "Messages",
+			Items: []string{
+				helpEntry(k.ToggleMark, "mark message"),
+				helpEntry(NewKeyBinding(k.ShowActiveQueue.Label()+"/"+k.ShowDeadLetterQueue.Label()), "switch active and DLQ"),
+				helpEntry(k.ToggleDLQFilter, "toggle entities with DLQ only"),
+				helpEntry(k.RequeueDLQ, "requeue marked/current DLQ messages"),
+				helpEntry(k.DeleteDuplicate, "delete duplicate DLQ message"),
+				helpEntry(k.MessageBack, "close message preview"),
+			},
+		},
+		{
+			Title: "App",
+			Items: []string{
+				helpEntry(k.ToggleThemePicker, "open theme picker"),
+				helpEntry(k.RefreshScope, "refresh current scope"),
+				helpEntry(k.ReloadSubscriptions, "reload subscriptions"),
+				helpEntry(k.ToggleHelp, "toggle help"),
+				helpEntry(k.Quit, "quit"),
+			},
+		},
+	}
+}
+
+func helpEntry(binding KeyBinding, description string) string {
+	return strings.Join([]string{binding.Label(), description}, "  ")
 }

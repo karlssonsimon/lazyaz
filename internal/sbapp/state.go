@@ -71,6 +71,7 @@ type Model struct {
 	appName      string
 	themes       []ui.Theme
 	themeOverlay ui.ThemeOverlayState
+	helpOverlay  ui.HelpOverlayState
 
 	loading bool
 	status  string

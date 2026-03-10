@@ -257,6 +257,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		key := msg.String()
+		if m.helpOverlay.Active {
+			switch {
+			case m.keymap.ToggleHelp.Matches(key), key == "esc":
+				m.helpOverlay.Close()
+				return m, nil
+			default:
+				return m, nil
+			}
+		}
 		if m.themeOverlay.Active {
 			if m.themeOverlay.HandleKey(key, ui.ThemeKeyBindings{
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
@@ -405,6 +414,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.keymap.ToggleThemePicker.Matches(key):
 			if !focusedFilterActive && !m.themeOverlay.Active {
 				m.themeOverlay.Open()
+				return m, nil
+			}
+		case m.keymap.ToggleHelp.Matches(key):
+			if !focusedFilterActive && !m.themeOverlay.Active {
+				m.helpOverlay.Toggle()
 				return m, nil
 			}
 		case m.keymap.BackspaceUp.Matches(key):

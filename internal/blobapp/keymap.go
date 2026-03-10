@@ -4,6 +4,8 @@ import "slices"
 
 import "strings"
 
+import "azure-storage/internal/ui"
+
 type KeyBinding struct {
 	Keys []string
 }
@@ -51,6 +53,7 @@ type KeyMap struct {
 	FilterInput         KeyBinding
 	BlobVisualMove      KeyBinding
 	ToggleThemePicker   KeyBinding
+	ToggleHelp          KeyBinding
 
 	ThemeUp     KeyBinding
 	ThemeDown   KeyBinding
@@ -87,6 +90,7 @@ func DefaultKeyMap() KeyMap {
 		FilterInput:         NewKeyBinding("/"),
 		BlobVisualMove:      NewKeyBinding("up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G"),
 		ToggleThemePicker:   NewKeyBinding("T"),
+		ToggleHelp:          NewKeyBinding("?"),
 
 		ThemeUp:     NewKeyBinding("up", "k"),
 		ThemeDown:   NewKeyBinding("down", "j"),
@@ -103,22 +107,59 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
-func (k KeyMap) HelpText() string {
-	return strings.Join([]string{
-		"keys:",
-		k.NextFocus.Label() + " focus",
-		k.FilterInput.Label() + " filter pane",
-		k.OpenFocused.Label() + "/" + k.OpenFocusedAlt.Label() + " open->focus right",
-		k.NavigateLeft.Label() + " left/up",
-		k.ToggleLoadAll.Label() + " toggle load-all blobs",
-		k.ToggleMark.Label() + " toggle mark",
-		k.ToggleVisualLine.Label() + " visual-line range",
-		k.DownloadSelection.Label() + " download selection",
-		"preview: " + k.PreviewUp.Label() + " " + k.HalfPageDown.Label() + "/" + k.HalfPageUp.Label() + " gg " + k.PreviewBottom.Label() + " " + k.PreviewBack.Label(),
-		k.BackspaceUp.Label() + " up folder",
-		k.ToggleThemePicker.Label() + " theme",
-		k.RefreshScope.Label() + " refresh scope",
-		k.ReloadSubscriptions.Label() + " reload subscriptions",
-		k.Quit.Label() + " quit",
-	}, " | ")
+func (k KeyMap) FooterHelpText() string {
+	return k.ToggleHelp.Label() + ": help"
+}
+
+func (k KeyMap) HelpSections() []ui.HelpSection {
+	return []ui.HelpSection{
+		{
+			Title: "Navigation",
+			Items: []string{
+				helpEntry(k.NextFocus, "next focus"),
+				helpEntry(k.PreviousFocus, "previous focus"),
+				helpEntry(k.FilterInput, "filter focused pane"),
+				helpEntry(NewKeyBinding(k.OpenFocused.Label()+"/"+k.OpenFocusedAlt.Label()), "open and move right"),
+				helpEntry(k.NavigateLeft, "go left/back"),
+				helpEntry(k.BackspaceUp, "up one folder"),
+				helpEntry(NewKeyBinding(k.HalfPageDown.Label()+"/"+k.HalfPageUp.Label()), "half-page scroll"),
+			},
+		},
+		{
+			Title: "Blob Actions",
+			Items: []string{
+				helpEntry(k.ToggleLoadAll, "toggle load-all blobs"),
+				helpEntry(k.ToggleMark, "toggle mark on current blob"),
+				helpEntry(k.ToggleVisualLine, "start/end visual-line selection"),
+				helpEntry(k.ExitVisualLine, "exit visual mode"),
+				helpEntry(k.DownloadSelection, "download marked/visual selection"),
+			},
+		},
+		{
+			Title: "Preview",
+			Items: []string{
+				helpEntry(k.PreviewNextFocus, "next preview focus"),
+				helpEntry(k.PreviewPreviousFocus, "previous preview focus"),
+				helpEntry(NewKeyBinding(k.PreviewDown.Label()+"/"+k.PreviewUp.Label()), "scroll preview"),
+				helpEntry(NewKeyBinding(k.HalfPageDown.Label()+"/"+k.HalfPageUp.Label()), "half-page preview scroll"),
+				helpEntry(k.PreviewTopPrefix, "go to top with gg"),
+				helpEntry(k.PreviewBottom, "go to bottom"),
+				helpEntry(k.PreviewBack, "close preview / go back"),
+			},
+		},
+		{
+			Title: "App",
+			Items: []string{
+				helpEntry(k.ToggleThemePicker, "open theme picker"),
+				helpEntry(k.RefreshScope, "refresh current scope"),
+				helpEntry(k.ReloadSubscriptions, "reload subscriptions"),
+				helpEntry(k.ToggleHelp, "toggle help"),
+				helpEntry(k.Quit, "quit"),
+			},
+		},
+	}
+}
+
+func helpEntry(binding KeyBinding, description string) string {
+	return strings.Join([]string{binding.Label(), description}, "  ")
 }

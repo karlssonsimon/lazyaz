@@ -2,6 +2,7 @@ package blobapp
 
 import (
 	"azure-storage/internal/ui"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -124,6 +125,37 @@ func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
 
 	if model.blobsList.FilterValue() != "q" {
 		t.Fatalf("expected filter value %q, got %q", "q", model.blobsList.FilterValue())
+	}
+}
+
+func TestHelpToggleOpensAndCloses(t *testing.T) {
+	m := NewModel(nil, testConfig)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model := updated.(Model)
+	if !model.helpOverlay.Active {
+		t.Fatal("expected ? to open help overlay")
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model = updated.(Model)
+	if model.helpOverlay.Active {
+		t.Fatal("expected ? to close help overlay")
+	}
+}
+
+func TestViewShowsCompactHelpHint(t *testing.T) {
+	m := NewModel(nil, testConfig)
+	m.width = 120
+	m.height = 40
+	m.resize()
+
+	view := m.View()
+	if !strings.Contains(view, "?: help") {
+		t.Fatal("expected compact help hint in footer")
+	}
+	if strings.Contains(view, "keys:") {
+		t.Fatal("expected long key list to be removed from footer")
 	}
 }
 
