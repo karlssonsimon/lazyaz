@@ -73,6 +73,8 @@ type Model struct {
 	themeOverlay ui.ThemeOverlayState
 	helpOverlay  ui.HelpOverlayState
 
+	cache sbCache
+
 	loading bool
 	status  string
 	lastErr string
@@ -184,6 +186,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, keymap KeyMap) M
 		focus:             subscriptionsPane,
 		markedMessages:    make(map[string]struct{}),
 		duplicateMessages: make(map[string]struct{}),
+		cache:             newCache(),
 		appName:           cfg.AppName,
 		themes:            cfg.Themes,
 		themeOverlay: ui.ThemeOverlayState{

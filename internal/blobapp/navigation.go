@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"azure-storage/internal/azure"
+	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -61,6 +62,14 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 		if m.hasContainer && !m.blobLoadAll && m.prefix != "" {
 			m.prefix = parentPrefix(m.prefix)
 			m.blobSearchQuery = ""
+
+			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
+				m.blobs = cached
+				m.blobsList.ResetFilter()
+				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
+				m.refreshBlobItems()
+			}
+
 			m.loading = true
 			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
 			return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
@@ -105,16 +114,25 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.resetPreviewState()
 		m.focus = accountsPane
 
-		m.accounts = nil
+		if cached, ok := m.cache.accounts.Get(item.subscription.ID); ok {
+			m.accounts = cached
+			m.accountsList.ResetFilter()
+			m.accountsList.SetItems(accountsToItems(cached))
+			m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(cached))
+			m.accountsList.Select(0)
+		} else {
+			m.accounts = nil
+			m.accountsList.ResetFilter()
+			m.accountsList.SetItems(nil)
+			m.accountsList.Title = "Storage Accounts"
+		}
+
 		m.containers = nil
 		m.blobs = nil
-		m.accountsList.ResetFilter()
 		m.containersList.ResetFilter()
 		m.blobsList.ResetFilter()
-		m.accountsList.SetItems(nil)
 		m.containersList.SetItems(nil)
 		m.blobsList.SetItems(nil)
-		m.accountsList.Title = "Storage Accounts"
 		m.containersList.Title = "Containers"
 		m.blobsList.Title = "Blobs"
 
@@ -139,13 +157,22 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.resetPreviewState()
 		m.focus = containersPane
 
-		m.containers = nil
+		if cached, ok := m.cache.containers.Get(cache.Key(m.currentSub.ID, item.account.Name)); ok {
+			m.containers = cached
+			m.containersList.ResetFilter()
+			m.containersList.SetItems(containersToItems(cached))
+			m.containersList.Title = fmt.Sprintf("Containers (%d)", len(cached))
+			m.containersList.Select(0)
+		} else {
+			m.containers = nil
+			m.containersList.ResetFilter()
+			m.containersList.SetItems(nil)
+			m.containersList.Title = "Containers"
+		}
+
 		m.blobs = nil
-		m.containersList.ResetFilter()
 		m.blobsList.ResetFilter()
-		m.containersList.SetItems(nil)
 		m.blobsList.SetItems(nil)
-		m.containersList.Title = "Containers"
 		m.blobsList.Title = "Blobs"
 
 		m.loading = true
@@ -167,10 +194,17 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.resetPreviewState()
 		m.focus = blobsPane
 
-		m.blobs = nil
-		m.blobsList.ResetFilter()
-		m.blobsList.SetItems(nil)
-		m.blobsList.Title = "Blobs"
+		if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, item.container.Name, "", false)); ok {
+			m.blobs = cached
+			m.blobsList.ResetFilter()
+			m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
+			m.refreshBlobItems()
+		} else {
+			m.blobs = nil
+			m.blobsList.ResetFilter()
+			m.blobsList.SetItems(nil)
+			m.blobsList.Title = "Blobs"
+		}
 
 		m.loading = true
 		m.status = fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName)
@@ -190,7 +224,16 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			}
 			m.prefix = item.blob.Name
 			m.blobSearchQuery = ""
-			m.blobsList.ResetFilter()
+
+			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
+				m.blobs = cached
+				m.blobsList.ResetFilter()
+				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
+				m.refreshBlobItems()
+			} else {
+				m.blobsList.ResetFilter()
+			}
+
 			m.loading = true
 			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
 			return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))

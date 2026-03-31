@@ -3,6 +3,7 @@ package sbapp
 import (
 	"fmt"
 
+	"azure-storage/internal/cache"
 	"azure-storage/internal/servicebus"
 	"azure-storage/internal/ui"
 
@@ -75,15 +76,24 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearDetailState()
 		m.focus = namespacesPane
 
-		m.namespaces = nil
+		if cached, ok := m.cache.namespaces.Get(item.subscription.ID); ok {
+			m.namespaces = cached
+			m.namespacesList.ResetFilter()
+			m.namespacesList.SetItems(namespacesToItems(cached))
+			m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(cached))
+			m.namespacesList.Select(0)
+		} else {
+			m.namespaces = nil
+			m.namespacesList.ResetFilter()
+			m.namespacesList.SetItems(nil)
+			m.namespacesList.Title = "Namespaces"
+		}
+
 		m.entities = nil
-		m.namespacesList.ResetFilter()
 		m.entitiesList.ResetFilter()
 		m.detailList.ResetFilter()
-		m.namespacesList.SetItems(nil)
 		m.entitiesList.SetItems(nil)
 		m.detailList.SetItems(nil)
-		m.namespacesList.Title = "Namespaces"
 		m.entitiesList.Title = "Entities"
 		m.detailList.Title = "Detail"
 
@@ -105,12 +115,21 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearDetailState()
 		m.focus = entitiesPane
 
-		m.entities = nil
-		m.entitiesList.ResetFilter()
+		if cached, ok := m.cache.entities.Get(cache.Key(m.currentSub.ID, item.namespace.Name)); ok {
+			m.entities = cached
+			m.entitiesList.ResetFilter()
+			m.entitiesList.SetItems(entitiesToFilteredItems(cached, m.dlqFilter))
+			m.entitiesList.Title = m.entitiesPaneTitle()
+			m.entitiesList.Select(0)
+		} else {
+			m.entities = nil
+			m.entitiesList.ResetFilter()
+			m.entitiesList.SetItems(nil)
+			m.entitiesList.Title = "Entities"
+		}
+
 		m.detailList.ResetFilter()
-		m.entitiesList.SetItems(nil)
 		m.detailList.SetItems(nil)
-		m.entitiesList.Title = "Entities"
 		m.detailList.Title = "Detail"
 
 		m.loading = true
@@ -129,19 +148,34 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearDetailState()
 		m.focus = detailPane
 
+		if item.entity.Kind == servicebus.EntityTopic {
+			topicKey := cache.Key(m.currentSub.ID, m.currentNS.Name, item.entity.Name)
+			if cached, ok := m.cache.topicSubs.Get(topicKey); ok {
+				m.topicSubs = cached
+				m.detailMode = detailTopicSubscriptions
+				m.detailList.ResetFilter()
+				m.detailList.SetItems(topicSubsToItems(cached))
+				m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(cached))
+				m.detailList.Select(0)
+			} else {
+				m.detailList.ResetFilter()
+				m.detailList.SetItems(nil)
+				m.detailList.Title = "Detail"
+			}
+
+			m.loading = true
+			m.status = fmt.Sprintf("Loading subscriptions for topic %s", item.entity.Name)
+			return m, tea.Batch(spinner.Tick, loadTopicSubscriptionsCmd(m.service, m.currentNS, item.entity.Name))
+		}
+
+		// Queue — messages are not cached (ephemeral)
 		m.detailList.ResetFilter()
 		m.detailList.SetItems(nil)
 		m.detailList.Title = "Detail"
 
-		if item.entity.Kind == servicebus.EntityQueue {
-			m.loading = true
-			m.status = fmt.Sprintf("Peeking messages from queue %s", item.entity.Name)
-			return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, item.entity.Name, m.deadLetter))
-		}
-
 		m.loading = true
-		m.status = fmt.Sprintf("Loading subscriptions for topic %s", item.entity.Name)
-		return m, tea.Batch(spinner.Tick, loadTopicSubscriptionsCmd(m.service, m.currentNS, item.entity.Name))
+		m.status = fmt.Sprintf("Peeking messages from queue %s", item.entity.Name)
+		return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, item.entity.Name, m.deadLetter))
 	}
 
 	if m.focus == detailPane {

@@ -46,3 +46,20 @@ func ClampListSelection(l *list.Model) {
 		l.Select(len(items) - 1)
 	}
 }
+
+// SetItemsPreserveIndex replaces list items while keeping the cursor
+// at the same index (clamped to the new item count). Use this for
+// background refreshes where the user is already browsing the list.
+func SetItemsPreserveIndex(l *list.Model, items []list.Item) {
+	idx := l.Index()
+	l.SetItems(items)
+	if n := len(items); n == 0 {
+		return
+	} else if idx >= n {
+		idx = n - 1
+	}
+	if idx < 0 {
+		idx = 0
+	}
+	l.Select(idx)
+}

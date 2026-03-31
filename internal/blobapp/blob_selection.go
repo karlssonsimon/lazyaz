@@ -42,16 +42,31 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 
 	m.blobsList.ResetFilter()
 	m.blobSearchQuery = ""
-	m.loading = true
 	m.lastErr = ""
 
 	if m.blobLoadAll {
 		m.blobLoadAll = false
+
+		if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
+			m.blobs = cached
+			m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
+			m.refreshBlobItems()
+		}
+
+		m.loading = true
 		m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
 		return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 	}
 
 	m.blobLoadAll = true
+
+	if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, true)); ok {
+		m.blobs = cached
+		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
+		m.refreshBlobItems()
+	}
+
+	m.loading = true
 	m.status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
 	return m, tea.Batch(spinner.Tick, loadAllBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix))
 }

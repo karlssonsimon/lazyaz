@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"azure-storage/internal/azure"
+	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -37,11 +38,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		m.cache.subscriptions.Set("", msg.subscriptions)
+		isRefresh := len(m.subscriptions) > 0
 		m.lastErr = ""
 		m.subscriptions = msg.subscriptions
+		m.subscriptionsList.Title = fmt.Sprintf("Subscriptions (%d)", len(msg.subscriptions))
+
+		if isRefresh {
+			ui.SetItemsPreserveIndex(&m.subscriptionsList, subscriptionsToItems(msg.subscriptions))
+			m.status = fmt.Sprintf("Refreshed %d subscriptions.", len(msg.subscriptions))
+			return m, nil
+		}
+
 		m.subscriptionsList.ResetFilter()
 		m.subscriptionsList.SetItems(subscriptionsToItems(msg.subscriptions))
-		m.subscriptionsList.Title = fmt.Sprintf("Subscriptions (%d)", len(msg.subscriptions))
 
 		if len(msg.subscriptions) == 0 {
 			m.hasSubscription = false
@@ -77,6 +87,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case accountsLoadedMsg:
+		if msg.err == nil {
+			m.cache.accounts.Set(msg.subscriptionID, msg.accounts)
+		}
+
 		if !m.hasSubscription || m.currentSub.ID != msg.subscriptionID {
 			return m, nil
 		}
@@ -88,11 +102,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		isRefresh := len(m.accounts) > 0
 		m.lastErr = ""
 		m.accounts = msg.accounts
+		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(msg.accounts))
+
+		if isRefresh {
+			ui.SetItemsPreserveIndex(&m.accountsList, accountsToItems(msg.accounts))
+			m.status = fmt.Sprintf("Refreshed %d storage accounts from %s.", len(msg.accounts), subscriptionDisplayName(m.currentSub))
+			return m, nil
+		}
+
 		m.accountsList.ResetFilter()
 		m.accountsList.SetItems(accountsToItems(msg.accounts))
-		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(msg.accounts))
 
 		if len(msg.accounts) == 0 {
 			m.hasAccount = false
@@ -130,6 +152,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case containersLoadedMsg:
+		if msg.err == nil {
+			m.cache.containers.Set(cache.Key(msg.account.SubscriptionID, msg.account.Name), msg.containers)
+		}
+
 		if !m.hasAccount || !sameAccount(m.currentAccount, msg.account) {
 			return m, nil
 		}
@@ -153,11 +179,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		isRefresh := len(m.containers) > 0
 		m.lastErr = ""
 		m.containers = msg.containers
+		m.containersList.Title = fmt.Sprintf("Containers (%d)", len(msg.containers))
+
+		if isRefresh {
+			ui.SetItemsPreserveIndex(&m.containersList, containersToItems(msg.containers))
+			m.status = fmt.Sprintf("Refreshed %d containers from %s.", len(msg.containers), msg.account.Name)
+			return m, nil
+		}
+
 		m.containersList.ResetFilter()
 		m.containersList.SetItems(containersToItems(msg.containers))
-		m.containersList.Title = fmt.Sprintf("Containers (%d)", len(msg.containers))
 		m.containersList.Select(0)
 
 		if len(msg.containers) == 0 {
@@ -189,6 +223,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case blobsLoadedMsg:
+		if msg.err == nil && msg.query == "" {
+			m.cache.blobs.Set(blobsCacheKey(msg.account.SubscriptionID, msg.account.Name, msg.container, msg.prefix, msg.loadAll), msg.blobs)
+		}
+
 		if !m.hasAccount || !m.hasContainer {
 			return m, nil
 		}
@@ -218,13 +256,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		isRefresh := len(m.blobs) > 0
 		m.lastErr = ""
-		m.visualLineMode = false
-		m.visualAnchor = ""
 		m.blobs = msg.blobs
-		m.blobsList.ResetFilter()
 		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(msg.blobs))
-		m.refreshBlobItems()
+
+		if isRefresh {
+			idx := m.blobsList.Index()
+			m.refreshBlobItems()
+			if n := len(m.blobsList.Items()); n > 0 {
+				if idx >= n {
+					idx = n - 1
+				}
+				m.blobsList.Select(idx)
+			}
+		} else {
+			m.visualLineMode = false
+			m.visualAnchor = ""
+			m.blobsList.ResetFilter()
+			m.refreshBlobItems()
+		}
+
 		if msg.loadAll {
 			m.status = fmt.Sprintf("Loaded all %d blobs in %s/%s", len(msg.blobs), msg.account.Name, msg.container)
 		} else if msg.query != "" {
@@ -380,6 +432,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != "" {
 					m.prefix = parentPrefix(m.prefix)
 					m.blobSearchQuery = ""
+
+					if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
+						m.blobs = cached
+						m.blobsList.ResetFilter()
+						m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
+						m.refreshBlobItems()
+					}
+
 					m.loading = true
 					m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
 					return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))

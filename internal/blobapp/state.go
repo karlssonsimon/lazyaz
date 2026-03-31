@@ -60,6 +60,8 @@ type Model struct {
 	themeOverlay ui.ThemeOverlayState
 	helpOverlay  ui.HelpOverlayState
 
+	cache blobCache
+
 	loading bool
 	status  string
 	lastErr string
@@ -172,6 +174,7 @@ func NewModelWithKeyMap(svc *azure.Service, cfg ui.Config, keymap KeyMap) Model 
 		blobsList:         blobs,
 		markedBlobs:       make(map[string]azure.BlobEntry),
 		preview:           newPreviewState(),
+		cache:             newCache(),
 		keymap:            keymap,
 		appName:           cfg.AppName,
 		themes:            cfg.Themes,

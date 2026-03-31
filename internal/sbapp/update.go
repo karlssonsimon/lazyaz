@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"azure-storage/internal/azure"
+	"azure-storage/internal/cache"
 	"azure-storage/internal/servicebus"
 	"azure-storage/internal/ui"
 
@@ -37,11 +38,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		m.cache.subscriptions.Set("", msg.subscriptions)
+		isRefresh := len(m.subscriptions) > 0
 		m.lastErr = ""
 		m.subscriptions = msg.subscriptions
+		m.subscriptionsList.Title = fmt.Sprintf("Subscriptions (%d)", len(msg.subscriptions))
+
+		if isRefresh {
+			ui.SetItemsPreserveIndex(&m.subscriptionsList, subscriptionsToItems(msg.subscriptions))
+			m.status = fmt.Sprintf("Refreshed %d subscriptions.", len(msg.subscriptions))
+			return m, nil
+		}
+
 		m.subscriptionsList.ResetFilter()
 		m.subscriptionsList.SetItems(subscriptionsToItems(msg.subscriptions))
-		m.subscriptionsList.Title = fmt.Sprintf("Subscriptions (%d)", len(msg.subscriptions))
 
 		if len(msg.subscriptions) == 0 {
 			m.hasSubscription = false
@@ -72,6 +82,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case namespacesLoadedMsg:
+		if msg.err == nil {
+			m.cache.namespaces.Set(msg.subscriptionID, msg.namespaces)
+		}
+
 		if !m.hasSubscription || m.currentSub.ID != msg.subscriptionID {
 			return m, nil
 		}
@@ -83,11 +97,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		isRefresh := len(m.namespaces) > 0
 		m.lastErr = ""
 		m.namespaces = msg.namespaces
+		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(msg.namespaces))
+
+		if isRefresh {
+			ui.SetItemsPreserveIndex(&m.namespacesList, namespacesToItems(msg.namespaces))
+			m.status = fmt.Sprintf("Refreshed %d namespaces from %s.", len(msg.namespaces), subscriptionDisplayName(m.currentSub))
+			return m, nil
+		}
+
 		m.namespacesList.ResetFilter()
 		m.namespacesList.SetItems(namespacesToItems(msg.namespaces))
-		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(msg.namespaces))
 
 		if len(msg.namespaces) == 0 {
 			m.hasNamespace = false
@@ -119,6 +141,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case entitiesLoadedMsg:
+		if msg.err == nil {
+			m.cache.entities.Set(cache.Key(m.currentSub.ID, msg.namespace.Name), msg.entities)
+		}
+
 		if !m.hasNamespace || m.currentNS.Name != msg.namespace.Name {
 			return m, nil
 		}
@@ -137,8 +163,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		isRefresh := len(m.entities) > 0
 		m.lastErr = ""
 		m.entities = msg.entities
+
+		if isRefresh {
+			idx := m.entitiesList.Index()
+			m.applyEntityFilter()
+			if n := len(m.entitiesList.Items()); n > 0 {
+				if idx >= n {
+					idx = n - 1
+				}
+				m.entitiesList.Select(idx)
+			}
+			m.status = fmt.Sprintf("Refreshed %d entities from %s.", len(msg.entities), msg.namespace.Name)
+			return m, nil
+		}
+
 		m.applyEntityFilter()
 
 		if len(msg.entities) == 0 {
@@ -160,6 +201,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case topicSubscriptionsLoadedMsg:
+		if msg.err == nil {
+			m.cache.topicSubs.Set(cache.Key(m.currentSub.ID, msg.namespace.Name, msg.topicName), msg.subs)
+		}
+
 		if !m.hasEntity || m.currentEntity.Kind != servicebus.EntityTopic {
 			return m, nil
 		}
@@ -174,13 +219,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		isRefresh := len(m.topicSubs) > 0
 		m.lastErr = ""
 		m.topicSubs = msg.subs
 		m.detailMode = detailTopicSubscriptions
+		m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(msg.subs))
+
+		if isRefresh {
+			ui.SetItemsPreserveIndex(&m.detailList, topicSubsToItems(msg.subs))
+			m.status = fmt.Sprintf("Refreshed %d subscriptions for topic %s", len(msg.subs), msg.topicName)
+			return m, nil
+		}
+
 		m.viewingTopicSub = false
 		m.detailList.ResetFilter()
 		m.detailList.SetItems(topicSubsToItems(msg.subs))
-		m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(msg.subs))
 		if len(msg.subs) > 0 {
 			m.detailList.Select(0)
 		}
@@ -188,6 +241,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case messagesLoadedMsg:
+		// Messages are ephemeral peek results — not cached.
 		m.loading = false
 		if msg.err != nil {
 			m.lastErr = msg.err.Error()
@@ -252,7 +306,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.entities = msg.entities
+		idx := m.entitiesList.Index()
 		m.applyEntityFilter()
+		if n := len(m.entitiesList.Items()); n > 0 {
+			if idx >= n {
+				idx = n - 1
+			}
+			m.entitiesList.Select(idx)
+		}
 		return m, nil
 
 	case tea.KeyMsg:
