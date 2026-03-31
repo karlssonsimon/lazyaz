@@ -1,0 +1,386 @@
+package kvapp
+
+import (
+	"fmt"
+
+	"azure-storage/internal/azure"
+	"azure-storage/internal/cache"
+	"azure-storage/internal/keyvault"
+	"azure-storage/internal/ui"
+
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.resize()
+		return m, nil
+
+	case spinner.TickMsg:
+		if !m.loading {
+			return m, nil
+		}
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
+	case subscriptionsLoadedMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.lastErr = msg.err.Error()
+			m.status = "Failed to load subscriptions"
+			return m, nil
+		}
+
+		m.cache.subscriptions.Set("", msg.subscriptions)
+		isRefresh := len(m.subscriptions) > 0
+		m.lastErr = ""
+		m.subscriptions = msg.subscriptions
+		m.subscriptionsList.Title = fmt.Sprintf("Subscriptions (%d)", len(msg.subscriptions))
+
+		if isRefresh {
+			ui.SetItemsPreserveIndex(&m.subscriptionsList, subscriptionsToItems(msg.subscriptions))
+			m.status = fmt.Sprintf("Refreshed %d subscriptions.", len(msg.subscriptions))
+			return m, nil
+		}
+
+		m.subscriptionsList.ResetFilter()
+		m.subscriptionsList.SetItems(subscriptionsToItems(msg.subscriptions))
+
+		if len(msg.subscriptions) == 0 {
+			m.hasSubscription = false
+			m.hasVault = false
+			m.hasSecret = false
+			m.status = "No subscriptions found. Verify az login context and tenant access."
+			m.vaults = nil
+			m.secrets = nil
+			m.versions = nil
+			m.vaultsList.ResetFilter()
+			m.secretsList.ResetFilter()
+			m.versionsList.ResetFilter()
+			m.vaultsList.SetItems(nil)
+			m.secretsList.SetItems(nil)
+			m.versionsList.SetItems(nil)
+			m.vaultsList.Title = "Vaults"
+			m.secretsList.Title = "Secrets"
+			m.versionsList.Title = "Versions"
+			return m, nil
+		}
+
+		m.subscriptionsList.Select(0)
+		m.hasSubscription = false
+		m.currentSub = azure.Subscription{}
+		m.hasVault = false
+		m.hasSecret = false
+		m.status = fmt.Sprintf("Loaded %d subscriptions. Select one and press Enter.", len(msg.subscriptions))
+		return m, nil
+
+	case vaultsLoadedMsg:
+		if msg.err == nil {
+			m.cache.vaults.Set(msg.subscriptionID, msg.vaults)
+		}
+
+		if !m.hasSubscription || m.currentSub.ID != msg.subscriptionID {
+			return m, nil
+		}
+
+		m.loading = false
+		if msg.err != nil {
+			m.lastErr = msg.err.Error()
+			m.status = fmt.Sprintf("Failed to load key vaults in %s", subscriptionDisplayName(m.currentSub))
+			return m, nil
+		}
+
+		isRefresh := len(m.vaults) > 0
+		m.lastErr = ""
+		m.vaults = msg.vaults
+		m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(msg.vaults))
+
+		if isRefresh {
+			ui.SetItemsPreserveIndex(&m.vaultsList, vaultsToItems(msg.vaults))
+			m.status = fmt.Sprintf("Refreshed %d key vaults from %s.", len(msg.vaults), subscriptionDisplayName(m.currentSub))
+			return m, nil
+		}
+
+		m.vaultsList.ResetFilter()
+		m.vaultsList.SetItems(vaultsToItems(msg.vaults))
+
+		if len(msg.vaults) == 0 {
+			m.hasVault = false
+			m.hasSecret = false
+			m.status = fmt.Sprintf("No key vaults found in %s", subscriptionDisplayName(m.currentSub))
+			m.secrets = nil
+			m.versions = nil
+			m.secretsList.ResetFilter()
+			m.versionsList.ResetFilter()
+			m.secretsList.SetItems(nil)
+			m.versionsList.SetItems(nil)
+			m.secretsList.Title = "Secrets"
+			m.versionsList.Title = "Versions"
+			return m, nil
+		}
+
+		m.vaultsList.Select(0)
+		m.hasVault = false
+		m.currentVault = keyvault.Vault{}
+		m.hasSecret = false
+		m.secrets = nil
+		m.versions = nil
+		m.secretsList.ResetFilter()
+		m.versionsList.ResetFilter()
+		m.secretsList.SetItems(nil)
+		m.versionsList.SetItems(nil)
+		m.secretsList.Title = "Secrets"
+		m.versionsList.Title = "Versions"
+		m.status = fmt.Sprintf("Loaded %d key vaults from %s. Open a vault to view secrets.", len(msg.vaults), subscriptionDisplayName(m.currentSub))
+		return m, nil
+
+	case secretsLoadedMsg:
+		if msg.err == nil {
+			m.cache.secrets.Set(cache.Key(m.currentSub.ID, msg.vault.Name), msg.secrets)
+		}
+
+		if !m.hasVault || m.currentVault.Name != msg.vault.Name {
+			return m, nil
+		}
+
+		m.loading = false
+		if msg.err != nil {
+			m.lastErr = msg.err.Error()
+			m.status = fmt.Sprintf("Failed to load secrets in %s", msg.vault.Name)
+			m.secrets = nil
+			m.versions = nil
+			m.secretsList.ResetFilter()
+			m.versionsList.ResetFilter()
+			m.secretsList.SetItems(nil)
+			m.versionsList.SetItems(nil)
+			m.hasSecret = false
+			return m, nil
+		}
+
+		isRefresh := len(m.secrets) > 0
+		m.lastErr = ""
+		m.secrets = msg.secrets
+		m.secretsList.Title = fmt.Sprintf("Secrets (%d)", len(msg.secrets))
+
+		if isRefresh {
+			ui.SetItemsPreserveIndex(&m.secretsList, secretsToItems(msg.secrets))
+			m.status = fmt.Sprintf("Refreshed %d secrets from %s.", len(msg.secrets), msg.vault.Name)
+			return m, nil
+		}
+
+		m.secretsList.ResetFilter()
+		m.secretsList.SetItems(secretsToItems(msg.secrets))
+
+		if len(msg.secrets) == 0 {
+			m.hasSecret = false
+			m.versions = nil
+			m.versionsList.ResetFilter()
+			m.versionsList.SetItems(nil)
+			m.versionsList.Title = "Versions"
+			m.status = fmt.Sprintf("No secrets found in %s", msg.vault.Name)
+			return m, nil
+		}
+
+		m.secretsList.Select(0)
+		m.hasSecret = false
+		m.currentSecret = keyvault.Secret{}
+		m.versions = nil
+		m.versionsList.ResetFilter()
+		m.versionsList.SetItems(nil)
+		m.versionsList.Title = "Versions"
+		m.status = fmt.Sprintf("Loaded %d secrets from %s. Open a secret to view versions.", len(msg.secrets), msg.vault.Name)
+		return m, nil
+
+	case versionsLoadedMsg:
+		if msg.err == nil {
+			m.cache.versions.Set(cache.Key(m.currentSub.ID, msg.vault.Name, msg.secretName), msg.versions)
+		}
+
+		if !m.hasSecret || m.currentSecret.Name != msg.secretName {
+			return m, nil
+		}
+		if m.currentVault.Name != msg.vault.Name {
+			return m, nil
+		}
+
+		m.loading = false
+		if msg.err != nil {
+			m.lastErr = msg.err.Error()
+			m.status = fmt.Sprintf("Failed to load versions for %s", msg.secretName)
+			return m, nil
+		}
+
+		isRefresh := len(m.versions) > 0
+		m.lastErr = ""
+		m.versions = msg.versions
+		m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(msg.versions))
+
+		if isRefresh {
+			ui.SetItemsPreserveIndex(&m.versionsList, versionsToItems(msg.versions))
+			m.status = fmt.Sprintf("Refreshed %d versions for %s", len(msg.versions), msg.secretName)
+			return m, nil
+		}
+
+		m.versionsList.ResetFilter()
+		m.versionsList.SetItems(versionsToItems(msg.versions))
+		if len(msg.versions) > 0 {
+			m.versionsList.Select(0)
+		}
+		m.status = fmt.Sprintf("Loaded %d versions for %s. Press y to yank a secret value.", len(msg.versions), msg.secretName)
+		return m, nil
+
+	case secretValueYankedMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.lastErr = msg.err.Error()
+			m.status = "Failed to yank secret value"
+			return m, nil
+		}
+
+		m.lastErr = ""
+		label := msg.secretName
+		if msg.version != "" {
+			v := msg.version
+			if len(v) > 12 {
+				v = v[:12]
+			}
+			label = fmt.Sprintf("%s@%s", msg.secretName, v)
+		}
+		m.status = fmt.Sprintf("Yanked %s to clipboard", label)
+		return m, nil
+
+	case tea.KeyMsg:
+		key := msg.String()
+		if m.helpOverlay.Active {
+			switch {
+			case m.keymap.ToggleHelp.Matches(key), key == "esc":
+				m.helpOverlay.Close()
+				return m, nil
+			default:
+				return m, nil
+			}
+		}
+		if m.themeOverlay.Active {
+			if m.themeOverlay.HandleKey(key, ui.ThemeKeyBindings{
+				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
+				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
+			}, m.themes) {
+				m.applyTheme(m.themes[m.themeOverlay.ActiveThemeIdx])
+				ui.SaveThemeName(m.appName, m.themes[m.themeOverlay.ActiveThemeIdx].Name)
+			}
+			return m, nil
+		}
+
+		focusedFilterActive := m.focusedListSettingFilter()
+
+		switch {
+		case ui.ShouldQuit(key, m.keymap.Quit, focusedFilterActive):
+			return m, tea.Quit
+		case m.keymap.HalfPageDown.Matches(key):
+			m.scrollFocusedHalfPage(1)
+			return m, nil
+		case m.keymap.HalfPageUp.Matches(key):
+			m.scrollFocusedHalfPage(-1)
+			return m, nil
+		case m.keymap.NextFocus.Matches(key):
+			if !focusedFilterActive {
+				m.nextFocus()
+				return m, nil
+			}
+		case m.keymap.PreviousFocus.Matches(key):
+			if !focusedFilterActive {
+				m.previousFocus()
+				return m, nil
+			}
+		case m.keymap.ReloadSubscriptions.Matches(key):
+			if !focusedFilterActive {
+				m.loading = true
+				m.lastErr = ""
+				m.status = "Refreshing subscriptions..."
+				return m, tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
+			}
+		case m.keymap.RefreshScope.Matches(key):
+			if !focusedFilterActive {
+				return m.refresh()
+			}
+		case m.keymap.OpenFocused.Matches(key):
+			if focusedFilterActive {
+				m.commitFocusedFilter()
+				m.status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
+				return m, nil
+			}
+			return m.handleEnter()
+		case m.keymap.OpenFocusedAlt.Matches(key):
+			if !focusedFilterActive {
+				return m.handleEnter()
+			}
+		case m.keymap.NavigateLeft.Matches(key):
+			if !focusedFilterActive {
+				return m.navigateLeft()
+			}
+		case m.keymap.YankSecret.Matches(key):
+			if !focusedFilterActive {
+				return m.handleYank()
+			}
+		case m.keymap.ToggleThemePicker.Matches(key):
+			if !focusedFilterActive && !m.themeOverlay.Active {
+				m.themeOverlay.Open()
+				return m, nil
+			}
+		case m.keymap.ToggleHelp.Matches(key):
+			if !focusedFilterActive && !m.themeOverlay.Active {
+				m.helpOverlay.Toggle()
+				return m, nil
+			}
+		case m.keymap.BackspaceUp.Matches(key):
+			if !focusedFilterActive {
+				return m.handleBackspace()
+			}
+		}
+	}
+
+	switch m.focus {
+	case subscriptionsPane:
+		m.subscriptionsList, cmd = m.subscriptionsList.Update(msg)
+	case vaultsPane:
+		m.vaultsList, cmd = m.vaultsList.Update(msg)
+	case secretsPane:
+		m.secretsList, cmd = m.secretsList.Update(msg)
+	case versionsPane:
+		m.versionsList, cmd = m.versionsList.Update(msg)
+	}
+
+	return m, cmd
+}
+
+func (m Model) handleYank() (Model, tea.Cmd) {
+	if m.focus == secretsPane {
+		item, ok := m.secretsList.SelectedItem().(secretItem)
+		if !ok {
+			return m, nil
+		}
+		m.loading = true
+		m.lastErr = ""
+		m.status = fmt.Sprintf("Fetching secret value for %s...", item.secret.Name)
+		return m, tea.Batch(spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, item.secret.Name, ""))
+	}
+
+	if m.focus == versionsPane {
+		item, ok := m.versionsList.SelectedItem().(versionItem)
+		if !ok {
+			return m, nil
+		}
+		m.loading = true
+		m.lastErr = ""
+		m.status = fmt.Sprintf("Fetching secret value for %s@%s...", m.currentSecret.Name, item.version.Version)
+		return m, tea.Batch(spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))
+	}
+
+	return m, nil
+}
