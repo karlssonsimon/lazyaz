@@ -1,34 +1,24 @@
 package kvapp
 
+import "azure-storage/internal/ui"
+
 func (m *Model) resize() {
 	if m.width <= 0 || m.height <= 0 {
 		return
 	}
 
-	sub := m.width / 5
-	vlt := m.width / 5
-	sec := m.width / 5
-	if sub < 24 {
-		sub = 24
-	}
-	if vlt < 24 {
-		vlt = 24
-	}
-	if sec < 24 {
-		sec = 24
-	}
-	ver := m.width - sub - vlt - sec - 12
-	if ver < 40 {
-		ver = 40
-	}
+	widths := ui.PaneLayout(m.styles.Chrome.Pane, m.width, 4)
+	pane := m.styles.Chrome.Pane
+	m.paneWidths = [4]int{widths[0], widths[1], widths[2], widths[3]}
 
 	height := m.height - 10
 	if height < 8 {
 		height = 8
 	}
+	m.paneHeight = height
 
-	m.subscriptionsList.SetSize(sub, height)
-	m.vaultsList.SetSize(vlt, height)
-	m.secretsList.SetSize(sec, height)
-	m.versionsList.SetSize(ver, height)
+	m.subscriptionsList.SetSize(ui.PaneContentWidth(pane, widths[0]), height)
+	m.vaultsList.SetSize(ui.PaneContentWidth(pane, widths[1]), height)
+	m.secretsList.SetSize(ui.PaneContentWidth(pane, widths[2]), height)
+	m.versionsList.SetSize(ui.PaneContentWidth(pane, widths[3]), height)
 }

@@ -36,27 +36,29 @@ func (m Model) View() string {
 	m.secretsList.Title = m.secretsPaneTitle()
 	m.versionsList.Title = m.versionsPaneTitle()
 
+	pw := m.paneWidths
+
 	subscriptionsView := m.subscriptionsList.View()
 	vaultsView := m.vaultsList.View()
 	secretsView := m.secretsList.View()
 	versionsView := m.versionsList.View()
 
-	subscriptionsPaneStyle := styles.Pane.Copy().MarginRight(1)
-	vaultsPaneStyle := styles.Pane.Copy().MarginRight(1)
-	secretsPaneStyle := styles.Pane.Copy().MarginRight(1)
-	versionsPaneStyle := styles.Pane.Copy()
+	subscriptionsPaneStyle := styles.Pane.Copy().Width(pw[0])
+	vaultsPaneStyle := styles.Pane.Copy().Width(pw[1])
+	secretsPaneStyle := styles.Pane.Copy().Width(pw[2])
+	versionsPaneStyle := styles.Pane.Copy().Width(pw[3])
 
 	if m.focus == subscriptionsPane {
-		subscriptionsPaneStyle = styles.FocusedPane.Copy().MarginRight(1)
+		subscriptionsPaneStyle = styles.FocusedPane.Copy().Width(pw[0])
 	}
 	if m.focus == vaultsPane {
-		vaultsPaneStyle = styles.FocusedPane.Copy().MarginRight(1)
+		vaultsPaneStyle = styles.FocusedPane.Copy().Width(pw[1])
 	}
 	if m.focus == secretsPane {
-		secretsPaneStyle = styles.FocusedPane.Copy().MarginRight(1)
+		secretsPaneStyle = styles.FocusedPane.Copy().Width(pw[2])
 	}
 	if m.focus == versionsPane {
-		versionsPaneStyle = styles.FocusedPane.Copy()
+		versionsPaneStyle = styles.FocusedPane.Copy().Width(pw[3])
 	}
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top,
@@ -91,7 +93,7 @@ func (m Model) View() string {
 	}
 	parts = append(parts, statusLine, helpLine)
 
-	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
+	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.styles.Bg)
 
 	if !m.EmbeddedMode && m.themeOverlay.Active {
 		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)

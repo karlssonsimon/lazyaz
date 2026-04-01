@@ -69,8 +69,10 @@ func RenderHelpOverlay(title string, sections []HelpSection, styles Styles, widt
 	box := lipgloss.NewStyle().
 		Width(boxWidth).
 		Height(boxHeight).
+		Background(o.BoxBg).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(o.Box.GetBorderBottomForeground()).
+		BorderBackground(o.BoxBg).
 		Padding(1, 2).
 		Render(content)
 

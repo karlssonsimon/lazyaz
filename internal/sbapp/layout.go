@@ -1,38 +1,29 @@
 package sbapp
 
+import "azure-storage/internal/ui"
+
 func (m *Model) resize() {
 	if m.width <= 0 || m.height <= 0 {
 		return
 	}
 
-	sub := m.width / 5
-	ns := m.width / 5
-	ent := m.width / 5
-	if sub < 24 {
-		sub = 24
-	}
-	if ns < 24 {
-		ns = 24
-	}
-	if ent < 24 {
-		ent = 24
-	}
-	det := m.width - sub - ns - ent - 12
-	if det < 40 {
-		det = 40
-	}
+	widths := ui.PaneLayout(m.styles.Chrome.Pane, m.width, 4)
+	pane := m.styles.Chrome.Pane
+	m.paneWidths = [4]int{widths[0], widths[1], widths[2], widths[3]}
 
 	height := m.height - 10
 	if height < 8 {
 		height = 8
 	}
+	m.paneHeight = height
 
+	detContent := ui.PaneContentWidth(pane, widths[3])
 	if m.viewingMessage {
-		detHalf := det / 3
+		detHalf := detContent / 3
 		if detHalf < 30 {
 			detHalf = 30
 		}
-		previewW := det - detHalf - 3
+		previewW := detContent - detHalf - 3
 		if previewW < 30 {
 			previewW = 30
 		}
@@ -40,12 +31,12 @@ func (m *Model) resize() {
 		m.messageViewport.Width = previewW
 		m.messageViewport.Height = height - 2
 	} else {
-		m.detailList.SetSize(det, height)
+		m.detailList.SetSize(detContent, height)
 		m.messageViewport.Width = 0
 		m.messageViewport.Height = 0
 	}
 
-	m.subscriptionsList.SetSize(sub, height)
-	m.namespacesList.SetSize(ns, height)
-	m.entitiesList.SetSize(ent, height)
+	m.subscriptionsList.SetSize(ui.PaneContentWidth(pane, widths[0]), height)
+	m.namespacesList.SetSize(ui.PaneContentWidth(pane, widths[1]), height)
+	m.entitiesList.SetSize(ui.PaneContentWidth(pane, widths[2]), height)
 }

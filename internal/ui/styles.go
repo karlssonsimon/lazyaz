@@ -1,9 +1,12 @@
 package ui
 
 import (
+	icolor "image/color"
+
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
+	lg2 "charm.land/lipgloss/v2"
 )
 
 // Scheme represents a Base16 color scheme. The 16 colors follow the
@@ -43,8 +46,12 @@ type Styles struct {
 	Overlay  OverlayStyles
 	TabBar   TabBarStyles
 
+	// Bg is the Base00 background color for RenderCanvas.
+	Bg icolor.Color
+
 	// Semantic convenience styles for ad-hoc usage in views.
 	Accent      lipgloss.Style // Bold accent (base0D)
+	Accent2     lipgloss.Style // Bold secondary accent (base09 orange)
 	Muted       lipgloss.Style // Muted text (base03)
 	Danger      lipgloss.Style // Danger text (base08)
 	DangerBold  lipgloss.Style // Bold danger (base08)
@@ -85,6 +92,7 @@ type OverlayStyles struct {
 	NoMatch      lipgloss.Style
 	Hint         lipgloss.Style
 	HintFull     lipgloss.Style // hint with full width
+	BoxBg        lipgloss.Color // background color for custom box construction
 	Box          lipgloss.Style
 }
 
@@ -93,6 +101,7 @@ type TabBarStyles struct {
 	Active   lipgloss.Style
 	Inactive lipgloss.Style
 	Sep      lipgloss.Style
+	Bar      lipgloss.Style // full-width bar wrapper
 }
 
 // color converts a Base16 hex string to a lipgloss.Color, prepending "#".
@@ -106,11 +115,21 @@ func color(hex string) lipgloss.Color {
 	return lipgloss.Color(hex)
 }
 
+// colorRGB converts a Base16 hex string to a color.Color for Canvas rendering.
+func colorRGB(hex string) icolor.Color {
+	if hex == "" {
+		return nil
+	}
+	if hex[0] != '#' {
+		return lg2.Color("#" + hex)
+	}
+	return lg2.Color(hex)
+}
+
 // NewStyles resolves a Scheme into a complete Styles struct.
 func NewStyles(s Scheme) Styles {
-	bg := color(s.Base00)
-	_ = bg // terminal bg — not applied (respects terminal settings)
-	border := color(s.Base01)
+	bg := color(s.Base00)       // main background
+	surface := color(s.Base01)  // chrome/surface background + border foreground
 	selBg := color(s.Base02)
 	muted := color(s.Base03)
 	statusFg := color(s.Base04)
@@ -118,24 +137,29 @@ func NewStyles(s Scheme) Styles {
 	selText := color(s.Base06)
 	bright := color(s.Base07)
 	danger := color(s.Base08)
+	orange := color(s.Base09)
 	warning := color(s.Base0A)
 	green := color(s.Base0B)
 	cyan := color(s.Base0C)
 	blue := color(s.Base0D)
+	purple := color(s.Base0E)
+	brown := color(s.Base0F)
 
 	// --- Chrome ---
 	chrome := ChromeStyles{
 		Header: lipgloss.NewStyle().
 			Foreground(blue).
+			Background(surface).
 			Bold(true).
 			Padding(0, 1),
 		Meta: lipgloss.NewStyle().
 			Foreground(muted).
+			Background(surface).
 			Padding(0, 1),
 		Pane: lipgloss.NewStyle().
 			Foreground(text).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(border).
+			BorderForeground(surface).
 			Padding(0, 1),
 		FocusedPane: lipgloss.NewStyle().
 			Foreground(text).
@@ -144,19 +168,25 @@ func NewStyles(s Scheme) Styles {
 			Padding(0, 1),
 		Status: lipgloss.NewStyle().
 			Foreground(text).
+			Background(surface).
 			Padding(0, 1),
 		Help: lipgloss.NewStyle().
 			Foreground(muted).
+			Background(surface).
 			Padding(0, 1),
 		Error: lipgloss.NewStyle().
 			Foreground(danger).
+			Background(surface).
 			Padding(0, 1),
 		FilterHint: lipgloss.NewStyle().
 			Foreground(blue).
+			Background(surface).
 			Padding(0, 1),
 	}
 
 	// --- List Delegate ---
+	// Delegate styles are transparent — RenderCanvas fills backgrounds
+	// at the cell level after rendering.
 	delegate := list.NewDefaultDelegate()
 	delegate.SetSpacing(0)
 	delegate.Styles.NormalTitle = lipgloss.NewStyle().
@@ -255,19 +285,25 @@ func NewStyles(s Scheme) Styles {
 	overlay := OverlayStyles{
 		Title: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(blue),
+			Foreground(blue).
+			Background(bg),
 		SectionTitle: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(blue),
+			Foreground(purple).
+			Background(bg),
 		Prompt: lipgloss.NewStyle().
-			Foreground(cyan),
+			Foreground(cyan).
+			Background(bg),
 		Input: lipgloss.NewStyle().
-			Foreground(text),
+			Foreground(text).
+			Background(bg),
 		Normal: lipgloss.NewStyle().
 			Foreground(text).
+			Background(bg).
 			Padding(0, 1),
 		NormalFull: lipgloss.NewStyle().
-			Foreground(text),
+			Foreground(text).
+			Background(bg),
 		Cursor: lipgloss.NewStyle().
 			Foreground(selText).
 			Background(selBg).
@@ -275,15 +311,21 @@ func NewStyles(s Scheme) Styles {
 			Padding(0, 1),
 		NoMatch: lipgloss.NewStyle().
 			Foreground(muted).
+			Background(bg).
 			Italic(true),
 		Hint: lipgloss.NewStyle().
 			Foreground(muted).
+			Background(bg).
 			Padding(0, 1),
 		HintFull: lipgloss.NewStyle().
-			Foreground(muted),
+			Foreground(muted).
+			Background(bg),
+		BoxBg: color(s.Base00),
 		Box: lipgloss.NewStyle().
+			Background(bg).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(green).
+			BorderBackground(bg).
 			Padding(1, 2),
 	}
 
@@ -296,9 +338,13 @@ func NewStyles(s Scheme) Styles {
 			Padding(0, 1),
 		Inactive: lipgloss.NewStyle().
 			Foreground(text).
+			Background(surface).
 			Padding(0, 1),
 		Sep: lipgloss.NewStyle().
-			Foreground(border),
+			Foreground(brown).
+			Background(surface),
+		Bar: lipgloss.NewStyle().
+			Background(surface),
 	}
 
 	return Styles{
@@ -310,7 +356,9 @@ func NewStyles(s Scheme) Styles {
 		Overlay:  overlay,
 		TabBar:   tabBar,
 
+		Bg:          colorRGB(s.Base00),
 		Accent:      lipgloss.NewStyle().Bold(true).Foreground(blue),
+		Accent2:     lipgloss.NewStyle().Bold(true).Foreground(orange),
 		Muted:       lipgloss.NewStyle().Foreground(muted),
 		Danger:      lipgloss.NewStyle().Foreground(danger),
 		DangerBold:  lipgloss.NewStyle().Foreground(danger).Bold(true),

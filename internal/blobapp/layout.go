@@ -16,46 +16,29 @@ func (m *Model) resize() {
 		return
 	}
 
-	sub := m.width / 5
-	acc := m.width / 5
-	con := m.width / 5
-	if sub < 24 {
-		sub = 24
-	}
-	if acc < 24 {
-		acc = 24
-	}
-	if con < 24 {
-		con = 24
-	}
-	marginBudget := 12
+	numPanes := 4
 	if m.preview.open {
-		marginBudget = 14
+		numPanes = 5
 	}
-	blob := m.width - sub - acc - con - marginBudget
-	preview := 0
+	widths := ui.PaneLayout(m.styles.Chrome.Pane, m.width, numPanes)
+	pane := m.styles.Chrome.Pane
+	m.paneWidths = [5]int{widths[0], widths[1], widths[2], widths[3], 0}
 	if m.preview.open {
-		preview = blob / 2
-		blob = blob - preview
-	}
-	if blob < 40 {
-		blob = 40
-	}
-	if m.preview.open && preview < 40 {
-		preview = 40
+		m.paneWidths[4] = widths[4]
 	}
 
 	height := m.height - 10
 	if height < 8 {
 		height = 8
 	}
+	m.paneHeight = height
 
-	m.subscriptionsList.SetSize(sub, height)
-	m.accountsList.SetSize(acc, height)
-	m.containersList.SetSize(con, height)
-	m.blobsList.SetSize(blob, height)
+	m.subscriptionsList.SetSize(ui.PaneContentWidth(pane, widths[0]), height)
+	m.accountsList.SetSize(ui.PaneContentWidth(pane, widths[1]), height)
+	m.containersList.SetSize(ui.PaneContentWidth(pane, widths[2]), height)
+	m.blobsList.SetSize(ui.PaneContentWidth(pane, widths[3]), height)
 	if m.preview.open {
-		m.preview.viewport.Width = preview
+		m.preview.viewport.Width = ui.PaneContentWidth(pane, widths[4])
 		m.preview.viewport.Height = height
 	}
 }
