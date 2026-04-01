@@ -69,24 +69,24 @@ func (s *Service) getClient(vaultURI string) (*azsecrets.Client, error) {
 	return c, nil
 }
 
-func (s *Service) ListSubscriptions(ctx context.Context) ([]azure.Subscription, error) {
-	return azure.ListSubscriptions(ctx, s.cred)
+func (s *Service) ListSubscriptions(ctx context.Context, send func([]azure.Subscription)) error {
+	return azure.ListSubscriptions(ctx, s.cred, send)
 }
 
-func (s *Service) ListVaults(ctx context.Context, subscriptionID string) ([]Vault, error) {
+func (s *Service) ListVaults(ctx context.Context, subscriptionID string, send func([]Vault)) error {
 	client, err := armkeyvault.NewVaultsClient(subscriptionID, s.cred, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create vaults client: %w", err)
+		return fmt.Errorf("create vaults client: %w", err)
 	}
 
-	vaults := make([]Vault, 0)
 	pager := client.NewListBySubscriptionPager(nil)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list key vaults: %w", err)
+			return fmt.Errorf("list key vaults: %w", err)
 		}
 
+		var batch []Vault
 		for _, v := range page.Value {
 			if v == nil || v.Name == nil {
 				continue
@@ -104,31 +104,33 @@ func (s *Service) ListVaults(ctx context.Context, subscriptionID string) ([]Vaul
 				entry.VaultURI = fmt.Sprintf("https://%s.vault.azure.net", *v.Name)
 			}
 
-			vaults = append(vaults, entry)
+			batch = append(batch, entry)
+		}
+		if len(batch) > 0 {
+			sort.Slice(batch, func(i, j int) bool {
+				return strings.ToLower(batch[i].Name) < strings.ToLower(batch[j].Name)
+			})
+			send(batch)
 		}
 	}
 
-	sort.Slice(vaults, func(i, j int) bool {
-		return strings.ToLower(vaults[i].Name) < strings.ToLower(vaults[j].Name)
-	})
-
-	return vaults, nil
+	return nil
 }
 
-func (s *Service) ListSecrets(ctx context.Context, vault Vault) ([]Secret, error) {
+func (s *Service) ListSecrets(ctx context.Context, vault Vault, send func([]Secret)) error {
 	client, err := s.getClient(vault.VaultURI)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	secrets := make([]Secret, 0)
 	pager := client.NewListSecretPropertiesPager(nil)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list secrets in %s: %w", vault.Name, err)
+			return fmt.Errorf("list secrets in %s: %w", vault.Name, err)
 		}
 
+		var batch []Secret
 		for _, sp := range page.Value {
 			if sp == nil || sp.ID == nil {
 				continue
@@ -152,31 +154,33 @@ func (s *Service) ListSecrets(ctx context.Context, vault Vault) ([]Secret, error
 				}
 			}
 
-			secrets = append(secrets, entry)
+			batch = append(batch, entry)
+		}
+		if len(batch) > 0 {
+			sort.Slice(batch, func(i, j int) bool {
+				return strings.ToLower(batch[i].Name) < strings.ToLower(batch[j].Name)
+			})
+			send(batch)
 		}
 	}
 
-	sort.Slice(secrets, func(i, j int) bool {
-		return strings.ToLower(secrets[i].Name) < strings.ToLower(secrets[j].Name)
-	})
-
-	return secrets, nil
+	return nil
 }
 
-func (s *Service) ListSecretVersions(ctx context.Context, vault Vault, secretName string) ([]SecretVersion, error) {
+func (s *Service) ListSecretVersions(ctx context.Context, vault Vault, secretName string, send func([]SecretVersion)) error {
 	client, err := s.getClient(vault.VaultURI)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	versions := make([]SecretVersion, 0)
 	pager := client.NewListSecretPropertiesVersionsPager(secretName, nil)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list secret versions for %s in %s: %w", secretName, vault.Name, err)
+			return fmt.Errorf("list secret versions for %s in %s: %w", secretName, vault.Name, err)
 		}
 
+		var batch []SecretVersion
 		for _, v := range page.Value {
 			if v == nil || v.ID == nil {
 				continue
@@ -203,15 +207,17 @@ func (s *Service) ListSecretVersions(ctx context.Context, vault Vault, secretNam
 				}
 			}
 
-			versions = append(versions, entry)
+			batch = append(batch, entry)
+		}
+		if len(batch) > 0 {
+			sort.Slice(batch, func(i, j int) bool {
+				return batch[i].CreatedOn.After(batch[j].CreatedOn)
+			})
+			send(batch)
 		}
 	}
 
-	sort.Slice(versions, func(i, j int) bool {
-		return versions[i].CreatedOn.After(versions[j].CreatedOn)
-	})
-
-	return versions, nil
+	return nil
 }
 
 func (s *Service) GetSecretValue(ctx context.Context, vault Vault, secretName string, version string) (string, error) {

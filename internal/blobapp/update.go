@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"azure-storage/internal/azure"
-	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
@@ -32,261 +30,128 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case subscriptionsLoadedMsg:
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = "Failed to load subscriptions"
 			return m, nil
 		}
 
-		m.cache.subscriptions.Set("", msg.subscriptions)
-		isRefresh := len(m.subscriptions) > 0
 		m.lastErr = ""
 		m.subscriptions = msg.subscriptions
 		m.subscriptionsList.Title = fmt.Sprintf("Subscriptions (%d)", len(msg.subscriptions))
+		ui.SetItemsPreserveIndex(&m.subscriptionsList, subscriptionsToItems(msg.subscriptions))
 
-		if isRefresh {
-			ui.SetItemsPreserveIndex(&m.subscriptionsList, subscriptionsToItems(msg.subscriptions))
-			m.status = fmt.Sprintf("Refreshed %d subscriptions.", len(msg.subscriptions))
-			return m, nil
+		if msg.done {
+			m.loading = false
+			m.cache.subscriptions.Set("", msg.subscriptions)
+			m.status = fmt.Sprintf("Loaded %d subscriptions.", len(msg.subscriptions))
 		}
 
-		m.subscriptionsList.ResetFilter()
-		m.subscriptionsList.SetItems(subscriptionsToItems(msg.subscriptions))
-
-		if len(msg.subscriptions) == 0 {
-			m.hasSubscription = false
-			m.hasAccount = false
-			m.hasContainer = false
-			m.status = "No subscriptions found. Verify az login context and tenant access."
-			m.clearBlobSelectionState()
-			m.resetBlobLoadState()
-			m.resetPreviewState()
-			m.accounts = nil
-			m.containers = nil
-			m.blobs = nil
-			m.accountsList.ResetFilter()
-			m.containersList.ResetFilter()
-			m.blobsList.ResetFilter()
-			m.accountsList.SetItems(nil)
-			m.containersList.SetItems(nil)
-			m.blobsList.SetItems(nil)
-			m.accountsList.Title = "Storage Accounts"
-			m.containersList.Title = "Containers"
-			m.blobsList.Title = "Blobs"
-			return m, nil
-		}
-
-		m.subscriptionsList.Select(0)
-		m.hasSubscription = false
-		m.currentSub = azure.Subscription{}
-		m.hasAccount = false
-		m.hasContainer = false
-		m.resetBlobLoadState()
-		m.resetPreviewState()
-		m.status = fmt.Sprintf("Loaded %d subscriptions. Select one and press Enter.", len(msg.subscriptions))
-		return m, nil
+		return m, msg.next
 
 	case accountsLoadedMsg:
-		if msg.err == nil {
+		if msg.done && msg.err == nil {
 			m.cache.accounts.Set(msg.subscriptionID, msg.accounts)
 		}
 
 		if !m.hasSubscription || m.currentSub.ID != msg.subscriptionID {
-			return m, nil
+			return m, msg.next
 		}
 
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load storage accounts in %s", subscriptionDisplayName(m.currentSub))
 			return m, nil
 		}
 
-		isRefresh := len(m.accounts) > 0
 		m.lastErr = ""
 		m.accounts = msg.accounts
 		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(msg.accounts))
+		ui.SetItemsPreserveIndex(&m.accountsList, accountsToItems(msg.accounts))
 
-		if isRefresh {
-			ui.SetItemsPreserveIndex(&m.accountsList, accountsToItems(msg.accounts))
-			m.status = fmt.Sprintf("Refreshed %d storage accounts from %s.", len(msg.accounts), subscriptionDisplayName(m.currentSub))
-			return m, nil
+		if msg.done {
+			m.loading = false
+			m.status = fmt.Sprintf("Loaded %d storage accounts from %s.", len(msg.accounts), subscriptionDisplayName(m.currentSub))
 		}
 
-		m.accountsList.ResetFilter()
-		m.accountsList.SetItems(accountsToItems(msg.accounts))
-
-		if len(msg.accounts) == 0 {
-			m.hasAccount = false
-			m.hasContainer = false
-			m.status = fmt.Sprintf("No storage accounts found in %s", subscriptionDisplayName(m.currentSub))
-			m.clearBlobSelectionState()
-			m.resetBlobLoadState()
-			m.resetPreviewState()
-			m.containers = nil
-			m.blobs = nil
-			m.containersList.ResetFilter()
-			m.blobsList.ResetFilter()
-			m.containersList.SetItems(nil)
-			m.blobsList.SetItems(nil)
-			m.containersList.Title = "Containers"
-			m.blobsList.Title = "Blobs"
-			return m, nil
-		}
-
-		m.accountsList.Select(0)
-		m.hasAccount = false
-		m.currentAccount = blob.Account{}
-		m.clearBlobSelectionState()
-		m.resetBlobLoadState()
-		m.resetPreviewState()
-		m.containers = nil
-		m.blobs = nil
-		m.containersList.ResetFilter()
-		m.blobsList.ResetFilter()
-		m.containersList.SetItems(nil)
-		m.blobsList.SetItems(nil)
-		m.containersList.Title = "Containers"
-		m.blobsList.Title = "Blobs"
-		m.status = fmt.Sprintf("Loaded %d storage accounts from %s. Open an account to view containers.", len(msg.accounts), subscriptionDisplayName(m.currentSub))
-		return m, nil
+		return m, msg.next
 
 	case containersLoadedMsg:
-		if msg.err == nil {
+		if msg.done && msg.err == nil {
 			m.cache.containers.Set(cache.Key(msg.account.SubscriptionID, msg.account.Name), msg.containers)
 		}
 
 		if !m.hasAccount || !sameAccount(m.currentAccount, msg.account) {
-			return m, nil
+			return m, msg.next
 		}
 
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load containers for %s", msg.account.Name)
-			m.clearBlobSelectionState()
-			m.resetBlobLoadState()
-			m.resetPreviewState()
-			m.containers = nil
-			m.blobs = nil
-			m.containersList.ResetFilter()
-			m.blobsList.ResetFilter()
-			m.containersList.SetItems(nil)
-			m.blobsList.SetItems(nil)
-			m.hasContainer = false
-			m.containerName = ""
-			m.prefix = ""
 			return m, nil
 		}
 
-		isRefresh := len(m.containers) > 0
 		m.lastErr = ""
 		m.containers = msg.containers
 		m.containersList.Title = fmt.Sprintf("Containers (%d)", len(msg.containers))
+		ui.SetItemsPreserveIndex(&m.containersList, containersToItems(msg.containers))
 
-		if isRefresh {
-			ui.SetItemsPreserveIndex(&m.containersList, containersToItems(msg.containers))
-			m.status = fmt.Sprintf("Refreshed %d containers from %s.", len(msg.containers), msg.account.Name)
-			return m, nil
+		if msg.done {
+			m.loading = false
+			m.status = fmt.Sprintf("Loaded %d containers from %s.", len(msg.containers), msg.account.Name)
 		}
 
-		m.containersList.ResetFilter()
-		m.containersList.SetItems(containersToItems(msg.containers))
-		m.containersList.Select(0)
-
-		if len(msg.containers) == 0 {
-			m.hasContainer = false
-			m.containerName = ""
-			m.prefix = ""
-			m.clearBlobSelectionState()
-			m.resetBlobLoadState()
-			m.resetPreviewState()
-			m.blobs = nil
-			m.blobsList.ResetFilter()
-			m.blobsList.SetItems(nil)
-			m.blobsList.Title = "Blobs"
-			m.status = fmt.Sprintf("No containers found in %s", msg.account.Name)
-			return m, nil
-		}
-
-		m.hasContainer = false
-		m.containerName = ""
-		m.prefix = ""
-		m.clearBlobSelectionState()
-		m.resetBlobLoadState()
-		m.resetPreviewState()
-		m.blobs = nil
-		m.blobsList.ResetFilter()
-		m.blobsList.SetItems(nil)
-		m.blobsList.Title = "Blobs"
-		m.status = fmt.Sprintf("Loaded %d containers from %s. Open a container to browse blobs.", len(msg.containers), msg.account.Name)
-		return m, nil
+		return m, msg.next
 
 	case blobsLoadedMsg:
-		if msg.err == nil && msg.query == "" {
+		if msg.done && msg.err == nil && msg.query == "" {
 			m.cache.blobs.Set(blobsCacheKey(msg.account.SubscriptionID, msg.account.Name, msg.container, msg.prefix, msg.loadAll), msg.blobs)
 		}
 
 		if !m.hasAccount || !m.hasContainer {
-			return m, nil
+			return m, msg.next
 		}
 		if !sameAccount(m.currentAccount, msg.account) || m.containerName != msg.container {
-			return m, nil
+			return m, msg.next
 		}
 		if m.prefix != msg.prefix {
-			return m, nil
+			return m, msg.next
 		}
 		if m.blobLoadAll != msg.loadAll {
-			return m, nil
+			return m, msg.next
 		}
 		if m.blobSearchQuery != msg.query {
-			return m, nil
+			return m, msg.next
 		}
 
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load blobs in %s/%s", msg.account.Name, msg.container)
-			m.visualLineMode = false
-			m.visualAnchor = ""
-			m.blobs = nil
-			m.blobsList.ResetFilter()
-			m.blobsList.SetItems(nil)
-			m.blobsList.Title = "Blobs"
 			return m, nil
 		}
 
-		isRefresh := len(m.blobs) > 0
 		m.lastErr = ""
 		m.blobs = msg.blobs
 		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(msg.blobs))
+		m.refreshBlobItems()
 
-		if isRefresh {
-			idx := m.blobsList.Index()
-			m.refreshBlobItems()
-			if n := len(m.blobsList.Items()); n > 0 {
-				if idx >= n {
-					idx = n - 1
-				}
-				m.blobsList.Select(idx)
+		if msg.done {
+			m.loading = false
+			if msg.loadAll {
+				m.status = fmt.Sprintf("Loaded all %d blobs in %s/%s", len(msg.blobs), msg.account.Name, msg.container)
+			} else if msg.query != "" {
+				effectivePrefix := blobSearchPrefix(m.prefix, msg.query)
+				m.status = fmt.Sprintf("Found %d blobs by prefix %q in %s/%s", len(msg.blobs), effectivePrefix, msg.account.Name, msg.container)
+			} else {
+				m.status = fmt.Sprintf("Loaded %d entries (max %d) in %s/%s under %q", len(msg.blobs), defaultHierarchyBlobLoadLimit, msg.account.Name, msg.container, msg.prefix)
 			}
-		} else {
-			m.visualLineMode = false
-			m.visualAnchor = ""
-			m.blobsList.ResetFilter()
-			m.refreshBlobItems()
 		}
 
-		if msg.loadAll {
-			m.status = fmt.Sprintf("Loaded all %d blobs in %s/%s", len(msg.blobs), msg.account.Name, msg.container)
-		} else if msg.query != "" {
-			effectivePrefix := blobSearchPrefix(m.prefix, msg.query)
-			m.status = fmt.Sprintf("Found %d blobs by prefix %q in %s/%s", len(msg.blobs), effectivePrefix, msg.account.Name, msg.container)
-		} else {
-			m.status = fmt.Sprintf("Loaded %d entries (max %d) in %s/%s under %q", len(msg.blobs), defaultHierarchyBlobLoadLimit, msg.account.Name, msg.container, msg.prefix)
-		}
-		return m, nil
+		return m, msg.next
 
 	case blobsDownloadedMsg:
 		m.loading = false
@@ -398,7 +263,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loading = true
 				m.lastErr = ""
 				m.status = "Refreshing subscriptions..."
-				return m, tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
+				return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
 			}
 		case m.keymap.RefreshScope.Matches(key):
 			if !focusedFilterActive {
@@ -443,7 +308,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					m.loading = true
 					m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-					return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+					return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 				}
 			}
 		}

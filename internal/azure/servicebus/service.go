@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -142,24 +141,24 @@ func (s *Service) getConnStrClient(ctx context.Context, ns Namespace) (*azservic
 	return c, nil
 }
 
-func (s *Service) ListSubscriptions(ctx context.Context) ([]azure.Subscription, error) {
-	return azure.ListSubscriptions(ctx, s.cred)
+func (s *Service) ListSubscriptions(ctx context.Context, send func([]azure.Subscription)) error {
+	return azure.ListSubscriptions(ctx, s.cred, send)
 }
 
-func (s *Service) ListNamespaces(ctx context.Context, subscriptionID string) ([]Namespace, error) {
+func (s *Service) ListNamespaces(ctx context.Context, subscriptionID string, send func([]Namespace)) error {
 	client, err := armservicebus.NewNamespacesClient(subscriptionID, s.cred, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create namespaces client: %w", err)
+		return fmt.Errorf("create namespaces client: %w", err)
 	}
 
-	namespaces := make([]Namespace, 0)
 	pager := client.NewListPager(nil)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list namespaces: %w", err)
+			return fmt.Errorf("list namespaces: %w", err)
 		}
 
+		var batch []Namespace
 		for _, ns := range page.Value {
 			if ns == nil || ns.Name == nil {
 				continue
@@ -177,31 +176,29 @@ func (s *Service) ListNamespaces(ctx context.Context, subscriptionID string) ([]
 				entry.FQDN = *ns.Name + ".servicebus.windows.net"
 			}
 
-			namespaces = append(namespaces, entry)
+			batch = append(batch, entry)
+		}
+		if len(batch) > 0 {
+			send(batch)
 		}
 	}
 
-	sort.Slice(namespaces, func(i, j int) bool {
-		return strings.ToLower(namespaces[i].Name) < strings.ToLower(namespaces[j].Name)
-	})
-
-	return namespaces, nil
+	return nil
 }
 
-func (s *Service) ListEntities(ctx context.Context, ns Namespace) ([]Entity, error) {
+func (s *Service) ListEntities(ctx context.Context, ns Namespace, send func([]Entity)) error {
 	client, err := armservicebus.NewQueuesClient(ns.SubscriptionID, s.cred, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create queues client: %w", err)
+		return fmt.Errorf("create queues client: %w", err)
 	}
-
-	entities := make([]Entity, 0)
 
 	queuePager := client.NewListByNamespacePager(ns.ResourceGroup, ns.Name, nil)
 	for queuePager.More() {
 		page, err := queuePager.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list queues in %s: %w", ns.Name, err)
+			return fmt.Errorf("list queues in %s: %w", ns.Name, err)
 		}
+		var batch []Entity
 		for _, q := range page.Value {
 			if q == nil || q.Name == nil {
 				continue
@@ -215,21 +212,25 @@ func (s *Service) ListEntities(ctx context.Context, ns Namespace) ([]Entity, err
 					e.DeadLetterCount = *q.Properties.CountDetails.DeadLetterMessageCount
 				}
 			}
-			entities = append(entities, e)
+			batch = append(batch, e)
+		}
+		if len(batch) > 0 {
+			send(batch)
 		}
 	}
 
 	topicsClient, err := armservicebus.NewTopicsClient(ns.SubscriptionID, s.cred, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create topics client: %w", err)
+		return fmt.Errorf("create topics client: %w", err)
 	}
 
 	topicPager := topicsClient.NewListByNamespacePager(ns.ResourceGroup, ns.Name, nil)
 	for topicPager.More() {
 		page, err := topicPager.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list topics in %s: %w", ns.Name, err)
+			return fmt.Errorf("list topics in %s: %w", ns.Name, err)
 		}
+		var batch []Entity
 		for _, t := range page.Value {
 			if t == nil || t.Name == nil {
 				continue
@@ -243,33 +244,29 @@ func (s *Service) ListEntities(ctx context.Context, ns Namespace) ([]Entity, err
 					e.DeadLetterCount = *t.Properties.CountDetails.DeadLetterMessageCount
 				}
 			}
-			entities = append(entities, e)
+			batch = append(batch, e)
+		}
+		if len(batch) > 0 {
+			send(batch)
 		}
 	}
 
-	sort.Slice(entities, func(i, j int) bool {
-		if entities[i].Kind != entities[j].Kind {
-			return entities[i].Kind < entities[j].Kind
-		}
-		return strings.ToLower(entities[i].Name) < strings.ToLower(entities[j].Name)
-	})
-
-	return entities, nil
+	return nil
 }
 
-func (s *Service) ListTopicSubscriptions(ctx context.Context, ns Namespace, topicName string) ([]TopicSubscription, error) {
+func (s *Service) ListTopicSubscriptions(ctx context.Context, ns Namespace, topicName string, send func([]TopicSubscription)) error {
 	client, err := armservicebus.NewSubscriptionsClient(ns.SubscriptionID, s.cred, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create subscriptions client: %w", err)
+		return fmt.Errorf("create subscriptions client: %w", err)
 	}
 
-	subs := make([]TopicSubscription, 0)
 	pager := client.NewListByTopicPager(ns.ResourceGroup, ns.Name, topicName, nil)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list subscriptions for topic %s: %w", topicName, err)
+			return fmt.Errorf("list subscriptions for topic %s: %w", topicName, err)
 		}
+		var batch []TopicSubscription
 		for _, sub := range page.Value {
 			if sub == nil || sub.Name == nil {
 				continue
@@ -283,41 +280,40 @@ func (s *Service) ListTopicSubscriptions(ctx context.Context, ns Namespace, topi
 					ts.DeadLetterCount = *sub.Properties.CountDetails.DeadLetterMessageCount
 				}
 			}
-			subs = append(subs, ts)
+			batch = append(batch, ts)
+		}
+		if len(batch) > 0 {
+			send(batch)
 		}
 	}
 
-	sort.Slice(subs, func(i, j int) bool {
-		return strings.ToLower(subs[i].Name) < strings.ToLower(subs[j].Name)
-	})
-
-	return subs, nil
+	return nil
 }
 
-func (s *Service) PeekQueueMessages(ctx context.Context, ns Namespace, queueName string, maxCount int, deadLetter bool) ([]PeekedMessage, error) {
+func (s *Service) PeekQueueMessages(ctx context.Context, ns Namespace, queueName string, maxCount int, deadLetter bool, send func([]PeekedMessage)) error {
 	client, err := s.getClient(ns.FQDN)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	messages, err := s.peekQueue(ctx, client, queueName, maxCount, deadLetter)
+	err = s.peekQueue(ctx, client, queueName, maxCount, deadLetter, send)
 	if err == nil || !isAuthError(err) {
-		return messages, err
+		return err
 	}
 
 	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
 	if fallbackErr != nil {
-		return nil, fmt.Errorf("peek queue %s with AAD failed: %v; connection string fallback failed: %w", queueName, err, fallbackErr)
+		return fmt.Errorf("peek queue %s with AAD failed: %v; connection string fallback failed: %w", queueName, err, fallbackErr)
 	}
 
-	messages, err = s.peekQueue(ctx, fallbackClient, queueName, maxCount, deadLetter)
+	err = s.peekQueue(ctx, fallbackClient, queueName, maxCount, deadLetter, send)
 	if err != nil {
-		return nil, fmt.Errorf("peek queue %s with connection string fallback: %w", queueName, err)
+		return fmt.Errorf("peek queue %s with connection string fallback: %w", queueName, err)
 	}
-	return messages, nil
+	return nil
 }
 
-func (s *Service) peekQueue(ctx context.Context, client *azservicebus.Client, queueName string, maxCount int, deadLetter bool) ([]PeekedMessage, error) {
+func (s *Service) peekQueue(ctx context.Context, client *azservicebus.Client, queueName string, maxCount int, deadLetter bool, send func([]PeekedMessage)) error {
 	opts := &azservicebus.ReceiverOptions{
 		ReceiveMode: azservicebus.ReceiveModePeekLock,
 	}
@@ -326,37 +322,37 @@ func (s *Service) peekQueue(ctx context.Context, client *azservicebus.Client, qu
 	}
 	receiver, err := client.NewReceiverForQueue(queueName, opts)
 	if err != nil {
-		return nil, fmt.Errorf("create queue receiver for %s: %w", queueName, err)
+		return fmt.Errorf("create queue receiver for %s: %w", queueName, err)
 	}
 	defer receiver.Close(ctx)
 
-	return peekMessages(ctx, receiver, maxCount)
+	return peekMessages(ctx, receiver, maxCount, send)
 }
 
-func (s *Service) PeekSubscriptionMessages(ctx context.Context, ns Namespace, topicName, subName string, maxCount int, deadLetter bool) ([]PeekedMessage, error) {
+func (s *Service) PeekSubscriptionMessages(ctx context.Context, ns Namespace, topicName, subName string, maxCount int, deadLetter bool, send func([]PeekedMessage)) error {
 	client, err := s.getClient(ns.FQDN)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	messages, err := s.peekSubscription(ctx, client, topicName, subName, maxCount, deadLetter)
+	err = s.peekSubscription(ctx, client, topicName, subName, maxCount, deadLetter, send)
 	if err == nil || !isAuthError(err) {
-		return messages, err
+		return err
 	}
 
 	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
 	if fallbackErr != nil {
-		return nil, fmt.Errorf("peek subscription %s/%s with AAD failed: %v; connection string fallback failed: %w", topicName, subName, err, fallbackErr)
+		return fmt.Errorf("peek subscription %s/%s with AAD failed: %v; connection string fallback failed: %w", topicName, subName, err, fallbackErr)
 	}
 
-	messages, err = s.peekSubscription(ctx, fallbackClient, topicName, subName, maxCount, deadLetter)
+	err = s.peekSubscription(ctx, fallbackClient, topicName, subName, maxCount, deadLetter, send)
 	if err != nil {
-		return nil, fmt.Errorf("peek subscription %s/%s with connection string fallback: %w", topicName, subName, err)
+		return fmt.Errorf("peek subscription %s/%s with connection string fallback: %w", topicName, subName, err)
 	}
-	return messages, nil
+	return nil
 }
 
-func (s *Service) peekSubscription(ctx context.Context, client *azservicebus.Client, topicName, subName string, maxCount int, deadLetter bool) ([]PeekedMessage, error) {
+func (s *Service) peekSubscription(ctx context.Context, client *azservicebus.Client, topicName, subName string, maxCount int, deadLetter bool, send func([]PeekedMessage)) error {
 	opts := &azservicebus.ReceiverOptions{
 		ReceiveMode: azservicebus.ReceiveModePeekLock,
 	}
@@ -365,11 +361,11 @@ func (s *Service) peekSubscription(ctx context.Context, client *azservicebus.Cli
 	}
 	receiver, err := client.NewReceiverForSubscription(topicName, subName, opts)
 	if err != nil {
-		return nil, fmt.Errorf("create subscription receiver for %s/%s: %w", topicName, subName, err)
+		return fmt.Errorf("create subscription receiver for %s/%s: %w", topicName, subName, err)
 	}
 	defer receiver.Close(ctx)
 
-	return peekMessages(ctx, receiver, maxCount)
+	return peekMessages(ctx, receiver, maxCount, send)
 }
 
 type DuplicateError struct {
@@ -611,10 +607,10 @@ func isAuthError(err error) bool {
 	return false
 }
 
-func peekMessages(ctx context.Context, receiver *azservicebus.Receiver, maxCount int) ([]PeekedMessage, error) {
+func peekMessages(ctx context.Context, receiver *azservicebus.Receiver, maxCount int, send func([]PeekedMessage)) error {
 	peeked, err := receiver.PeekMessages(ctx, maxCount, nil)
 	if err != nil {
-		return nil, fmt.Errorf("peek messages: %w", err)
+		return fmt.Errorf("peek messages: %w", err)
 	}
 
 	messages := make([]PeekedMessage, 0, len(peeked))
@@ -630,7 +626,11 @@ func peekMessages(ctx context.Context, receiver *azservicebus.Receiver, maxCount
 		messages = append(messages, entry)
 	}
 
-	return messages, nil
+	if len(messages) > 0 {
+		send(messages)
+	}
+
+	return nil
 }
 
 func truncateBody(body []byte, max int) string {

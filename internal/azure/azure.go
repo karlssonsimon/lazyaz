@@ -21,20 +21,20 @@ func NewDefaultCredential() (azcore.TokenCredential, error) {
 	return azidentity.NewDefaultAzureCredential(nil)
 }
 
-func ListSubscriptions(ctx context.Context, cred azcore.TokenCredential) ([]Subscription, error) {
+func ListSubscriptions(ctx context.Context, cred azcore.TokenCredential, send func([]Subscription)) error {
 	subscriptionsClient, err := armsubscriptions.NewClient(cred, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create subscriptions client: %w", err)
+		return fmt.Errorf("create subscriptions client: %w", err)
 	}
 
-	subscriptions := make([]Subscription, 0)
 	pager := subscriptionsClient.NewListPager(nil)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("list subscriptions: %w", err)
+			return fmt.Errorf("list subscriptions: %w", err)
 		}
 
+		var batch []Subscription
 		for _, subscription := range page.Value {
 			if subscription == nil || subscription.SubscriptionID == nil {
 				continue
@@ -48,24 +48,26 @@ func ListSubscriptions(ctx context.Context, cred azcore.TokenCredential) ([]Subs
 				entry.State = string(*subscription.State)
 			}
 
-			subscriptions = append(subscriptions, entry)
+			batch = append(batch, entry)
+		}
+		if len(batch) > 0 {
+			sort.Slice(batch, func(i, j int) bool {
+				nameI := strings.ToLower(strings.TrimSpace(batch[i].Name))
+				nameJ := strings.ToLower(strings.TrimSpace(batch[j].Name))
+				if nameI == nameJ {
+					return batch[i].ID < batch[j].ID
+				}
+				if nameI == "" {
+					return false
+				}
+				if nameJ == "" {
+					return true
+				}
+				return nameI < nameJ
+			})
+			send(batch)
 		}
 	}
 
-	sort.Slice(subscriptions, func(i, j int) bool {
-		nameI := strings.ToLower(strings.TrimSpace(subscriptions[i].Name))
-		nameJ := strings.ToLower(strings.TrimSpace(subscriptions[j].Name))
-		if nameI == nameJ {
-			return subscriptions[i].ID < subscriptions[j].ID
-		}
-		if nameI == "" {
-			return false
-		}
-		if nameJ == "" {
-			return true
-		}
-		return nameI < nameJ
-	})
-
-	return subscriptions, nil
+	return nil
 }

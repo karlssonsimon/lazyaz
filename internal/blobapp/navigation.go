@@ -17,21 +17,21 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.loading = true
 		m.lastErr = ""
 		m.status = "Refreshing subscriptions..."
-		return m, tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
+		return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
 	}
 
 	if !m.hasAccount || m.focus == accountsPane {
 		m.loading = true
 		m.lastErr = ""
 		m.status = fmt.Sprintf("Loading storage accounts in %s", subscriptionDisplayName(m.currentSub))
-		return m, tea.Batch(spinner.Tick, loadAccountsForSubscriptionCmd(m.service, m.currentSub.ID))
+		return m, tea.Batch(spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, m.currentSub.ID))
 	}
 
 	if m.focus == containersPane || !m.hasContainer {
 		m.loading = true
 		m.lastErr = ""
 		m.status = fmt.Sprintf("Loading containers in %s", m.currentAccount.Name)
-		return m, tea.Batch(spinner.Tick, loadContainersCmd(m.service, m.currentAccount))
+		return m, tea.Batch(spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, m.currentAccount))
 	}
 	if m.focus == previewPane && m.preview.open {
 		return m.ensurePreviewWindowAtCursor()
@@ -41,16 +41,16 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	m.lastErr = ""
 	if m.blobLoadAll {
 		m.status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
-		return m, tea.Batch(spinner.Tick, loadAllBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix))
+		return m, tea.Batch(spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix))
 	}
 	if m.blobSearchQuery != "" {
 		effectivePrefix := blobSearchPrefix(m.prefix, m.blobSearchQuery)
 		m.status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
-		return m, tea.Batch(spinner.Tick, searchBlobsByPrefixCmd(m.service, m.currentAccount, m.containerName, m.prefix, m.blobSearchQuery, defaultBlobPrefixSearchLimit))
+		return m, tea.Batch(spinner.Tick, fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.blobSearchQuery, defaultBlobPrefixSearchLimit))
 	}
 	m.loading = true
 	m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-	return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+	return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 }
 
 func (m Model) navigateLeft() (Model, tea.Cmd) {
@@ -73,7 +73,7 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 
 			m.loading = true
 			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-			return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+			return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 		}
 		if m.visualLineMode {
 			m.visualLineMode = false
@@ -139,7 +139,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		m.loading = true
 		m.status = fmt.Sprintf("Loading storage accounts in %s", subscriptionDisplayName(item.subscription))
-		return m, tea.Batch(spinner.Tick, loadAccountsForSubscriptionCmd(m.service, item.subscription.ID))
+		return m, tea.Batch(spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, item.subscription.ID))
 	}
 
 	if m.focus == accountsPane {
@@ -178,7 +178,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		m.loading = true
 		m.status = fmt.Sprintf("Loading containers in %s", item.account.Name)
-		return m, tea.Batch(spinner.Tick, loadContainersCmd(m.service, item.account))
+		return m, tea.Batch(spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, item.account))
 	}
 
 	if m.focus == containersPane {
@@ -209,7 +209,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		m.loading = true
 		m.status = fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName)
-		return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+		return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 	}
 
 	if m.focus == blobsPane {
@@ -237,7 +237,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 			m.loading = true
 			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-			return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+			return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 		}
 
 		return m.openPreview(item.blob)

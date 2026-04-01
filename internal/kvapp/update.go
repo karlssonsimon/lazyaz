@@ -3,9 +3,7 @@ package kvapp
 import (
 	"fmt"
 
-	"azure-storage/internal/azure"
 	"azure-storage/internal/cache"
-	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -30,178 +28,77 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case subscriptionsLoadedMsg:
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = "Failed to load subscriptions"
 			return m, nil
 		}
 
-		m.cache.subscriptions.Set("", msg.subscriptions)
-		isRefresh := len(m.subscriptions) > 0
 		m.lastErr = ""
 		m.subscriptions = msg.subscriptions
 		m.subscriptionsList.Title = fmt.Sprintf("Subscriptions (%d)", len(msg.subscriptions))
+		ui.SetItemsPreserveIndex(&m.subscriptionsList, subscriptionsToItems(msg.subscriptions))
 
-		if isRefresh {
-			ui.SetItemsPreserveIndex(&m.subscriptionsList, subscriptionsToItems(msg.subscriptions))
-			m.status = fmt.Sprintf("Refreshed %d subscriptions.", len(msg.subscriptions))
-			return m, nil
+		if msg.done {
+			m.loading = false
+			m.cache.subscriptions.Set("", msg.subscriptions)
+			m.status = fmt.Sprintf("Loaded %d subscriptions.", len(msg.subscriptions))
 		}
 
-		m.subscriptionsList.ResetFilter()
-		m.subscriptionsList.SetItems(subscriptionsToItems(msg.subscriptions))
-
-		if len(msg.subscriptions) == 0 {
-			m.hasSubscription = false
-			m.hasVault = false
-			m.hasSecret = false
-			m.status = "No subscriptions found. Verify az login context and tenant access."
-			m.vaults = nil
-			m.secrets = nil
-			m.versions = nil
-			m.vaultsList.ResetFilter()
-			m.secretsList.ResetFilter()
-			m.versionsList.ResetFilter()
-			m.vaultsList.SetItems(nil)
-			m.secretsList.SetItems(nil)
-			m.versionsList.SetItems(nil)
-			m.vaultsList.Title = "Vaults"
-			m.secretsList.Title = "Secrets"
-			m.versionsList.Title = "Versions"
-			return m, nil
-		}
-
-		m.subscriptionsList.Select(0)
-		m.hasSubscription = false
-		m.currentSub = azure.Subscription{}
-		m.hasVault = false
-		m.hasSecret = false
-		m.status = fmt.Sprintf("Loaded %d subscriptions. Select one and press Enter.", len(msg.subscriptions))
-		return m, nil
+		return m, msg.next
 
 	case vaultsLoadedMsg:
-		if msg.err == nil {
-			m.cache.vaults.Set(msg.subscriptionID, msg.vaults)
-		}
-
 		if !m.hasSubscription || m.currentSub.ID != msg.subscriptionID {
 			return m, nil
 		}
 
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load key vaults in %s", subscriptionDisplayName(m.currentSub))
 			return m, nil
 		}
 
-		isRefresh := len(m.vaults) > 0
 		m.lastErr = ""
 		m.vaults = msg.vaults
 		m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(msg.vaults))
+		ui.SetItemsPreserveIndex(&m.vaultsList, vaultsToItems(msg.vaults))
 
-		if isRefresh {
-			ui.SetItemsPreserveIndex(&m.vaultsList, vaultsToItems(msg.vaults))
-			m.status = fmt.Sprintf("Refreshed %d key vaults from %s.", len(msg.vaults), subscriptionDisplayName(m.currentSub))
-			return m, nil
+		if msg.done {
+			m.loading = false
+			m.cache.vaults.Set(msg.subscriptionID, msg.vaults)
+			m.status = fmt.Sprintf("Loaded %d vaults.", len(msg.vaults))
 		}
 
-		m.vaultsList.ResetFilter()
-		m.vaultsList.SetItems(vaultsToItems(msg.vaults))
-
-		if len(msg.vaults) == 0 {
-			m.hasVault = false
-			m.hasSecret = false
-			m.status = fmt.Sprintf("No key vaults found in %s", subscriptionDisplayName(m.currentSub))
-			m.secrets = nil
-			m.versions = nil
-			m.secretsList.ResetFilter()
-			m.versionsList.ResetFilter()
-			m.secretsList.SetItems(nil)
-			m.versionsList.SetItems(nil)
-			m.secretsList.Title = "Secrets"
-			m.versionsList.Title = "Versions"
-			return m, nil
-		}
-
-		m.vaultsList.Select(0)
-		m.hasVault = false
-		m.currentVault = keyvault.Vault{}
-		m.hasSecret = false
-		m.secrets = nil
-		m.versions = nil
-		m.secretsList.ResetFilter()
-		m.versionsList.ResetFilter()
-		m.secretsList.SetItems(nil)
-		m.versionsList.SetItems(nil)
-		m.secretsList.Title = "Secrets"
-		m.versionsList.Title = "Versions"
-		m.status = fmt.Sprintf("Loaded %d key vaults from %s. Open a vault to view secrets.", len(msg.vaults), subscriptionDisplayName(m.currentSub))
-		return m, nil
+		return m, msg.next
 
 	case secretsLoadedMsg:
-		if msg.err == nil {
-			m.cache.secrets.Set(cache.Key(m.currentSub.ID, msg.vault.Name), msg.secrets)
-		}
-
 		if !m.hasVault || m.currentVault.Name != msg.vault.Name {
 			return m, nil
 		}
 
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load secrets in %s", msg.vault.Name)
-			m.secrets = nil
-			m.versions = nil
-			m.secretsList.ResetFilter()
-			m.versionsList.ResetFilter()
-			m.secretsList.SetItems(nil)
-			m.versionsList.SetItems(nil)
-			m.hasSecret = false
 			return m, nil
 		}
 
-		isRefresh := len(m.secrets) > 0
 		m.lastErr = ""
 		m.secrets = msg.secrets
 		m.secretsList.Title = fmt.Sprintf("Secrets (%d)", len(msg.secrets))
+		ui.SetItemsPreserveIndex(&m.secretsList, secretsToItems(msg.secrets))
 
-		if isRefresh {
-			ui.SetItemsPreserveIndex(&m.secretsList, secretsToItems(msg.secrets))
-			m.status = fmt.Sprintf("Refreshed %d secrets from %s.", len(msg.secrets), msg.vault.Name)
-			return m, nil
+		if msg.done {
+			m.loading = false
+			m.cache.secrets.Set(cache.Key(m.currentSub.ID, msg.vault.Name), msg.secrets)
+			m.status = fmt.Sprintf("Loaded %d secrets from %s.", len(msg.secrets), msg.vault.Name)
 		}
 
-		m.secretsList.ResetFilter()
-		m.secretsList.SetItems(secretsToItems(msg.secrets))
-
-		if len(msg.secrets) == 0 {
-			m.hasSecret = false
-			m.versions = nil
-			m.versionsList.ResetFilter()
-			m.versionsList.SetItems(nil)
-			m.versionsList.Title = "Versions"
-			m.status = fmt.Sprintf("No secrets found in %s", msg.vault.Name)
-			return m, nil
-		}
-
-		m.secretsList.Select(0)
-		m.hasSecret = false
-		m.currentSecret = keyvault.Secret{}
-		m.versions = nil
-		m.versionsList.ResetFilter()
-		m.versionsList.SetItems(nil)
-		m.versionsList.Title = "Versions"
-		m.status = fmt.Sprintf("Loaded %d secrets from %s. Open a secret to view versions.", len(msg.secrets), msg.vault.Name)
-		return m, nil
+		return m, msg.next
 
 	case versionsLoadedMsg:
-		if msg.err == nil {
-			m.cache.versions.Set(cache.Key(m.currentSub.ID, msg.vault.Name, msg.secretName), msg.versions)
-		}
-
 		if !m.hasSecret || m.currentSecret.Name != msg.secretName {
 			return m, nil
 		}
@@ -209,31 +106,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load versions for %s", msg.secretName)
 			return m, nil
 		}
 
-		isRefresh := len(m.versions) > 0
 		m.lastErr = ""
 		m.versions = msg.versions
 		m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(msg.versions))
+		ui.SetItemsPreserveIndex(&m.versionsList, versionsToItems(msg.versions))
 
-		if isRefresh {
-			ui.SetItemsPreserveIndex(&m.versionsList, versionsToItems(msg.versions))
-			m.status = fmt.Sprintf("Refreshed %d versions for %s", len(msg.versions), msg.secretName)
-			return m, nil
+		if msg.done {
+			m.loading = false
+			m.cache.versions.Set(cache.Key(m.currentSub.ID, msg.vault.Name, msg.secretName), msg.versions)
+			m.status = fmt.Sprintf("Loaded %d versions for %s.", len(msg.versions), msg.secretName)
 		}
 
-		m.versionsList.ResetFilter()
-		m.versionsList.SetItems(versionsToItems(msg.versions))
-		if len(msg.versions) > 0 {
-			m.versionsList.Select(0)
-		}
-		m.status = fmt.Sprintf("Loaded %d versions for %s. Press y to yank a secret value.", len(msg.versions), msg.secretName)
-		return m, nil
+		return m, msg.next
 
 	case secretValueYankedMsg:
 		m.loading = false
@@ -303,7 +194,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loading = true
 				m.lastErr = ""
 				m.status = "Refreshing subscriptions..."
-				return m, tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
+				return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
 			}
 		case m.keymap.RefreshScope.Matches(key):
 			if !focusedFilterActive {

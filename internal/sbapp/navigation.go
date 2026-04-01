@@ -99,7 +99,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		m.loading = true
 		m.status = fmt.Sprintf("Loading namespaces in %s", subscriptionDisplayName(item.subscription))
-		return m, tea.Batch(spinner.Tick, loadNamespacesCmd(m.service, item.subscription.ID))
+		return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, item.subscription.ID))
 	}
 
 	if m.focus == namespacesPane {
@@ -115,7 +115,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearDetailState()
 		m.focus = entitiesPane
 
-		if cached, ok := m.cache.entities.Get(cache.Key(m.currentSub.ID, item.namespace.Name)); ok {
+		entityKey := cache.Key(m.currentSub.ID, item.namespace.Name)
+		if cached, ok := m.cache.entities.Get(entityKey); ok {
 			m.entities = cached
 			m.entitiesList.ResetFilter()
 			m.entitiesList.SetItems(entitiesToFilteredItems(cached, m.dlqFilter))
@@ -134,7 +135,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		m.loading = true
 		m.status = fmt.Sprintf("Loading entities in %s", item.namespace.Name)
-		return m, tea.Batch(spinner.Tick, loadEntitiesCmd(m.service, item.namespace))
+		return m, tea.Batch(spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityKey))
 	}
 
 	if m.focus == entitiesPane {
@@ -165,7 +166,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 			m.loading = true
 			m.status = fmt.Sprintf("Loading subscriptions for topic %s", item.entity.Name)
-			return m, tea.Batch(spinner.Tick, loadTopicSubscriptionsCmd(m.service, m.currentNS, item.entity.Name))
+			return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, item.entity.Name, topicKey))
 		}
 
 		// Queue — messages are not cached (ephemeral)

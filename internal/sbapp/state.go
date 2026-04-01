@@ -85,26 +85,34 @@ type Model struct {
 
 type subscriptionsLoadedMsg struct {
 	subscriptions []azure.Subscription
+	done          bool
 	err           error
+	next          tea.Cmd
 }
 
 type namespacesLoadedMsg struct {
 	subscriptionID string
 	namespaces     []servicebus.Namespace
+	done           bool
 	err            error
+	next           tea.Cmd
 }
 
 type entitiesLoadedMsg struct {
 	namespace servicebus.Namespace
 	entities  []servicebus.Entity
+	done      bool
 	err       error
+	next      tea.Cmd
 }
 
 type topicSubscriptionsLoadedMsg struct {
 	namespace servicebus.Namespace
 	topicName string
 	subs      []servicebus.TopicSubscription
+	done      bool
 	err       error
+	next      tea.Cmd
 }
 
 type messagesLoadedMsg struct {
@@ -207,5 +215,5 @@ func (m *Model) applyTheme(theme ui.Theme) {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
+	return tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
 }

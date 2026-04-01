@@ -12,17 +12,17 @@ import (
 //
 // Messages are not cached because they are ephemeral peek results.
 type sbCache struct {
-	subscriptions cache.Store[azure.Subscription]
-	namespaces    cache.Store[servicebus.Namespace]
-	entities      cache.Store[servicebus.Entity]
-	topicSubs     cache.Store[servicebus.TopicSubscription]
+	subscriptions *cache.Loader[azure.Subscription]
+	namespaces    *cache.Loader[servicebus.Namespace]
+	entities      *cache.Loader[servicebus.Entity]
+	topicSubs     *cache.Loader[servicebus.TopicSubscription]
 }
 
 func newCache() sbCache {
 	return sbCache{
-		subscriptions: cache.NewMap[azure.Subscription](),
-		namespaces:    cache.NewMap[servicebus.Namespace](),
-		entities:      cache.NewMap[servicebus.Entity](),
-		topicSubs:     cache.NewMap[servicebus.TopicSubscription](),
+		subscriptions: cache.NewLoader(cache.NewMap[azure.Subscription]()),
+		namespaces:    cache.NewLoader(cache.NewMap[servicebus.Namespace]()),
+		entities:      cache.NewLoader(cache.NewMap[servicebus.Entity]()),
+		topicSubs:     cache.NewLoader(cache.NewMap[servicebus.TopicSubscription]()),
 	}
 }

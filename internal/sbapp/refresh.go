@@ -3,6 +3,7 @@ package sbapp
 import (
 	"fmt"
 
+	"azure-storage/internal/cache"
 	"azure-storage/internal/azure/servicebus"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -14,21 +15,22 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.loading = true
 		m.lastErr = ""
 		m.status = "Refreshing subscriptions..."
-		return m, tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
+		return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
 	}
 
 	if !m.hasNamespace || m.focus == namespacesPane {
 		m.loading = true
 		m.lastErr = ""
 		m.status = fmt.Sprintf("Loading namespaces in %s", subscriptionDisplayName(m.currentSub))
-		return m, tea.Batch(spinner.Tick, loadNamespacesCmd(m.service, m.currentSub.ID))
+		return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, m.currentSub.ID))
 	}
 
 	if m.focus == entitiesPane || !m.hasEntity {
 		m.loading = true
 		m.lastErr = ""
 		m.status = fmt.Sprintf("Loading entities in %s", m.currentNS.Name)
-		return m, tea.Batch(spinner.Tick, loadEntitiesCmd(m.service, m.currentNS))
+		entityKey := cache.Key(m.currentSub.ID, m.currentNS.Name)
+		return m, tea.Batch(spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, m.currentNS, entityKey))
 	}
 
 	return m.refreshDetail()
@@ -52,7 +54,8 @@ func (m Model) refreshDetail() (Model, tea.Cmd) {
 	m.loading = true
 	m.lastErr = ""
 	m.status = fmt.Sprintf("Loading subscriptions for topic %s", m.currentEntity.Name)
-	return m, tea.Batch(spinner.Tick, loadTopicSubscriptionsCmd(m.service, m.currentNS, m.currentEntity.Name))
+	topicKey := cache.Key(m.currentSub.ID, m.currentNS.Name, m.currentEntity.Name)
+	return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, m.currentEntity.Name, topicKey))
 }
 
 func (m Model) rePeekMessages() (Model, tea.Cmd) {

@@ -76,7 +76,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		m.loading = true
 		m.status = fmt.Sprintf("Loading key vaults in %s", subscriptionDisplayName(item.subscription))
-		return m, tea.Batch(spinner.Tick, loadVaultsCmd(m.service, item.subscription.ID))
+		return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, item.subscription.ID))
 	}
 
 	if m.focus == vaultsPane {
@@ -111,7 +111,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		m.loading = true
 		m.status = fmt.Sprintf("Loading secrets in %s", item.vault.Name)
-		return m, tea.Batch(spinner.Tick, loadSecretsCmd(m.service, item.vault))
+		return m, tea.Batch(spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, item.vault))
 	}
 
 	if m.focus == secretsPane {
@@ -140,7 +140,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		m.loading = true
 		m.status = fmt.Sprintf("Loading versions for %s", item.secret.Name)
-		return m, tea.Batch(spinner.Tick, loadVersionsCmd(m.service, m.currentVault, item.secret.Name))
+		return m, tea.Batch(spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, item.secret.Name))
 	}
 
 	return m, nil

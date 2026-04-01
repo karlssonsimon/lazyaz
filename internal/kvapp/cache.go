@@ -10,17 +10,17 @@ import (
 //
 //	subscriptions → vaults → secrets → versions
 type kvCache struct {
-	subscriptions cache.Store[azure.Subscription]
-	vaults        cache.Store[keyvault.Vault]
-	secrets       cache.Store[keyvault.Secret]
-	versions      cache.Store[keyvault.SecretVersion]
+	subscriptions *cache.Loader[azure.Subscription]
+	vaults        *cache.Loader[keyvault.Vault]
+	secrets       *cache.Loader[keyvault.Secret]
+	versions      *cache.Loader[keyvault.SecretVersion]
 }
 
 func newCache() kvCache {
 	return kvCache{
-		subscriptions: cache.NewMap[azure.Subscription](),
-		vaults:        cache.NewMap[keyvault.Vault](),
-		secrets:       cache.NewMap[keyvault.Secret](),
-		versions:      cache.NewMap[keyvault.SecretVersion](),
+		subscriptions: cache.NewLoader(cache.NewMap[azure.Subscription]()),
+		vaults:        cache.NewLoader(cache.NewMap[keyvault.Vault]()),
+		secrets:       cache.NewLoader(cache.NewMap[keyvault.Secret]()),
+		versions:      cache.NewLoader(cache.NewMap[keyvault.SecretVersion]()),
 	}
 }

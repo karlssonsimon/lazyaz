@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"azure-storage/internal/azure"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/ui"
@@ -31,180 +30,78 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case subscriptionsLoadedMsg:
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = "Failed to load subscriptions"
 			return m, nil
 		}
 
-		m.cache.subscriptions.Set("", msg.subscriptions)
-		isRefresh := len(m.subscriptions) > 0
 		m.lastErr = ""
 		m.subscriptions = msg.subscriptions
 		m.subscriptionsList.Title = fmt.Sprintf("Subscriptions (%d)", len(msg.subscriptions))
+		ui.SetItemsPreserveIndex(&m.subscriptionsList, subscriptionsToItems(msg.subscriptions))
 
-		if isRefresh {
-			ui.SetItemsPreserveIndex(&m.subscriptionsList, subscriptionsToItems(msg.subscriptions))
-			m.status = fmt.Sprintf("Refreshed %d subscriptions.", len(msg.subscriptions))
-			return m, nil
+		if msg.done {
+			m.loading = false
+			m.cache.subscriptions.Set("", msg.subscriptions)
+			m.status = fmt.Sprintf("Loaded %d subscriptions.", len(msg.subscriptions))
 		}
 
-		m.subscriptionsList.ResetFilter()
-		m.subscriptionsList.SetItems(subscriptionsToItems(msg.subscriptions))
-
-		if len(msg.subscriptions) == 0 {
-			m.hasSubscription = false
-			m.hasNamespace = false
-			m.hasEntity = false
-			m.status = "No subscriptions found. Verify az login context and tenant access."
-			m.clearDetailState()
-			m.namespaces = nil
-			m.entities = nil
-			m.namespacesList.ResetFilter()
-			m.entitiesList.ResetFilter()
-			m.detailList.ResetFilter()
-			m.namespacesList.SetItems(nil)
-			m.entitiesList.SetItems(nil)
-			m.detailList.SetItems(nil)
-			m.namespacesList.Title = "Namespaces"
-			m.entitiesList.Title = "Entities"
-			m.detailList.Title = "Detail"
-			return m, nil
-		}
-
-		m.subscriptionsList.Select(0)
-		m.hasSubscription = false
-		m.currentSub = azure.Subscription{}
-		m.hasNamespace = false
-		m.hasEntity = false
-		m.status = fmt.Sprintf("Loaded %d subscriptions. Select one and press Enter.", len(msg.subscriptions))
-		return m, nil
+		return m, msg.next
 
 	case namespacesLoadedMsg:
-		if msg.err == nil {
-			m.cache.namespaces.Set(msg.subscriptionID, msg.namespaces)
-		}
-
 		if !m.hasSubscription || m.currentSub.ID != msg.subscriptionID {
 			return m, nil
 		}
 
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load namespaces in %s", subscriptionDisplayName(m.currentSub))
 			return m, nil
 		}
 
-		isRefresh := len(m.namespaces) > 0
 		m.lastErr = ""
 		m.namespaces = msg.namespaces
 		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(msg.namespaces))
+		ui.SetItemsPreserveIndex(&m.namespacesList, namespacesToItems(msg.namespaces))
 
-		if isRefresh {
-			ui.SetItemsPreserveIndex(&m.namespacesList, namespacesToItems(msg.namespaces))
-			m.status = fmt.Sprintf("Refreshed %d namespaces from %s.", len(msg.namespaces), subscriptionDisplayName(m.currentSub))
-			return m, nil
+		if msg.done {
+			m.loading = false
+			m.cache.namespaces.Set(msg.subscriptionID, msg.namespaces)
+			m.status = fmt.Sprintf("Loaded %d namespaces from %s.", len(msg.namespaces), subscriptionDisplayName(m.currentSub))
 		}
 
-		m.namespacesList.ResetFilter()
-		m.namespacesList.SetItems(namespacesToItems(msg.namespaces))
-
-		if len(msg.namespaces) == 0 {
-			m.hasNamespace = false
-			m.hasEntity = false
-			m.status = fmt.Sprintf("No Service Bus namespaces found in %s", subscriptionDisplayName(m.currentSub))
-			m.clearDetailState()
-			m.entities = nil
-			m.entitiesList.ResetFilter()
-			m.detailList.ResetFilter()
-			m.entitiesList.SetItems(nil)
-			m.detailList.SetItems(nil)
-			m.entitiesList.Title = "Entities"
-			m.detailList.Title = "Detail"
-			return m, nil
-		}
-
-		m.namespacesList.Select(0)
-		m.hasNamespace = false
-		m.currentNS = servicebus.Namespace{}
-		m.clearDetailState()
-		m.entities = nil
-		m.entitiesList.ResetFilter()
-		m.detailList.ResetFilter()
-		m.entitiesList.SetItems(nil)
-		m.detailList.SetItems(nil)
-		m.entitiesList.Title = "Entities"
-		m.detailList.Title = "Detail"
-		m.status = fmt.Sprintf("Loaded %d namespaces from %s. Open a namespace to view entities.", len(msg.namespaces), subscriptionDisplayName(m.currentSub))
-		return m, nil
+		return m, msg.next
 
 	case entitiesLoadedMsg:
-		if msg.err == nil {
-			m.cache.entities.Set(cache.Key(m.currentSub.ID, msg.namespace.Name), msg.entities)
-		}
-
 		if !m.hasNamespace || m.currentNS.Name != msg.namespace.Name {
 			return m, nil
 		}
 
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load entities in %s", msg.namespace.Name)
-			m.clearDetailState()
-			m.entities = nil
-			m.entitiesList.ResetFilter()
-			m.detailList.ResetFilter()
-			m.entitiesList.SetItems(nil)
-			m.detailList.SetItems(nil)
-			m.hasEntity = false
 			return m, nil
 		}
 
-		isRefresh := len(m.entities) > 0
 		m.lastErr = ""
 		m.entities = msg.entities
+		items := entitiesToFilteredItems(m.entities, m.dlqFilter)
+		ui.SetItemsPreserveIndex(&m.entitiesList, items)
+		m.entitiesList.Title = m.entitiesPaneTitle()
 
-		if isRefresh {
-			idx := m.entitiesList.Index()
-			m.applyEntityFilter()
-			if n := len(m.entitiesList.Items()); n > 0 {
-				if idx >= n {
-					idx = n - 1
-				}
-				m.entitiesList.Select(idx)
-			}
-			m.status = fmt.Sprintf("Refreshed %d entities from %s.", len(msg.entities), msg.namespace.Name)
-			return m, nil
+		if msg.done {
+			m.loading = false
+			m.cache.entities.Set(cache.Key(m.currentSub.ID, msg.namespace.Name), msg.entities)
+			m.status = fmt.Sprintf("Loaded %d entities from %s.", len(msg.entities), msg.namespace.Name)
 		}
 
-		m.applyEntityFilter()
-
-		if len(msg.entities) == 0 {
-			m.hasEntity = false
-			m.clearDetailState()
-			m.detailList.ResetFilter()
-			m.detailList.SetItems(nil)
-			m.detailList.Title = "Detail"
-			m.status = fmt.Sprintf("No queues or topics found in %s", msg.namespace.Name)
-			return m, nil
-		}
-
-		m.hasEntity = false
-		m.clearDetailState()
-		m.detailList.ResetFilter()
-		m.detailList.SetItems(nil)
-		m.detailList.Title = "Detail"
-		m.status = fmt.Sprintf("Loaded %d entities from %s. Open an entity to peek messages.", len(msg.entities), msg.namespace.Name)
-		return m, nil
+		return m, msg.next
 
 	case topicSubscriptionsLoadedMsg:
-		if msg.err == nil {
-			m.cache.topicSubs.Set(cache.Key(m.currentSub.ID, msg.namespace.Name, msg.topicName), msg.subs)
-		}
-
 		if !m.hasEntity || m.currentEntity.Kind != servicebus.EntityTopic {
 			return m, nil
 		}
@@ -212,33 +109,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		m.loading = false
 		if msg.err != nil {
+			m.loading = false
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load subscriptions for topic %s", msg.topicName)
 			return m, nil
 		}
 
-		isRefresh := len(m.topicSubs) > 0
 		m.lastErr = ""
 		m.topicSubs = msg.subs
 		m.detailMode = detailTopicSubscriptions
 		m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(msg.subs))
+		ui.SetItemsPreserveIndex(&m.detailList, topicSubsToItems(msg.subs))
 
-		if isRefresh {
-			ui.SetItemsPreserveIndex(&m.detailList, topicSubsToItems(msg.subs))
-			m.status = fmt.Sprintf("Refreshed %d subscriptions for topic %s", len(msg.subs), msg.topicName)
-			return m, nil
+		if msg.done {
+			m.loading = false
+			m.cache.topicSubs.Set(cache.Key(m.currentSub.ID, msg.namespace.Name, msg.topicName), msg.subs)
+			m.status = fmt.Sprintf("Loaded %d subscriptions for topic %s", len(msg.subs), msg.topicName)
 		}
 
-		m.viewingTopicSub = false
-		m.detailList.ResetFilter()
-		m.detailList.SetItems(topicSubsToItems(msg.subs))
-		if len(msg.subs) > 0 {
-			m.detailList.Select(0)
-		}
-		m.status = fmt.Sprintf("Loaded %d subscriptions for topic %s", len(msg.subs), msg.topicName)
-		return m, nil
+		return m, msg.next
 
 	case messagesLoadedMsg:
 		// Messages are ephemeral peek results — not cached.
@@ -380,7 +270,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loading = true
 				m.lastErr = ""
 				m.status = "Refreshing subscriptions..."
-				return m, tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
+				return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
 			}
 		case m.keymap.RefreshScope.Matches(key):
 			if !focusedFilterActive {

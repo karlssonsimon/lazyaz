@@ -73,19 +73,25 @@ type Model struct {
 
 type subscriptionsLoadedMsg struct {
 	subscriptions []azure.Subscription
+	done          bool
 	err           error
+	next          tea.Cmd
 }
 
 type accountsLoadedMsg struct {
 	subscriptionID string
 	accounts       []blob.Account
+	done           bool
 	err            error
+	next           tea.Cmd
 }
 
 type containersLoadedMsg struct {
 	account    blob.Account
 	containers []blob.ContainerInfo
+	done       bool
 	err        error
+	next       tea.Cmd
 }
 
 type blobsLoadedMsg struct {
@@ -95,7 +101,9 @@ type blobsLoadedMsg struct {
 	loadAll   bool
 	query     string
 	blobs     []blob.BlobEntry
+	done      bool
 	err       error
+	next      tea.Cmd
 }
 
 type blobsDownloadedMsg struct {
@@ -197,5 +205,5 @@ func (m *Model) applyTheme(theme ui.Theme) {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
+	return tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
 }

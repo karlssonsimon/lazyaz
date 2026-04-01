@@ -131,13 +131,13 @@ func (m *Model) commitFocusedFilter() tea.Cmd {
 			m.blobSearchQuery = ""
 			m.loading = true
 			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-			return tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+			return tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 		}
 
 		m.blobSearchQuery = query
 		m.loading = true
 		m.status = fmt.Sprintf("Searching blobs by prefix %q...", blobSearchPrefix(m.prefix, query))
-		return tea.Batch(spinner.Tick, searchBlobsByPrefixCmd(m.service, m.currentAccount, m.containerName, m.prefix, query, defaultBlobPrefixSearchLimit))
+		return tea.Batch(spinner.Tick, fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, query, defaultBlobPrefixSearchLimit))
 	}
 
 	return nil

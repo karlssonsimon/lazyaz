@@ -55,7 +55,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 
 		m.loading = true
 		m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-		return m, tea.Batch(spinner.Tick, loadHierarchyBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+		return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
 	}
 
 	m.blobLoadAll = true
@@ -68,7 +68,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 
 	m.loading = true
 	m.status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
-	return m, tea.Batch(spinner.Tick, loadAllBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix))
+	return m, tea.Batch(spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix))
 }
 
 func (m *Model) toggleVisualLineMode() {

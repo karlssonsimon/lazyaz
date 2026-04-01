@@ -62,26 +62,34 @@ type Model struct {
 
 type subscriptionsLoadedMsg struct {
 	subscriptions []azure.Subscription
+	done          bool
 	err           error
+	next          tea.Cmd
 }
 
 type vaultsLoadedMsg struct {
 	subscriptionID string
 	vaults         []keyvault.Vault
+	done           bool
 	err            error
+	next           tea.Cmd
 }
 
 type secretsLoadedMsg struct {
 	vault   keyvault.Vault
 	secrets []keyvault.Secret
+	done    bool
 	err     error
+	next    tea.Cmd
 }
 
 type versionsLoadedMsg struct {
 	vault      keyvault.Vault
 	secretName string
 	versions   []keyvault.SecretVersion
+	done       bool
 	err        error
+	next       tea.Cmd
 }
 
 type secretValueYankedMsg struct {
@@ -165,5 +173,5 @@ func (m *Model) applyTheme(theme ui.Theme) {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(spinner.Tick, loadSubscriptionsCmd(m.service))
+	return tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
 }
