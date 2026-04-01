@@ -70,6 +70,7 @@ func (l *Loader[T]) Fetch(
 			all = append(all, items...)
 			out := make([]T, len(all))
 			copy(out, all)
+			l.store.Set(key, out)
 			select {
 			case ch <- Page[T]{Key: key, Items: out}:
 			case <-ctx.Done():
@@ -79,6 +80,7 @@ func (l *Loader[T]) Fetch(
 		if ctx.Err() != nil {
 			return
 		}
+		l.store.Set(key, all)
 		done := Page[T]{Key: key, Items: all, Done: true, Err: err}
 		select {
 		case ch <- done:
