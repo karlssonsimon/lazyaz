@@ -2,8 +2,6 @@ package ui
 
 import (
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 type KeyMatcher interface {
@@ -98,15 +96,6 @@ func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, sch
 }
 
 func RenderThemeOverlay(state ThemeOverlayState, schemes []Scheme, styles Styles, width, height int, base string) string {
-	o := styles.Overlay
-
-	var rows []string
-	rows = append(rows, o.Title.Render("Select Theme"))
-
-	inputLine := o.Prompt.Render("> ") + o.Input.Render(state.Query+"█")
-	rows = append(rows, inputLine)
-	rows = append(rows, "")
-
 	filtered := state.filtered
 	if filtered == nil {
 		filtered = make([]int, len(schemes))
@@ -115,103 +104,13 @@ func RenderThemeOverlay(state ThemeOverlayState, schemes []Scheme, styles Styles
 		}
 	}
 
-	if len(filtered) == 0 {
-		rows = append(rows, o.NoMatch.Render("No matching themes"))
-	} else {
-		for ci, ti := range filtered {
-			marker := "  "
-			if ti == state.ActiveThemeIdx {
-				marker = "* "
-			}
-			label := marker + schemes[ti].Name
-			if ci == state.CursorIdx {
-				rows = append(rows, o.Cursor.Render(label))
-			} else {
-				rows = append(rows, o.Normal.Render(label))
-			}
+	items := make([]OverlayItem, len(filtered))
+	for ci, ti := range filtered {
+		items[ci] = OverlayItem{
+			Label:    schemes[ti].Name,
+			IsActive: ti == state.ActiveThemeIdx,
 		}
 	}
 
-	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
-	box := o.Box.Render(content)
-
-	return PlaceOverlay(width, height, box, base)
-}
-
-func PlaceOverlay(width, height int, overlay, base string) string {
-	overlayLines := strings.Split(overlay, "\n")
-	baseLines := strings.Split(base, "\n")
-
-	for len(baseLines) < height {
-		baseLines = append(baseLines, "")
-	}
-
-	oH := len(overlayLines)
-	oW := 0
-	for _, l := range overlayLines {
-		if w := lipgloss.Width(l); w > oW {
-			oW = w
-		}
-	}
-
-	startY := (height - oH) / 2
-	startX := (width - oW) / 2
-	if startY < 0 {
-		startY = 0
-	}
-	if startX < 0 {
-		startX = 0
-	}
-
-	for i, ol := range overlayLines {
-		row := startY + i
-		if row >= len(baseLines) {
-			break
-		}
-		line := baseLines[row]
-		lineW := lipgloss.Width(line)
-
-		var out strings.Builder
-		if startX > 0 {
-			if lineW >= startX {
-				out.WriteString(truncateAnsi(line, startX))
-			} else {
-				out.WriteString(line)
-				out.WriteString(strings.Repeat(" ", startX-lineW))
-			}
-		}
-		out.WriteString(ol)
-		rightCol := startX + oW
-		if lineW > rightCol {
-			out.WriteString(skipAnsi(line, rightCol))
-		}
-		baseLines[row] = out.String()
-	}
-
-	return strings.Join(baseLines[:height], "\n")
-}
-
-func skipAnsi(s string, skipWidth int) string {
-	runes := []rune(s)
-	for i := 0; i <= len(runes); i++ {
-		prefix := string(runes[:i])
-		if lipgloss.Width(prefix) >= skipWidth {
-			return string(runes[i:])
-		}
-	}
-	return ""
-}
-
-func truncateAnsi(s string, maxWidth int) string {
-	if lipgloss.Width(s) <= maxWidth {
-		return s
-	}
-	runes := []rune(s)
-	for i := len(runes); i > 0; i-- {
-		candidate := string(runes[:i])
-		if lipgloss.Width(candidate) <= maxWidth {
-			return candidate
-		}
-	}
-	return ""
+	return RenderOverlayList("Themes", state.Query, items, state.CursorIdx, styles.Overlay, width, height, base)
 }
