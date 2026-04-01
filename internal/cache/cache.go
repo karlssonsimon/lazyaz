@@ -1,19 +1,24 @@
-// Package cache provides a generic in-memory cache for hierarchical
-// Azure resource trees. Each CacheMap stores slices of items keyed by
-// a composite string built from parent identifiers, enabling
-// stale-while-revalidate patterns across navigation levels.
+// Package cache provides a pluggable caching layer for hierarchical
+// Azure resource trees. The [Store] interface defines the contract;
+// [Map] is a simple in-memory implementation.
 package cache
 
-// Map is a typed cache for one level of a resource hierarchy.
-// Keys are composite strings built from parent identifiers
-// (e.g. subscriptionID or subscriptionID + namespaceName).
+// Store is the interface for a single-level cache in the resource hierarchy.
+// Implementations must be safe for sequential use within a Bubble Tea
+// update loop (concurrent safety is not required).
+type Store[T any] interface {
+	Get(key string) ([]T, bool)
+	Set(key string, items []T)
+}
+
+// Map is an in-memory [Store] backed by a plain Go map.
 type Map[T any] struct {
 	entries map[string][]T
 }
 
-// NewMap creates an empty Map ready for use.
-func NewMap[T any]() Map[T] {
-	return Map[T]{entries: make(map[string][]T)}
+// NewMap creates an empty in-memory Store.
+func NewMap[T any]() *Map[T] {
+	return &Map[T]{entries: make(map[string][]T)}
 }
 
 // Get returns the cached items for the given key and whether they exist.

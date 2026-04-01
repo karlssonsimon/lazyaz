@@ -44,3 +44,7 @@ func TestMapGetSet(t *testing.T) {
 		t.Fatalf("got %v after overwrite, want [x]", got)
 	}
 }
+
+func TestMapSatisfiesStore(t *testing.T) {
+	var _ Store[string] = NewMap[string]()
+}

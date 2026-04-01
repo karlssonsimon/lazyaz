@@ -10,10 +10,10 @@ import (
 //
 //	subscriptions → storage accounts → containers → blobs
 type blobCache struct {
-	subscriptions cache.Map[azure.Subscription]
-	accounts      cache.Map[blob.Account]      // key: subscriptionID
-	containers    cache.Map[blob.ContainerInfo] // key: subscriptionID, accountName
-	blobs         cache.Map[blob.BlobEntry]     // key: subscriptionID, accountName, container, prefix, loadAll
+	subscriptions cache.Store[azure.Subscription]
+	accounts      cache.Store[blob.Account]      // key: subscriptionID
+	containers    cache.Store[blob.ContainerInfo] // key: subscriptionID, accountName
+	blobs         cache.Store[blob.BlobEntry]     // key: subscriptionID, accountName, container, prefix, loadAll
 }
 
 func newCache() blobCache {

@@ -2,18 +2,18 @@ package kvapp
 
 import (
 	"azure-storage/internal/azure"
-	"azure-storage/internal/cache"
 	"azure-storage/internal/azure/keyvault"
+	"azure-storage/internal/cache"
 )
 
 // kvCache provides an in-memory, stale-while-revalidate cache for:
 //
 //	subscriptions → vaults → secrets → versions
 type kvCache struct {
-	subscriptions cache.Map[azure.Subscription]
-	vaults        cache.Map[keyvault.Vault]
-	secrets       cache.Map[keyvault.Secret]
-	versions      cache.Map[keyvault.SecretVersion]
+	subscriptions cache.Store[azure.Subscription]
+	vaults        cache.Store[keyvault.Vault]
+	secrets       cache.Store[keyvault.Secret]
+	versions      cache.Store[keyvault.SecretVersion]
 }
 
 func newCache() kvCache {
