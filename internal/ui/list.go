@@ -36,23 +36,38 @@ func NewDefaultDelegate(p Palette) list.DefaultDelegate {
 }
 
 func StyleList(l *list.Model, p Palette) {
-	l.Styles.TitleBar = l.Styles.TitleBar.
+	// Build all styles from scratch so no default colors bleed through.
+	l.Styles.TitleBar = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(p.Muted)).
 		Padding(0, 1)
-	l.Styles.Title = l.Styles.Title.
+	l.Styles.Title = lipgloss.NewStyle().
 		Bold(true).
+		Foreground(lipgloss.Color(p.Accent)).
+		Padding(0, 1)
+	l.Styles.Spinner = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(p.AccentStrong))
+	l.Styles.FilterPrompt = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(p.Accent))
-	l.Styles.Spinner = l.Styles.Spinner.Foreground(lipgloss.Color(p.AccentStrong))
-	l.Styles.FilterPrompt = l.Styles.FilterPrompt.Foreground(lipgloss.Color(p.Accent))
-	l.Styles.FilterCursor = l.Styles.FilterCursor.Foreground(lipgloss.Color(p.AccentStrong))
-	l.Styles.DefaultFilterCharacterMatch = l.Styles.DefaultFilterCharacterMatch.Foreground(lipgloss.Color(p.FilterMatch)).Underline(true)
-	l.Styles.StatusBar = l.Styles.StatusBar.
+	l.Styles.FilterCursor = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(p.AccentStrong))
+	l.Styles.DefaultFilterCharacterMatch = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(p.FilterMatch)).
+		Underline(true)
+	l.Styles.StatusBar = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(p.Muted)).
+		Padding(0, 0, 1, 2)
+	l.Styles.StatusBarActiveFilter = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(p.Accent)).
+		Bold(true)
+	l.Styles.StatusBarFilterCount = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(p.AccentStrong)).
+		Bold(true)
+	l.Styles.NoItems = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(p.Muted))
-	l.Styles.StatusBarActiveFilter = l.Styles.StatusBarActiveFilter.Foreground(lipgloss.Color(p.Accent)).Bold(true)
-	l.Styles.StatusBarFilterCount = l.Styles.StatusBarFilterCount.Foreground(lipgloss.Color(p.AccentStrong)).Bold(true)
-	l.Styles.NoItems = l.Styles.NoItems.Foreground(lipgloss.Color(p.Muted))
-	l.Styles.PaginationStyle = l.Styles.PaginationStyle.Foreground(lipgloss.Color(p.Muted))
-	l.Styles.HelpStyle = l.Styles.HelpStyle.Foreground(lipgloss.Color(p.Muted))
+	l.Styles.PaginationStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(p.Muted))
+	l.Styles.HelpStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(p.Muted))
 }
 
 func ApplyThemeToLists(theme Theme, lists []*list.Model, spin *spinner.Model) (Palette, SyntaxStyles) {
