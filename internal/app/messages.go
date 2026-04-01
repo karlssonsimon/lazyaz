@@ -20,6 +20,13 @@ type tabPickerMsg struct {
 	kind TabKind
 }
 
+// Command palette action messages.
+type nextTabMsg struct{}
+type prevTabMsg struct{}
+type jumpTabMsg struct{ index int }
+type openThemePickerMsg struct{}
+type toggleHelpMsg struct{}
+
 // wrapCmd wraps a tea.Cmd so its resulting message is tagged with tabID.
 // It recursively handles tea.BatchMsg to wrap each sub-command.
 func wrapCmd(id int, cmd tea.Cmd) tea.Cmd {

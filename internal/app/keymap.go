@@ -48,9 +48,10 @@ type tabKeyMap struct {
 	Jump7     keyBinding
 	Jump8     keyBinding
 	Jump9     keyBinding
-	Quit      keyBinding
-	ThemePick keyBinding
-	ToggleHelp keyBinding
+	Quit           keyBinding
+	CommandPalette keyBinding
+	ThemePick      keyBinding
+	ToggleHelp     keyBinding
 
 	ThemeUp     keyBinding
 	ThemeDown   keyBinding
@@ -73,9 +74,10 @@ func defaultTabKeyMap() tabKeyMap {
 		Jump7:     newKeyBinding("alt+7"),
 		Jump8:     newKeyBinding("alt+8"),
 		Jump9:     newKeyBinding("alt+9"),
-		Quit:      newKeyBinding("ctrl+c", "q"),
-		ThemePick: newKeyBinding("T"),
-		ToggleHelp: newKeyBinding("?"),
+		Quit:           newKeyBinding("ctrl+c", "q"),
+		CommandPalette: newKeyBinding("ctrl+p"),
+		ThemePick:      newKeyBinding("T"),
+		ToggleHelp:     newKeyBinding("?"),
 
 		ThemeUp:     newKeyBinding("up", "k"),
 		ThemeDown:   newKeyBinding("down", "j"),
@@ -98,6 +100,7 @@ func (k tabKeyMap) helpSections(childSections []ui.HelpSection) []ui.HelpSection
 	tabSection := ui.HelpSection{
 		Title: "Tabs",
 		Items: []string{
+			k.CommandPalette.Label() + "  command palette",
 			k.NewTab.Label() + "  new tab",
 			k.CloseTab.Label() + "  close tab",
 			k.PrevTab.Label() + "  prev tab",

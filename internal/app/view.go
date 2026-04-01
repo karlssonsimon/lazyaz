@@ -23,6 +23,9 @@ func (m Model) View() string {
 
 	view := lipgloss.JoinVertical(lipgloss.Left, tabBar, childView)
 
+	if m.cmdPalette.active {
+		view = renderCommandPalette(&m.cmdPalette, m.palette, m.width, m.height, view)
+	}
 	if m.tabPicker {
 		view = renderTabPicker(m.palette, m.width, m.height, view)
 	}

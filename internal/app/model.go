@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+
 	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/azure/servicebus"
@@ -32,7 +34,8 @@ type Model struct {
 	themeOverlay ui.ThemeOverlayState
 	helpOverlay  ui.HelpOverlayState
 
-	tabPicker bool // true when the new-tab picker overlay is showing
+	tabPicker  bool // true when the new-tab picker overlay is showing
+	cmdPalette commandPalette
 
 	width  int
 	height int
@@ -200,6 +203,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 		return m, tea.Batch(initCmd, resizeCmd)
 
+	case nextTabMsg:
+		if len(m.tabs) > 1 {
+			m.activeIdx = (m.activeIdx + 1) % len(m.tabs)
+			return m, m.resizeAndTickActive()
+		}
+		return m, nil
+
+	case prevTabMsg:
+		if len(m.tabs) > 1 {
+			m.activeIdx = (m.activeIdx - 1 + len(m.tabs)) % len(m.tabs)
+			return m, m.resizeAndTickActive()
+		}
+		return m, nil
+
+	case jumpTabMsg:
+		if msg.index >= 0 && msg.index < len(m.tabs) {
+			m.activeIdx = msg.index
+			return m, m.resizeAndTickActive()
+		}
+		return m, nil
+
+	case openThemePickerMsg:
+		m.themeOverlay.Open()
+		return m, nil
+
+	case toggleHelpMsg:
+		m.helpOverlay.Toggle()
+		return m, nil
+
 	case spinner.TickMsg:
 		// Forward spinner ticks to active tab only.
 		if len(m.tabs) == 0 {
@@ -212,6 +244,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		key := msg.String()
+
+		// Command palette overlay.
+		if m.cmdPalette.active {
+			return m.handleCommandPalette(key)
+		}
 
 		// Tab picker overlay.
 		if m.tabPicker {
@@ -245,6 +282,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case m.keymap.Quit.Matches(key):
 			return m, tea.Quit
+		case m.keymap.CommandPalette.Matches(key):
+			m.cmdPalette.open(m.buildCommands())
+			return m, nil
 		case m.keymap.NewTab.Matches(key):
 			m.tabPicker = true
 			return m, nil
@@ -319,6 +359,75 @@ func (m *Model) resizeAndTickActive() tea.Cmd {
 	// Send a spinner tick so the active tab picks up spinner animation.
 	tickCmd := m.forwardToActive(spinner.Tick())
 	return tea.Batch(resizeCmd, tickCmd)
+}
+
+func (m *Model) buildCommands() []command {
+	cmds := []command{
+		{name: "New Tab: Blob Storage", hint: "ctrl+t", action: func() commandAction {
+			return commandAction{msg: tabPickerMsg{kind: TabBlob}}
+		}},
+		{name: "New Tab: Service Bus", hint: "ctrl+t", action: func() commandAction {
+			return commandAction{msg: tabPickerMsg{kind: TabServiceBus}}
+		}},
+		{name: "New Tab: Key Vault", hint: "ctrl+t", action: func() commandAction {
+			return commandAction{msg: tabPickerMsg{kind: TabKeyVault}}
+		}},
+		{name: "Close Tab", hint: "ctrl+w", action: func() commandAction {
+			if len(m.tabs) <= 1 {
+				return commandAction{quit: true}
+			}
+			return commandAction{msg: closeTabMsg{tabID: m.tabs[m.activeIdx].ID}}
+		}},
+		{name: "Next Tab", hint: "L", action: func() commandAction {
+			return commandAction{msg: nextTabMsg{}}
+		}},
+		{name: "Previous Tab", hint: "H", action: func() commandAction {
+			return commandAction{msg: prevTabMsg{}}
+		}},
+	}
+
+	// Jump to specific open tabs.
+	for i, t := range m.tabs {
+		idx := i // capture
+		tab := t
+		label := fmt.Sprintf("Go to Tab %d: %s", idx+1, tab.Kind.String())
+		hint := fmt.Sprintf("alt+%d", idx+1)
+		cmds = append(cmds, command{name: label, hint: hint, action: func() commandAction {
+			return commandAction{msg: jumpTabMsg{index: idx}}
+		}})
+	}
+
+	cmds = append(cmds,
+		command{name: "Theme Picker", hint: "T", action: func() commandAction {
+			return commandAction{msg: openThemePickerMsg{}}
+		}},
+		command{name: "Help", hint: "?", action: func() commandAction {
+			return commandAction{msg: toggleHelpMsg{}}
+		}},
+		command{name: "Quit", hint: "ctrl+c", action: func() commandAction {
+			return commandAction{quit: true}
+		}},
+	)
+
+	return cmds
+}
+
+func (m Model) handleCommandPalette(key string) (tea.Model, tea.Cmd) {
+	cmd, executed, _ := m.cmdPalette.handleKey(key)
+	if executed {
+		action := cmd.action()
+		if action.quit {
+			return m, tea.Quit
+		}
+		if action.msg != nil {
+			// Re-inject the message through Update.
+			return m.Update(action.msg)
+		}
+		if action.cmd != nil {
+			return m, action.cmd
+		}
+	}
+	return m, nil
 }
 
 func (m Model) handleTabPicker(key string) (tea.Model, tea.Cmd) {
