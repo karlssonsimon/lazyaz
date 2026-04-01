@@ -24,3 +24,22 @@ func newCache() kvCache {
 		versions:      cache.NewLoader(cache.NewMap[keyvault.SecretVersion]()),
 	}
 }
+
+// KVStores holds the shared cache stores for key vault resources.
+type KVStores struct {
+	Subscriptions cache.Store[azure.Subscription]
+	Vaults        cache.Store[keyvault.Vault]
+	Secrets       cache.Store[keyvault.Secret]
+	Versions      cache.Store[keyvault.SecretVersion]
+}
+
+// NewCacheWithStores creates a kvCache where each Loader wraps the
+// provided shared stores.
+func NewCacheWithStores(s KVStores) kvCache {
+	return kvCache{
+		subscriptions: cache.NewLoader(s.Subscriptions),
+		vaults:        cache.NewLoader(s.Vaults),
+		secrets:       cache.NewLoader(s.Secrets),
+		versions:      cache.NewLoader(s.Versions),
+	}
+}

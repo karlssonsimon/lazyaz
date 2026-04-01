@@ -52,6 +52,10 @@ type Model struct {
 
 	cache kvCache
 
+	// EmbeddedMode suppresses theme/help overlay handling and quit
+	// interception so the parent tabapp can own those concerns.
+	EmbeddedMode bool
+
 	loading bool
 	status  string
 	lastErr string
@@ -166,10 +170,27 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, keymap KeyMap) Mod
 	return m
 }
 
+// NewModelWithCache creates a Model using pre-built shared cache stores.
+func NewModelWithCache(svc *keyvault.Service, cfg ui.Config, stores KVStores) Model {
+	m := NewModel(svc, cfg)
+	m.cache = NewCacheWithStores(stores)
+	return m
+}
+
 func (m *Model) applyTheme(theme ui.Theme) {
 	m.palette, m.syntaxStyles = ui.ApplyThemeToLists(theme, []*list.Model{
 		&m.subscriptionsList, &m.vaultsList, &m.secretsList, &m.versionsList,
 	}, &m.spinner)
+}
+
+// ApplyTheme applies the given theme to all lists and spinner.
+func (m *Model) ApplyTheme(theme ui.Theme) {
+	m.applyTheme(theme)
+}
+
+// HelpSections returns the help sections for the key vault explorer.
+func (m Model) HelpSections() []ui.HelpSection {
+	return m.keymap.HelpSections()
 }
 
 func (m Model) Init() tea.Cmd {

@@ -63,6 +63,10 @@ type Model struct {
 
 	cache blobCache
 
+	// EmbeddedMode suppresses theme/help overlay handling and quit
+	// interception so the parent tabapp can own those concerns.
+	EmbeddedMode bool
+
 	loading bool
 	status  string
 	lastErr string
@@ -198,10 +202,28 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, keymap KeyMap) Model {
 	return m
 }
 
+// NewModelWithCache creates a Model using pre-built shared cache stores.
+// Used by the tabapp to share cache data across tabs.
+func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores) Model {
+	m := NewModel(svc, cfg)
+	m.cache = NewCacheWithStores(stores)
+	return m
+}
+
 func (m *Model) applyTheme(theme ui.Theme) {
 	m.palette, m.syntaxStyles = ui.ApplyThemeToLists(theme, []*list.Model{
 		&m.subscriptionsList, &m.accountsList, &m.containersList, &m.blobsList,
 	}, &m.spinner)
+}
+
+// ApplyTheme applies the given theme to all lists and spinner.
+func (m *Model) ApplyTheme(theme ui.Theme) {
+	m.applyTheme(theme)
+}
+
+// HelpSections returns the help sections for the blob explorer.
+func (m Model) HelpSections() []ui.HelpSection {
+	return m.keymap.HelpSections()
 }
 
 func (m Model) Init() tea.Cmd {

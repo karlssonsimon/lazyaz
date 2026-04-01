@@ -93,10 +93,10 @@ func (m Model) View() string {
 
 	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
-	if m.themeOverlay.Active {
+	if !m.EmbeddedMode && m.themeOverlay.Active {
 		view = ui.RenderThemeOverlay(m.themeOverlay, m.themes, m.palette, m.width, m.height, view)
 	}
-	if m.helpOverlay.Active {
+	if !m.EmbeddedMode && m.helpOverlay.Active {
 		view = ui.RenderHelpOverlay("Azure Key Vault Explorer Help", m.keymap.HelpSections(), m.palette, m.width, m.height, view)
 	}
 

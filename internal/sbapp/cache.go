@@ -26,3 +26,22 @@ func newCache() sbCache {
 		topicSubs:     cache.NewLoader(cache.NewMap[servicebus.TopicSubscription]()),
 	}
 }
+
+// SBStores holds the shared cache stores for service bus resources.
+type SBStores struct {
+	Subscriptions cache.Store[azure.Subscription]
+	Namespaces    cache.Store[servicebus.Namespace]
+	Entities      cache.Store[servicebus.Entity]
+	TopicSubs     cache.Store[servicebus.TopicSubscription]
+}
+
+// NewCacheWithStores creates an sbCache where each Loader wraps the
+// provided shared stores.
+func NewCacheWithStores(s SBStores) sbCache {
+	return sbCache{
+		subscriptions: cache.NewLoader(s.Subscriptions),
+		namespaces:    cache.NewLoader(s.Namespaces),
+		entities:      cache.NewLoader(s.Entities),
+		topicSubs:     cache.NewLoader(s.TopicSubs),
+	}
+}

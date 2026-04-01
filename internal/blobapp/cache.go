@@ -25,6 +25,27 @@ func newCache() blobCache {
 	}
 }
 
+// BlobStores holds the shared cache stores for blob resources.
+// The parent tabapp owns these and passes them when creating tabs.
+type BlobStores struct {
+	Subscriptions cache.Store[azure.Subscription]
+	Accounts      cache.Store[blob.Account]
+	Containers    cache.Store[blob.ContainerInfo]
+	Blobs         cache.Store[blob.BlobEntry]
+}
+
+// NewCacheWithStores creates a blobCache where each Loader wraps the
+// provided shared stores. Each tab gets its own Loaders (independent
+// fetch lifecycle) but shares the underlying data.
+func NewCacheWithStores(s BlobStores) blobCache {
+	return blobCache{
+		subscriptions: cache.NewLoader(s.Subscriptions),
+		accounts:      cache.NewLoader(s.Accounts),
+		containers:    cache.NewLoader(s.Containers),
+		blobs:         cache.NewLoader(s.Blobs),
+	}
+}
+
 func blobsCacheKey(subscriptionID, accountName, container, prefix string, loadAll bool) string {
 	allStr := "0"
 	if loadAll {
