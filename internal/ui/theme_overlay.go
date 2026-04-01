@@ -18,11 +18,42 @@ type ThemeOverlayState struct {
 	Active         bool
 	ActiveThemeIdx int
 	CursorIdx      int
+	Query          string
+	filtered       []int // indices into the themes slice
 }
 
 func (s *ThemeOverlayState) Open() {
 	s.Active = true
+	s.Query = ""
+	s.filtered = nil
 	s.CursorIdx = s.ActiveThemeIdx
+}
+
+func (s *ThemeOverlayState) refilter(themes []Theme) {
+	if s.Query == "" {
+		s.filtered = make([]int, len(themes))
+		for i := range themes {
+			s.filtered[i] = i
+		}
+	} else {
+		q := strings.ToLower(s.Query)
+		s.filtered = s.filtered[:0]
+		for i, t := range themes {
+			if strings.Contains(strings.ToLower(t.Name), q) {
+				s.filtered = append(s.filtered, i)
+			}
+		}
+	}
+	if s.CursorIdx >= len(s.filtered) {
+		s.CursorIdx = max(0, len(s.filtered)-1)
+	}
+}
+
+func (s *ThemeOverlayState) selectedThemeIdx() (int, bool) {
+	if len(s.filtered) == 0 || s.CursorIdx >= len(s.filtered) {
+		return 0, false
+	}
+	return s.filtered[s.CursorIdx], true
 }
 
 func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, themes []Theme) (applied bool) {
@@ -31,21 +62,38 @@ func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, the
 		return false
 	}
 
+	// Ensure filtered list is initialized.
+	if s.filtered == nil {
+		s.refilter(themes)
+	}
+
 	switch {
 	case bindings.Up.Matches(key):
 		if s.CursorIdx > 0 {
 			s.CursorIdx--
 		}
 	case bindings.Down.Matches(key):
-		if s.CursorIdx < len(themes)-1 {
+		if s.CursorIdx < len(s.filtered)-1 {
 			s.CursorIdx++
 		}
 	case bindings.Apply.Matches(key):
-		s.ActiveThemeIdx = s.CursorIdx
-		s.Active = false
-		return true
+		if idx, ok := s.selectedThemeIdx(); ok {
+			s.ActiveThemeIdx = idx
+			s.Active = false
+			return true
+		}
 	case bindings.Cancel.Matches(key):
 		s.Active = false
+	case key == "backspace":
+		if len(s.Query) > 0 {
+			s.Query = s.Query[:len(s.Query)-1]
+			s.refilter(themes)
+		}
+	default:
+		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
+			s.Query += key
+			s.refilter(themes)
+		}
 	}
 	return false
 }
@@ -53,8 +101,13 @@ func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, the
 func RenderThemeOverlay(state ThemeOverlayState, themes []Theme, palette Palette, width, height int, base string) string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(palette.Accent)).
-		Padding(0, 1)
+		Foreground(lipgloss.Color(palette.Accent))
+
+	promptStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(palette.AccentStrong))
+
+	inputStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(palette.Text))
 
 	normalStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(palette.Text)).
@@ -66,29 +119,42 @@ func RenderThemeOverlay(state ThemeOverlayState, themes []Theme, palette Palette
 		Bold(true).
 		Padding(0, 1)
 
-	hintStyle := lipgloss.NewStyle().
+	noMatchStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(palette.Muted)).
-		Padding(0, 1)
+		Italic(true)
 
 	var rows []string
 	rows = append(rows, titleStyle.Render("Select Theme"))
+
+	inputLine := promptStyle.Render("> ") + inputStyle.Render(state.Query+"█")
+	rows = append(rows, inputLine)
 	rows = append(rows, "")
 
-	for i, t := range themes {
-		marker := "  "
-		if i == state.ActiveThemeIdx {
-			marker = "* "
-		}
-		label := marker + t.Name
-		if i == state.CursorIdx {
-			rows = append(rows, cursorStyle.Render(label))
-		} else {
-			rows = append(rows, normalStyle.Render(label))
+	filtered := state.filtered
+	if filtered == nil {
+		// Fallback: show all themes unfiltered.
+		filtered = make([]int, len(themes))
+		for i := range themes {
+			filtered[i] = i
 		}
 	}
 
-	rows = append(rows, "")
-	rows = append(rows, hintStyle.Render("j/k navigate | enter apply | esc cancel"))
+	if len(filtered) == 0 {
+		rows = append(rows, noMatchStyle.Render("No matching themes"))
+	} else {
+		for ci, ti := range filtered {
+			marker := "  "
+			if ti == state.ActiveThemeIdx {
+				marker = "* "
+			}
+			label := marker + themes[ti].Name
+			if ci == state.CursorIdx {
+				rows = append(rows, cursorStyle.Render(label))
+			} else {
+				rows = append(rows, normalStyle.Render(label))
+			}
+		}
+	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
 

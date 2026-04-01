@@ -79,10 +79,10 @@ func defaultTabKeyMap() tabKeyMap {
 		ThemePick:      newKeyBinding("T"),
 		ToggleHelp:     newKeyBinding("?"),
 
-		ThemeUp:     newKeyBinding("up", "k"),
-		ThemeDown:   newKeyBinding("down", "j"),
+		ThemeUp:     newKeyBinding("up", "ctrl+k"),
+		ThemeDown:   newKeyBinding("down", "ctrl+j"),
 		ThemeApply:  newKeyBinding("enter"),
-		ThemeCancel: newKeyBinding("esc", "q"),
+		ThemeCancel: newKeyBinding("esc", "ctrl+c"),
 	}
 }
 

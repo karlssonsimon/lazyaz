@@ -86,10 +86,10 @@ func DefaultKeyMap() KeyMap {
 		ToggleThemePicker:   NewKeyBinding("T"),
 		ToggleHelp:          NewKeyBinding("?"),
 
-		ThemeUp:     NewKeyBinding("up", "k"),
-		ThemeDown:   NewKeyBinding("down", "j"),
+		ThemeUp:     NewKeyBinding("up", "ctrl+k"),
+		ThemeDown:   NewKeyBinding("down", "ctrl+j"),
 		ThemeApply:  NewKeyBinding("enter"),
-		ThemeCancel: NewKeyBinding("esc", "q"),
+		ThemeCancel: NewKeyBinding("esc", "ctrl+c"),
 
 		MessageBack: NewKeyBinding("h", "left", "backspace", "esc"),
 	}
