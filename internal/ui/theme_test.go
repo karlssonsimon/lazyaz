@@ -21,7 +21,7 @@ func TestEnsureStockThemes_WritesWhenMissing(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "themes")
 	ensureStockThemes(dir)
 
-	for _, name := range []string{"bamboo.yaml", "default.yaml", "tokyonight.yaml", "rosepine.yaml"} {
+	for _, name := range []string{"bamboo.yaml", "default-dark.yaml", "rose-pine.yaml", "dracula.yaml"} {
 		path := filepath.Join(dir, name)
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected stock theme %s to be written, got err: %v", name, err)
@@ -35,14 +35,14 @@ func TestEnsureStockThemes_OverwritesStockFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	old := []byte("name: tokyonight\nui_colors:\n  accent: \"#old\"\n")
-	if err := os.WriteFile(filepath.Join(dir, "tokyonight.yaml"), old, 0o644); err != nil {
+	old := []byte("name: dracula\nui_colors:\n  accent: \"#old\"\n")
+	if err := os.WriteFile(filepath.Join(dir, "dracula.yaml"), old, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	ensureStockThemes(dir)
 
-	data, err := os.ReadFile(filepath.Join(dir, "tokyonight.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, "dracula.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,29 +78,29 @@ func TestEnsureStockThemes_DoesNotTouchUserFiles(t *testing.T) {
 
 func TestLoadConfig_MissingFile(t *testing.T) {
 	cfg := loadConfigFromDir(t.TempDir())
-	if cfg.ThemeName != "Default" {
-		t.Fatalf("expected theme=Default, got %s", cfg.ThemeName)
+	if cfg.ThemeName != "Default Dark" {
+		t.Fatalf("expected theme=Default Dark, got %s", cfg.ThemeName)
 	}
-	if len(cfg.Schemes) != 4 {
-		t.Fatalf("expected 4 schemes (auto-created from embedded), got %d", len(cfg.Schemes))
+	if len(cfg.Schemes) < 100 {
+		t.Fatalf("expected many schemes (auto-created from embedded), got %d", len(cfg.Schemes))
 	}
 }
 
 func TestLoadConfig_ThemeName(t *testing.T) {
 	dir := t.TempDir()
-	data := []byte("theme: \"Rosé Pine\"\n")
+	data := []byte("theme: \"Rose Pine\"\n")
 	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	cfg := loadConfigFromDir(dir)
-	if cfg.ThemeName != "Rosé Pine" {
-		t.Fatalf("expected theme=Rosé Pine, got %s", cfg.ThemeName)
+	if cfg.ThemeName != "Rose Pine" {
+		t.Fatalf("expected theme=Rose Pine, got %s", cfg.ThemeName)
 	}
 
 	active := cfg.ActiveScheme()
-	if active.Name != "Rosé Pine" {
-		t.Fatalf("expected active scheme=Rosé Pine, got %s", active.Name)
+	if active.Name != "Rose Pine" {
+		t.Fatalf("expected active scheme=Rose Pine, got %s", active.Name)
 	}
 	if active.Base0B == "" {
 		t.Fatal("expected Base0B to be non-empty")
@@ -111,8 +111,8 @@ func TestLoadConfig_CreatesConfigFileWhenMissing(t *testing.T) {
 	dir := t.TempDir()
 
 	cfg := loadConfigFromDir(dir)
-	if cfg.ThemeName != "Default" {
-		t.Fatalf("expected theme=Default, got %s", cfg.ThemeName)
+	if cfg.ThemeName != "Default Dark" {
+		t.Fatalf("expected theme=Default Dark, got %s", cfg.ThemeName)
 	}
 
 	data, err := os.ReadFile(filepath.Join(dir, "config.yaml"))
@@ -179,8 +179,8 @@ palette:
 	}
 
 	cfg := loadConfigFromDir(dir)
-	if len(cfg.Schemes) != 5 {
-		t.Fatalf("expected 5 schemes (4 stock + 1 custom), got %d", len(cfg.Schemes))
+	if len(cfg.Schemes) < 100 {
+		t.Fatalf("expected many schemes (stock + 1 custom), got %d", len(cfg.Schemes))
 	}
 
 	active := cfg.ActiveScheme()

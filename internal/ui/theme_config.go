@@ -37,7 +37,7 @@ func LoadConfig() Config {
 
 func loadConfigFromDir(dir string) Config {
 	cfg := Config{
-		ThemeName: "Default",
+		ThemeName: "Default Dark",
 	}
 
 	// Read shared config file.
@@ -159,10 +159,13 @@ func saveThemeNameToFile(path, name string) {
 // migrateThemeName maps old custom theme names to new Base16 scheme names.
 func migrateThemeName(name string) string {
 	migrations := map[string]string{
-		"default":     "Default",
-		"tokyonight":  "Tokyo Night",
-		"rosepine":    "Rosé Pine",
-		"bamboo":      "Bamboo",
+		"default":      "Default Dark",
+		"Default":      "Default Dark",
+		"tokyonight":   "Tokyo Night Dark",
+		"Tokyo Night":  "Tokyo Night Dark",
+		"rosepine":     "Rose Pine",
+		"Rosé Pine":   "Rose Pine",
+		"bamboo":       "Bamboo",
 	}
 	if newName, ok := migrations[name]; ok {
 		return newName
