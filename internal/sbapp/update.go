@@ -6,7 +6,7 @@ import (
 
 	"azure-storage/internal/azure"
 	"azure-storage/internal/cache"
-	"azure-storage/internal/servicebus"
+	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"

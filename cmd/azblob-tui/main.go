@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"azure-storage/internal/azure"
+	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/blobapp"
 	"azure-storage/internal/ui"
 
@@ -19,7 +20,7 @@ func main() {
 	}
 
 	cfg := ui.LoadConfig("azblob")
-	program := tea.NewProgram(blobapp.NewModel(azure.NewService(cred), cfg), tea.WithAltScreen())
+	program := tea.NewProgram(blobapp.NewModel(blob.NewService(cred), cfg), tea.WithAltScreen())
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "application error: %v\n", err)
 		os.Exit(1)

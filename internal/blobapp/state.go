@@ -2,6 +2,7 @@ package blobapp
 
 import (
 	"azure-storage/internal/azure"
+	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -22,7 +23,7 @@ const (
 )
 
 type Model struct {
-	service *azure.Service
+	service *blob.Service
 
 	spinner spinner.Model
 
@@ -34,16 +35,16 @@ type Model struct {
 	focus int
 
 	subscriptions   []azure.Subscription
-	accounts        []azure.Account
-	containers      []azure.ContainerInfo
-	blobs           []azure.BlobEntry
-	markedBlobs     map[string]azure.BlobEntry
+	accounts        []blob.Account
+	containers      []blob.ContainerInfo
+	blobs           []blob.BlobEntry
+	markedBlobs     map[string]blob.BlobEntry
 	visualLineMode  bool
 	visualAnchor    string
 	hasSubscription bool
 	currentSub      azure.Subscription
 	hasAccount      bool
-	currentAccount  azure.Account
+	currentAccount  blob.Account
 	hasContainer    bool
 	containerName   string
 	prefix          string
@@ -77,23 +78,23 @@ type subscriptionsLoadedMsg struct {
 
 type accountsLoadedMsg struct {
 	subscriptionID string
-	accounts       []azure.Account
+	accounts       []blob.Account
 	err            error
 }
 
 type containersLoadedMsg struct {
-	account    azure.Account
-	containers []azure.ContainerInfo
+	account    blob.Account
+	containers []blob.ContainerInfo
 	err        error
 }
 
 type blobsLoadedMsg struct {
-	account   azure.Account
+	account   blob.Account
 	container string
 	prefix    string
 	loadAll   bool
 	query     string
-	blobs     []azure.BlobEntry
+	blobs     []blob.BlobEntry
 	err       error
 }
 
@@ -108,7 +109,7 @@ type blobsDownloadedMsg struct {
 
 type previewWindowLoadedMsg struct {
 	requestID   int
-	account     azure.Account
+	account     blob.Account
 	container   string
 	blobName    string
 	blobSize    int64
@@ -119,11 +120,11 @@ type previewWindowLoadedMsg struct {
 	err         error
 }
 
-func NewModel(svc *azure.Service, cfg ui.Config) Model {
+func NewModel(svc *blob.Service, cfg ui.Config) Model {
 	return NewModelWithKeyMap(svc, cfg, DefaultKeyMap())
 }
 
-func NewModelWithKeyMap(svc *azure.Service, cfg ui.Config, keymap KeyMap) Model {
+func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, keymap KeyMap) Model {
 	delegate := list.NewDefaultDelegate()
 
 	subscriptions := list.New([]list.Item{}, delegate, 28, 10)
@@ -172,7 +173,7 @@ func NewModelWithKeyMap(svc *azure.Service, cfg ui.Config, keymap KeyMap) Model 
 		accountsList:      accounts,
 		containersList:    containers,
 		blobsList:         blobs,
-		markedBlobs:       make(map[string]azure.BlobEntry),
+		markedBlobs:       make(map[string]blob.BlobEntry),
 		preview:           newPreviewState(),
 		cache:             newCache(),
 		keymap:            keymap,

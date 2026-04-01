@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"azure-storage/internal/azure"
+	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -16,7 +16,7 @@ func (m *Model) clearBlobSelectionState() {
 	m.visualLineMode = false
 	m.visualAnchor = ""
 	if m.markedBlobs == nil {
-		m.markedBlobs = make(map[string]azure.BlobEntry)
+		m.markedBlobs = make(map[string]blob.BlobEntry)
 		return
 	}
 	for name := range m.markedBlobs {

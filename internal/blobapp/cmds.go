@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"azure-storage/internal/azure"
+	"azure-storage/internal/azure/blob"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func loadSubscriptionsCmd(svc *azure.Service) tea.Cmd {
+func loadSubscriptionsCmd(svc *blob.Service) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -21,7 +21,7 @@ func loadSubscriptionsCmd(svc *azure.Service) tea.Cmd {
 	}
 }
 
-func loadAccountsForSubscriptionCmd(svc *azure.Service, subscriptionID string) tea.Cmd {
+func loadAccountsForSubscriptionCmd(svc *blob.Service, subscriptionID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -31,7 +31,7 @@ func loadAccountsForSubscriptionCmd(svc *azure.Service, subscriptionID string) t
 	}
 }
 
-func loadContainersCmd(svc *azure.Service, account azure.Account) tea.Cmd {
+func loadContainersCmd(svc *blob.Service, account blob.Account) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		defer cancel()
@@ -41,7 +41,7 @@ func loadContainersCmd(svc *azure.Service, account azure.Account) tea.Cmd {
 	}
 }
 
-func loadHierarchyBlobsCmd(svc *azure.Service, account azure.Account, containerName, prefix string, limit int) tea.Cmd {
+func loadHierarchyBlobsCmd(svc *blob.Service, account blob.Account, containerName, prefix string, limit int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -51,7 +51,7 @@ func loadHierarchyBlobsCmd(svc *azure.Service, account azure.Account, containerN
 	}
 }
 
-func loadAllBlobsCmd(svc *azure.Service, account azure.Account, containerName, prefix string) tea.Cmd {
+func loadAllBlobsCmd(svc *blob.Service, account blob.Account, containerName, prefix string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -61,7 +61,7 @@ func loadAllBlobsCmd(svc *azure.Service, account azure.Account, containerName, p
 	}
 }
 
-func searchBlobsByPrefixCmd(svc *azure.Service, account azure.Account, containerName, currentPrefix, query string, limit int) tea.Cmd {
+func searchBlobsByPrefixCmd(svc *blob.Service, account blob.Account, containerName, currentPrefix, query string, limit int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -72,7 +72,7 @@ func searchBlobsByPrefixCmd(svc *azure.Service, account azure.Account, container
 	}
 }
 
-func downloadBlobsCmd(svc *azure.Service, account azure.Account, containerName string, blobNames []string, destinationRoot string) tea.Cmd {
+func downloadBlobsCmd(svc *blob.Service, account blob.Account, containerName string, blobNames []string, destinationRoot string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()

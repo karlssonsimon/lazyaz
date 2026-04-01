@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"azure-storage/internal/azure"
-	"azure-storage/internal/servicebus"
+	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/ui"
 )
 

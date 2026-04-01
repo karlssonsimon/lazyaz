@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"azure-storage/internal/cache"
-	"azure-storage/internal/keyvault"
+	"azure-storage/internal/azure/keyvault"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"

@@ -12,7 +12,6 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/keyvault/armkeyvault"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 )
 
@@ -71,52 +70,7 @@ func (s *Service) getClient(vaultURI string) (*azsecrets.Client, error) {
 }
 
 func (s *Service) ListSubscriptions(ctx context.Context) ([]azure.Subscription, error) {
-	client, err := armsubscriptions.NewClient(s.cred, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create subscriptions client: %w", err)
-	}
-
-	subs := make([]azure.Subscription, 0)
-	pager := client.NewListPager(nil)
-	for pager.More() {
-		page, err := pager.NextPage(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("list subscriptions: %w", err)
-		}
-
-		for _, sub := range page.Value {
-			if sub == nil || sub.SubscriptionID == nil {
-				continue
-			}
-
-			entry := azure.Subscription{ID: *sub.SubscriptionID}
-			if sub.DisplayName != nil {
-				entry.Name = *sub.DisplayName
-			}
-			if sub.State != nil {
-				entry.State = string(*sub.State)
-			}
-
-			subs = append(subs, entry)
-		}
-	}
-
-	sort.Slice(subs, func(i, j int) bool {
-		nameI := strings.ToLower(strings.TrimSpace(subs[i].Name))
-		nameJ := strings.ToLower(strings.TrimSpace(subs[j].Name))
-		if nameI == nameJ {
-			return subs[i].ID < subs[j].ID
-		}
-		if nameI == "" {
-			return false
-		}
-		if nameJ == "" {
-			return true
-		}
-		return nameI < nameJ
-	})
-
-	return subs, nil
+	return azure.ListSubscriptions(ctx, s.cred)
 }
 
 func (s *Service) ListVaults(ctx context.Context, subscriptionID string) ([]Vault, error) {
@@ -290,4 +244,3 @@ func parseResourceGroup(id *string) string {
 	}
 	return ""
 }
-

@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"azure-storage/internal/azure"
-	"azure-storage/internal/keyvault"
+	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/kvapp"
 	"azure-storage/internal/ui"
 

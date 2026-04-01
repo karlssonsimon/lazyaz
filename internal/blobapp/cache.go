@@ -2,6 +2,7 @@ package blobapp
 
 import (
 	"azure-storage/internal/azure"
+	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/cache"
 )
 
@@ -10,17 +11,17 @@ import (
 //	subscriptions → storage accounts → containers → blobs
 type blobCache struct {
 	subscriptions cache.Map[azure.Subscription]
-	accounts      cache.Map[azure.Account]      // key: subscriptionID
-	containers    cache.Map[azure.ContainerInfo] // key: subscriptionID, accountName
-	blobs         cache.Map[azure.BlobEntry]     // key: subscriptionID, accountName, container, prefix, loadAll
+	accounts      cache.Map[blob.Account]      // key: subscriptionID
+	containers    cache.Map[blob.ContainerInfo] // key: subscriptionID, accountName
+	blobs         cache.Map[blob.BlobEntry]     // key: subscriptionID, accountName, container, prefix, loadAll
 }
 
 func newCache() blobCache {
 	return blobCache{
 		subscriptions: cache.NewMap[azure.Subscription](),
-		accounts:      cache.NewMap[azure.Account](),
-		containers:    cache.NewMap[azure.ContainerInfo](),
-		blobs:         cache.NewMap[azure.BlobEntry](),
+		accounts:      cache.NewMap[blob.Account](),
+		containers:    cache.NewMap[blob.ContainerInfo](),
+		blobs:         cache.NewMap[blob.BlobEntry](),
 	}
 }
 

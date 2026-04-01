@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"azure-storage/internal/keyvault"
+	"azure-storage/internal/azure/keyvault"
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"

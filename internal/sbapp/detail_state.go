@@ -1,6 +1,6 @@
 package sbapp
 
-import "azure-storage/internal/servicebus"
+import "azure-storage/internal/azure/servicebus"
 
 func (m *Model) clearDetailState() {
 	m.topicSubs = nil

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"azure-storage/internal/azure"
+	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
@@ -106,7 +107,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.hasSubscription = true
 		m.hasAccount = false
 		m.hasContainer = false
-		m.currentAccount = azure.Account{}
+		m.currentAccount = blob.Account{}
 		m.containerName = ""
 		m.prefix = ""
 		m.clearBlobSelectionState()
@@ -266,6 +267,6 @@ func subscriptionDisplayName(sub azure.Subscription) string {
 	return ui.SubscriptionDisplayName(sub)
 }
 
-func sameAccount(a, b azure.Account) bool {
+func sameAccount(a, b blob.Account) bool {
 	return a.Name == b.Name && a.SubscriptionID == b.SubscriptionID
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"azure-storage/internal/azure"
+	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
@@ -136,7 +137,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.accountsList.Select(0)
 		m.hasAccount = false
-		m.currentAccount = azure.Account{}
+		m.currentAccount = blob.Account{}
 		m.clearBlobSelectionState()
 		m.resetBlobLoadState()
 		m.resetPreviewState()

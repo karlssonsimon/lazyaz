@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"azure-storage/internal/azure"
+	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -68,8 +68,8 @@ func (p previewState) title(palette ui.Palette) string {
 	return titleStyle.Render("Preview") + " " + metaStyle.Render(label+" | "+meta)
 }
 
-func (m Model) openPreview(blob azure.BlobEntry) (Model, tea.Cmd) {
-	if blob.IsPrefix {
+func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
+	if b.IsPrefix {
 		m.status = "Open a blob file to preview"
 		return m, nil
 	}
@@ -79,10 +79,10 @@ func (m Model) openPreview(blob azure.BlobEntry) (Model, tea.Cmd) {
 	if !m.preview.open {
 		m.preview.open = true
 	}
-	m.preview.blobName = blob.Name
-	m.preview.blobSize = blob.Size
-	m.preview.contentType = blob.ContentType
-	m.preview.language = ui.DetectLanguage(blob.Name, blob.ContentType)
+	m.preview.blobName = b.Name
+	m.preview.blobSize = b.Size
+	m.preview.contentType = b.ContentType
+	m.preview.language = ui.DetectLanguage(b.Name, b.ContentType)
 	m.preview.binary = false
 	m.preview.cursor = 0
 	m.preview.windowStart = 0
@@ -94,17 +94,17 @@ func (m Model) openPreview(blob azure.BlobEntry) (Model, tea.Cmd) {
 	m.focus = previewPane
 	m.loading = true
 	m.lastErr = ""
-	m.status = fmt.Sprintf("Loading preview for %s", blob.Name)
+	m.status = fmt.Sprintf("Loading preview for %s", b.Name)
 	m.resize()
 
 	cmd := loadPreviewWindowCmd(
 		m.service,
 		m.currentAccount,
 		m.containerName,
-		blob.Name,
+		b.Name,
 		0,
-		blob.Size,
-		blob.ContentType,
+		b.Size,
+		b.ContentType,
 		max(1, m.preview.viewport.Height),
 		m.preview.requestID,
 	)
@@ -314,8 +314,8 @@ func computeLineStarts(data []byte) []int {
 }
 
 func loadPreviewWindowCmd(
-	svc *azure.Service,
-	account azure.Account,
+	svc *blob.Service,
+	account blob.Account,
 	containerName string,
 	blobName string,
 	cursor int64,

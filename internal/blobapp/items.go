@@ -5,13 +5,14 @@ import (
 	"strings"
 
 	"azure-storage/internal/azure"
+	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 )
 
 type accountItem struct {
-	account azure.Account
+	account blob.Account
 }
 
 type subscriptionItem struct {
@@ -61,7 +62,7 @@ func (i accountItem) FilterValue() string {
 }
 
 type containerItem struct {
-	container azure.ContainerInfo
+	container blob.ContainerInfo
 }
 
 func (i containerItem) Title() string {
@@ -80,7 +81,7 @@ func (i containerItem) FilterValue() string {
 }
 
 type blobItem struct {
-	blob        azure.BlobEntry
+	blob        blob.BlobEntry
 	displayName string
 	marked      bool
 	visual      bool
@@ -120,7 +121,7 @@ func (i blobItem) FilterValue() string {
 	return i.blob.Name
 }
 
-func accountsToItems(accounts []azure.Account) []list.Item {
+func accountsToItems(accounts []blob.Account) []list.Item {
 	items := make([]list.Item, 0, len(accounts))
 	for _, account := range accounts {
 		items = append(items, accountItem{account: account})
@@ -136,7 +137,7 @@ func subscriptionsToItems(subscriptions []azure.Subscription) []list.Item {
 	return items
 }
 
-func containersToItems(containers []azure.ContainerInfo) []list.Item {
+func containersToItems(containers []blob.ContainerInfo) []list.Item {
 	items := make([]list.Item, 0, len(containers))
 	for _, containerInfo := range containers {
 		items = append(items, containerItem{container: containerInfo})
@@ -144,7 +145,7 @@ func containersToItems(containers []azure.ContainerInfo) []list.Item {
 	return items
 }
 
-func blobsToItems(entries []azure.BlobEntry, prefix string, marked map[string]azure.BlobEntry, visual map[string]struct{}) []list.Item {
+func blobsToItems(entries []blob.BlobEntry, prefix string, marked map[string]blob.BlobEntry, visual map[string]struct{}) []list.Item {
 	items := make([]list.Item, 0, len(entries))
 	for _, entry := range entries {
 		items = append(items, blobItem{
@@ -157,7 +158,7 @@ func blobsToItems(entries []azure.BlobEntry, prefix string, marked map[string]az
 	return items
 }
 
-func isBlobMarked(marked map[string]azure.BlobEntry, blobName string) bool {
+func isBlobMarked(marked map[string]blob.BlobEntry, blobName string) bool {
 	if len(marked) == 0 {
 		return false
 	}

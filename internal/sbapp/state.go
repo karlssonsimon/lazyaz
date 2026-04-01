@@ -2,7 +2,7 @@ package sbapp
 
 import (
 	"azure-storage/internal/azure"
-	"azure-storage/internal/servicebus"
+	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"

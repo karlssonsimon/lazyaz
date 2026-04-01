@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"azure-storage/internal/servicebus"
+	"azure-storage/internal/azure/servicebus"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

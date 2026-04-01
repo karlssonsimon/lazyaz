@@ -3,7 +3,7 @@ package kvapp
 import (
 	"azure-storage/internal/azure"
 	"azure-storage/internal/cache"
-	"azure-storage/internal/keyvault"
+	"azure-storage/internal/azure/keyvault"
 )
 
 // kvCache provides an in-memory, stale-while-revalidate cache for:

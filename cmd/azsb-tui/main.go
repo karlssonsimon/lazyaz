@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"azure-storage/internal/azure"
+	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/sbapp"
-	"azure-storage/internal/servicebus"
 	"azure-storage/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
