@@ -42,33 +42,32 @@ func (m Model) View() string {
 		m.detailList.Styles.Title = m.styles.List.Title
 	}
 
+	pw := m.paneWidths
+
 	subscriptionsView := m.subscriptionsList.View()
 	namespacesView := m.namespacesList.View()
 	entitiesView := m.entitiesList.View()
 	detailView := m.detailList.View()
 
-	subscriptionsPaneStyle := styles.Pane.Copy().MarginRight(1)
-	namespacesPaneStyle := styles.Pane.Copy().MarginRight(1)
-	entitiesPaneStyle := styles.Pane.Copy().MarginRight(1)
-	detailPaneStyle := styles.Pane.Copy()
+	subscriptionsPaneStyle := styles.Pane.Copy().Width(pw[0])
+	namespacesPaneStyle := styles.Pane.Copy().Width(pw[1])
+	entitiesPaneStyle := styles.Pane.Copy().Width(pw[2])
+	detailPaneStyle := styles.Pane.Copy().Width(pw[3])
 
 	if m.focus == subscriptionsPane {
-		subscriptionsPaneStyle = styles.FocusedPane.Copy().MarginRight(1)
+		subscriptionsPaneStyle = styles.FocusedPane.Copy().Width(pw[0])
 	}
 	if m.focus == namespacesPane {
-		namespacesPaneStyle = styles.FocusedPane.Copy().MarginRight(1)
+		namespacesPaneStyle = styles.FocusedPane.Copy().Width(pw[1])
 	}
 	if m.focus == entitiesPane {
-		entitiesPaneStyle = styles.FocusedPane.Copy().MarginRight(1)
+		entitiesPaneStyle = styles.FocusedPane.Copy().Width(pw[2])
 	}
 
 	if m.deadLetter && m.detailMode == detailMessages {
-		detailPaneStyle = styles.Pane.Copy().BorderForeground(m.styles.Danger.GetForeground())
+		detailPaneStyle = styles.Pane.Copy().Width(pw[3]).BorderForeground(m.styles.Danger.GetForeground())
 	} else if m.focus == detailPane && !m.viewingMessage {
-		detailPaneStyle = styles.FocusedPane.Copy()
-	}
-	if m.viewingMessage {
-		detailPaneStyle = detailPaneStyle.Copy().MarginRight(1)
+		detailPaneStyle = styles.FocusedPane.Copy().Width(pw[3])
 	}
 
 	panesList := []string{
@@ -115,7 +114,7 @@ func (m Model) View() string {
 	}
 	parts = append(parts, statusLine, helpLine)
 
-	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
+	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.styles.Bg)
 
 	if !m.EmbeddedMode && m.themeOverlay.Active {
 		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)

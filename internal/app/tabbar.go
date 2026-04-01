@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"azure-storage/internal/ui"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 func renderTabBar(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, width int) string {
@@ -45,7 +43,7 @@ func renderTabBar(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, width in
 
 	bar := strings.Join(parts, "")
 
-	barLine := lipgloss.NewStyle().
+	barLine := tabStyles.Bar.
 		Width(width).
 		Render(bar)
 

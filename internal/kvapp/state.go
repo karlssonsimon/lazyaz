@@ -58,8 +58,10 @@ type Model struct {
 	status  string
 	lastErr string
 
-	width  int
-	height int
+	width      int
+	height     int
+	paneWidths [4]int // sub, vlt, sec, ver — set by resize
+	paneHeight int
 }
 
 type subscriptionsLoadedMsg struct {

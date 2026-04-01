@@ -45,6 +45,8 @@ func (m Model) View() string {
 	ui.ClampListSelection(&m.containersList)
 	ui.ClampListSelection(&m.blobsList)
 
+	pw := m.paneWidths
+
 	subscriptionsView := m.subscriptionsList.View()
 	accountsView := m.accountsList.View()
 	containersView := m.containersList.View()
@@ -53,27 +55,26 @@ func (m Model) View() string {
 	if m.preview.open {
 		previewView = m.preview.viewport.View()
 	}
-
-	subscriptionsPaneStyle := styles.Pane.Copy().MarginRight(1)
-	accountsPaneStyle := styles.Pane.Copy().MarginRight(1)
-	containersPaneStyle := styles.Pane.Copy().MarginRight(1)
-	blobsPaneStyle := styles.Pane.Copy()
-	previewPaneStyle := styles.Pane.Copy()
+	subscriptionsPaneStyle := styles.Pane.Copy().Width(pw[0])
+	accountsPaneStyle := styles.Pane.Copy().Width(pw[1])
+	containersPaneStyle := styles.Pane.Copy().Width(pw[2])
+	blobsPaneStyle := styles.Pane.Copy().Width(pw[3])
+	previewPaneStyle := styles.Pane.Copy().Width(pw[4])
 
 	if m.focus == subscriptionsPane {
-		subscriptionsPaneStyle = styles.FocusedPane.Copy().MarginRight(1)
+		subscriptionsPaneStyle = styles.FocusedPane.Copy().Width(pw[0])
 	}
 	if m.focus == accountsPane {
-		accountsPaneStyle = styles.FocusedPane.Copy().MarginRight(1)
+		accountsPaneStyle = styles.FocusedPane.Copy().Width(pw[1])
 	}
 	if m.focus == containersPane {
-		containersPaneStyle = styles.FocusedPane.Copy().MarginRight(1)
+		containersPaneStyle = styles.FocusedPane.Copy().Width(pw[2])
 	}
 	if m.focus == blobsPane {
-		blobsPaneStyle = styles.FocusedPane.Copy()
+		blobsPaneStyle = styles.FocusedPane.Copy().Width(pw[3])
 	}
 	if m.preview.open && m.focus == previewPane {
-		previewPaneStyle = styles.FocusedPane.Copy()
+		previewPaneStyle = styles.FocusedPane.Copy().Width(pw[4])
 	}
 
 	paneParts := []string{
@@ -124,7 +125,7 @@ func (m Model) View() string {
 	}
 	parts = append(parts, statusLine, helpLine)
 
-	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
+	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.styles.Bg)
 
 	if !m.EmbeddedMode && m.themeOverlay.Active {
 		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)

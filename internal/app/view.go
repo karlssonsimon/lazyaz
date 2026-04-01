@@ -37,7 +37,7 @@ func (m Model) View() string {
 		view = ui.RenderHelpOverlay("Azure TUI Help", sections, m.styles, m.width, m.height, view)
 	}
 
-	return view
+	return ui.RenderCanvas(view, m.width, m.height, m.styles.Bg)
 }
 
 func (m Model) activeHelpSections() []ui.HelpSection {
