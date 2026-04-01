@@ -14,7 +14,7 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	tabBar := renderTabBar(m.tabs, m.activeIdx, m.palette, m.width)
+	tabBar := renderTabBar(m.tabs, m.activeIdx, m.styles.TabBar, m.width)
 
 	childView := ""
 	if len(m.tabs) > 0 {
@@ -24,17 +24,17 @@ func (m Model) View() string {
 	view := lipgloss.JoinVertical(lipgloss.Left, tabBar, childView)
 
 	if m.cmdPalette.active {
-		view = renderCommandPalette(&m.cmdPalette, m.palette, m.width, m.height, view)
+		view = renderCommandPalette(&m.cmdPalette, m.styles.Overlay, m.width, m.height, view)
 	}
 	if m.tabPicker {
-		view = renderTabPicker(m.palette, m.width, m.height, view)
+		view = renderTabPicker(m.styles.Overlay, m.width, m.height, view)
 	}
 	if m.themeOverlay.Active {
-		view = ui.RenderThemeOverlay(m.themeOverlay, m.themes, m.palette, m.width, m.height, view)
+		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
 	}
 	if m.helpOverlay.Active {
 		sections := m.activeHelpSections()
-		view = ui.RenderHelpOverlay("Azure TUI Help", sections, m.palette, m.width, m.height, view)
+		view = ui.RenderHelpOverlay("Azure TUI Help", sections, m.styles, m.width, m.height, view)
 	}
 
 	return view
@@ -55,37 +55,19 @@ func (m Model) activeHelpSections() []ui.HelpSection {
 	return m.keymap.helpSections(childSections)
 }
 
-func renderTabPicker(palette ui.Palette, width, height int, base string) string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(palette.Accent)).
-		Padding(0, 1)
-
-	itemStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Text)).
-		Padding(0, 1)
-
-	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Muted)).
-		Padding(0, 1)
-
+func renderTabPicker(overlay ui.OverlayStyles, width, height int, base string) string {
 	rows := []string{
-		titleStyle.Render("Open New Tab"),
+		overlay.Title.Render("Open New Tab"),
 		"",
-		itemStyle.Render("1) Blob Storage"),
-		itemStyle.Render("2) Service Bus"),
-		itemStyle.Render("3) Key Vault"),
+		overlay.Normal.Render("1) Blob Storage"),
+		overlay.Normal.Render("2) Service Bus"),
+		overlay.Normal.Render("3) Key Vault"),
 		"",
-		hintStyle.Render("Press 1/2/3 or esc to cancel"),
+		overlay.Hint.Render("Press 1/2/3 or esc to cancel"),
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
-
-	box := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(palette.BorderFocused)).
-		Padding(1, 2).
-		Render(content)
+	box := overlay.Box.Render(content)
 
 	return ui.PlaceOverlay(width, height, box, base)
 }

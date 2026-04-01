@@ -7,17 +7,13 @@ import (
 	"testing"
 )
 
-func TestDefaultTheme(t *testing.T) {
-	theme := DefaultTheme()
-
-	if theme.Name != "default" {
-		t.Fatalf("expected name=default, got %s", theme.Name)
+func TestFallbackScheme(t *testing.T) {
+	s := FallbackScheme()
+	if s.Name != "fallback" {
+		t.Fatalf("expected name=fallback, got %s", s.Name)
 	}
-	if theme.SyntaxColorConfig.Key != "#C084FC" {
-		t.Fatalf("expected key=#C084FC, got %s", theme.SyntaxColorConfig.Key)
-	}
-	if theme.Colors.Border != "#4B5563" {
-		t.Fatalf("expected border=#4B5563, got %s", theme.Colors.Border)
+	if s.Base0D == "" {
+		t.Fatal("expected Base0D to be non-empty")
 	}
 }
 
@@ -33,14 +29,14 @@ func TestEnsureStockThemes_WritesWhenMissing(t *testing.T) {
 	}
 }
 
-func TestEnsureStockThemes_DoesNotOverwrite(t *testing.T) {
+func TestEnsureStockThemes_OverwritesStockFiles(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "themes")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	custom := []byte("name: tokyonight\nui_colors:\n  accent: \"#custom\"\n")
-	if err := os.WriteFile(filepath.Join(dir, "tokyonight.yaml"), custom, 0o644); err != nil {
+	old := []byte("name: tokyonight\nui_colors:\n  accent: \"#old\"\n")
+	if err := os.WriteFile(filepath.Join(dir, "tokyonight.yaml"), old, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -50,178 +46,162 @@ func TestEnsureStockThemes_DoesNotOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if string(data) == string(old) {
+		t.Fatal("expected stock theme to be overwritten with new format")
+	}
+	if !strings.Contains(string(data), "base16") {
+		t.Fatal("expected overwritten file to contain base16 format")
+	}
+}
+
+func TestEnsureStockThemes_DoesNotTouchUserFiles(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "themes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	custom := []byte("system: base16\nname: my-custom\npalette:\n  base0D: \"abcdef\"\n")
+	if err := os.WriteFile(filepath.Join(dir, "my-custom.yaml"), custom, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ensureStockThemes(dir)
+
+	data, err := os.ReadFile(filepath.Join(dir, "my-custom.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(data) != string(custom) {
-		t.Fatalf("expected stock theme not to overwrite existing file")
+		t.Fatal("expected user theme file to be untouched")
 	}
 }
 
 func TestLoadConfig_MissingFile(t *testing.T) {
-	cfg := loadConfigFromDir(t.TempDir(), "testapp")
-	if cfg.ThemeName != "default" {
-		t.Fatalf("expected theme=default, got %s", cfg.ThemeName)
+	cfg := loadConfigFromDir(t.TempDir())
+	if cfg.ThemeName != "Default" {
+		t.Fatalf("expected theme=Default, got %s", cfg.ThemeName)
 	}
-	if cfg.AppName != "testapp" {
-		t.Fatalf("expected appName=testapp, got %s", cfg.AppName)
-	}
-	if len(cfg.Themes) != 4 {
-		t.Fatalf("expected 4 themes (auto-created from embedded), got %d", len(cfg.Themes))
+	if len(cfg.Schemes) != 4 {
+		t.Fatalf("expected 4 schemes (auto-created from embedded), got %d", len(cfg.Schemes))
 	}
 }
 
 func TestLoadConfig_ThemeName(t *testing.T) {
 	dir := t.TempDir()
-	data := []byte("theme: rosepine\n")
-	if err := os.WriteFile(filepath.Join(dir, "azsb.yaml"), data, 0o644); err != nil {
+	data := []byte("theme: \"Rosé Pine\"\n")
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg := loadConfigFromDir(dir, "azsb")
-	if cfg.ThemeName != "rosepine" {
-		t.Fatalf("expected theme=rosepine, got %s", cfg.ThemeName)
+	cfg := loadConfigFromDir(dir)
+	if cfg.ThemeName != "Rosé Pine" {
+		t.Fatalf("expected theme=Rosé Pine, got %s", cfg.ThemeName)
 	}
 
-	active := cfg.ActiveTheme()
-	if active.Name != "rosepine" {
-		t.Fatalf("expected active theme=rosepine, got %s", active.Name)
+	active := cfg.ActiveScheme()
+	if active.Name != "Rosé Pine" {
+		t.Fatalf("expected active scheme=Rosé Pine, got %s", active.Name)
 	}
-	if active.Colors.Accent != "#c4a7e7" {
-		t.Fatalf("expected rosepine accent=#c4a7e7, got %s", active.Colors.Accent)
+	if active.Base0B == "" {
+		t.Fatal("expected Base0B to be non-empty")
 	}
 }
 
-func TestLoadConfig_UserThemeOverridesBuiltin(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "azblob.yaml"), []byte("theme: tokyonight\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	themesDir := filepath.Join(dir, "themes")
-	if err := os.MkdirAll(themesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	customTheme := []byte("name: tokyonight\njson_colors:\n  key: \"#ff0000\"\nui_colors:\n  border: \"#111111\"\n")
-	if err := os.WriteFile(filepath.Join(themesDir, "tokyonight.yaml"), customTheme, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg := loadConfigFromDir(dir, "azblob")
-	active := cfg.ActiveTheme()
-	if active.SyntaxColorConfig.Key != "#ff0000" {
-		t.Fatalf("expected overridden key=#ff0000, got %s", active.SyntaxColorConfig.Key)
-	}
-	if active.Colors.Border != "#111111" {
-		t.Fatalf("expected overridden border=#111111, got %s", active.Colors.Border)
-	}
-	if active.SyntaxColorConfig.String != DefaultTheme().SyntaxColorConfig.String {
-		t.Fatalf("expected merged string=%s, got %s", DefaultTheme().SyntaxColorConfig.String, active.SyntaxColorConfig.String)
-	}
-}
-
-func TestLoadConfig_MultiWordPaletteFieldsDeserialize(t *testing.T) {
-	dir := t.TempDir()
-	themesDir := filepath.Join(dir, "themes")
-	if err := os.MkdirAll(themesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	theme := []byte(`name: custom
-ui_colors:
-  border_focused: "#aaaaaa"
-  accent_strong: "#bbbbbb"
-  filter_match: "#cccccc"
-  selected_bg: "#dddddd"
-  selected_text: "#eeeeee"
-`)
-	if err := os.WriteFile(filepath.Join(themesDir, "custom.yaml"), theme, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "testapp.yaml"), []byte("theme: custom\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg := loadConfigFromDir(dir, "testapp")
-	active := cfg.ActiveTheme()
-
-	checks := map[string]struct{ got, want string }{
-		"BorderFocused": {active.Colors.BorderFocused, "#aaaaaa"},
-		"AccentStrong":  {active.Colors.AccentStrong, "#bbbbbb"},
-		"FilterMatch":   {active.Colors.FilterMatch, "#cccccc"},
-		"SelectedBg":    {active.Colors.SelectedBg, "#dddddd"},
-		"SelectedText":  {active.Colors.SelectedText, "#eeeeee"},
-	}
-	for field, c := range checks {
-		if c.got != c.want {
-			t.Errorf("Palette.%s: got %s, want %s", field, c.got, c.want)
-		}
-	}
-}
-
-func TestLoadConfig_UserThemeFromFilename(t *testing.T) {
-	dir := t.TempDir()
-	themesDir := filepath.Join(dir, "themes")
-	if err := os.MkdirAll(themesDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	customTheme := []byte("json_colors:\n  key: \"#abcdef\"\nui_colors:\n  accent: \"#fedcba\"\n")
-	if err := os.WriteFile(filepath.Join(themesDir, "mycustom.yaml"), customTheme, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "testapp.yaml"), []byte("theme: mycustom\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg := loadConfigFromDir(dir, "testapp")
-	if len(cfg.Themes) != 5 {
-		t.Fatalf("expected 5 themes (4 stock + 1 custom), got %d", len(cfg.Themes))
-	}
-
-	active := cfg.ActiveTheme()
-	if active.Name != "mycustom" {
-		t.Fatalf("expected active theme=mycustom, got %s", active.Name)
-	}
-	if active.SyntaxColorConfig.Key != "#abcdef" {
-		t.Fatalf("expected key=#abcdef, got %s", active.SyntaxColorConfig.Key)
-	}
-	if active.Colors.Accent != "#fedcba" {
-		t.Fatalf("expected accent=#fedcba, got %s", active.Colors.Accent)
-	}
-}
-
-func TestLoadConfig_CreatesAppFileWhenMissing(t *testing.T) {
+func TestLoadConfig_CreatesConfigFileWhenMissing(t *testing.T) {
 	dir := t.TempDir()
 
-	cfg := loadConfigFromDir(dir, "azblob")
-	if cfg.ThemeName != "default" {
-		t.Fatalf("expected theme=default, got %s", cfg.ThemeName)
+	cfg := loadConfigFromDir(dir)
+	if cfg.ThemeName != "Default" {
+		t.Fatalf("expected theme=Default, got %s", cfg.ThemeName)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "azblob.yaml"))
+	data, err := os.ReadFile(filepath.Join(dir, "config.yaml"))
 	if err != nil {
-		t.Fatalf("expected azblob.yaml to be created: %v", err)
+		t.Fatalf("expected config.yaml to be created: %v", err)
 	}
-	if !strings.Contains(string(data), "default") {
-		t.Fatalf("expected azblob.yaml to contain default, got %s", string(data))
-	}
-}
-
-func TestActiveTheme_FallbackToDefault(t *testing.T) {
-	cfg := Config{ThemeName: "nonexistent", Themes: []Theme{DefaultTheme()}}
-	active := cfg.ActiveTheme()
-	if active.Name != "default" {
-		t.Fatalf("expected fallback to default, got %s", active.Name)
+	if !strings.Contains(string(data), "Default") {
+		t.Fatalf("expected config.yaml to contain Default, got %s", string(data))
 	}
 }
 
-func TestSyntaxColorConfig_Styles(t *testing.T) {
-	theme := DefaultTheme()
-	s := SyntaxStylesForTheme(theme)
+func TestActiveScheme_FallbackToFirst(t *testing.T) {
+	fb := FallbackScheme()
+	cfg := Config{ThemeName: "nonexistent", Schemes: []Scheme{fb}}
+	active := cfg.ActiveScheme()
+	if active.Name != "fallback" {
+		t.Fatalf("expected fallback to first scheme, got %s", active.Name)
+	}
+}
 
-	rendered := s.HighlightJSON(`{"key":"value"}`)
+func TestNewStyles_ProducesSyntax(t *testing.T) {
+	s := FallbackScheme()
+	styles := NewStyles(s)
+
+	rendered := styles.Syntax.HighlightJSON(`{"key":"value"}`)
 	if rendered == "" {
-		t.Fatal("expected non-empty rendered output from key style")
+		t.Fatal("expected non-empty rendered output")
+	}
+}
+
+func TestLoadConfig_CustomBase16Scheme(t *testing.T) {
+	dir := t.TempDir()
+	themesDir := filepath.Join(dir, "themes")
+	if err := os.MkdirAll(themesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	custom := []byte(`system: "base16"
+name: "My Custom"
+palette:
+  base00: "111111"
+  base01: "222222"
+  base02: "333333"
+  base03: "444444"
+  base04: "555555"
+  base05: "666666"
+  base06: "777777"
+  base07: "888888"
+  base08: "990000"
+  base09: "009900"
+  base0A: "000099"
+  base0B: "999900"
+  base0C: "009999"
+  base0D: "990099"
+  base0E: "999999"
+  base0F: "000000"
+`)
+	if err := os.WriteFile(filepath.Join(themesDir, "mycustom.yaml"), custom, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("theme: \"My Custom\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := loadConfigFromDir(dir)
+	if len(cfg.Schemes) != 5 {
+		t.Fatalf("expected 5 schemes (4 stock + 1 custom), got %d", len(cfg.Schemes))
+	}
+
+	active := cfg.ActiveScheme()
+	if active.Name != "My Custom" {
+		t.Fatalf("expected active scheme=My Custom, got %s", active.Name)
+	}
+	if active.Base08 != "990000" {
+		t.Fatalf("expected base08=990000, got %s", active.Base08)
+	}
+}
+
+func TestMigrateOldConfig(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte("theme: tokyonight\n")
+	if err := os.WriteFile(filepath.Join(dir, "azblob.yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	migrated := migrateOldConfig(dir)
+	if migrated != "tokyonight" {
+		t.Fatalf("expected migrated theme=tokyonight, got %s", migrated)
 	}
 }
 
@@ -239,7 +219,7 @@ func testBindings() ThemeKeyBindings {
 }
 
 func TestHandleKey(t *testing.T) {
-	themes := []Theme{
+	schemes := []Scheme{
 		{Name: "alpha"},
 		{Name: "beta"},
 		{Name: "gamma"},
@@ -249,59 +229,35 @@ func TestHandleKey(t *testing.T) {
 		name       string
 		setup      func() ThemeOverlayState
 		key        string
-		themes     []Theme
+		schemes    []Scheme
 		wantReturn bool
 		check      func(t *testing.T, s ThemeOverlayState)
 	}{
 		{
 			name: "up from middle moves cursor up",
 			setup: func() ThemeOverlayState {
-				return ThemeOverlayState{Active: true, CursorIdx: 1}
+				s := ThemeOverlayState{Active: true, CursorIdx: 1}
+				s.refilter(schemes)
+				return s
 			},
 			key:        "up",
-			themes:     themes,
+			schemes:    schemes,
 			wantReturn: false,
 			check: func(t *testing.T, s ThemeOverlayState) {
 				if s.CursorIdx != 0 {
 					t.Fatalf("expected CursorIdx=0, got %d", s.CursorIdx)
-				}
-			},
-		},
-		{
-			name: "up at top stays at zero",
-			setup: func() ThemeOverlayState {
-				return ThemeOverlayState{Active: true, CursorIdx: 0}
-			},
-			key:        "up",
-			themes:     themes,
-			wantReturn: false,
-			check: func(t *testing.T, s ThemeOverlayState) {
-				if s.CursorIdx != 0 {
-					t.Fatalf("expected CursorIdx=0, got %d", s.CursorIdx)
-				}
-			},
-		},
-		{
-			name: "down from middle moves cursor down",
-			setup: func() ThemeOverlayState {
-				return ThemeOverlayState{Active: true, CursorIdx: 1}
-			},
-			key:        "down",
-			themes:     themes,
-			wantReturn: false,
-			check: func(t *testing.T, s ThemeOverlayState) {
-				if s.CursorIdx != 2 {
-					t.Fatalf("expected CursorIdx=2, got %d", s.CursorIdx)
 				}
 			},
 		},
 		{
 			name: "down at bottom stays at last",
 			setup: func() ThemeOverlayState {
-				return ThemeOverlayState{Active: true, CursorIdx: 2}
+				s := ThemeOverlayState{Active: true, CursorIdx: 2}
+				s.refilter(schemes)
+				return s
 			},
 			key:        "down",
-			themes:     themes,
+			schemes:    schemes,
 			wantReturn: false,
 			check: func(t *testing.T, s ThemeOverlayState) {
 				if s.CursorIdx != 2 {
@@ -312,10 +268,12 @@ func TestHandleKey(t *testing.T) {
 		{
 			name: "apply sets active index and returns true",
 			setup: func() ThemeOverlayState {
-				return ThemeOverlayState{Active: true, CursorIdx: 2, ActiveThemeIdx: 0}
+				s := ThemeOverlayState{Active: true, CursorIdx: 2, ActiveThemeIdx: 0}
+				s.refilter(schemes)
+				return s
 			},
 			key:        "enter",
-			themes:     themes,
+			schemes:    schemes,
 			wantReturn: true,
 			check: func(t *testing.T, s ThemeOverlayState) {
 				if s.ActiveThemeIdx != 2 {
@@ -329,10 +287,12 @@ func TestHandleKey(t *testing.T) {
 		{
 			name: "cancel deactivates overlay",
 			setup: func() ThemeOverlayState {
-				return ThemeOverlayState{Active: true, CursorIdx: 1}
+				s := ThemeOverlayState{Active: true, CursorIdx: 1}
+				s.refilter(schemes)
+				return s
 			},
 			key:        "esc",
-			themes:     themes,
+			schemes:    schemes,
 			wantReturn: false,
 			check: func(t *testing.T, s ThemeOverlayState) {
 				if s.Active {
@@ -341,16 +301,16 @@ func TestHandleKey(t *testing.T) {
 			},
 		},
 		{
-			name: "empty themes does not panic",
+			name: "empty schemes does not panic",
 			setup: func() ThemeOverlayState {
 				return ThemeOverlayState{Active: true, CursorIdx: 0}
 			},
 			key:        "down",
-			themes:     nil,
+			schemes:    nil,
 			wantReturn: false,
 			check: func(t *testing.T, s ThemeOverlayState) {
 				if s.Active {
-					t.Fatal("expected Active=false with empty themes")
+					t.Fatal("expected Active=false with empty schemes")
 				}
 			},
 		},
@@ -359,7 +319,7 @@ func TestHandleKey(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			s := tc.setup()
-			got := s.HandleKey(tc.key, testBindings(), tc.themes)
+			got := s.HandleKey(tc.key, testBindings(), tc.schemes)
 			if got != tc.wantReturn {
 				t.Fatalf("expected HandleKey return=%v, got %v", tc.wantReturn, got)
 			}

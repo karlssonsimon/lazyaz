@@ -1,0 +1,350 @@
+package ui
+
+import (
+	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/lipgloss"
+)
+
+// Scheme represents a Base16 color scheme. The 16 colors follow the
+// Tinted Theming specification: base00–base07 are shades (background
+// through foreground), base08–base0F are accent hues.
+type Scheme struct {
+	Name   string `yaml:"name"`
+	Author string `yaml:"author"`
+	// Shades
+	Base00 string `yaml:"base00"` // Default Background
+	Base01 string `yaml:"base01"` // Lighter Background (status bars, pane borders)
+	Base02 string `yaml:"base02"` // Selection Background
+	Base03 string `yaml:"base03"` // Comments, Muted text
+	Base04 string `yaml:"base04"` // Dark Foreground (status bars)
+	Base05 string `yaml:"base05"` // Default Foreground
+	Base06 string `yaml:"base06"` // Light Foreground (selected text)
+	Base07 string `yaml:"base07"` // Bright Foreground (headers)
+	// Accents
+	Base08 string `yaml:"base08"` // Red — danger, errors
+	Base09 string `yaml:"base09"` // Orange — numbers, constants
+	Base0A string `yaml:"base0A"` // Yellow — filter match, warnings
+	Base0B string `yaml:"base0B"` // Green — focused border, strings
+	Base0C string `yaml:"base0C"` // Cyan — accent strong
+	Base0D string `yaml:"base0D"` // Blue — accent, functions
+	Base0E string `yaml:"base0E"` // Purple — keywords
+	Base0F string `yaml:"base0F"` // Brown — punctuation
+}
+
+// Styles is the single resolved style collection built from a Scheme.
+// Every render site uses fields from this struct instead of raw colors.
+type Styles struct {
+	Chrome   ChromeStyles
+	Delegate list.DefaultDelegate
+	List     ListStyles
+	Spinner  lipgloss.Style
+	Syntax   SyntaxStyles
+	Overlay  OverlayStyles
+	TabBar   TabBarStyles
+
+	// Semantic convenience styles for ad-hoc usage in views.
+	Accent      lipgloss.Style // Bold accent (base0D)
+	Muted       lipgloss.Style // Muted text (base03)
+	Danger      lipgloss.Style // Danger text (base08)
+	DangerBold  lipgloss.Style // Bold danger (base08)
+	Warning     lipgloss.Style // Warning/filter match (base0A)
+	FocusBorder lipgloss.Style // Focused border color (base0B)
+}
+
+// ListStyles contains all list.Model.Styles fields.
+type ListStyles struct {
+	TitleBar                    lipgloss.Style
+	Title                       lipgloss.Style
+	Spinner                     lipgloss.Style
+	FilterPrompt                lipgloss.Style
+	FilterCursor                lipgloss.Style
+	DefaultFilterCharacterMatch lipgloss.Style
+	StatusBar                   lipgloss.Style
+	StatusEmpty                 lipgloss.Style
+	StatusBarActiveFilter       lipgloss.Style
+	StatusBarFilterCount        lipgloss.Style
+	NoItems                     lipgloss.Style
+	PaginationStyle             lipgloss.Style
+	HelpStyle                   lipgloss.Style
+	ActivePaginationDot         lipgloss.Style
+	InactivePaginationDot       lipgloss.Style
+	ArabicPagination            lipgloss.Style
+	DividerDot                  lipgloss.Style
+}
+
+// OverlayStyles covers theme picker, help overlay, command palette, tab picker.
+type OverlayStyles struct {
+	Title        lipgloss.Style
+	SectionTitle lipgloss.Style
+	Prompt       lipgloss.Style
+	Input        lipgloss.Style
+	Normal       lipgloss.Style
+	NormalFull   lipgloss.Style // normal with full width (for help body)
+	Cursor       lipgloss.Style
+	NoMatch      lipgloss.Style
+	Hint         lipgloss.Style
+	HintFull     lipgloss.Style // hint with full width
+	Box          lipgloss.Style
+}
+
+// TabBarStyles covers tab bar rendering.
+type TabBarStyles struct {
+	Active   lipgloss.Style
+	Inactive lipgloss.Style
+	Sep      lipgloss.Style
+}
+
+// color converts a Base16 hex string to a lipgloss.Color, prepending "#".
+func color(hex string) lipgloss.Color {
+	if hex == "" {
+		return lipgloss.Color("")
+	}
+	if hex[0] != '#' {
+		return lipgloss.Color("#" + hex)
+	}
+	return lipgloss.Color(hex)
+}
+
+// NewStyles resolves a Scheme into a complete Styles struct.
+func NewStyles(s Scheme) Styles {
+	bg := color(s.Base00)
+	_ = bg // terminal bg — not applied (respects terminal settings)
+	border := color(s.Base01)
+	selBg := color(s.Base02)
+	muted := color(s.Base03)
+	statusFg := color(s.Base04)
+	text := color(s.Base05)
+	selText := color(s.Base06)
+	bright := color(s.Base07)
+	danger := color(s.Base08)
+	warning := color(s.Base0A)
+	green := color(s.Base0B)
+	cyan := color(s.Base0C)
+	blue := color(s.Base0D)
+
+	// --- Chrome ---
+	chrome := ChromeStyles{
+		Header: lipgloss.NewStyle().
+			Foreground(blue).
+			Bold(true).
+			Padding(0, 1),
+		Meta: lipgloss.NewStyle().
+			Foreground(muted).
+			Padding(0, 1),
+		Pane: lipgloss.NewStyle().
+			Foreground(text).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(border).
+			Padding(0, 1),
+		FocusedPane: lipgloss.NewStyle().
+			Foreground(text).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(green).
+			Padding(0, 1),
+		Status: lipgloss.NewStyle().
+			Foreground(text).
+			Padding(0, 1),
+		Help: lipgloss.NewStyle().
+			Foreground(muted).
+			Padding(0, 1),
+		Error: lipgloss.NewStyle().
+			Foreground(danger).
+			Padding(0, 1),
+		FilterHint: lipgloss.NewStyle().
+			Foreground(blue).
+			Padding(0, 1),
+	}
+
+	// --- List Delegate ---
+	delegate := list.NewDefaultDelegate()
+	delegate.SetSpacing(0)
+	delegate.Styles.NormalTitle = lipgloss.NewStyle().
+		Foreground(text).
+		Padding(0, 0, 0, 2)
+	delegate.Styles.NormalDesc = lipgloss.NewStyle().
+		Foreground(muted).
+		Padding(0, 0, 0, 2)
+	delegate.Styles.SelectedTitle = lipgloss.NewStyle().
+		Foreground(selText).
+		Background(selBg).
+		Bold(true).
+		Padding(0, 0, 0, 2)
+	delegate.Styles.SelectedDesc = lipgloss.NewStyle().
+		Foreground(selText).
+		Background(selBg).
+		Padding(0, 0, 0, 2)
+	delegate.Styles.DimmedTitle = lipgloss.NewStyle().
+		Foreground(muted).
+		Padding(0, 0, 0, 2)
+	delegate.Styles.DimmedDesc = lipgloss.NewStyle().
+		Foreground(muted).
+		Padding(0, 0, 0, 2)
+	delegate.Styles.FilterMatch = lipgloss.NewStyle().
+		Foreground(warning).
+		Underline(true)
+
+	// --- List Component Styles ---
+	ls := ListStyles{
+		TitleBar: lipgloss.NewStyle().
+			Foreground(muted).
+			Padding(0, 1),
+		Title: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(blue).
+			Padding(0, 1),
+		Spinner: lipgloss.NewStyle().
+			Foreground(cyan),
+		FilterPrompt: lipgloss.NewStyle().
+			Foreground(blue),
+		FilterCursor: lipgloss.NewStyle().
+			Foreground(cyan),
+		DefaultFilterCharacterMatch: lipgloss.NewStyle().
+			Foreground(warning).
+			Underline(true),
+		StatusBar: lipgloss.NewStyle().
+			Foreground(statusFg).
+			Padding(0, 0, 1, 2),
+		StatusEmpty: lipgloss.NewStyle().
+			Foreground(muted),
+		StatusBarActiveFilter: lipgloss.NewStyle().
+			Foreground(blue).
+			Bold(true),
+		StatusBarFilterCount: lipgloss.NewStyle().
+			Foreground(cyan).
+			Bold(true),
+		NoItems: lipgloss.NewStyle().
+			Foreground(muted),
+		PaginationStyle: lipgloss.NewStyle().
+			Foreground(muted).
+			PaddingLeft(2),
+		HelpStyle: lipgloss.NewStyle().
+			Foreground(muted).
+			Padding(1, 0, 0, 2),
+		ActivePaginationDot: lipgloss.NewStyle().
+			Foreground(cyan).
+			SetString("•"),
+		InactivePaginationDot: lipgloss.NewStyle().
+			Foreground(muted).
+			SetString("•"),
+		ArabicPagination: lipgloss.NewStyle().
+			Foreground(muted),
+		DividerDot: lipgloss.NewStyle().
+			Foreground(muted).
+			SetString(" • "),
+	}
+
+	// --- Spinner ---
+	spinStyle := lipgloss.NewStyle().Foreground(cyan)
+
+	// --- Syntax Highlighting ---
+	syntax := NewSyntaxStyles(SyntaxPalette{
+		Key:         "#" + s.Base0E,
+		String:      "#" + s.Base0B,
+		Number:      "#" + s.Base09,
+		Bool:        "#" + s.Base0C,
+		Null:        "#" + s.Base08,
+		Punctuation: "#" + s.Base0F,
+		XMLTag:      "#" + s.Base0D,
+		XMLAttr:     "#" + s.Base0A,
+		CSVCellA:    "#" + s.Base05,
+		CSVCellB:    "#" + s.Base0C,
+	})
+
+	// --- Overlay ---
+	overlay := OverlayStyles{
+		Title: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(blue),
+		SectionTitle: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(blue),
+		Prompt: lipgloss.NewStyle().
+			Foreground(cyan),
+		Input: lipgloss.NewStyle().
+			Foreground(text),
+		Normal: lipgloss.NewStyle().
+			Foreground(text).
+			Padding(0, 1),
+		NormalFull: lipgloss.NewStyle().
+			Foreground(text),
+		Cursor: lipgloss.NewStyle().
+			Foreground(selText).
+			Background(selBg).
+			Bold(true).
+			Padding(0, 1),
+		NoMatch: lipgloss.NewStyle().
+			Foreground(muted).
+			Italic(true),
+		Hint: lipgloss.NewStyle().
+			Foreground(muted).
+			Padding(0, 1),
+		HintFull: lipgloss.NewStyle().
+			Foreground(muted),
+		Box: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(green).
+			Padding(1, 2),
+	}
+
+	// --- Tab Bar ---
+	tabBar := TabBarStyles{
+		Active: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(bright).
+			Background(selBg).
+			Padding(0, 1),
+		Inactive: lipgloss.NewStyle().
+			Foreground(text).
+			Padding(0, 1),
+		Sep: lipgloss.NewStyle().
+			Foreground(border),
+	}
+
+	return Styles{
+		Chrome:   chrome,
+		Delegate: delegate,
+		List:     ls,
+		Spinner:  spinStyle,
+		Syntax:   syntax,
+		Overlay:  overlay,
+		TabBar:   tabBar,
+
+		Accent:      lipgloss.NewStyle().Bold(true).Foreground(blue),
+		Muted:       lipgloss.NewStyle().Foreground(muted),
+		Danger:      lipgloss.NewStyle().Foreground(danger),
+		DangerBold:  lipgloss.NewStyle().Foreground(danger).Bold(true),
+		Warning:     lipgloss.NewStyle().Foreground(warning),
+		FocusBorder: lipgloss.NewStyle().BorderForeground(green),
+	}
+}
+
+// ApplyToList applies the resolved styles to a single list.Model.
+func (st Styles) ApplyToList(l *list.Model) {
+	l.SetDelegate(st.Delegate)
+	l.Styles.TitleBar = st.List.TitleBar
+	l.Styles.Title = st.List.Title
+	l.Styles.Spinner = st.List.Spinner
+	l.Styles.FilterPrompt = st.List.FilterPrompt
+	l.Styles.FilterCursor = st.List.FilterCursor
+	l.Styles.DefaultFilterCharacterMatch = st.List.DefaultFilterCharacterMatch
+	l.Styles.StatusBar = st.List.StatusBar
+	l.Styles.StatusEmpty = st.List.StatusEmpty
+	l.Styles.StatusBarActiveFilter = st.List.StatusBarActiveFilter
+	l.Styles.StatusBarFilterCount = st.List.StatusBarFilterCount
+	l.Styles.NoItems = st.List.NoItems
+	l.Styles.PaginationStyle = st.List.PaginationStyle
+	l.Styles.HelpStyle = st.List.HelpStyle
+	l.Styles.ActivePaginationDot = st.List.ActivePaginationDot
+	l.Styles.InactivePaginationDot = st.List.InactivePaginationDot
+	l.Styles.ArabicPagination = st.List.ArabicPagination
+	l.Styles.DividerDot = st.List.DividerDot
+}
+
+// ApplyToLists applies styles to multiple lists and a spinner.
+func (st Styles) ApplyToLists(lists []*list.Model, spin *spinner.Model) {
+	for _, l := range lists {
+		st.ApplyToList(l)
+	}
+	spin.Style = st.Spinner
+}

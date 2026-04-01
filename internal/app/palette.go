@@ -108,7 +108,7 @@ func (p *commandPalette) handleKey(key string) (cmd command, executed bool, clos
 	return command{}, false, false
 }
 
-func renderCommandPalette(p *commandPalette, palette ui.Palette, width, height int, base string) string {
+func renderCommandPalette(p *commandPalette, overlay ui.OverlayStyles, width, height int, base string) string {
 	boxWidth := width / 2
 	if boxWidth < 40 {
 		boxWidth = 40
@@ -118,41 +118,20 @@ func renderCommandPalette(p *commandPalette, palette ui.Palette, width, height i
 	}
 	innerWidth := boxWidth - 6
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(palette.Accent))
-
-	promptStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.AccentStrong))
-
-	inputStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Text))
-
-	normalStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Text)).
-		Width(innerWidth)
-
-	cursorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.SelectedText)).
-		Background(lipgloss.Color(palette.SelectedBg)).
-		Bold(true).
-		Width(innerWidth)
-
-	noMatchStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Muted)).
-		Italic(true)
+	normalStyle := overlay.Normal.Width(innerWidth)
+	cursorStyle := overlay.Cursor.Width(innerWidth)
 
 	var rows []string
-	rows = append(rows, titleStyle.Render("Command Palette"))
+	rows = append(rows, overlay.Title.Render("Command Palette"))
 
 	// Input line.
 	cursor := "█"
-	inputLine := promptStyle.Render("> ") + inputStyle.Render(p.query+cursor)
+	inputLine := overlay.Prompt.Render("> ") + overlay.Input.Render(p.query+cursor)
 	rows = append(rows, inputLine)
 	rows = append(rows, "")
 
 	if len(p.filtered) == 0 {
-		rows = append(rows, noMatchStyle.Render("No matching commands"))
+		rows = append(rows, overlay.NoMatch.Render("No matching commands"))
 	} else {
 		maxVisible := height/2 - 6
 		if maxVisible < 5 {
@@ -210,10 +189,7 @@ func renderCommandPalette(p *commandPalette, palette ui.Palette, width, height i
 
 	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
 
-	box := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(palette.BorderFocused)).
-		Padding(1, 2).
+	box := overlay.Box.
 		Width(boxWidth).
 		Render(content)
 

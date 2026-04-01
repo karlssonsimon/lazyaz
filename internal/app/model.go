@@ -29,8 +29,8 @@ type Model struct {
 	cfg    ui.Config
 	keymap tabKeyMap
 
-	palette      ui.Palette
-	themes       []ui.Theme
+	styles       ui.Styles
+	schemes      []ui.Scheme
 	themeOverlay ui.ThemeOverlayState
 	helpOverlay  ui.HelpOverlayState
 
@@ -50,13 +50,12 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		stores:  newSharedStores(),
 		cfg:     cfg,
 		keymap:  defaultTabKeyMap(),
-		themes:  cfg.Themes,
+		schemes: cfg.Schemes,
 		themeOverlay: ui.ThemeOverlayState{
-			ActiveThemeIdx: ui.ActiveThemeIndex(cfg),
+			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
 	}
-	theme := cfg.ActiveTheme()
-	m.palette = theme.Colors
+	m.styles = ui.NewStyles(cfg.ActiveScheme())
 
 	// Open a default blob tab.
 	m.addTab(TabBlob)
@@ -133,18 +132,18 @@ func (m *Model) tabIndexByID(id int) int {
 	return -1
 }
 
-func (m *Model) applyThemeToAll(theme ui.Theme) {
-	m.palette = theme.Colors
+func (m *Model) applySchemeToAll(scheme ui.Scheme) {
+	m.styles = ui.NewStyles(scheme)
 	for i := range m.tabs {
 		switch child := m.tabs[i].Model.(type) {
 		case blobapp.Model:
-			child.ApplyTheme(theme)
+			child.ApplyScheme(scheme)
 			m.tabs[i].Model = child
 		case sbapp.Model:
-			child.ApplyTheme(theme)
+			child.ApplyScheme(scheme)
 			m.tabs[i].Model = child
 		case kvapp.Model:
-			child.ApplyTheme(theme)
+			child.ApplyScheme(scheme)
 			m.tabs[i].Model = child
 		}
 	}
@@ -271,9 +270,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.themeOverlay.HandleKey(key, ui.ThemeKeyBindings{
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
 				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
-			}, m.themes) {
-				m.applyThemeToAll(m.themes[m.themeOverlay.ActiveThemeIdx])
-				ui.SaveThemeName(m.cfg.AppName, m.themes[m.themeOverlay.ActiveThemeIdx].Name)
+			}, m.schemes) {
+				m.applySchemeToAll(m.schemes[m.themeOverlay.ActiveThemeIdx])
+				ui.SaveThemeName(m.schemes[m.themeOverlay.ActiveThemeIdx].Name)
 			}
 			return m, nil
 		}

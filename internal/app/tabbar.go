@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func renderTabBar(tabs []Tab, activeIdx int, palette ui.Palette, width int) string {
+func renderTabBar(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, width int) string {
 	if len(tabs) == 0 {
 		return ""
 	}
@@ -23,19 +23,6 @@ func renderTabBar(tabs []Tab, activeIdx int, palette ui.Palette, width int) stri
 	// Assign per-kind sequence numbers.
 	kindSeq := map[TabKind]int{}
 
-	activeStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(palette.SelectedText)).
-		Background(lipgloss.Color(palette.SelectedBg)).
-		Padding(0, 1)
-
-	inactiveStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Text)).
-		Padding(0, 1)
-
-	sepStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Border))
-
 	var parts []string
 	for i, t := range tabs {
 		kindSeq[t.Kind]++
@@ -46,13 +33,13 @@ func renderTabBar(tabs []Tab, activeIdx int, palette ui.Palette, width int) stri
 		label = fmt.Sprintf(" %d:%s ", i+1, label)
 
 		if i == activeIdx {
-			parts = append(parts, activeStyle.Render(label))
+			parts = append(parts, tabStyles.Active.Render(label))
 		} else {
-			parts = append(parts, inactiveStyle.Render(label))
+			parts = append(parts, tabStyles.Inactive.Render(label))
 		}
 
 		if i < len(tabs)-1 {
-			parts = append(parts, sepStyle.Render("│"))
+			parts = append(parts, tabStyles.Sep.Render("│"))
 		}
 	}
 

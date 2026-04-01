@@ -191,9 +191,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.themeOverlay.HandleKey(key, ui.ThemeKeyBindings{
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
 				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
-			}, m.themes) {
-				m.applyTheme(m.themes[m.themeOverlay.ActiveThemeIdx])
-				ui.SaveThemeName(m.appName, m.themes[m.themeOverlay.ActiveThemeIdx].Name)
+			}, m.schemes) {
+				m.applyScheme(m.schemes[m.themeOverlay.ActiveThemeIdx])
+				ui.SaveThemeName(m.schemes[m.themeOverlay.ActiveThemeIdx].Name)
 			}
 			return m, nil
 		}

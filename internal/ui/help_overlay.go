@@ -24,7 +24,7 @@ type HelpSection struct {
 	Items []string
 }
 
-func RenderHelpOverlay(title string, sections []HelpSection, palette Palette, width, height int, base string) string {
+func RenderHelpOverlay(title string, sections []HelpSection, styles Styles, width, height int, base string) string {
 	boxWidth := width * 4 / 5
 	boxHeight := height * 4 / 5
 	if boxWidth < 48 {
@@ -49,28 +49,16 @@ func RenderHelpOverlay(title string, sections []HelpSection, palette Palette, wi
 		innerHeight = 1
 	}
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(palette.Accent))
+	o := styles.Overlay
+	bodyStyle := o.NormalFull.Width(innerWidth)
+	hintStyle := o.HintFull.Width(innerWidth)
 
-	sectionTitleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(palette.Accent))
-
-	bodyStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Text)).
-		Width(innerWidth)
-
-	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Muted)).
-		Width(innerWidth)
-
-	rows := []string{titleStyle.Render(title), ""}
+	rows := []string{o.Title.Render(title), ""}
 	for i, section := range sections {
 		if i > 0 {
 			rows = append(rows, "")
 		}
-		rows = append(rows, sectionTitleStyle.Render(section.Title))
+		rows = append(rows, o.SectionTitle.Render(section.Title))
 		for _, item := range section.Items {
 			rows = append(rows, bodyStyle.Render(item))
 		}
@@ -82,7 +70,7 @@ func RenderHelpOverlay(title string, sections []HelpSection, palette Palette, wi
 		Width(boxWidth).
 		Height(boxHeight).
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(palette.BorderFocused)).
+		BorderForeground(o.Box.GetBorderBottomForeground()).
 		Padding(1, 2).
 		Render(content)
 

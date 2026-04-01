@@ -41,12 +41,10 @@ type Model struct {
 	hasSecret       bool
 	currentSecret   keyvault.Secret
 
-	palette      ui.Palette
-	syntaxStyles ui.SyntaxStyles
-	keymap       KeyMap
+	styles ui.Styles
+	keymap KeyMap
 
-	appName      string
-	themes       []ui.Theme
+	schemes      []ui.Scheme
 	themeOverlay ui.ThemeOverlayState
 	helpOverlay  ui.HelpOverlayState
 
@@ -157,16 +155,15 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, keymap KeyMap) Mod
 		versionsList:      versionsList,
 		focus:             subscriptionsPane,
 		cache:             newCache(),
-		appName:           cfg.AppName,
-		themes:            cfg.Themes,
+		schemes:           cfg.Schemes,
 		themeOverlay: ui.ThemeOverlayState{
-			ActiveThemeIdx: ui.ActiveThemeIndex(cfg),
+			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
 		keymap:  keymap,
 		status:  "Loading Azure subscriptions...",
 		loading: true,
 	}
-	m.applyTheme(cfg.ActiveTheme())
+	m.applyScheme(cfg.ActiveScheme())
 	return m
 }
 
@@ -177,15 +174,16 @@ func NewModelWithCache(svc *keyvault.Service, cfg ui.Config, stores KVStores) Mo
 	return m
 }
 
-func (m *Model) applyTheme(theme ui.Theme) {
-	m.palette, m.syntaxStyles = ui.ApplyThemeToLists(theme, []*list.Model{
+func (m *Model) applyScheme(scheme ui.Scheme) {
+	m.styles = ui.NewStyles(scheme)
+	m.styles.ApplyToLists([]*list.Model{
 		&m.subscriptionsList, &m.vaultsList, &m.secretsList, &m.versionsList,
 	}, &m.spinner)
 }
 
-// ApplyTheme applies the given theme to all lists and spinner.
-func (m *Model) ApplyTheme(theme ui.Theme) {
-	m.applyTheme(theme)
+// ApplyScheme applies the given scheme to all lists and spinner.
+func (m *Model) ApplyScheme(scheme ui.Scheme) {
+	m.applyScheme(scheme)
 }
 
 // HelpSections returns the help sections for the key vault explorer.

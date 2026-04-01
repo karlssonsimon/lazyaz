@@ -21,7 +21,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg := ui.LoadConfig("aztui")
+	cfg := ui.LoadConfig()
 	model := app.NewModel(
 		blob.NewService(cred),
 		servicebus.NewService(cred),

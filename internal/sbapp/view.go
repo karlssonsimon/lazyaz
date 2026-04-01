@@ -13,7 +13,7 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	styles := ui.NewChromeStyles(m.palette)
+	styles := m.styles.Chrome
 
 	subscriptionName := "-"
 	namespaceName := "-"
@@ -37,11 +37,9 @@ func (m Model) View() string {
 	m.detailList.Title = m.detailPaneTitle()
 
 	if m.deadLetter && m.detailMode == detailMessages {
-		m.detailList.Styles.Title = m.detailList.Styles.Title.
-			Foreground(lipgloss.Color(m.palette.Danger))
+		m.detailList.Styles.Title = m.styles.DangerBold.Padding(0, 1)
 	} else {
-		m.detailList.Styles.Title = m.detailList.Styles.Title.
-			Foreground(lipgloss.Color(m.palette.Accent))
+		m.detailList.Styles.Title = m.styles.List.Title
 	}
 
 	subscriptionsView := m.subscriptionsList.View()
@@ -65,7 +63,7 @@ func (m Model) View() string {
 	}
 
 	if m.deadLetter && m.detailMode == detailMessages {
-		detailPaneStyle = styles.Pane.Copy().BorderForeground(lipgloss.Color(m.palette.Danger))
+		detailPaneStyle = styles.Pane.Copy().BorderForeground(m.styles.Danger.GetForeground())
 	} else if m.focus == detailPane && !m.viewingMessage {
 		detailPaneStyle = styles.FocusedPane.Copy()
 	}
@@ -81,10 +79,7 @@ func (m Model) View() string {
 	}
 
 	if m.viewingMessage {
-		previewTitleStyle := lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color(m.palette.Accent)).
-			Padding(0, 1)
+		previewTitleStyle := m.styles.Accent.Copy().Padding(0, 1)
 		msgID := ui.EmptyToDash(m.selectedMessage.MessageID)
 		previewTitle := previewTitleStyle.Render(fmt.Sprintf("Message: %s", msgID))
 		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, m.messageViewport.View())
@@ -123,10 +118,10 @@ func (m Model) View() string {
 	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	if !m.EmbeddedMode && m.themeOverlay.Active {
-		view = ui.RenderThemeOverlay(m.themeOverlay, m.themes, m.palette, m.width, m.height, view)
+		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
 	}
 	if !m.EmbeddedMode && m.helpOverlay.Active {
-		view = ui.RenderHelpOverlay("Azure Service Bus Explorer Help", m.keymap.HelpSections(), m.palette, m.width, m.height, view)
+		view = ui.RenderHelpOverlay("Azure Service Bus Explorer Help", m.keymap.HelpSections(), m.styles, m.width, m.height, view)
 	}
 
 	return view

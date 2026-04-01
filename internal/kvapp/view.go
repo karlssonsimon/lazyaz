@@ -13,7 +13,7 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	styles := ui.NewChromeStyles(m.palette)
+	styles := m.styles.Chrome
 
 	subscriptionName := "-"
 	vaultName := "-"
@@ -94,10 +94,10 @@ func (m Model) View() string {
 	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	if !m.EmbeddedMode && m.themeOverlay.Active {
-		view = ui.RenderThemeOverlay(m.themeOverlay, m.themes, m.palette, m.width, m.height, view)
+		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
 	}
 	if !m.EmbeddedMode && m.helpOverlay.Active {
-		view = ui.RenderHelpOverlay("Azure Key Vault Explorer Help", m.keymap.HelpSections(), m.palette, m.width, m.height, view)
+		view = ui.RenderHelpOverlay("Azure Key Vault Explorer Help", m.keymap.HelpSections(), m.styles, m.width, m.height, view)
 	}
 
 	return view

@@ -53,11 +53,9 @@ type Model struct {
 	preview         previewState
 	pendingPreviewG bool
 	keymap          KeyMap
-	palette         ui.Palette
-	syntaxStyles    ui.SyntaxStyles
+	styles          ui.Styles
 
-	appName      string
-	themes       []ui.Theme
+	schemes      []ui.Scheme
 	themeOverlay ui.ThemeOverlayState
 	helpOverlay  ui.HelpOverlayState
 
@@ -189,16 +187,15 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, keymap KeyMap) Model {
 		preview:           newPreviewState(),
 		cache:             newCache(),
 		keymap:            keymap,
-		appName:           cfg.AppName,
-		themes:            cfg.Themes,
+		schemes:           cfg.Schemes,
 		themeOverlay: ui.ThemeOverlayState{
-			ActiveThemeIdx: ui.ActiveThemeIndex(cfg),
+			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
 		focus:   subscriptionsPane,
 		status:  "Loading Azure subscriptions...",
 		loading: true,
 	}
-	m.applyTheme(cfg.ActiveTheme())
+	m.applyScheme(cfg.ActiveScheme())
 	return m
 }
 
@@ -210,15 +207,16 @@ func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores) Mode
 	return m
 }
 
-func (m *Model) applyTheme(theme ui.Theme) {
-	m.palette, m.syntaxStyles = ui.ApplyThemeToLists(theme, []*list.Model{
+func (m *Model) applyScheme(scheme ui.Scheme) {
+	m.styles = ui.NewStyles(scheme)
+	m.styles.ApplyToLists([]*list.Model{
 		&m.subscriptionsList, &m.accountsList, &m.containersList, &m.blobsList,
 	}, &m.spinner)
 }
 
-// ApplyTheme applies the given theme to all lists and spinner.
-func (m *Model) ApplyTheme(theme ui.Theme) {
-	m.applyTheme(theme)
+// ApplyScheme applies the given scheme to all lists and spinner.
+func (m *Model) ApplyScheme(scheme ui.Scheme) {
+	m.applyScheme(scheme)
 }
 
 // HelpSections returns the help sections for the blob explorer.

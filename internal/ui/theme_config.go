@@ -13,6 +13,7 @@ import (
 //go:embed themes/*.yaml
 var stockThemesFS embed.FS
 
+// ConfigDir returns the shared configuration directory.
 func ConfigDir() string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "aztools")
@@ -24,22 +25,24 @@ func ConfigDir() string {
 	return filepath.Join(home, ".config", "aztools")
 }
 
-func LoadConfig(appName string) Config {
+// LoadConfig loads the shared configuration and all available Base16 schemes.
+func LoadConfig() Config {
 	dir := ConfigDir()
 	if dir == "" {
-		return Config{AppName: appName, ThemeName: "default", Themes: []Theme{DefaultTheme()}}
+		fb := FallbackScheme()
+		return Config{ThemeName: fb.Name, Schemes: []Scheme{fb}}
 	}
-	return loadConfigFromDir(dir, appName)
+	return loadConfigFromDir(dir)
 }
 
-func loadConfigFromDir(dir, appName string) Config {
+func loadConfigFromDir(dir string) Config {
 	cfg := Config{
-		AppName:   appName,
-		ThemeName: "default",
+		ThemeName: "Default",
 	}
 
-	appFile := filepath.Join(dir, appName+".yaml")
-	data, err := os.ReadFile(appFile)
+	// Read shared config file.
+	cfgFile := filepath.Join(dir, "config.yaml")
+	data, err := os.ReadFile(cfgFile)
 	if err == nil {
 		var fileCfg struct {
 			ThemeName string `yaml:"theme"`
@@ -48,24 +51,32 @@ func loadConfigFromDir(dir, appName string) Config {
 			cfg.ThemeName = fileCfg.ThemeName
 		}
 	} else {
-		// Auto-create the config file so the user can discover and edit it.
-		saveThemeNameToDir(dir, appName, cfg.ThemeName)
+		// Migrate from old per-app config files if config.yaml doesn't exist.
+		if migrated := migrateOldConfig(dir); migrated != "" {
+			cfg.ThemeName = migrated
+		}
+		saveThemeNameToFile(cfgFile, cfg.ThemeName)
 	}
 
+	// Ensure stock themes are present.
 	themesDir := filepath.Join(dir, "themes")
 	ensureStockThemes(themesDir)
 
-	themes := loadUserThemes(themesDir)
-	def := DefaultTheme()
-	for i := range themes {
-		mergeStringFields(&def.SyntaxColorConfig, &themes[i].SyntaxColorConfig)
-		mergeStringFields(&def.Colors, &themes[i].Colors)
-	}
-	cfg.Themes = themes
+	// Load all Base16 scheme files.
+	cfg.Schemes = loadSchemes(themesDir)
 
-	if len(cfg.Themes) == 0 {
-		cfg.Themes = []Theme{DefaultTheme()}
+	// Merge missing fields against the fallback.
+	fb := FallbackScheme()
+	for i := range cfg.Schemes {
+		mergeSchemeDefaults(&fb, &cfg.Schemes[i])
 	}
+
+	if len(cfg.Schemes) == 0 {
+		cfg.Schemes = []Scheme{FallbackScheme()}
+	}
+
+	// Migrate old theme names to new Base16 scheme names.
+	cfg.ThemeName = migrateThemeName(cfg.ThemeName)
 
 	return cfg
 }
@@ -80,53 +91,52 @@ func ensureStockThemes(themesDir string) {
 	}
 	for _, e := range entries {
 		dest := filepath.Join(themesDir, e.Name())
-		if _, err := os.Stat(dest); err == nil {
-			continue
-		}
-		data, err := stockThemesFS.ReadFile("themes/" + e.Name())
+		stockData, err := stockThemesFS.ReadFile("themes/" + e.Name())
 		if err != nil {
 			continue
 		}
-		os.WriteFile(dest, data, 0o644)
+		// Always overwrite stock themes to pick up format changes.
+		// User-created themes (not matching a stock filename) are never touched.
+		os.WriteFile(dest, stockData, 0o644)
 	}
 }
 
-func loadUserThemes(themesDir string) []Theme {
+func loadSchemes(themesDir string) []Scheme {
 	entries, err := filepath.Glob(filepath.Join(themesDir, "*.yaml"))
 	if err != nil {
 		return nil
 	}
 
-	var themes []Theme
+	var schemes []Scheme
 	for _, path := range entries {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
-		var t Theme
-		if yaml.Unmarshal(data, &t) != nil {
+		var sf schemeFile
+		if yaml.Unmarshal(data, &sf) != nil {
 			continue
 		}
-		if t.Name == "" {
+		s := parseSchemeFile(sf)
+		if s.Name == "" {
 			stem := filepath.Base(path)
-			t.Name = strings.TrimSuffix(stem, filepath.Ext(stem))
+			s.Name = strings.TrimSuffix(stem, filepath.Ext(stem))
 		}
-		themes = append(themes, t)
+		schemes = append(schemes, s)
 	}
-	return themes
+	return schemes
 }
 
-func SaveThemeName(appName, name string) {
+// SaveThemeName persists the theme name to the shared config file.
+func SaveThemeName(name string) {
 	dir := ConfigDir()
 	if dir == "" {
 		return
 	}
-	saveThemeNameToDir(dir, appName, name)
+	saveThemeNameToFile(filepath.Join(dir, "config.yaml"), name)
 }
 
-func saveThemeNameToDir(dir, appName, name string) {
-	path := filepath.Join(dir, appName+".yaml")
-
+func saveThemeNameToFile(path, name string) {
 	cfg := make(map[string]any)
 	if data, err := os.ReadFile(path); err == nil {
 		if err := yaml.Unmarshal(data, &cfg); err != nil {
@@ -142,6 +152,39 @@ func saveThemeNameToDir(dir, appName, name string) {
 	if err != nil {
 		return
 	}
-	os.MkdirAll(dir, 0o755)
+	os.MkdirAll(filepath.Dir(path), 0o755)
 	os.WriteFile(path, data, 0o644)
+}
+
+// migrateThemeName maps old custom theme names to new Base16 scheme names.
+func migrateThemeName(name string) string {
+	migrations := map[string]string{
+		"default":     "Default",
+		"tokyonight":  "Tokyo Night",
+		"rosepine":    "Rosé Pine",
+		"bamboo":      "Bamboo",
+	}
+	if newName, ok := migrations[name]; ok {
+		return newName
+	}
+	return name
+}
+
+// migrateOldConfig checks for old per-app config files and returns
+// the theme name from the first one found.
+func migrateOldConfig(dir string) string {
+	for _, name := range []string{"aztui", "azblob", "azsb", "azkv"} {
+		path := filepath.Join(dir, name+".yaml")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var old struct {
+			ThemeName string `yaml:"theme"`
+		}
+		if yaml.Unmarshal(data, &old) == nil && old.ThemeName != "" {
+			return old.ThemeName
+		}
+	}
+	return ""
 }

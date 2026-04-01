@@ -19,7 +19,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg := ui.LoadConfig("azkv")
+	cfg := ui.LoadConfig()
 	program := tea.NewProgram(kvapp.NewModel(keyvault.NewService(cred), cfg), tea.WithAltScreen())
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "application error: %v\n", err)

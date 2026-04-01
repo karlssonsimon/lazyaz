@@ -18,10 +18,11 @@ func TestHelpOverlayToggle(t *testing.T) {
 }
 
 func TestRenderHelpOverlayIncludesContent(t *testing.T) {
+	styles := NewStyles(FallbackScheme())
 	view := RenderHelpOverlay(
 		"Help",
 		[]HelpSection{{Title: "General", Items: []string{"tab  next focus", "?    toggle help"}}},
-		DefaultTheme().Colors,
+		styles,
 		100,
 		40,
 		"base",

@@ -205,7 +205,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.selectedMessage = item.message
 			m.viewingMessage = true
 			m.resize()
-			m.messageViewport.SetContent(m.syntaxStyles.HighlightJSON(item.message.FullBody))
+			m.messageViewport.SetContent(m.styles.Syntax.HighlightJSON(item.message.FullBody))
 			m.messageViewport.GotoTop()
 			m.status = fmt.Sprintf("Viewing message %s (Esc/h to go back)", ui.EmptyToDash(item.message.MessageID))
 			return m, nil

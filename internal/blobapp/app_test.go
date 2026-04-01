@@ -10,8 +10,8 @@ import (
 )
 
 var testConfig = ui.Config{
-	ThemeName: "default",
-	Themes:    []ui.Theme{ui.DefaultTheme()},
+	ThemeName: "fallback",
+	Schemes:   []ui.Scheme{ui.FallbackScheme()},
 }
 
 func TestParentPrefix(t *testing.T) {

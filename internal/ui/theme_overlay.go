@@ -19,7 +19,7 @@ type ThemeOverlayState struct {
 	ActiveThemeIdx int
 	CursorIdx      int
 	Query          string
-	filtered       []int // indices into the themes slice
+	filtered       []int
 }
 
 func (s *ThemeOverlayState) Open() {
@@ -29,17 +29,17 @@ func (s *ThemeOverlayState) Open() {
 	s.CursorIdx = s.ActiveThemeIdx
 }
 
-func (s *ThemeOverlayState) refilter(themes []Theme) {
+func (s *ThemeOverlayState) refilter(schemes []Scheme) {
 	if s.Query == "" {
-		s.filtered = make([]int, len(themes))
-		for i := range themes {
+		s.filtered = make([]int, len(schemes))
+		for i := range schemes {
 			s.filtered[i] = i
 		}
 	} else {
 		q := strings.ToLower(s.Query)
 		s.filtered = s.filtered[:0]
-		for i, t := range themes {
-			if strings.Contains(strings.ToLower(t.Name), q) {
+		for i, sc := range schemes {
+			if strings.Contains(strings.ToLower(sc.Name), q) {
 				s.filtered = append(s.filtered, i)
 			}
 		}
@@ -56,15 +56,14 @@ func (s *ThemeOverlayState) selectedThemeIdx() (int, bool) {
 	return s.filtered[s.CursorIdx], true
 }
 
-func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, themes []Theme) (applied bool) {
-	if len(themes) == 0 {
+func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, schemes []Scheme) (applied bool) {
+	if len(schemes) == 0 {
 		s.Active = false
 		return false
 	}
 
-	// Ensure filtered list is initialized.
 	if s.filtered == nil {
-		s.refilter(themes)
+		s.refilter(schemes)
 	}
 
 	switch {
@@ -87,83 +86,54 @@ func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, the
 	case key == "backspace":
 		if len(s.Query) > 0 {
 			s.Query = s.Query[:len(s.Query)-1]
-			s.refilter(themes)
+			s.refilter(schemes)
 		}
 	default:
 		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 			s.Query += key
-			s.refilter(themes)
+			s.refilter(schemes)
 		}
 	}
 	return false
 }
 
-func RenderThemeOverlay(state ThemeOverlayState, themes []Theme, palette Palette, width, height int, base string) string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(palette.Accent))
-
-	promptStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.AccentStrong))
-
-	inputStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Text))
-
-	normalStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Text)).
-		Padding(0, 1)
-
-	cursorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.SelectedText)).
-		Background(lipgloss.Color(palette.SelectedBg)).
-		Bold(true).
-		Padding(0, 1)
-
-	noMatchStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(palette.Muted)).
-		Italic(true)
+func RenderThemeOverlay(state ThemeOverlayState, schemes []Scheme, styles Styles, width, height int, base string) string {
+	o := styles.Overlay
 
 	var rows []string
-	rows = append(rows, titleStyle.Render("Select Theme"))
+	rows = append(rows, o.Title.Render("Select Theme"))
 
-	inputLine := promptStyle.Render("> ") + inputStyle.Render(state.Query+"█")
+	inputLine := o.Prompt.Render("> ") + o.Input.Render(state.Query+"█")
 	rows = append(rows, inputLine)
 	rows = append(rows, "")
 
 	filtered := state.filtered
 	if filtered == nil {
-		// Fallback: show all themes unfiltered.
-		filtered = make([]int, len(themes))
-		for i := range themes {
+		filtered = make([]int, len(schemes))
+		for i := range schemes {
 			filtered[i] = i
 		}
 	}
 
 	if len(filtered) == 0 {
-		rows = append(rows, noMatchStyle.Render("No matching themes"))
+		rows = append(rows, o.NoMatch.Render("No matching themes"))
 	} else {
 		for ci, ti := range filtered {
 			marker := "  "
 			if ti == state.ActiveThemeIdx {
 				marker = "* "
 			}
-			label := marker + themes[ti].Name
+			label := marker + schemes[ti].Name
 			if ci == state.CursorIdx {
-				rows = append(rows, cursorStyle.Render(label))
+				rows = append(rows, o.Cursor.Render(label))
 			} else {
-				rows = append(rows, normalStyle.Render(label))
+				rows = append(rows, o.Normal.Render(label))
 			}
 		}
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(palette.BorderFocused)).
-		Padding(1, 2)
-
-	box := boxStyle.Render(content)
+	box := o.Box.Render(content)
 
 	return PlaceOverlay(width, height, box, base)
 }

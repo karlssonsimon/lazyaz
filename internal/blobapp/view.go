@@ -14,7 +14,7 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	styles := ui.NewChromeStyles(m.palette)
+	styles := m.styles.Chrome
 
 	subscriptionName := "-"
 	accountName := "-"
@@ -83,9 +83,9 @@ func (m Model) View() string {
 		blobsPaneStyle.Render(blobsView),
 	}
 	if m.preview.open {
-		previewTitle := m.preview.title(m.palette)
+		previewTitle := m.preview.title(m.styles)
 		previewPaneContent := lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.palette.Accent)).Render(previewTitle),
+			m.styles.Accent.Render(previewTitle),
 			previewView,
 		)
 		paneParts = append(paneParts, previewPaneStyle.Render(previewPaneContent))
@@ -127,10 +127,10 @@ func (m Model) View() string {
 	view := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	if !m.EmbeddedMode && m.themeOverlay.Active {
-		view = ui.RenderThemeOverlay(m.themeOverlay, m.themes, m.palette, m.width, m.height, view)
+		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
 	}
 	if !m.EmbeddedMode && m.helpOverlay.Active {
-		view = ui.RenderHelpOverlay("Azure Blob Explorer Help", m.keymap.HelpSections(), m.palette, m.width, m.height, view)
+		view = ui.RenderHelpOverlay("Azure Blob Explorer Help", m.keymap.HelpSections(), m.styles, m.width, m.height, view)
 	}
 
 	return view

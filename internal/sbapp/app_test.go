@@ -11,8 +11,8 @@ import (
 )
 
 var testConfig = ui.Config{
-	ThemeName: "default",
-	Themes:    []ui.Theme{ui.DefaultTheme()},
+	ThemeName: "fallback",
+	Schemes:   []ui.Scheme{{Name: "fallback", Base00: "1e293b", Base01: "4B5563", Base02: "334155", Base03: "94A3B8", Base04: "94A3B8", Base05: "E5E7EB", Base06: "F8FAFC", Base07: "F8FAFC", Base08: "F87171", Base09: "F59E0B", Base0A: "F59E0B", Base0B: "22C55E", Base0C: "38BDF8", Base0D: "60A5FA", Base0E: "C084FC", Base0F: "94A3B8"}},
 }
 
 func TestTrimToWidth(t *testing.T) {

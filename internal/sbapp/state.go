@@ -64,12 +64,10 @@ type Model struct {
 	markedMessages    map[string]struct{}
 	duplicateMessages map[string]struct{}
 
-	palette      ui.Palette
-	syntaxStyles ui.SyntaxStyles
-	keymap       KeyMap
+	styles ui.Styles
+	keymap KeyMap
 
-	appName      string
-	themes       []ui.Theme
+	schemes      []ui.Scheme
 	themeOverlay ui.ThemeOverlayState
 	helpOverlay  ui.HelpOverlayState
 
@@ -198,17 +196,16 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, keymap KeyMap) M
 		focus:             subscriptionsPane,
 		markedMessages:    make(map[string]struct{}),
 		duplicateMessages: make(map[string]struct{}),
-		cache:             newCache(),
-		appName:           cfg.AppName,
-		themes:            cfg.Themes,
+		cache:   newCache(),
+		schemes: cfg.Schemes,
 		themeOverlay: ui.ThemeOverlayState{
-			ActiveThemeIdx: ui.ActiveThemeIndex(cfg),
+			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
 		keymap:  keymap,
 		status:  "Loading Azure subscriptions...",
 		loading: true,
 	}
-	m.applyTheme(cfg.ActiveTheme())
+	m.applyScheme(cfg.ActiveScheme())
 	return m
 }
 
@@ -219,15 +216,16 @@ func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores SBStores) 
 	return m
 }
 
-func (m *Model) applyTheme(theme ui.Theme) {
-	m.palette, m.syntaxStyles = ui.ApplyThemeToLists(theme, []*list.Model{
+func (m *Model) applyScheme(scheme ui.Scheme) {
+	m.styles = ui.NewStyles(scheme)
+	m.styles.ApplyToLists([]*list.Model{
 		&m.subscriptionsList, &m.namespacesList, &m.entitiesList, &m.detailList,
 	}, &m.spinner)
 }
 
-// ApplyTheme applies the given theme to all lists and spinner.
-func (m *Model) ApplyTheme(theme ui.Theme) {
-	m.applyTheme(theme)
+// ApplyScheme applies the given scheme to all lists and spinner.
+func (m *Model) ApplyScheme(scheme ui.Scheme) {
+	m.applyScheme(scheme)
 }
 
 // HelpSections returns the help sections for the service bus explorer.
