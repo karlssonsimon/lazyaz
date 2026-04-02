@@ -1,12 +1,14 @@
 package keymap
 
 // Default returns the built-in keymap with all default bindings.
+// This is vim-style navigation. Users who prefer standard arrow-key
+// bindings can set keymap: standard in config.yaml.
 func Default() Keymap {
 	return Keymap{
 		// Shared.
 		Quit:                New("ctrl+c", "q"),
-		HalfPageDown:        New("ctrl+d"),
-		HalfPageUp:          New("ctrl+u"),
+		HalfPageDown:        New("ctrl+d", "pgdown"),
+		HalfPageUp:          New("ctrl+u", "pgup"),
 		NextFocus:           New("tab"),
 		PreviousFocus:       New("shift+tab"),
 		ReloadSubscriptions: New("d"),
@@ -18,7 +20,7 @@ func Default() Keymap {
 		BackspaceUp:         New("backspace"),
 		SubscriptionPicker:  New("S"),
 		ToggleThemePicker:   New("T"),
-		ToggleHelp:          New("?"),
+		ToggleHelp:          New("?", "f1"),
 
 		// Overlay navigation.
 		ThemeUp:     New("up", "ctrl+k"),
@@ -29,8 +31,8 @@ func Default() Keymap {
 		// Tabs.
 		NewTab:         New("ctrl+t"),
 		CloseTab:       New("ctrl+w"),
-		NextTab:        New("L"),
-		PrevTab:        New("H"),
+		NextTab:        New("L", "ctrl+right"),
+		PrevTab:        New("H", "ctrl+left"),
 		CommandPalette: New("ctrl+p"),
 		Jump1:          New("alt+1"),
 		Jump2:          New("alt+2"),
@@ -43,12 +45,12 @@ func Default() Keymap {
 		Jump9:          New("alt+9"),
 
 		// Blob.
-		ToggleLoadAll:    New("a", "A"),
-		ToggleMark:       New(" "),
-		ToggleVisualLine: New("v", "V"),
-		ExitVisualLine:   New("esc"),
+		ToggleLoadAll:     New("a", "A"),
+		ToggleMark:        New(" "),
+		ToggleVisualLine:  New("v", "V"),
+		ExitVisualLine:    New("esc"),
 		DownloadSelection: New("D"),
-		BlobVisualMove:   New("up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G"),
+		BlobVisualMove:    New("up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G"),
 
 		// Blob preview.
 		PreviewBack:          New("h", "left", "esc"),
@@ -56,8 +58,8 @@ func Default() Keymap {
 		PreviewPreviousFocus: New("shift+tab"),
 		PreviewDown:          New("j", "down"),
 		PreviewUp:            New("k", "up"),
-		PreviewBottom:        New("G"),
-		PreviewTopPrefix:     New("g"),
+		PreviewBottom:        New("G", "end"),
+		PreviewTopPrefix:     New("g", "home"),
 
 		// Service Bus.
 		ShowActiveQueue:     New("["),
