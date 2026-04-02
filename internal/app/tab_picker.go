@@ -1,8 +1,7 @@
 package app
 
 import (
-	"strings"
-
+	"azure-storage/internal/fuzzy"
 	"azure-storage/internal/ui"
 )
 
@@ -30,13 +29,12 @@ func (s *tabPickerState) open() {
 }
 
 func (s *tabPickerState) refilter() {
-	s.filtered = s.filtered[:0]
-	q := strings.ToLower(s.query)
-	for i, tk := range tabKinds {
-		if q == "" || strings.Contains(strings.ToLower(tk.name), q) {
-			s.filtered = append(s.filtered, i)
-		}
-	}
+	s.filtered = fuzzy.Filter(s.query, tabKinds, func(tk struct {
+		kind TabKind
+		name string
+	}) string {
+		return tk.name
+	})
 	if s.cursorIdx >= len(s.filtered) {
 		s.cursorIdx = max(0, len(s.filtered)-1)
 	}
