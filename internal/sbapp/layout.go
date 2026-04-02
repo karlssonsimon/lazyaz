@@ -11,7 +11,8 @@ func (m *Model) resize() {
 	pane := m.styles.Chrome.Pane
 	m.paneWidths = [4]int{widths[0], widths[1], widths[2], widths[3]}
 
-	height := m.height - 10
+	paneFrame := 2 // rounded border top + bottom
+	height := m.height - paneFrame - ui.StatusBarHeight
 	if height < 8 {
 		height = 8
 	}

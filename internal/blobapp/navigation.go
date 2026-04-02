@@ -57,7 +57,6 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case previewPane:
 		m.focus = blobsPane
-		m.status = "Focus: blobs"
 		return m, nil
 	case blobsPane:
 		if m.hasContainer && !m.blobLoadAll && m.prefix != "" {
@@ -81,15 +80,12 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 			m.refreshBlobItems()
 		}
 		m.focus = containersPane
-		m.status = "Focus: containers"
 		return m, nil
 	case containersPane:
 		m.focus = accountsPane
-		m.status = "Focus: storage accounts"
 		return m, nil
 	case accountsPane:
 		m.focus = subscriptionsPane
-		m.status = "Focus: subscriptions"
 		return m, nil
 	default:
 		return m, nil

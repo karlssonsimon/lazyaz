@@ -66,15 +66,15 @@ func TestHelpToggleOpensAndCloses(t *testing.T) {
 	}
 }
 
-func TestViewShowsCompactHelpHint(t *testing.T) {
+func TestViewShowsStatusBar(t *testing.T) {
 	m := NewModel(nil, testConfig)
 	m.width = 120
 	m.height = 40
 	m.resize()
 
 	view := m.View()
-	if !strings.Contains(view, "?: help") {
-		t.Fatal("expected compact help hint in footer")
+	if !strings.Contains(view, "Loading") {
+		t.Fatal("expected status bar to show loading message")
 	}
 }
 
