@@ -239,7 +239,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.helpOverlay.Active {
 					m.helpOverlay.Close()
 				} else {
-					m.helpOverlay.Open("Azure Key Vault Explorer Help", m.keymap.HelpSections())
+					m.helpOverlay.Open("Azure Key Vault Explorer Help", m.HelpSections())
 				}
 				return m, nil
 			}

@@ -2,6 +2,7 @@ package app
 
 import (
 	"azure-storage/internal/blobapp"
+	"azure-storage/internal/keymap"
 	"azure-storage/internal/kvapp"
 	"azure-storage/internal/sbapp"
 	"azure-storage/internal/ui"
@@ -51,6 +52,21 @@ func (m Model) activeHelpSections() []ui.HelpSection {
 			childSections = child.HelpSections()
 		}
 	}
-	return m.keymap.helpSections(childSections)
+	km := m.keymap
+	tabSection := ui.HelpSection{
+		Title: "Tabs",
+		Items: []string{
+			keymap.HelpEntry(km.CommandPalette, "command palette"),
+			keymap.HelpEntry(km.NewTab, "new tab"),
+			keymap.HelpEntry(km.CloseTab, "close tab"),
+			keymap.HelpEntry(km.PrevTab, "prev tab"),
+			keymap.HelpEntry(km.NextTab, "next tab"),
+			"alt+1..9  jump to tab",
+			keymap.HelpEntry(km.ToggleThemePicker, "theme picker"),
+			keymap.HelpEntry(km.ToggleHelp, "help"),
+			keymap.HelpEntry(km.Quit, "quit"),
+		},
+	}
+	return append([]ui.HelpSection{tabSection}, childSections...)
 }
 

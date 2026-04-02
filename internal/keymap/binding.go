@@ -1,0 +1,46 @@
+// Package keymap provides a unified, JSON-configurable keybinding system.
+// Stock keymaps are embedded; users can override by placing custom JSON
+// files in the config directory.
+package keymap
+
+import (
+	"slices"
+	"strings"
+)
+
+// Binding represents one or more key aliases for an action.
+type Binding struct {
+	Keys []string
+}
+
+// New creates a Binding from one or more key strings.
+func New(keys ...string) Binding {
+	return Binding{Keys: keys}
+}
+
+// Matches returns true if key matches any of the binding's keys.
+func (b Binding) Matches(key string) bool {
+	return slices.Contains(b.Keys, key)
+}
+
+// Label returns a human-readable representation of the binding
+// (e.g. "ctrl+c/q"). The space key is displayed as "space".
+func (b Binding) Label() string {
+	if len(b.Keys) == 0 {
+		return ""
+	}
+	labels := make([]string, 0, len(b.Keys))
+	for _, key := range b.Keys {
+		if key == " " {
+			labels = append(labels, "space")
+			continue
+		}
+		labels = append(labels, key)
+	}
+	return strings.Join(labels, "/")
+}
+
+// HelpEntry formats a binding and description as a help line.
+func HelpEntry(b Binding, description string) string {
+	return b.Label() + "  " + description
+}

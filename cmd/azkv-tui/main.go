@@ -7,6 +7,7 @@ import (
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/cache"
+	"azure-storage/internal/keymap"
 	"azure-storage/internal/kvapp"
 	"azure-storage/internal/ui"
 
@@ -26,7 +27,8 @@ func main() {
 	}
 
 	cfg := ui.LoadConfig()
-	program := tea.NewProgram(kvapp.NewModel(keyvault.NewService(cred), cfg, db), tea.WithAltScreen())
+	km := keymap.Load(ui.ConfigDir())
+	program := tea.NewProgram(kvapp.NewModelWithKeyMap(keyvault.NewService(cred), cfg, km, db), tea.WithAltScreen())
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "application error: %v\n", err)
 		os.Exit(1)
