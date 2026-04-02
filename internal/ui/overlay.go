@@ -19,18 +19,35 @@ type OverlayItem struct {
 	IsActive bool   // shows a marker (e.g. * for current theme)
 }
 
-// RenderOverlayList renders a fixed-size overlay with a title bar, search
-// input, and a scrollable item list. Both the command palette and theme
-// picker use this to maintain a consistent look.
-func RenderOverlayList(title string, query string, items []OverlayItem, cursor int, styles OverlayStyles, termWidth, termHeight int, base string) string {
-	innerW := overlayInnerWidth
-	boxW := overlayBoxWidth
+// OverlayListConfig configures the dimensions and placement of an overlay list.
+type OverlayListConfig struct {
+	Title      string
+	Query      string
+	InnerWidth int  // content width; 0 = default (60)
+	MaxVisible int  // max visible items; 0 = default (20)
+	Center     bool // center vertically instead of 1/5 from top
+}
+
+// RenderOverlayList renders a configurable overlay with a title bar, search
+// input, and a scrollable item list. The command palette, theme picker, and
+// help overlay use this to maintain a consistent look.
+func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, styles OverlayStyles, termWidth, termHeight int, base string) string {
+	innerW := cfg.InnerWidth
+	if innerW <= 0 {
+		innerW = overlayInnerWidth
+	}
+	boxW := innerW + 6
 	if boxW > termWidth-4 {
 		boxW = termWidth - 4
 		innerW = boxW - 6
 	}
 	if innerW < 20 {
 		innerW = 20
+	}
+
+	maxVis := cfg.MaxVisible
+	if maxVis <= 0 {
+		maxVis = overlayMaxVisible
 	}
 
 	// The Normal/Cursor styles include Padding(0,1) = 2 chars horizontal.
@@ -43,7 +60,7 @@ func RenderOverlayList(title string, query string, items []OverlayItem, cursor i
 	var rows []string
 
 	// Header: title left, "esc" right.
-	titleText := styles.Title.Render(title)
+	titleText := styles.Title.Render(cfg.Title)
 	escText := styles.Hint.Render("esc")
 	titleW := lipgloss.Width(titleText)
 	escW := lipgloss.Width(escText)
@@ -54,22 +71,25 @@ func RenderOverlayList(title string, query string, items []OverlayItem, cursor i
 	rows = append(rows, titleText+strings.Repeat(" ", gap)+escText)
 
 	// Search input.
-	if query == "" {
+	if cfg.Query == "" {
 		rows = append(rows, styles.NoMatch.Render("█"))
 	} else {
-		rows = append(rows, styles.Input.Render(query+"█"))
+		rows = append(rows, styles.Input.Render(cfg.Query+"█"))
 	}
 	rows = append(rows, "")
+
+	// Pre-render a single empty row for padding (avoids repeated lipgloss work).
+	emptyRow := normalStyle.Render("")
 
 	// Scrollable item list.
 	if len(items) == 0 {
 		rows = append(rows, styles.NoMatch.Render("No matches"))
 		// Pad remaining rows.
-		for i := 1; i < overlayMaxVisible; i++ {
-			rows = append(rows, normalStyle.Render(""))
+		for i := 1; i < maxVis; i++ {
+			rows = append(rows, emptyRow)
 		}
 	} else {
-		visible := min(overlayMaxVisible, len(items))
+		visible := min(maxVis, len(items))
 
 		// Scroll window around cursor.
 		start := 0
@@ -115,14 +135,17 @@ func RenderOverlayList(title string, query string, items []OverlayItem, cursor i
 		}
 
 		// Pad to constant height.
-		for i := visible; i < overlayMaxVisible; i++ {
-			rows = append(rows, normalStyle.Render(""))
+		for i := visible; i < maxVis; i++ {
+			rows = append(rows, emptyRow)
 		}
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
 	box := styles.Box.Width(boxW).Render(content)
 
+	if cfg.Center {
+		return PlaceOverlay(termWidth, termHeight, box, base)
+	}
 	return placeOverlayTop(termWidth, termHeight, box, base)
 }
 

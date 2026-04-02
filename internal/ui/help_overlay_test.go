@@ -5,13 +5,15 @@ import (
 	"testing"
 )
 
-func TestHelpOverlayToggle(t *testing.T) {
+func TestHelpOverlayOpenClose(t *testing.T) {
 	state := HelpOverlayState{}
-	state.Toggle()
+	sections := []HelpSection{{Title: "Test", Items: []string{"key  desc"}}}
+
+	state.Open("Help", sections)
 	if !state.Active {
 		t.Fatal("expected help overlay to open")
 	}
-	state.Toggle()
+	state.Close()
 	if state.Active {
 		t.Fatal("expected help overlay to close")
 	}
@@ -19,18 +21,68 @@ func TestHelpOverlayToggle(t *testing.T) {
 
 func TestRenderHelpOverlayIncludesContent(t *testing.T) {
 	styles := NewStyles(FallbackScheme())
-	view := RenderHelpOverlay(
-		"Help",
-		[]HelpSection{{Title: "General", Items: []string{"tab  next focus", "?    toggle help"}}},
-		styles,
-		100,
-		40,
-		"base",
-	)
+	state := HelpOverlayState{}
+	state.Open("Help", []HelpSection{{Title: "General", Items: []string{"tab  next focus", "?  toggle help"}}})
 
-	for _, want := range []string{"Help", "General", "toggle help", "?: close | esc close"} {
+	view := RenderHelpOverlay(state, styles, 100, 40, "base")
+
+	for _, want := range []string{"Help", "General", "toggle help", "esc"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected rendered overlay to contain %q", want)
 		}
 	}
 }
+
+func TestHelpOverlaySearch(t *testing.T) {
+	state := HelpOverlayState{}
+	state.Open("Help", []HelpSection{
+		{Title: "Navigation", Items: []string{"tab  next focus", "/  filter pane"}},
+		{Title: "Actions", Items: []string{"d  download", "r  refresh"}},
+	})
+
+	// Type "down" to filter.
+	bindings := HelpKeyBindings{Up: noopMatcher{}, Down: noopMatcher{}, Close: noopMatcher{}}
+	state.HandleKey("d", bindings)
+	state.HandleKey("o", bindings)
+	state.HandleKey("w", bindings)
+	state.HandleKey("n", bindings)
+
+	if len(state.filtered) != 1 {
+		t.Fatalf("expected 1 filtered item, got %d", len(state.filtered))
+	}
+	if state.items[state.filtered[0]].desc != "download" {
+		t.Fatalf("expected filtered item to be download, got %q", state.items[state.filtered[0]].desc)
+	}
+
+	// Backspace to remove filter.
+	state.HandleKey("backspace", bindings)
+	state.HandleKey("backspace", bindings)
+	state.HandleKey("backspace", bindings)
+	state.HandleKey("backspace", bindings)
+	if len(state.filtered) != 4 {
+		t.Fatalf("expected 4 items after clearing filter, got %d", len(state.filtered))
+	}
+}
+
+func TestHelpOverlaySearchBySection(t *testing.T) {
+	state := HelpOverlayState{}
+	state.Open("Help", []HelpSection{
+		{Title: "Navigation", Items: []string{"tab  next focus", "/  filter pane"}},
+		{Title: "Actions", Items: []string{"d  download", "r  refresh"}},
+	})
+
+	bindings := HelpKeyBindings{Up: noopMatcher{}, Down: noopMatcher{}, Close: noopMatcher{}}
+	// Type "actions" to filter by section name.
+	for _, ch := range "actions" {
+		state.HandleKey(string(ch), bindings)
+	}
+
+	if len(state.filtered) != 2 {
+		t.Fatalf("expected 2 filtered items for section 'Actions', got %d", len(state.filtered))
+	}
+}
+
+// noopMatcher is a KeyMatcher that never matches (for tests).
+type noopMatcher struct{}
+
+func (noopMatcher) Matches(string) bool { return false }

@@ -149,13 +149,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		key := msg.String()
 		if !m.EmbeddedMode && m.helpOverlay.Active {
-			switch {
-			case m.keymap.ToggleHelp.Matches(key), key == "esc":
-				m.helpOverlay.Close()
-				return m, nil
-			default:
-				return m, nil
-			}
+			m.helpOverlay.HandleKey(key, ui.HelpKeyBindings{
+				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
+				Close: m.keymap.ToggleHelp,
+			})
+			return m, nil
 		}
 		if !m.EmbeddedMode && m.themeOverlay.Active {
 			if m.themeOverlay.HandleKey(key, ui.ThemeKeyBindings{
@@ -226,7 +224,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case !m.EmbeddedMode && m.keymap.ToggleHelp.Matches(key):
 			if !focusedFilterActive && !m.themeOverlay.Active {
-				m.helpOverlay.Toggle()
+				if m.helpOverlay.Active {
+					m.helpOverlay.Close()
+				} else {
+					m.helpOverlay.Open("Azure Key Vault Explorer Help", m.keymap.HelpSections())
+				}
 				return m, nil
 			}
 		case m.keymap.BackspaceUp.Matches(key):

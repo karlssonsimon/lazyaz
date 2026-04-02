@@ -2,22 +2,6 @@ package ui
 
 import "strings"
 
-func DetectLanguage(blobName, contentType string) string {
-	lowerName := strings.ToLower(blobName)
-	lowerType := strings.ToLower(contentType)
-
-	switch {
-	case strings.HasSuffix(lowerName, ".json") || strings.Contains(lowerType, "json"):
-		return "json"
-	case strings.HasSuffix(lowerName, ".xml") || strings.Contains(lowerType, "xml"):
-		return "xml"
-	case strings.HasSuffix(lowerName, ".csv") || strings.Contains(lowerType, "csv"):
-		return "csv"
-	default:
-		return "text"
-	}
-}
-
 func IsProbablyBinary(data []byte) bool {
 	if len(data) == 0 {
 		return false
