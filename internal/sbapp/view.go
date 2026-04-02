@@ -78,7 +78,7 @@ func (m Model) View() string {
 		previewTitle := previewTitleStyle.Render(fmt.Sprintf("Message: %s", msgID))
 		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, m.messageViewport.View())
 
-		previewPaneStyle := styles.FocusedPane.Copy()
+		previewPaneStyle := styles.FocusedPane.Copy().Width(pw[4])
 		panesList = append(panesList, previewPaneStyle.Render(previewContent))
 	}
 
