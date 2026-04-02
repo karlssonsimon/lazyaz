@@ -3,8 +3,9 @@ package kvapp
 import (
 	"fmt"
 
-	"azure-storage/internal/cache"
 	"azure-storage/internal/azure/keyvault"
+	"azure-storage/internal/cache"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -55,9 +56,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		if cached, ok := m.cache.vaults.Get(item.subscription.ID); ok {
 			m.vaults = cached
 			m.vaultsList.ResetFilter()
-			m.vaultsList.SetItems(vaultsToItems(cached))
+			ui.SetItemsPreserveIndex(&m.vaultsList, vaultsToItems(cached))
 			m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(cached))
-			m.vaultsList.Select(0)
 		} else {
 			m.vaults = nil
 			m.vaultsList.ResetFilter()
@@ -94,9 +94,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		if cached, ok := m.cache.secrets.Get(cache.Key(m.currentSub.ID, item.vault.Name)); ok {
 			m.secrets = cached
 			m.secretsList.ResetFilter()
-			m.secretsList.SetItems(secretsToItems(cached))
+			ui.SetItemsPreserveIndex(&m.secretsList, secretsToItems(cached))
 			m.secretsList.Title = fmt.Sprintf("Secrets (%d)", len(cached))
-			m.secretsList.Select(0)
 		} else {
 			m.secrets = nil
 			m.secretsList.ResetFilter()
@@ -128,9 +127,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		if cached, ok := m.cache.versions.Get(versionKey); ok {
 			m.versions = cached
 			m.versionsList.ResetFilter()
-			m.versionsList.SetItems(versionsToItems(cached))
+			ui.SetItemsPreserveIndex(&m.versionsList, versionsToItems(cached))
 			m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(cached))
-			m.versionsList.Select(0)
 		} else {
 			m.versions = nil
 			m.versionsList.ResetFilter()
