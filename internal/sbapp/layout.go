@@ -7,9 +7,17 @@ func (m *Model) resize() {
 		return
 	}
 
-	widths := ui.PaneLayout(m.styles.Chrome.Pane, m.width, 4)
 	pane := m.styles.Chrome.Pane
-	m.paneWidths = [4]int{widths[0], widths[1], widths[2], widths[3]}
+	numPanes := 4
+	if m.viewingMessage {
+		numPanes = 5
+	}
+	widths := ui.PaneLayout(pane, m.width, numPanes)
+
+	m.paneWidths = [5]int{widths[0], widths[1], widths[2], widths[3], 0}
+	if m.viewingMessage {
+		m.paneWidths[4] = widths[4]
+	}
 
 	paneFrame := 2 // rounded border top + bottom
 	height := m.height - paneFrame - ui.StatusBarHeight
@@ -18,21 +26,12 @@ func (m *Model) resize() {
 	}
 	m.paneHeight = height
 
-	detContent := ui.PaneContentWidth(pane, widths[3])
 	if m.viewingMessage {
-		detHalf := detContent / 3
-		if detHalf < 30 {
-			detHalf = 30
-		}
-		previewW := detContent - detHalf - 3
-		if previewW < 30 {
-			previewW = 30
-		}
-		m.detailList.SetSize(detHalf, height)
-		m.messageViewport.Width = previewW
+		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[3]), height)
+		m.messageViewport.Width = ui.PaneContentWidth(pane, widths[4])
 		m.messageViewport.Height = height - 2
 	} else {
-		m.detailList.SetSize(detContent, height)
+		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[3]), height)
 		m.messageViewport.Width = 0
 		m.messageViewport.Height = 0
 	}

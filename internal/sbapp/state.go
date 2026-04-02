@@ -83,8 +83,8 @@ type Model struct {
 
 	width      int
 	height     int
-	paneWidths [4]int // sub, ns, ent, det — set by resize
-	paneHeight int
+	paneWidths    [5]int // sub, ns, ent, det, preview — set by resize
+	paneHeight    int
 }
 
 type subscriptionsLoadedMsg struct {
