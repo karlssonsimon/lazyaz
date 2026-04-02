@@ -9,6 +9,7 @@ import (
 	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/blobapp"
 	"azure-storage/internal/cache"
+	"azure-storage/internal/keymap"
 	"azure-storage/internal/kvapp"
 	"azure-storage/internal/sbapp"
 	"azure-storage/internal/ui"
@@ -29,7 +30,7 @@ type Model struct {
 
 	stores sharedStores
 	cfg    ui.Config
-	keymap tabKeyMap
+	keymap keymap.Keymap
 
 	styles       ui.Styles
 	schemes      []ui.Scheme
@@ -45,14 +46,14 @@ type Model struct {
 
 // NewModel creates the parent tabbed model.
 // If db is non-nil, a persistent SQLite cache is used; otherwise in-memory.
-func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.Service, cfg ui.Config, db *cache.DB) Model {
+func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.Service, cfg ui.Config, db *cache.DB, km keymap.Keymap) Model {
 	m := Model{
 		blobSvc: blobSvc,
 		sbSvc:   sbSvc,
 		kvSvc:   kvSvc,
 		stores:  newSharedStores(db),
 		cfg:     cfg,
-		keymap:  defaultTabKeyMap(),
+		keymap:  km,
 		schemes: cfg.Schemes,
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
@@ -80,7 +81,7 @@ func (m *Model) addTab(kind TabKind) {
 			Accounts:      m.stores.blobAccounts,
 			Containers:    m.stores.blobContainers,
 			Blobs:         m.stores.blobs,
-		})
+		}, m.keymap)
 		bm.EmbeddedMode = true
 		if hasSub {
 			bm.SetSubscription(sub)
@@ -92,24 +93,24 @@ func (m *Model) addTab(kind TabKind) {
 			Namespaces:    m.stores.sbNamespaces,
 			Entities:      m.stores.sbEntities,
 			TopicSubs:     m.stores.sbTopicSubs,
-		})
+		}, m.keymap)
 		sm.EmbeddedMode = true
 		if hasSub {
 			sm.SetSubscription(sub)
 		}
 		child = sm
 	case TabKeyVault:
-		km := kvapp.NewModelWithCache(m.kvSvc, m.cfg, kvapp.KVStores{
+		kvm := kvapp.NewModelWithCache(m.kvSvc, m.cfg, kvapp.KVStores{
 			Subscriptions: m.stores.subscriptions,
 			Vaults:        m.stores.kvVaults,
 			Secrets:       m.stores.kvSecrets,
 			Versions:      m.stores.kvVersions,
-		})
-		km.EmbeddedMode = true
+		}, m.keymap)
+		kvm.EmbeddedMode = true
 		if hasSub {
-			km.SetSubscription(sub)
+			kvm.SetSubscription(sub)
 		}
-		child = km
+		child = kvm
 	}
 
 	m.tabs = append(m.tabs, Tab{ID: id, Kind: kind, Model: child})
@@ -347,7 +348,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.resizeAndTickActive()
 			}
 			return m, nil
-		case m.keymap.ThemePick.Matches(key):
+		case m.keymap.ToggleThemePicker.Matches(key):
 			m.themeOverlay.Open()
 			return m, nil
 		case m.keymap.ToggleHelp.Matches(key):
@@ -355,7 +356,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if idx, ok := m.keymap.jumpIndex(key); ok {
+		if idx, ok := m.keymap.JumpIndex(key); ok {
 			if idx < len(m.tabs) {
 				m.activeIdx = idx
 				return m, m.resizeAndTickActive()

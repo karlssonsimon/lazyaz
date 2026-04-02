@@ -387,7 +387,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.helpOverlay.Active {
 					m.helpOverlay.Close()
 				} else {
-					m.helpOverlay.Open("Azure Service Bus Explorer Help", m.keymap.HelpSections())
+					m.helpOverlay.Open("Azure Service Bus Explorer Help", m.HelpSections())
 				}
 				return m, nil
 			}

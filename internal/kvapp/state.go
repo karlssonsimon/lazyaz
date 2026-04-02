@@ -4,6 +4,7 @@ import (
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/cache"
+	"azure-storage/internal/keymap"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -41,7 +42,7 @@ type Model struct {
 	currentSecret   keyvault.Secret
 
 	styles ui.Styles
-	keymap KeyMap
+	keymap keymap.Keymap
 
 	schemes      []ui.Scheme
 	themeOverlay ui.ThemeOverlayState
@@ -103,10 +104,10 @@ type secretValueYankedMsg struct {
 }
 
 func NewModel(svc *keyvault.Service, cfg ui.Config, db *cache.DB) Model {
-	return NewModelWithKeyMap(svc, cfg, DefaultKeyMap(), db)
+	return NewModelWithKeyMap(svc, cfg, keymap.Default(), db)
 }
 
-func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, keymap KeyMap, db *cache.DB) Model {
+func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, db *cache.DB) Model {
 	delegate := list.NewDefaultDelegate()
 
 	vaults := list.New([]list.Item{}, delegate, 24, 10)
@@ -151,7 +152,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, keymap KeyMap, db 
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
-		keymap:  keymap,
+		keymap:  km,
 		status:  "Loading Azure subscriptions...",
 		loading: true,
 	}
@@ -160,8 +161,8 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, keymap KeyMap, db 
 }
 
 // NewModelWithCache creates a Model using pre-built shared cache stores.
-func NewModelWithCache(svc *keyvault.Service, cfg ui.Config, stores KVStores) Model {
-	m := NewModel(svc, cfg, nil)
+func NewModelWithCache(svc *keyvault.Service, cfg ui.Config, stores KVStores, km keymap.Keymap) Model {
+	m := NewModelWithKeyMap(svc, cfg, km, nil)
 	m.cache = NewCacheWithStores(stores)
 	return m
 }
@@ -180,7 +181,38 @@ func (m *Model) ApplyScheme(scheme ui.Scheme) {
 
 // HelpSections returns the help sections for the key vault explorer.
 func (m Model) HelpSections() []ui.HelpSection {
-	return m.keymap.HelpSections()
+	km := m.keymap
+	return []ui.HelpSection{
+		{
+			Title: "Navigation",
+			Items: []string{
+				keymap.HelpEntry(km.NextFocus, "next focus"),
+				keymap.HelpEntry(km.PreviousFocus, "previous focus"),
+				keymap.HelpEntry(km.FilterInput, "filter focused pane"),
+				keymap.HelpEntry(keymap.New(km.OpenFocused.Label()+"/"+km.OpenFocusedAlt.Label()), "open selected item"),
+				keymap.HelpEntry(km.NavigateLeft, "go back"),
+				keymap.HelpEntry(km.BackspaceUp, "backspace navigation"),
+				keymap.HelpEntry(keymap.New(km.HalfPageDown.Label()+"/"+km.HalfPageUp.Label()), "half-page scroll"),
+			},
+		},
+		{
+			Title: "Secrets",
+			Items: []string{
+				keymap.HelpEntry(km.YankSecret, "yank secret value to clipboard"),
+			},
+		},
+		{
+			Title: "App",
+			Items: []string{
+				keymap.HelpEntry(km.SubscriptionPicker, "change subscription"),
+				keymap.HelpEntry(km.ToggleThemePicker, "open theme picker"),
+				keymap.HelpEntry(km.RefreshScope, "refresh current scope"),
+				keymap.HelpEntry(km.ReloadSubscriptions, "reload subscriptions"),
+				keymap.HelpEntry(km.ToggleHelp, "toggle help"),
+				keymap.HelpEntry(km.Quit, "quit"),
+			},
+		},
+	}
 }
 
 // CurrentSubscription returns the active subscription and whether one is set.

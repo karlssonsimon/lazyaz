@@ -10,6 +10,7 @@ import (
 	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/cache"
+	"azure-storage/internal/keymap"
 	"azure-storage/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -28,12 +29,14 @@ func main() {
 	}
 
 	cfg := ui.LoadConfig()
+	km := keymap.Load(ui.ConfigDir())
 	model := app.NewModel(
 		blob.NewService(cred),
 		servicebus.NewService(cred),
 		keyvault.NewService(cred),
 		cfg,
 		db,
+		km,
 	)
 
 	program := tea.NewProgram(model, tea.WithAltScreen())

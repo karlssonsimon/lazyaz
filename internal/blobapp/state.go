@@ -4,6 +4,7 @@ import (
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/cache"
+	"azure-storage/internal/keymap"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -51,7 +52,7 @@ type Model struct {
 	blobSearchQuery string
 	preview         previewState
 	pendingPreviewG bool
-	keymap          KeyMap
+	keymap          keymap.Keymap
 	styles          ui.Styles
 
 	schemes      []ui.Scheme
@@ -133,10 +134,10 @@ type previewWindowLoadedMsg struct {
 }
 
 func NewModel(svc *blob.Service, cfg ui.Config, db *cache.DB) Model {
-	return NewModelWithKeyMap(svc, cfg, DefaultKeyMap(), db)
+	return NewModelWithKeyMap(svc, cfg, keymap.Default(), db)
 }
 
-func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, keymap KeyMap, db *cache.DB) Model {
+func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *cache.DB) Model {
 	delegate := list.NewDefaultDelegate()
 
 	accounts := list.New([]list.Item{}, delegate, 24, 10)
@@ -178,7 +179,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, keymap KeyMap, db *cac
 		markedBlobs:    make(map[string]blob.BlobEntry),
 		preview:        newPreviewState(),
 		cache:          newCache(db),
-		keymap:         keymap,
+		keymap:         km,
 		schemes:        cfg.Schemes,
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
@@ -193,8 +194,8 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, keymap KeyMap, db *cac
 
 // NewModelWithCache creates a Model using pre-built shared cache stores.
 // Used by the tabapp to share cache data across tabs.
-func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores) Model {
-	m := NewModel(svc, cfg, nil)
+func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores, km keymap.Keymap) Model {
+	m := NewModelWithKeyMap(svc, cfg, km, nil)
 	m.cache = NewCacheWithStores(stores)
 	return m
 }
@@ -213,7 +214,54 @@ func (m *Model) ApplyScheme(scheme ui.Scheme) {
 
 // HelpSections returns the help sections for the blob explorer.
 func (m Model) HelpSections() []ui.HelpSection {
-	return m.keymap.HelpSections()
+	km := m.keymap
+	return []ui.HelpSection{
+		{
+			Title: "Navigation",
+			Items: []string{
+				keymap.HelpEntry(km.NextFocus, "next focus"),
+				keymap.HelpEntry(km.PreviousFocus, "previous focus"),
+				keymap.HelpEntry(km.FilterInput, "filter focused pane"),
+				keymap.HelpEntry(keymap.New(km.OpenFocused.Label()+"/"+km.OpenFocusedAlt.Label()), "open and move right"),
+				keymap.HelpEntry(km.NavigateLeft, "go left/back"),
+				keymap.HelpEntry(km.BackspaceUp, "up one folder"),
+				keymap.HelpEntry(keymap.New(km.HalfPageDown.Label()+"/"+km.HalfPageUp.Label()), "half-page scroll"),
+			},
+		},
+		{
+			Title: "Blob Actions",
+			Items: []string{
+				keymap.HelpEntry(km.ToggleLoadAll, "toggle load-all blobs"),
+				keymap.HelpEntry(km.ToggleMark, "toggle mark on current blob"),
+				keymap.HelpEntry(km.ToggleVisualLine, "start/end visual-line selection"),
+				keymap.HelpEntry(km.ExitVisualLine, "exit visual mode"),
+				keymap.HelpEntry(km.DownloadSelection, "download marked/visual selection"),
+			},
+		},
+		{
+			Title: "Preview",
+			Items: []string{
+				keymap.HelpEntry(km.PreviewNextFocus, "next preview focus"),
+				keymap.HelpEntry(km.PreviewPreviousFocus, "previous preview focus"),
+				keymap.HelpEntry(keymap.New(km.PreviewDown.Label()+"/"+km.PreviewUp.Label()), "scroll preview"),
+				keymap.HelpEntry(keymap.New(km.HalfPageDown.Label()+"/"+km.HalfPageUp.Label()), "half-page preview scroll"),
+				keymap.HelpEntry(km.PreviewTopPrefix, "go to top with gg"),
+				keymap.HelpEntry(km.PreviewBottom, "go to bottom"),
+				keymap.HelpEntry(km.PreviewBack, "close preview / go back"),
+			},
+		},
+		{
+			Title: "App",
+			Items: []string{
+				keymap.HelpEntry(km.SubscriptionPicker, "change subscription"),
+				keymap.HelpEntry(km.ToggleThemePicker, "open theme picker"),
+				keymap.HelpEntry(km.RefreshScope, "refresh current scope"),
+				keymap.HelpEntry(km.ReloadSubscriptions, "reload subscriptions"),
+				keymap.HelpEntry(km.ToggleHelp, "toggle help"),
+				keymap.HelpEntry(km.Quit, "quit"),
+			},
+		},
+	}
 }
 
 // CurrentSubscription returns the active subscription and whether one is set.
