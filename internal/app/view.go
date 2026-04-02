@@ -26,8 +26,8 @@ func (m Model) View() string {
 	if m.cmdPalette.active {
 		view = renderCommandPalette(&m.cmdPalette, m.styles.Overlay, m.width, m.height, view)
 	}
-	if m.tabPicker {
-		view = renderTabPicker(m.styles.Overlay, m.width, m.height, view)
+	if m.tabPicker.active {
+		view = renderTabPickerOverlay(&m.tabPicker, m.styles.Overlay, m.width, m.height, view)
 	}
 	if m.themeOverlay.Active {
 		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
@@ -54,19 +54,3 @@ func (m Model) activeHelpSections() []ui.HelpSection {
 	return m.keymap.helpSections(childSections)
 }
 
-func renderTabPicker(overlay ui.OverlayStyles, width, height int, base string) string {
-	rows := []string{
-		overlay.Title.Render("Open New Tab"),
-		"",
-		overlay.Normal.Render("1) Blob Storage"),
-		overlay.Normal.Render("2) Service Bus"),
-		overlay.Normal.Render("3) Key Vault"),
-		"",
-		overlay.Hint.Render("Press 1/2/3 or esc to cancel"),
-	}
-
-	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
-	box := overlay.Box.Render(content)
-
-	return ui.PlaceOverlay(width, height, box, base)
-}

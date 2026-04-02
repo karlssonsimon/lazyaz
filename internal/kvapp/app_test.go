@@ -36,7 +36,7 @@ func TestPaneName(t *testing.T) {
 }
 
 func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
-	m := NewModel(nil, testConfig)
+	m := NewModel(nil, testConfig, nil)
 	m.focus = subscriptionsPane
 	m.subscriptionsList.SetFilterState(1) // list.Filtering
 
@@ -51,7 +51,7 @@ func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
 }
 
 func TestHelpToggleOpensAndCloses(t *testing.T) {
-	m := NewModel(nil, testConfig)
+	m := NewModel(nil, testConfig, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model := updated.(Model)
@@ -67,7 +67,7 @@ func TestHelpToggleOpensAndCloses(t *testing.T) {
 }
 
 func TestViewShowsStatusBar(t *testing.T) {
-	m := NewModel(nil, testConfig)
+	m := NewModel(nil, testConfig, nil)
 	m.width = 120
 	m.height = 40
 	m.resize()
