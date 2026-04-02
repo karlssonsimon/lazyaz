@@ -10,8 +10,6 @@ import (
 
 func paneName(pane int) string {
 	switch pane {
-	case subscriptionsPane:
-		return "subscriptions"
 	case namespacesPane:
 		return "namespaces"
 	case entitiesPane:
@@ -33,14 +31,6 @@ func entityDisplayName(e servicebus.Entity) string {
 		tag = "[T]"
 	}
 	return fmt.Sprintf("%s %s", tag, e.Name)
-}
-
-func (m Model) subscriptionsPaneTitle() string {
-	title := "Subscriptions"
-	if len(m.subscriptions) > 0 {
-		title = fmt.Sprintf("Subscriptions (%d)", len(m.subscriptions))
-	}
-	return title
 }
 
 func (m Model) namespacesPaneTitle() string {

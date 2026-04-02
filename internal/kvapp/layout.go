@@ -7,19 +7,18 @@ func (m *Model) resize() {
 		return
 	}
 
-	widths := ui.PaneLayout(m.styles.Chrome.Pane, m.width, 4)
+	widths := ui.PaneLayout(m.styles.Chrome.Pane, m.width, 3)
 	pane := m.styles.Chrome.Pane
-	m.paneWidths = [4]int{widths[0], widths[1], widths[2], widths[3]}
+	m.paneWidths = [3]int{widths[0], widths[1], widths[2]}
 
 	paneFrame := 2 // rounded border top + bottom
-	height := m.height - paneFrame - ui.StatusBarHeight
+	height := m.height - paneFrame - ui.StatusBarHeight - ui.SubscriptionBarHeight
 	if height < 8 {
 		height = 8
 	}
 	m.paneHeight = height
 
-	m.subscriptionsList.SetSize(ui.PaneContentWidth(pane, widths[0]), height)
-	m.vaultsList.SetSize(ui.PaneContentWidth(pane, widths[1]), height)
-	m.secretsList.SetSize(ui.PaneContentWidth(pane, widths[2]), height)
-	m.versionsList.SetSize(ui.PaneContentWidth(pane, widths[3]), height)
+	m.vaultsList.SetSize(ui.PaneContentWidth(pane, widths[0]), height)
+	m.secretsList.SetSize(ui.PaneContentWidth(pane, widths[1]), height)
+	m.versionsList.SetSize(ui.PaneContentWidth(pane, widths[2]), height)
 }

@@ -16,9 +16,6 @@ func (m Model) View() string {
 	styles := m.styles.Chrome
 
 	var sbItems []ui.StatusBarItem
-	if m.hasSubscription {
-		sbItems = append(sbItems, ui.StatusBarItem{Label: "Subscription:", Value: subscriptionDisplayName(m.currentSub)})
-	}
 	if m.hasNamespace {
 		sbItems = append(sbItems, ui.StatusBarItem{Label: "Namespace:", Value: m.currentNS.Name})
 	}
@@ -26,7 +23,6 @@ func (m Model) View() string {
 		sbItems = append(sbItems, ui.StatusBarItem{Label: "Entity:", Value: entityDisplayName(m.currentEntity)})
 	}
 
-	m.subscriptionsList.Title = m.subscriptionsPaneTitle()
 	m.namespacesList.Title = m.namespacesPaneTitle()
 	m.entitiesList.Title = m.entitiesPaneTitle()
 	m.detailList.Title = m.detailPaneTitle()
@@ -37,36 +33,34 @@ func (m Model) View() string {
 		m.detailList.Styles.Title = m.styles.List.Title
 	}
 
+	ui.ClampListSelection(&m.namespacesList)
+	ui.ClampListSelection(&m.entitiesList)
+	ui.ClampListSelection(&m.detailList)
+
 	pw := m.paneWidths
 
-	subscriptionsView := m.subscriptionsList.View()
 	namespacesView := m.namespacesList.View()
 	entitiesView := m.entitiesList.View()
 	detailView := m.detailList.View()
 
-	subscriptionsPaneStyle := styles.Pane.Copy().Width(pw[0])
-	namespacesPaneStyle := styles.Pane.Copy().Width(pw[1])
-	entitiesPaneStyle := styles.Pane.Copy().Width(pw[2])
-	detailPaneStyle := styles.Pane.Copy().Width(pw[3])
+	namespacesPaneStyle := styles.Pane.Copy().Width(pw[0])
+	entitiesPaneStyle := styles.Pane.Copy().Width(pw[1])
+	detailPaneStyle := styles.Pane.Copy().Width(pw[2])
 
-	if m.focus == subscriptionsPane {
-		subscriptionsPaneStyle = styles.FocusedPane.Copy().Width(pw[0])
-	}
 	if m.focus == namespacesPane {
-		namespacesPaneStyle = styles.FocusedPane.Copy().Width(pw[1])
+		namespacesPaneStyle = styles.FocusedPane.Copy().Width(pw[0])
 	}
 	if m.focus == entitiesPane {
-		entitiesPaneStyle = styles.FocusedPane.Copy().Width(pw[2])
+		entitiesPaneStyle = styles.FocusedPane.Copy().Width(pw[1])
 	}
 
 	if m.deadLetter && m.detailMode == detailMessages {
-		detailPaneStyle = styles.Pane.Copy().Width(pw[3]).BorderForeground(m.styles.Danger.GetForeground())
+		detailPaneStyle = styles.Pane.Copy().Width(pw[2]).BorderForeground(m.styles.Danger.GetForeground())
 	} else if m.focus == detailPane && !m.viewingMessage {
-		detailPaneStyle = styles.FocusedPane.Copy().Width(pw[3])
+		detailPaneStyle = styles.FocusedPane.Copy().Width(pw[2])
 	}
 
 	panesList := []string{
-		subscriptionsPaneStyle.Render(subscriptionsView),
 		namespacesPaneStyle.Render(namespacesView),
 		entitiesPaneStyle.Render(entitiesView),
 		detailPaneStyle.Render(detailView),
@@ -78,11 +72,13 @@ func (m Model) View() string {
 		previewTitle := previewTitleStyle.Render(fmt.Sprintf("Message: %s", msgID))
 		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, m.messageViewport.View())
 
-		previewPaneStyle := styles.FocusedPane.Copy().Width(pw[4])
+		previewPaneStyle := styles.FocusedPane.Copy().Width(pw[3])
 		panesList = append(panesList, previewPaneStyle.Render(previewContent))
 	}
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, panesList...)
+
+	subBar := ui.RenderSubscriptionBar(m.currentSub, m.hasSubscription, m.styles, m.width)
 
 	sbStatus := m.status
 	sbErr := m.lastErr != ""
@@ -93,10 +89,13 @@ func (m Model) View() string {
 	}
 	statusBar := ui.RenderStatusBar(m.styles, sbItems, sbStatus, sbErr, m.width)
 
-	parts := []string{panes, statusBar}
+	parts := []string{subBar, panes, statusBar}
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.styles.Bg)
 
+	if m.subOverlay.Active {
+		view = ui.RenderSubscriptionOverlay(m.subOverlay, m.subscriptions, m.currentSub, m.styles, m.width, m.height, view)
+	}
 	if !m.EmbeddedMode && m.themeOverlay.Active {
 		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
 	}

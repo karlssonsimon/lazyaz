@@ -65,7 +65,6 @@ func TestPaneName(t *testing.T) {
 		pane int
 		want string
 	}{
-		{subscriptionsPane, "subscriptions"},
 		{namespacesPane, "namespaces"},
 		{entitiesPane, "entities"},
 		{detailPane, "detail"},
@@ -116,8 +115,8 @@ func TestEntityDisplayName(t *testing.T) {
 
 func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
-	m.focus = subscriptionsPane
-	m.subscriptionsList.SetFilterState(list.Filtering)
+	m.focus = namespacesPane
+	m.namespacesList.SetFilterState(list.Filtering)
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	model, ok := updated.(Model)
@@ -129,8 +128,8 @@ func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
 		t.Fatal("expected typing q in active filter not to quit")
 	}
 
-	if model.subscriptionsList.FilterValue() != "q" {
-		t.Fatalf("expected filter value %q, got %q", "q", model.subscriptionsList.FilterValue())
+	if model.namespacesList.FilterValue() != "q" {
+		t.Fatalf("expected filter value %q, got %q", "q", model.namespacesList.FilterValue())
 	}
 }
 

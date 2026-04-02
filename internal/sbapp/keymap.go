@@ -52,6 +52,7 @@ type KeyMap struct {
 	RequeueDLQ          KeyBinding
 	DeleteDuplicate     KeyBinding
 	ToggleDLQFilter     KeyBinding
+	SubscriptionPicker  KeyBinding
 	ToggleThemePicker   KeyBinding
 	ToggleHelp          KeyBinding
 
@@ -83,6 +84,7 @@ func DefaultKeyMap() KeyMap {
 		RequeueDLQ:          NewKeyBinding("R"),
 		DeleteDuplicate:     NewKeyBinding("D"),
 		ToggleDLQFilter:     NewKeyBinding("f"),
+		SubscriptionPicker:  NewKeyBinding("S"),
 		ToggleThemePicker:   NewKeyBinding("T"),
 		ToggleHelp:          NewKeyBinding("?"),
 
@@ -127,6 +129,7 @@ func (k KeyMap) HelpSections() []ui.HelpSection {
 		{
 			Title: "App",
 			Items: []string{
+				helpEntry(k.SubscriptionPicker, "change subscription"),
 				helpEntry(k.ToggleThemePicker, "open theme picker"),
 				helpEntry(k.RefreshScope, "refresh current scope"),
 				helpEntry(k.ReloadSubscriptions, "reload subscriptions"),

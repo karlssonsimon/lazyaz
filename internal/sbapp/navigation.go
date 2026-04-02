@@ -3,6 +3,7 @@ package sbapp
 import (
 	"fmt"
 
+	"azure-storage/internal/azure"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/ui"
@@ -31,7 +32,6 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 		m.focus = namespacesPane
 		return m, nil
 	case namespacesPane:
-		m.focus = subscriptionsPane
 		return m, nil
 	default:
 		return m, nil
@@ -56,53 +56,47 @@ func (m Model) handleBackspace() (Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleEnter() (Model, tea.Cmd) {
-	if m.focus == subscriptionsPane {
-		item, ok := m.subscriptionsList.SelectedItem().(subscriptionItem)
-		if !ok {
-			return m, nil
-		}
-
-		// Re-selecting the same subscription: just move focus.
-		if m.hasSubscription && m.currentSub.ID == item.subscription.ID {
-			m.focus = namespacesPane
-			return m, nil
-		}
-
-		m.currentSub = item.subscription
-		m.hasSubscription = true
-		m.hasNamespace = false
-		m.hasEntity = false
-		m.currentNS = servicebus.Namespace{}
-		m.currentEntity = servicebus.Entity{}
-		m.clearDetailState()
-		m.focus = namespacesPane
-
-		if cached, ok := m.cache.namespaces.Get(item.subscription.ID); ok {
-			m.namespaces = cached
-			m.namespacesList.ResetFilter()
-			ui.SetItemsPreserveIndex(&m.namespacesList, namespacesToItems(cached))
-			m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(cached))
-		} else {
-			m.namespaces = nil
-			m.namespacesList.ResetFilter()
-			m.namespacesList.SetItems(nil)
-			m.namespacesList.Title = "Namespaces"
-		}
-
-		m.entities = nil
-		m.entitiesList.ResetFilter()
-		m.detailList.ResetFilter()
-		m.entitiesList.SetItems(nil)
-		m.detailList.SetItems(nil)
-		m.entitiesList.Title = "Entities"
-		m.detailList.Title = "Detail"
-
-		m.loading = true
-		m.status = fmt.Sprintf("Loading namespaces in %s", subscriptionDisplayName(item.subscription))
-		return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, item.subscription.ID))
+func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
+	// Re-selecting the same subscription: no-op.
+	if m.hasSubscription && m.currentSub.ID == sub.ID {
+		return m, nil
 	}
 
+	m.currentSub = sub
+	m.hasSubscription = true
+	m.hasNamespace = false
+	m.hasEntity = false
+	m.currentNS = servicebus.Namespace{}
+	m.currentEntity = servicebus.Entity{}
+	m.clearDetailState()
+	m.focus = namespacesPane
+
+	if cached, ok := m.cache.namespaces.Get(sub.ID); ok {
+		m.namespaces = cached
+		m.namespacesList.ResetFilter()
+		ui.SetItemsPreserveIndex(&m.namespacesList, namespacesToItems(cached))
+		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(cached))
+	} else {
+		m.namespaces = nil
+		m.namespacesList.ResetFilter()
+		m.namespacesList.SetItems(nil)
+		m.namespacesList.Title = "Namespaces"
+	}
+
+	m.entities = nil
+	m.entitiesList.ResetFilter()
+	m.detailList.ResetFilter()
+	m.entitiesList.SetItems(nil)
+	m.detailList.SetItems(nil)
+	m.entitiesList.Title = "Entities"
+	m.detailList.Title = "Detail"
+
+	m.loading = true
+	m.status = fmt.Sprintf("Loading namespaces in %s", subscriptionDisplayName(sub))
+	return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID))
+}
+
+func (m Model) handleEnter() (Model, tea.Cmd) {
 	if m.focus == namespacesPane {
 		item, ok := m.namespacesList.SelectedItem().(namespaceItem)
 		if !ok {

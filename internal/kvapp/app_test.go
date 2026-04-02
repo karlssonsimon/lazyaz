@@ -19,7 +19,6 @@ func TestPaneName(t *testing.T) {
 		pane int
 		want string
 	}{
-		{subscriptionsPane, "subscriptions"},
 		{vaultsPane, "vaults"},
 		{secretsPane, "secrets"},
 		{versionsPane, "versions"},
@@ -37,8 +36,8 @@ func TestPaneName(t *testing.T) {
 
 func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
-	m.focus = subscriptionsPane
-	m.subscriptionsList.SetFilterState(1) // list.Filtering
+	m.focus = vaultsPane
+	m.vaultsList.SetFilterState(1) // list.Filtering
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	if _, ok := updated.(Model); !ok {

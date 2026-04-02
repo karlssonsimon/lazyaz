@@ -46,9 +46,10 @@ type KeyMap struct {
 	OpenFocusedAlt      KeyBinding
 	NavigateLeft        KeyBinding
 	BackspaceUp         KeyBinding
-	YankSecret          KeyBinding
-	ToggleThemePicker   KeyBinding
-	ToggleHelp          KeyBinding
+	YankSecret         KeyBinding
+	SubscriptionPicker KeyBinding
+	ToggleThemePicker  KeyBinding
+	ToggleHelp         KeyBinding
 
 	ThemeUp     KeyBinding
 	ThemeDown   KeyBinding
@@ -70,9 +71,10 @@ func DefaultKeyMap() KeyMap {
 		OpenFocusedAlt:      NewKeyBinding("l", "right"),
 		NavigateLeft:        NewKeyBinding("h", "left"),
 		BackspaceUp:         NewKeyBinding("backspace"),
-		YankSecret:          NewKeyBinding("y"),
-		ToggleThemePicker:   NewKeyBinding("T"),
-		ToggleHelp:          NewKeyBinding("?"),
+		YankSecret:         NewKeyBinding("y"),
+		SubscriptionPicker: NewKeyBinding("S"),
+		ToggleThemePicker:  NewKeyBinding("T"),
+		ToggleHelp:         NewKeyBinding("?"),
 
 		ThemeUp:     NewKeyBinding("up", "ctrl+k"),
 		ThemeDown:   NewKeyBinding("down", "ctrl+j"),
@@ -108,6 +110,7 @@ func (k KeyMap) HelpSections() []ui.HelpSection {
 		{
 			Title: "App",
 			Items: []string{
+				helpEntry(k.SubscriptionPicker, "change subscription"),
 				helpEntry(k.ToggleThemePicker, "open theme picker"),
 				helpEntry(k.RefreshScope, "refresh current scope"),
 				helpEntry(k.ReloadSubscriptions, "reload subscriptions"),

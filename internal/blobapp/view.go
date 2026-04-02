@@ -18,9 +18,6 @@ func (m Model) View() string {
 
 	// Build status bar items.
 	var sbItems []ui.StatusBarItem
-	if m.hasSubscription {
-		sbItems = append(sbItems, ui.StatusBarItem{Label: "Subscription:", Value: subscriptionDisplayName(m.currentSub)})
-	}
 	if m.hasAccount {
 		sbItems = append(sbItems, ui.StatusBarItem{Label: "Account:", Value: m.currentAccount.Name})
 	}
@@ -32,7 +29,6 @@ func (m Model) View() string {
 		sbItems = append(sbItems, ui.StatusBarItem{Label: "Container:", Value: label})
 	}
 
-	m.subscriptionsList.Title = m.subscriptionsPaneTitle()
 	m.accountsList.Title = m.accountsPaneTitle()
 	m.containersList.Title = m.containersPaneTitle()
 	m.blobsList.Title = m.blobsPaneTitle()
@@ -40,14 +36,12 @@ func (m Model) View() string {
 		m.preview.viewport.SetContent(m.preview.rendered)
 	}
 
-	ui.ClampListSelection(&m.subscriptionsList)
 	ui.ClampListSelection(&m.accountsList)
 	ui.ClampListSelection(&m.containersList)
 	ui.ClampListSelection(&m.blobsList)
 
 	pw := m.paneWidths
 
-	subscriptionsView := m.subscriptionsList.View()
 	accountsView := m.accountsList.View()
 	containersView := m.containersList.View()
 	blobsView := m.blobsList.View()
@@ -55,30 +49,25 @@ func (m Model) View() string {
 	if m.preview.open {
 		previewView = m.preview.viewport.View()
 	}
-	subscriptionsPaneStyle := styles.Pane.Copy().Width(pw[0])
-	accountsPaneStyle := styles.Pane.Copy().Width(pw[1])
-	containersPaneStyle := styles.Pane.Copy().Width(pw[2])
-	blobsPaneStyle := styles.Pane.Copy().Width(pw[3])
-	previewPaneStyle := styles.Pane.Copy().Width(pw[4])
+	accountsPaneStyle := styles.Pane.Copy().Width(pw[0])
+	containersPaneStyle := styles.Pane.Copy().Width(pw[1])
+	blobsPaneStyle := styles.Pane.Copy().Width(pw[2])
+	previewPaneStyle := styles.Pane.Copy().Width(pw[3])
 
-	if m.focus == subscriptionsPane {
-		subscriptionsPaneStyle = styles.FocusedPane.Copy().Width(pw[0])
-	}
 	if m.focus == accountsPane {
-		accountsPaneStyle = styles.FocusedPane.Copy().Width(pw[1])
+		accountsPaneStyle = styles.FocusedPane.Copy().Width(pw[0])
 	}
 	if m.focus == containersPane {
-		containersPaneStyle = styles.FocusedPane.Copy().Width(pw[2])
+		containersPaneStyle = styles.FocusedPane.Copy().Width(pw[1])
 	}
 	if m.focus == blobsPane {
-		blobsPaneStyle = styles.FocusedPane.Copy().Width(pw[3])
+		blobsPaneStyle = styles.FocusedPane.Copy().Width(pw[2])
 	}
 	if m.preview.open && m.focus == previewPane {
-		previewPaneStyle = styles.FocusedPane.Copy().Width(pw[4])
+		previewPaneStyle = styles.FocusedPane.Copy().Width(pw[3])
 	}
 
 	paneParts := []string{
-		subscriptionsPaneStyle.Render(subscriptionsView),
 		accountsPaneStyle.Render(accountsView),
 		containersPaneStyle.Render(containersView),
 		blobsPaneStyle.Render(blobsView),
@@ -94,6 +83,8 @@ func (m Model) View() string {
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, paneParts...)
 
+	subBar := ui.RenderSubscriptionBar(m.currentSub, m.hasSubscription, m.styles, m.width)
+
 	sbStatus := m.status
 	sbErr := m.lastErr != ""
 	if sbErr {
@@ -103,10 +94,13 @@ func (m Model) View() string {
 	}
 	statusBar := ui.RenderStatusBar(m.styles, sbItems, sbStatus, sbErr, m.width)
 
-	parts := []string{panes, statusBar}
+	parts := []string{subBar, panes, statusBar}
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.styles.Bg)
 
+	if m.subOverlay.Active {
+		view = ui.RenderSubscriptionOverlay(m.subOverlay, m.subscriptions, m.currentSub, m.styles, m.width, m.height, view)
+	}
 	if !m.EmbeddedMode && m.themeOverlay.Active {
 		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
 	}
@@ -115,14 +109,6 @@ func (m Model) View() string {
 	}
 
 	return view
-}
-
-func (m Model) subscriptionsPaneTitle() string {
-	title := "Subscriptions"
-	if len(m.subscriptions) > 0 {
-		title = fmt.Sprintf("Subscriptions (%d)", len(m.subscriptions))
-	}
-	return title
 }
 
 func (m Model) accountsPaneTitle() string {

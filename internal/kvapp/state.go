@@ -12,8 +12,7 @@ import (
 )
 
 const (
-	subscriptionsPane = iota
-	vaultsPane
+	vaultsPane = iota
 	secretsPane
 	versionsPane
 )
@@ -23,10 +22,9 @@ type Model struct {
 
 	spinner spinner.Model
 
-	subscriptionsList list.Model
-	vaultsList        list.Model
-	secretsList       list.Model
-	versionsList      list.Model
+	vaultsList   list.Model
+	secretsList  list.Model
+	versionsList list.Model
 
 	focus int
 
@@ -48,6 +46,7 @@ type Model struct {
 	schemes      []ui.Scheme
 	themeOverlay ui.ThemeOverlayState
 	helpOverlay  ui.HelpOverlayState
+	subOverlay   ui.SubscriptionOverlayState
 
 	cache kvCache
 
@@ -61,7 +60,7 @@ type Model struct {
 
 	width      int
 	height     int
-	paneWidths [4]int // sub, vlt, sec, ver — set by resize
+	paneWidths [3]int // vlt, sec, ver — set by resize
 	paneHeight int
 }
 
@@ -110,15 +109,6 @@ func NewModel(svc *keyvault.Service, cfg ui.Config, db *cache.DB) Model {
 func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, keymap KeyMap, db *cache.DB) Model {
 	delegate := list.NewDefaultDelegate()
 
-	subscriptions := list.New([]list.Item{}, delegate, 28, 10)
-	subscriptions.Title = "Subscriptions"
-	subscriptions.SetShowHelp(false)
-	subscriptions.SetShowPagination(false)
-	subscriptions.SetShowStatusBar(true)
-	subscriptions.SetStatusBarItemName("subscription", "subscriptions")
-	subscriptions.SetFilteringEnabled(true)
-	subscriptions.DisableQuitKeybindings()
-
 	vaults := list.New([]list.Item{}, delegate, 24, 10)
 	vaults.Title = "Vaults"
 	vaults.SetShowHelp(false)
@@ -150,15 +140,14 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, keymap KeyMap, db 
 	spin.Spinner = spinner.Dot
 
 	m := Model{
-		service:           svc,
-		spinner:           spin,
-		subscriptionsList: subscriptions,
-		vaultsList:        vaults,
-		secretsList:       secrets,
-		versionsList:      versionsList,
-		focus:             subscriptionsPane,
-		cache:             newCache(db),
-		schemes:           cfg.Schemes,
+		service:      svc,
+		spinner:      spin,
+		vaultsList:   vaults,
+		secretsList:  secrets,
+		versionsList: versionsList,
+		focus:        vaultsPane,
+		cache:        newCache(db),
+		schemes:      cfg.Schemes,
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
@@ -180,7 +169,7 @@ func NewModelWithCache(svc *keyvault.Service, cfg ui.Config, stores KVStores) Mo
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.styles = ui.NewStyles(scheme)
 	m.styles.ApplyToLists([]*list.Model{
-		&m.subscriptionsList, &m.vaultsList, &m.secretsList, &m.versionsList,
+		&m.vaultsList, &m.secretsList, &m.versionsList,
 	}, &m.spinner)
 }
 
@@ -194,6 +183,21 @@ func (m Model) HelpSections() []ui.HelpSection {
 	return m.keymap.HelpSections()
 }
 
+// CurrentSubscription returns the active subscription and whether one is set.
+func (m Model) CurrentSubscription() (azure.Subscription, bool) {
+	return m.currentSub, m.hasSubscription
+}
+
+// SetSubscription sets the active subscription without triggering navigation.
+func (m *Model) SetSubscription(sub azure.Subscription) {
+	m.currentSub = sub
+	m.hasSubscription = true
+}
+
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
+	cmds := []tea.Cmd{spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions)}
+	if m.hasSubscription {
+		cmds = append(cmds, fetchVaultsCmd(m.service, m.cache.vaults, m.currentSub.ID))
+	}
+	return tea.Batch(cmds...)
 }

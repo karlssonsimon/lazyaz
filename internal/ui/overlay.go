@@ -15,6 +15,7 @@ const (
 // OverlayItem is a single entry in an overlay list.
 type OverlayItem struct {
 	Label    string
+	Desc     string // optional second line below label (muted)
 	Hint     string // right-aligned secondary text (shortcut, author, etc.)
 	IsActive bool   // shows a marker (e.g. * for current theme)
 }
@@ -127,10 +128,14 @@ func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, s
 				entry += "  " + hint
 			}
 
+			style := normalStyle
 			if ci == cursor {
-				rows = append(rows, cursorStyle.Render(entry))
-			} else {
-				rows = append(rows, normalStyle.Render(entry))
+				style = cursorStyle
+			}
+			rows = append(rows, style.Render(entry))
+
+			if item.Desc != "" {
+				rows = append(rows, style.Render("  "+item.Desc))
 			}
 		}
 

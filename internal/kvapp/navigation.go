@@ -3,6 +3,7 @@ package kvapp
 import (
 	"fmt"
 
+	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
@@ -20,7 +21,6 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 		m.focus = vaultsPane
 		return m, nil
 	case vaultsPane:
-		m.focus = subscriptionsPane
 		return m, nil
 	default:
 		return m, nil
@@ -34,53 +34,47 @@ func (m Model) handleBackspace() (Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleEnter() (Model, tea.Cmd) {
-	if m.focus == subscriptionsPane {
-		item, ok := m.subscriptionsList.SelectedItem().(subscriptionItem)
-		if !ok {
-			return m, nil
-		}
-
-		// Re-selecting the same subscription: just move focus.
-		if m.hasSubscription && m.currentSub.ID == item.subscription.ID {
-			m.focus = vaultsPane
-			return m, nil
-		}
-
-		m.currentSub = item.subscription
-		m.hasSubscription = true
-		m.hasVault = false
-		m.hasSecret = false
-		m.currentVault = keyvault.Vault{}
-		m.currentSecret = keyvault.Secret{}
-		m.focus = vaultsPane
-
-		if cached, ok := m.cache.vaults.Get(item.subscription.ID); ok {
-			m.vaults = cached
-			m.vaultsList.ResetFilter()
-			ui.SetItemsPreserveIndex(&m.vaultsList, vaultsToItems(cached))
-			m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(cached))
-		} else {
-			m.vaults = nil
-			m.vaultsList.ResetFilter()
-			m.vaultsList.SetItems(nil)
-			m.vaultsList.Title = "Vaults"
-		}
-
-		m.secrets = nil
-		m.versions = nil
-		m.secretsList.ResetFilter()
-		m.versionsList.ResetFilter()
-		m.secretsList.SetItems(nil)
-		m.versionsList.SetItems(nil)
-		m.secretsList.Title = "Secrets"
-		m.versionsList.Title = "Versions"
-
-		m.loading = true
-		m.status = fmt.Sprintf("Loading key vaults in %s", subscriptionDisplayName(item.subscription))
-		return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, item.subscription.ID))
+func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
+	// Re-selecting the same subscription: no-op.
+	if m.hasSubscription && m.currentSub.ID == sub.ID {
+		return m, nil
 	}
 
+	m.currentSub = sub
+	m.hasSubscription = true
+	m.hasVault = false
+	m.hasSecret = false
+	m.currentVault = keyvault.Vault{}
+	m.currentSecret = keyvault.Secret{}
+	m.focus = vaultsPane
+
+	if cached, ok := m.cache.vaults.Get(sub.ID); ok {
+		m.vaults = cached
+		m.vaultsList.ResetFilter()
+		ui.SetItemsPreserveIndex(&m.vaultsList, vaultsToItems(cached))
+		m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(cached))
+	} else {
+		m.vaults = nil
+		m.vaultsList.ResetFilter()
+		m.vaultsList.SetItems(nil)
+		m.vaultsList.Title = "Vaults"
+	}
+
+	m.secrets = nil
+	m.versions = nil
+	m.secretsList.ResetFilter()
+	m.versionsList.ResetFilter()
+	m.secretsList.SetItems(nil)
+	m.versionsList.SetItems(nil)
+	m.secretsList.Title = "Secrets"
+	m.versionsList.Title = "Versions"
+
+	m.loading = true
+	m.status = fmt.Sprintf("Loading key vaults in %s", subscriptionDisplayName(sub))
+	return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID))
+}
+
+func (m Model) handleEnter() (Model, tea.Cmd) {
 	if m.focus == vaultsPane {
 		item, ok := m.vaultsList.SelectedItem().(vaultItem)
 		if !ok {

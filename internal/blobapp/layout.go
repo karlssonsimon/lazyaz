@@ -16,30 +16,29 @@ func (m *Model) resize() {
 		return
 	}
 
-	numPanes := 4
+	numPanes := 3
 	if m.preview.open {
-		numPanes = 5
+		numPanes = 4
 	}
 	widths := ui.PaneLayout(m.styles.Chrome.Pane, m.width, numPanes)
 	pane := m.styles.Chrome.Pane
-	m.paneWidths = [5]int{widths[0], widths[1], widths[2], widths[3], 0}
+	m.paneWidths = [4]int{widths[0], widths[1], widths[2], 0}
 	if m.preview.open {
-		m.paneWidths[4] = widths[4]
+		m.paneWidths[3] = widths[3]
 	}
 
 	paneFrame := 2 // rounded border top + bottom
-	height := m.height - paneFrame - ui.StatusBarHeight
+	height := m.height - paneFrame - ui.StatusBarHeight - ui.SubscriptionBarHeight
 	if height < 8 {
 		height = 8
 	}
 	m.paneHeight = height
 
-	m.subscriptionsList.SetSize(ui.PaneContentWidth(pane, widths[0]), height)
-	m.accountsList.SetSize(ui.PaneContentWidth(pane, widths[1]), height)
-	m.containersList.SetSize(ui.PaneContentWidth(pane, widths[2]), height)
-	m.blobsList.SetSize(ui.PaneContentWidth(pane, widths[3]), height)
+	m.accountsList.SetSize(ui.PaneContentWidth(pane, widths[0]), height)
+	m.containersList.SetSize(ui.PaneContentWidth(pane, widths[1]), height)
+	m.blobsList.SetSize(ui.PaneContentWidth(pane, widths[2]), height)
 	if m.preview.open {
-		m.preview.viewport.Width = ui.PaneContentWidth(pane, widths[4])
+		m.preview.viewport.Width = ui.PaneContentWidth(pane, widths[3])
 		m.preview.viewport.Height = height
 	}
 }
@@ -51,9 +50,9 @@ func (m *Model) nextFocus() {
 		m.refreshBlobItems()
 	}
 	m.blurAllFilters()
-	count := 4
+	count := 3
 	if m.preview.open {
-		count = 5
+		count = 4
 	}
 	m.focus = (m.focus + 1) % count
 }
@@ -67,15 +66,14 @@ func (m *Model) previousFocus() {
 	m.blurAllFilters()
 	m.focus--
 	if m.focus < 0 {
-		m.focus = 3
+		m.focus = 2
 		if m.preview.open {
-			m.focus = 4
+			m.focus = 3
 		}
 	}
 }
 
 func (m *Model) blurAllFilters() {
-	m.subscriptionsList.FilterInput.Blur()
 	m.accountsList.FilterInput.Blur()
 	m.containersList.FilterInput.Blur()
 	m.blobsList.FilterInput.Blur()
@@ -85,10 +83,6 @@ func (m *Model) commitFocusedFilter() tea.Cmd {
 	m.blurAllFilters()
 
 	switch m.focus {
-	case subscriptionsPane:
-		ui.ApplyFilterState(&m.subscriptionsList)
-		m.status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
-		return nil
 	case accountsPane:
 		ui.ApplyFilterState(&m.accountsList)
 		m.status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
@@ -134,8 +128,6 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 
 	var target *list.Model
 	switch m.focus {
-	case subscriptionsPane:
-		target = &m.subscriptionsList
 	case accountsPane:
 		target = &m.accountsList
 	case containersPane:
@@ -162,8 +154,6 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 }
 func (m Model) focusedListSettingFilter() bool {
 	switch m.focus {
-	case subscriptionsPane:
-		return m.subscriptionsList.SettingFilter()
 	case accountsPane:
 		return m.accountsList.SettingFilter()
 	case containersPane:

@@ -9,8 +9,6 @@ import (
 
 func paneName(pane int) string {
 	switch pane {
-	case subscriptionsPane:
-		return "subscriptions"
 	case vaultsPane:
 		return "vaults"
 	case secretsPane:
@@ -24,14 +22,6 @@ func paneName(pane int) string {
 
 func subscriptionDisplayName(sub azure.Subscription) string {
 	return ui.SubscriptionDisplayName(sub)
-}
-
-func (m Model) subscriptionsPaneTitle() string {
-	title := "Subscriptions"
-	if len(m.subscriptions) > 0 {
-		title = fmt.Sprintf("Subscriptions (%d)", len(m.subscriptions))
-	}
-	return title
 }
 
 func (m Model) vaultsPaneTitle() string {
