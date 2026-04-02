@@ -52,18 +52,19 @@ func (m Model) View() string {
 	secretsView := lipgloss.JoinVertical(lipgloss.Left, m.secretsList.View(), secretsHints)
 	versionsView := lipgloss.JoinVertical(lipgloss.Left, m.versionsList.View(), versionsHints)
 
-	vaultsPaneStyle := styles.Pane.Copy().Width(pw[0])
-	secretsPaneStyle := styles.Pane.Copy().Width(pw[1])
-	versionsPaneStyle := styles.Pane.Copy().Width(pw[2])
+	h := m.paneHeight
+	vaultsPaneStyle := styles.Pane.Copy().Width(pw[0]).Height(h)
+	secretsPaneStyle := styles.Pane.Copy().Width(pw[1]).Height(h)
+	versionsPaneStyle := styles.Pane.Copy().Width(pw[2]).Height(h)
 
 	if m.focus == vaultsPane {
-		vaultsPaneStyle = styles.FocusedPane.Copy().Width(pw[0])
+		vaultsPaneStyle = styles.FocusedPane.Copy().Width(pw[0]).Height(h)
 	}
 	if m.focus == secretsPane {
-		secretsPaneStyle = styles.FocusedPane.Copy().Width(pw[1])
+		secretsPaneStyle = styles.FocusedPane.Copy().Width(pw[1]).Height(h)
 	}
 	if m.focus == versionsPane {
-		versionsPaneStyle = styles.FocusedPane.Copy().Width(pw[2])
+		versionsPaneStyle = styles.FocusedPane.Copy().Width(pw[2]).Height(h)
 	}
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top,
