@@ -79,9 +79,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		if cached, ok := m.cache.namespaces.Get(item.subscription.ID); ok {
 			m.namespaces = cached
 			m.namespacesList.ResetFilter()
-			m.namespacesList.SetItems(namespacesToItems(cached))
+			ui.SetItemsPreserveIndex(&m.namespacesList, namespacesToItems(cached))
 			m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(cached))
-			m.namespacesList.Select(0)
 		} else {
 			m.namespaces = nil
 			m.namespacesList.ResetFilter()
@@ -119,9 +118,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		if cached, ok := m.cache.entities.Get(entityKey); ok {
 			m.entities = cached
 			m.entitiesList.ResetFilter()
-			m.entitiesList.SetItems(entitiesToFilteredItems(cached, m.dlqFilter))
+			ui.SetItemsPreserveIndex(&m.entitiesList, entitiesToFilteredItems(cached, m.dlqFilter))
 			m.entitiesList.Title = m.entitiesPaneTitle()
-			m.entitiesList.Select(0)
 		} else {
 			m.entities = nil
 			m.entitiesList.ResetFilter()
@@ -155,9 +153,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 				m.topicSubs = cached
 				m.detailMode = detailTopicSubscriptions
 				m.detailList.ResetFilter()
-				m.detailList.SetItems(topicSubsToItems(cached))
+				ui.SetItemsPreserveIndex(&m.detailList, topicSubsToItems(cached))
 				m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(cached))
-				m.detailList.Select(0)
 			} else {
 				m.detailList.ResetFilter()
 				m.detailList.SetItems(nil)

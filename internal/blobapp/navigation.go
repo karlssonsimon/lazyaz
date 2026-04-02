@@ -118,9 +118,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		if cached, ok := m.cache.accounts.Get(item.subscription.ID); ok {
 			m.accounts = cached
 			m.accountsList.ResetFilter()
-			m.accountsList.SetItems(accountsToItems(cached))
+			ui.SetItemsPreserveIndex(&m.accountsList, accountsToItems(cached))
 			m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(cached))
-			m.accountsList.Select(0)
 		} else {
 			m.accounts = nil
 			m.accountsList.ResetFilter()
@@ -161,9 +160,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		if cached, ok := m.cache.containers.Get(cache.Key(m.currentSub.ID, item.account.Name)); ok {
 			m.containers = cached
 			m.containersList.ResetFilter()
-			m.containersList.SetItems(containersToItems(cached))
+			ui.SetItemsPreserveIndex(&m.containersList, containersToItems(cached))
 			m.containersList.Title = fmt.Sprintf("Containers (%d)", len(cached))
-			m.containersList.Select(0)
 		} else {
 			m.containers = nil
 			m.containersList.ResetFilter()
