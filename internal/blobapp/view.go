@@ -16,21 +16,21 @@ func (m Model) View() string {
 
 	styles := m.styles.Chrome
 
-	subscriptionName := "-"
-	accountName := "-"
-	containerName := "-"
+	// Build status bar items.
+	var sbItems []ui.StatusBarItem
 	if m.hasSubscription {
-		subscriptionName = subscriptionDisplayName(m.currentSub)
+		sbItems = append(sbItems, ui.StatusBarItem{Label: "Subscription:", Value: subscriptionDisplayName(m.currentSub)})
 	}
 	if m.hasAccount {
-		accountName = m.currentAccount.Name
+		sbItems = append(sbItems, ui.StatusBarItem{Label: "Account:", Value: m.currentAccount.Name})
 	}
 	if m.hasContainer {
-		containerName = m.containerName
+		label := m.containerName
+		if m.prefix != "" {
+			label += "/" + strings.TrimSuffix(m.prefix, "/")
+		}
+		sbItems = append(sbItems, ui.StatusBarItem{Label: "Container:", Value: label})
 	}
-
-	header := styles.Header.Width(m.width).Render(ui.TrimToWidth("Azure Blob Explorer", m.width-2))
-	headerMeta := styles.Meta.Width(m.width).Render(ui.TrimToWidth(fmt.Sprintf("Subscription: %s | Account: %s | Container: %s | Prefix: %q", subscriptionName, accountName, containerName, m.prefix), m.width-2))
 
 	m.subscriptionsList.Title = m.subscriptionsPaneTitle()
 	m.accountsList.Title = m.accountsPaneTitle()
@@ -94,36 +94,16 @@ func (m Model) View() string {
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, paneParts...)
 
-	filterHint := "Press / to filter the focused pane (fzf-style live filter)."
-	if m.focusedListSettingFilter() {
-		if m.focus == blobsPane && !m.blobLoadAll {
-			filterHint = "Blob search mode: type a prefix, Enter runs server-side prefix search."
-		} else {
-			filterHint = fmt.Sprintf("Filtering %s: type to narrow, up/down to move, Enter applies filter.", paneName(m.focus))
-		}
-	} else if m.focus == blobsPane && m.visualLineMode {
-		filterHint = "Visual mode: move to select a line range, Space toggles persistent marks, D downloads selection, v/V exits."
+	sbStatus := m.status
+	sbErr := m.lastErr != ""
+	if sbErr {
+		sbStatus = m.lastErr
+	} else if m.loading {
+		sbStatus = m.spinner.View() + " " + m.status
 	}
-	filterLine := styles.FilterHint.Width(m.width).Render(ui.TrimToWidth(filterHint, m.width-2))
+	statusBar := ui.RenderStatusBar(m.styles, sbItems, sbStatus, sbErr, m.width)
 
-	errorLine := ""
-	if m.lastErr != "" {
-		errorLine = styles.Error.Width(m.width).Render(ui.TrimToWidth("Error: "+m.lastErr, m.width-2))
-	}
-
-	statusText := m.status
-	if m.loading {
-		statusText = fmt.Sprintf("%s %s", m.spinner.View(), m.status)
-	}
-	statusLine := styles.Status.Width(m.width).Render(ui.TrimToWidth(statusText, m.width-2))
-
-	helpLine := styles.Help.Width(m.width).Render(ui.TrimToWidth(m.keymap.FooterHelpText(), m.width-2))
-
-	parts := []string{header, headerMeta, panes, filterLine}
-	if errorLine != "" {
-		parts = append(parts, errorLine)
-	}
-	parts = append(parts, statusLine, helpLine)
+	parts := []string{panes, statusBar}
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.styles.Bg)
 

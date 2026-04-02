@@ -15,15 +15,12 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case versionsPane:
 		m.focus = secretsPane
-		m.status = "Focus: secrets"
 		return m, nil
 	case secretsPane:
 		m.focus = vaultsPane
-		m.status = "Focus: vaults"
 		return m, nil
 	case vaultsPane:
 		m.focus = subscriptionsPane
-		m.status = "Focus: subscriptions"
 		return m, nil
 	default:
 		return m, nil
@@ -33,7 +30,6 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 func (m Model) handleBackspace() (Model, tea.Cmd) {
 	if m.focus == versionsPane {
 		m.focus = secretsPane
-		m.status = "Focus: secrets"
 	}
 	return m, nil
 }

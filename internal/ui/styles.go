@@ -57,6 +57,9 @@ type Styles struct {
 	DangerBold  lipgloss.Style // Bold danger (base08)
 	Warning     lipgloss.Style // Warning/filter match (base0A)
 	FocusBorder lipgloss.Style // Focused border color (base0B)
+
+	// StatusBar is the bottom status bar.
+	StatusBar StatusBarStyles
 }
 
 // ListStyles contains all list.Model.Styles fields.
@@ -364,6 +367,25 @@ func NewStyles(s Scheme) Styles {
 		DangerBold:  lipgloss.NewStyle().Foreground(danger).Bold(true),
 		Warning:     lipgloss.NewStyle().Foreground(warning),
 		FocusBorder: lipgloss.NewStyle().BorderForeground(green),
+
+		StatusBar: StatusBarStyles{
+			Box: lipgloss.NewStyle().
+				Background(surface).
+				Padding(1, 1),
+			Label: lipgloss.NewStyle().
+				Foreground(text).
+				Background(surface).
+				Bold(true),
+			Value: lipgloss.NewStyle().
+				Foreground(muted).
+				Background(surface),
+			Error: lipgloss.NewStyle().
+				Foreground(danger).
+				Background(surface).
+				Bold(true),
+			Gap: lipgloss.NewStyle().
+				Background(surface),
+		},
 	}
 }
 

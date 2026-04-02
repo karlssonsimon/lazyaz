@@ -156,7 +156,6 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.keymap.PreviewBack.Matches(key):
 		m.pendingPreviewG = false
 		m.focus = blobsPane
-		m.status = "Focus: blobs"
 		return m, nil
 	case m.keymap.PreviewNextFocus.Matches(key):
 		m.pendingPreviewG = false

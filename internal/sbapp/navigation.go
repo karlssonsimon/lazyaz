@@ -26,15 +26,12 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.focus = entitiesPane
-		m.status = "Focus: entities"
 		return m, nil
 	case entitiesPane:
 		m.focus = namespacesPane
-		m.status = "Focus: namespaces"
 		return m, nil
 	case namespacesPane:
 		m.focus = subscriptionsPane
-		m.status = "Focus: subscriptions"
 		return m, nil
 	default:
 		return m, nil
@@ -55,7 +52,6 @@ func (m Model) handleBackspace() (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.focus = entitiesPane
-		m.status = "Focus: entities"
 	}
 	return m, nil
 }

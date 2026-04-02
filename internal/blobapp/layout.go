@@ -27,7 +27,8 @@ func (m *Model) resize() {
 		m.paneWidths[4] = widths[4]
 	}
 
-	height := m.height - 10
+	paneFrame := 2 // rounded border top + bottom
+	height := m.height - paneFrame - ui.StatusBarHeight
 	if height < 8 {
 		height = 8
 	}
