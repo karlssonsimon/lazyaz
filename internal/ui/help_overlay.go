@@ -1,22 +1,26 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
+type HelpKeyBindings struct {
+	Up, Down, Close KeyMatcher
+}
+
 type HelpOverlayState struct {
-	Active bool
+	Active    bool
+	Title     string
+	CursorIdx int
+	Query     string
+	items     []helpItem
+	filtered  []int
 }
 
-func (s *HelpOverlayState) Toggle() {
-	s.Active = !s.Active
-}
-
-func (s *HelpOverlayState) Close() {
-	s.Active = false
+type helpItem struct {
+	keys    string
+	desc    string
+	section string
 }
 
 type HelpSection struct {
@@ -24,78 +28,152 @@ type HelpSection struct {
 	Items []string
 }
 
-func RenderHelpOverlay(title string, sections []HelpSection, styles Styles, width, height int, base string) string {
-	boxWidth := width * 4 / 5
-	boxHeight := height * 4 / 5
-	if boxWidth < 48 {
-		boxWidth = 48
-	}
-	if boxHeight < 12 {
-		boxHeight = 12
-	}
-	if boxWidth > width {
-		boxWidth = width
-	}
-	if boxHeight > height {
-		boxHeight = height
-	}
-
-	innerWidth := boxWidth - 6
-	innerHeight := boxHeight - 4
-	if innerWidth < 1 {
-		innerWidth = 1
-	}
-	if innerHeight < 1 {
-		innerHeight = 1
-	}
-
-	o := styles.Overlay
-	bodyStyle := o.NormalFull.Width(innerWidth)
-	hintStyle := o.HintFull.Width(innerWidth)
-
-	rows := []string{o.Title.Render(title), ""}
-	for i, section := range sections {
-		if i > 0 {
-			rows = append(rows, "")
-		}
-		rows = append(rows, o.SectionTitle.Render(section.Title))
-		for _, item := range section.Items {
-			rows = append(rows, bodyStyle.Render(item))
-		}
-	}
-	rows = append(rows, "", hintStyle.Render("?: close | esc close"))
-
-	content := fitOverlayContent(rows, innerWidth, innerHeight)
-	box := lipgloss.NewStyle().
-		Width(boxWidth).
-		Height(boxHeight).
-		Background(o.BoxBg).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(o.Box.GetBorderBottomForeground()).
-		BorderBackground(o.BoxBg).
-		Padding(1, 2).
-		Render(content)
-
-	return PlaceOverlay(width, height, box, base)
+func (s *HelpOverlayState) Open(title string, sections []HelpSection) {
+	s.Active = true
+	s.Title = title
+	s.Query = ""
+	s.CursorIdx = 0
+	s.items = flattenSections(sections)
+	s.filtered = nil
 }
 
-func fitOverlayContent(rows []string, width, height int) string {
-	if height <= 0 {
-		return ""
+func (s *HelpOverlayState) Close() {
+	s.Active = false
+}
+
+func (s *HelpOverlayState) HandleKey(key string, bindings HelpKeyBindings) {
+	if s.filtered == nil {
+		s.refilter()
 	}
 
-	var lines []string
-	for _, row := range rows {
-		wrapped := lipgloss.NewStyle().Width(width).Render(row)
-		lines = append(lines, strings.Split(wrapped, "\n")...)
+	switch {
+	case bindings.Close.Matches(key), key == "esc":
+		s.Active = false
+	case bindings.Up.Matches(key):
+		if s.CursorIdx > 0 {
+			s.CursorIdx--
+		}
+	case bindings.Down.Matches(key):
+		if s.CursorIdx < len(s.filtered)-1 {
+			s.CursorIdx++
+		}
+	case key == "backspace":
+		if len(s.Query) > 0 {
+			s.Query = s.Query[:len(s.Query)-1]
+			s.refilter()
+		}
+	default:
+		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
+			s.Query += key
+			s.refilter()
+		}
+	}
+}
+
+func (s *HelpOverlayState) refilter() {
+	if s.Query == "" {
+		s.filtered = make([]int, len(s.items))
+		for i := range s.items {
+			s.filtered[i] = i
+		}
+	} else {
+		q := strings.ToLower(s.Query)
+		s.filtered = s.filtered[:0]
+		for i, item := range s.items {
+			if strings.Contains(strings.ToLower(item.keys), q) ||
+				strings.Contains(strings.ToLower(item.desc), q) ||
+				strings.Contains(strings.ToLower(item.section), q) {
+				s.filtered = append(s.filtered, i)
+			}
+		}
+	}
+	if s.CursorIdx >= len(s.filtered) {
+		s.CursorIdx = max(0, len(s.filtered)-1)
+	}
+}
+
+func flattenSections(sections []HelpSection) []helpItem {
+	var items []helpItem
+	for _, section := range sections {
+		for _, entry := range section.Items {
+			keys, desc := parseHelpEntry(entry)
+			items = append(items, helpItem{
+				keys:    keys,
+				desc:    desc,
+				section: section.Title,
+			})
+		}
+	}
+	return items
+}
+
+func parseHelpEntry(s string) (keys, desc string) {
+	if idx := strings.Index(s, "  "); idx >= 0 {
+		return s[:idx], s[idx+2:]
+	}
+	return s, ""
+}
+
+func RenderHelpOverlay(state HelpOverlayState, styles Styles, width, height int, base string) string {
+	filtered := state.filtered
+	if filtered == nil {
+		filtered = make([]int, len(state.items))
+		for i := range state.items {
+			filtered[i] = i
+		}
 	}
 
-	if len(lines) > height {
-		lines = append(lines[:height-1], fmt.Sprintf("... (%d more lines)", len(lines)-height+1))
-	}
-	for len(lines) < height {
-		lines = append(lines, "")
+	// Compute column widths from ALL items so the overlay stays stable during search.
+	maxKeyW := 0
+	maxDescW := 0
+	maxSectW := 0
+	for _, item := range state.items {
+		if w := len(item.keys); w > maxKeyW {
+			maxKeyW = w
+		}
+		if w := len(item.desc); w > maxDescW {
+			maxDescW = w
+		}
+		if w := len(item.section); w > maxSectW {
+			maxSectW = w
+		}
 	}
 
-	return strings.Join(lines, "\n")
+	items := make([]OverlayItem, len(filtered))
+	for ci, idx := range filtered {
+		item := state.items[idx]
+		label := padRight(item.keys, maxKeyW) + "  " + item.desc
+		items[ci] = OverlayItem{
+			Label: label,
+			Hint:  item.section,
+		}
+	}
+
+	// Size to fit content: marker(2) + key + gap(2) + desc + gap(2) + section + padding(4).
+	innerW := 2 + maxKeyW + 2 + maxDescW + 2 + maxSectW + 4
+	if innerW < 60 {
+		innerW = 60
+	}
+	if innerW > width-10 {
+		innerW = width - 10
+	}
+
+	// Height based on total item count, not terminal size.
+	maxVis := len(state.items) + 2
+	if maxVis < 10 {
+		maxVis = 10
+	}
+	if maxVis > 30 {
+		maxVis = 30
+	}
+
+	cfg := OverlayListConfig{
+		Title:      state.Title,
+		Query:      state.Query,
+		InnerWidth: innerW,
+		MaxVisible: maxVis,
+		Center:     true,
+	}
+
+	return RenderOverlayList(cfg, items, state.CursorIdx, styles.Overlay, width, height, base)
 }

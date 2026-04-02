@@ -27,7 +27,6 @@ type previewState struct {
 	blobName    string
 	blobSize    int64
 	contentType string
-	language    string
 	binary      bool
 	cursor      int64
 	windowStart int64
@@ -58,7 +57,9 @@ func (p previewState) title(styles ui.Styles) string {
 	}
 
 	label := ui.TrimToWidth(p.blobName, 50)
-	meta := fmt.Sprintf("%s | %s", ui.EmptyToDash(p.language), humanSize(p.blobSize))
+	lexer := ui.DetectLexer(p.blobName, p.contentType)
+	lang := lexer.Config().Name
+	meta := fmt.Sprintf("%s | %s", ui.EmptyToDash(lang), humanSize(p.blobSize))
 	if p.binary {
 		meta += " | binary"
 	}
@@ -77,7 +78,6 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.preview.blobName = b.Name
 	m.preview.blobSize = b.Size
 	m.preview.contentType = b.ContentType
-	m.preview.language = ui.DetectLanguage(b.Name, b.ContentType)
 	m.preview.binary = false
 	m.preview.cursor = 0
 	m.preview.windowStart = 0
@@ -133,9 +133,8 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 	m.preview.windowData = msg.data
 	m.preview.cursor = clampInt64(msg.cursor, 0, maxInt64(0, msg.blobSize-1))
 	m.preview.binary = ui.IsProbablyBinary(msg.data)
-	m.preview.language = ui.DetectLanguage(msg.blobName, m.preview.contentType)
 	m.preview.lineStarts = computeLineStarts(msg.data)
-	m.preview.rendered = renderPreviewContent(msg.data, m.preview.language, m.preview.binary, m.styles)
+	m.preview.rendered = renderPreviewContent(msg.data, msg.blobName, m.preview.contentType, m.preview.binary, m.styles)
 	m.preview.viewport.SetContent(m.preview.rendered)
 	m.preview.viewport.YOffset = m.previewLocalLine()
 
@@ -388,7 +387,7 @@ func computePreviewWindow(totalSize, cursor int64, visibleLines int) (int64, int
 	return start, windowSize
 }
 
-func renderPreviewContent(data []byte, language string, binary bool, styles ui.Styles) string {
+func renderPreviewContent(data []byte, blobName, contentType string, binary bool, styles ui.Styles) string {
 	if binary {
 		return styles.Warning.Render("Binary content preview is not supported.")
 	}
@@ -398,7 +397,7 @@ func renderPreviewContent(data []byte, language string, binary bool, styles ui.S
 	}
 
 	text := string(data)
-	return styles.Syntax.Highlight(language, text)
+	return styles.Syntax.Highlight(blobName, contentType, text)
 }
 
 func clampInt64(v, minVal, maxVal int64) int64 {

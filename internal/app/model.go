@@ -228,7 +228,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case toggleHelpMsg:
-		m.helpOverlay.Toggle()
+		if m.helpOverlay.Active {
+			m.helpOverlay.Close()
+		} else {
+			m.helpOverlay.Open("Azure TUI Help", m.activeHelpSections())
+		}
 		return m, nil
 
 	case spinner.TickMsg:
@@ -256,13 +260,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Help overlay.
 		if m.helpOverlay.Active {
-			switch {
-			case m.keymap.ToggleHelp.Matches(key), key == "esc":
-				m.helpOverlay.Close()
-				return m, nil
-			default:
-				return m, nil
-			}
+			m.helpOverlay.HandleKey(key, ui.HelpKeyBindings{
+				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
+				Close: m.keymap.ToggleHelp,
+			})
+			return m, nil
 		}
 
 		// Theme overlay.
@@ -312,7 +314,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.themeOverlay.Open()
 			return m, nil
 		case m.keymap.ToggleHelp.Matches(key):
-			m.helpOverlay.Toggle()
+			m.helpOverlay.Open("Azure TUI Help", m.activeHelpSections())
 			return m, nil
 		}
 

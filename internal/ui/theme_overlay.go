@@ -112,5 +112,5 @@ func RenderThemeOverlay(state ThemeOverlayState, schemes []Scheme, styles Styles
 		}
 	}
 
-	return RenderOverlayList("Themes", state.Query, items, state.CursorIdx, styles.Overlay, width, height, base)
+	return RenderOverlayList(OverlayListConfig{Title: "Themes", Query: state.Query}, items, state.CursorIdx, styles.Overlay, width, height, base)
 }

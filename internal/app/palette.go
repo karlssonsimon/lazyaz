@@ -115,5 +115,5 @@ func renderCommandPalette(p *commandPalette, overlay ui.OverlayStyles, width, he
 		}
 	}
 
-	return ui.RenderOverlayList("Commands", p.query, items, p.cursor, overlay, width, height, base)
+	return ui.RenderOverlayList(ui.OverlayListConfig{Title: "Commands", Query: p.query}, items, p.cursor, overlay, width, height, base)
 }

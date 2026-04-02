@@ -276,12 +276,9 @@ func NewStyles(s Scheme) Styles {
 		String:      "#" + s.Base0B,
 		Number:      "#" + s.Base09,
 		Bool:        "#" + s.Base0C,
-		Null:        "#" + s.Base08,
 		Punctuation: "#" + s.Base0F,
 		XMLTag:      "#" + s.Base0D,
 		XMLAttr:     "#" + s.Base0A,
-		CSVCellA:    "#" + s.Base05,
-		CSVCellB:    "#" + s.Base0C,
 	})
 
 	// --- Overlay ---

@@ -178,13 +178,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		key := msg.String()
 
 		if !m.EmbeddedMode && m.helpOverlay.Active {
-			switch {
-			case m.keymap.ToggleHelp.Matches(key), key == "esc":
-				m.helpOverlay.Close()
-				return m, nil
-			default:
-				return m, nil
-			}
+			m.helpOverlay.HandleKey(key, ui.HelpKeyBindings{
+				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
+				Close: m.keymap.ToggleHelp,
+			})
+			return m, nil
 		}
 
 		if !m.EmbeddedMode && m.themeOverlay.Active {
@@ -290,7 +288,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case !m.EmbeddedMode && m.keymap.ToggleHelp.Matches(key):
 			if !focusedFilterActive && !m.themeOverlay.Active {
-				m.helpOverlay.Toggle()
+				if m.helpOverlay.Active {
+					m.helpOverlay.Close()
+				} else {
+					m.helpOverlay.Open("Azure Blob Explorer Help", m.keymap.HelpSections())
+				}
 				return m, nil
 			}
 		case m.keymap.BackspaceUp.Matches(key):

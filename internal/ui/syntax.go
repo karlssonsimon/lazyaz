@@ -3,11 +3,12 @@ package ui
 import (
 	"bytes"
 	"encoding/json"
-	"regexp"
+	"fmt"
+	"strconv"
 	"strings"
-	"unicode"
 
-	"github.com/charmbracelet/lipgloss"
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 )
 
 type SyntaxPalette struct {
@@ -15,177 +16,145 @@ type SyntaxPalette struct {
 	String      string
 	Number      string
 	Bool        string
-	Null        string
 	Punctuation string
 	XMLTag      string
 	XMLAttr     string
-	CSVCellA    string
-	CSVCellB    string
+}
+
+// ansiColor holds pre-computed ANSI true-color escape sequences for a single
+// foreground color, so we don't depend on lipgloss profile detection.
+type ansiColor struct {
+	open  string // e.g. "\033[38;2;180;142;173m"
+	close string // "\033[0m"
+}
+
+func newAnsiColor(hex string) ansiColor {
+	r, g, b := hexToRGB(hex)
+	return ansiColor{
+		open:  fmt.Sprintf("\033[38;2;%d;%d;%dm", r, g, b),
+		close: "\033[0m",
+	}
+}
+
+func (c ansiColor) render(s string) string {
+	return c.open + s + c.close
 }
 
 type SyntaxStyles struct {
-	key      lipgloss.Style
-	str      lipgloss.Style
-	number   lipgloss.Style
-	boolean  lipgloss.Style
-	null     lipgloss.Style
-	punct    lipgloss.Style
-	xmlTag   lipgloss.Style
-	xmlAttr  lipgloss.Style
-	csvCellA lipgloss.Style
-	csvCellB lipgloss.Style
+	tokenColors map[chroma.TokenType]ansiColor
 }
-
-var (
-	xmlTagPattern  = regexp.MustCompile(`<(?:"[^"]*"|'[^']*'|[^'">])*>`)
-	xmlAttrPattern = regexp.MustCompile(`\s([A-Za-z_:][A-Za-z0-9_.:-]*)=`)
-)
 
 func NewSyntaxStyles(p SyntaxPalette) SyntaxStyles {
-	return SyntaxStyles{
-		key:      lipgloss.NewStyle().Foreground(lipgloss.Color(p.Key)),
-		str:      lipgloss.NewStyle().Foreground(lipgloss.Color(p.String)),
-		number:   lipgloss.NewStyle().Foreground(lipgloss.Color(p.Number)),
-		boolean:  lipgloss.NewStyle().Foreground(lipgloss.Color(p.Bool)),
-		null:     lipgloss.NewStyle().Foreground(lipgloss.Color(p.Null)),
-		punct:    lipgloss.NewStyle().Foreground(lipgloss.Color(p.Punctuation)),
-		xmlTag:   lipgloss.NewStyle().Foreground(lipgloss.Color(p.XMLTag)),
-		xmlAttr:  lipgloss.NewStyle().Foreground(lipgloss.Color(p.XMLAttr)),
-		csvCellA: lipgloss.NewStyle().Foreground(lipgloss.Color(p.CSVCellA)),
-		csvCellB: lipgloss.NewStyle().Foreground(lipgloss.Color(p.CSVCellB)),
+	s := SyntaxStyles{
+		tokenColors: make(map[chroma.TokenType]ansiColor),
 	}
+
+	set := func(tt chroma.TokenType, hex string) {
+		s.tokenColors[tt] = newAnsiColor(hex)
+	}
+
+	// Structural: tags (XML elements, JSON keys)
+	set(chroma.NameTag, p.XMLTag)
+	// Strings
+	set(chroma.LiteralString, p.String)
+	set(chroma.LiteralStringDouble, p.String)
+	set(chroma.LiteralStringSingle, p.String)
+	set(chroma.LiteralStringBacktick, p.String)
+	set(chroma.LiteralStringAffix, p.String)
+	// Numbers
+	set(chroma.LiteralNumber, p.Number)
+	set(chroma.LiteralNumberFloat, p.Number)
+	set(chroma.LiteralNumberInteger, p.Number)
+	// Keywords / constants
+	set(chroma.Keyword, p.Key)
+	set(chroma.KeywordConstant, p.Bool)
+	// Punctuation
+	set(chroma.Punctuation, p.Punctuation)
+	// XML attributes
+	set(chroma.NameAttribute, p.XMLAttr)
+	// Comments (XML declaration, etc.)
+	set(chroma.Comment, p.Punctuation)
+	set(chroma.CommentPreproc, p.Punctuation)
+
+	return s
 }
 
-func (s SyntaxStyles) Highlight(language, input string) string {
-	switch language {
-	case "json":
-		return s.HighlightJSON(input)
-	case "xml":
-		return s.HighlightXML(input)
-	case "csv":
-		return s.HighlightCSV(input)
-	default:
-		return input
+func DetectLexer(filename, contentType string) chroma.Lexer {
+	if l := lexers.Match(filename); l != nil {
+		return l
 	}
+	if contentType != "" {
+		mime := contentType
+		if i := strings.IndexByte(mime, ';'); i >= 0 {
+			mime = strings.TrimSpace(mime[:i])
+		}
+		if l := lexers.MatchMimeType(mime); l != nil {
+			return l
+		}
+	}
+	return lexers.Fallback
+}
+
+func (s SyntaxStyles) Highlight(filename, contentType, input string) string {
+	lexer := DetectLexer(filename, contentType)
+	lexer = chroma.Coalesce(lexer)
+	return s.renderWithLexer(lexer, input)
 }
 
 func (s SyntaxStyles) HighlightJSON(body string) string {
 	var buf bytes.Buffer
 	if err := json.Indent(&buf, []byte(body), "", "  "); err != nil {
-		return s.colorizeJSONLines(body)
+		return s.highlightAsJSON(body)
 	}
-	return s.colorizeJSONLines(buf.String())
+	return s.highlightAsJSON(buf.String())
 }
 
-func (s SyntaxStyles) colorizeJSONLines(input string) string {
-	var out strings.Builder
-	lines := strings.Split(input, "\n")
-
-	for i, line := range lines {
-		if i > 0 {
-			out.WriteByte('\n')
-		}
-		out.WriteString(s.colorizeJSONLine(line))
+func (s SyntaxStyles) highlightAsJSON(input string) string {
+	lexer := lexers.Get("json")
+	if lexer == nil {
+		return input
 	}
-
-	return out.String()
+	lexer = chroma.Coalesce(lexer)
+	return s.renderWithLexer(lexer, input)
 }
 
-func (s SyntaxStyles) colorizeJSONLine(line string) string {
-	trimmed := strings.TrimLeftFunc(line, unicode.IsSpace)
-	indent := line[:len(line)-len(trimmed)]
-
-	if trimmed == "" {
-		return line
+func (s SyntaxStyles) renderWithLexer(lexer chroma.Lexer, input string) string {
+	iterator, err := lexer.Tokenise(nil, input)
+	if err != nil {
+		return input
 	}
 
-	var out strings.Builder
-	out.WriteString(indent)
-
-	if trimmed[0] == '"' {
-		colonIdx := strings.Index(trimmed, "\":")
-		if colonIdx > 0 {
-			key := trimmed[:colonIdx+1]
-			rest := trimmed[colonIdx+1:]
-			out.WriteString(s.key.Render(key))
-			out.WriteString(s.punct.Render(":"))
-			val := strings.TrimSpace(rest[1:])
-			if val != "" {
-				out.WriteString(" ")
-				out.WriteString(s.colorizeJSONValue(val))
-			}
-			return out.String()
+	var buf strings.Builder
+	for _, tok := range iterator.Tokens() {
+		if c, ok := s.colorForToken(tok.Type); ok {
+			buf.WriteString(c.render(tok.Value))
+		} else {
+			buf.WriteString(tok.Value)
 		}
-		out.WriteString(s.colorizeJSONValue(trimmed))
-		return out.String()
 	}
 
-	out.WriteString(s.colorizeJSONValue(trimmed))
-	return out.String()
+	return buf.String()
 }
 
-func (s SyntaxStyles) colorizeJSONValue(val string) string {
-	if val == "" {
-		return val
+// colorForToken walks up the chroma token type hierarchy to find a matching
+// color. For example, LiteralStringOther inherits from LiteralString.
+func (s SyntaxStyles) colorForToken(tt chroma.TokenType) (ansiColor, bool) {
+	for t := tt; t > 0; t = t.Parent() {
+		if c, ok := s.tokenColors[t]; ok {
+			return c, true
+		}
 	}
-
-	trailing := ""
-	clean := val
-	for strings.HasSuffix(clean, ",") {
-		trailing = "," + trailing
-		clean = clean[:len(clean)-1]
-	}
-
-	var styled string
-	switch {
-	case clean == "{" || clean == "}" || clean == "[" || clean == "]" ||
-		clean == "{}" || clean == "[]":
-		styled = s.punct.Render(clean)
-	case clean == "null":
-		styled = s.null.Render(clean)
-	case clean == "true" || clean == "false":
-		styled = s.boolean.Render(clean)
-	case len(clean) > 0 && clean[0] == '"':
-		styled = s.str.Render(clean)
-	default:
-		styled = s.number.Render(clean)
-	}
-
-	if trailing != "" {
-		return styled + s.punct.Render(trailing)
-	}
-	return styled
+	return ansiColor{}, false
 }
 
-func (s SyntaxStyles) HighlightXML(input string) string {
-	return xmlTagPattern.ReplaceAllStringFunc(input, func(tag string) string {
-		colored := s.xmlTag.Render(tag)
-		colored = xmlAttrPattern.ReplaceAllString(colored, " "+s.xmlAttr.Render("$1")+s.punct.Render("="))
-		return colored
-	})
-}
-
-func (s SyntaxStyles) HighlightCSV(input string) string {
-	lines := strings.Split(input, "\n")
-	var out strings.Builder
-	for i, line := range lines {
-		if i > 0 {
-			out.WriteByte('\n')
-		}
-		if line == "" {
-			continue
-		}
-		parts := strings.Split(line, ",")
-		for idx, part := range parts {
-			if idx > 0 {
-				out.WriteString(s.punct.Render(","))
-			}
-			if idx%2 == 0 {
-				out.WriteString(s.csvCellA.Render(part))
-			} else {
-				out.WriteString(s.csvCellB.Render(part))
-			}
-		}
+// hexToRGB parses a hex color string (with or without # prefix) into RGB components.
+func hexToRGB(hex string) (uint8, uint8, uint8) {
+	hex = strings.TrimLeft(hex, "#")
+	if len(hex) != 6 {
+		return 0, 0, 0
 	}
-	return out.String()
+	r, _ := strconv.ParseUint(hex[0:2], 16, 8)
+	g, _ := strconv.ParseUint(hex[2:4], 16, 8)
+	b, _ := strconv.ParseUint(hex[4:6], 16, 8)
+	return uint8(r), uint8(g), uint8(b)
 }

@@ -101,7 +101,7 @@ func (m Model) View() string {
 		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
 	}
 	if !m.EmbeddedMode && m.helpOverlay.Active {
-		view = ui.RenderHelpOverlay("Azure Service Bus Explorer Help", m.keymap.HelpSections(), m.styles, m.width, m.height, view)
+		view = ui.RenderHelpOverlay(m.helpOverlay, m.styles, m.width, m.height, view)
 	}
 
 	return view
