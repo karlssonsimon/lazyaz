@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/ui"
 
@@ -13,33 +12,6 @@ import (
 
 type accountItem struct {
 	account blob.Account
-}
-
-type subscriptionItem struct {
-	subscription azure.Subscription
-}
-
-func (i subscriptionItem) Title() string {
-	if strings.TrimSpace(i.subscription.Name) != "" {
-		return i.subscription.Name
-	}
-	return i.subscription.ID
-}
-
-func (i subscriptionItem) Description() string {
-	id := i.subscription.ID
-	if len(id) > 12 {
-		id = id[:12]
-	}
-	state := strings.TrimSpace(i.subscription.State)
-	if state == "" {
-		return fmt.Sprintf("id %s", id)
-	}
-	return fmt.Sprintf("%s | id %s", state, id)
-}
-
-func (i subscriptionItem) FilterValue() string {
-	return i.subscription.Name + " " + i.subscription.ID + " " + i.subscription.State
 }
 
 func (i accountItem) Title() string {
@@ -125,14 +97,6 @@ func accountsToItems(accounts []blob.Account) []list.Item {
 	items := make([]list.Item, 0, len(accounts))
 	for _, account := range accounts {
 		items = append(items, accountItem{account: account})
-	}
-	return items
-}
-
-func subscriptionsToItems(subscriptions []azure.Subscription) []list.Item {
-	items := make([]list.Item, 0, len(subscriptions))
-	for _, subscription := range subscriptions {
-		items = append(items, subscriptionItem{subscription: subscription})
 	}
 	return items
 }

@@ -4,39 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 )
-
-type subscriptionItem struct {
-	subscription azure.Subscription
-}
-
-func (i subscriptionItem) Title() string {
-	if strings.TrimSpace(i.subscription.Name) != "" {
-		return i.subscription.Name
-	}
-	return i.subscription.ID
-}
-
-func (i subscriptionItem) Description() string {
-	id := i.subscription.ID
-	if len(id) > 12 {
-		id = id[:12]
-	}
-	state := strings.TrimSpace(i.subscription.State)
-	if state == "" {
-		return fmt.Sprintf("id %s", id)
-	}
-	return fmt.Sprintf("%s | id %s", state, id)
-}
-
-func (i subscriptionItem) FilterValue() string {
-	return i.subscription.Name + " " + i.subscription.ID + " " + i.subscription.State
-}
 
 type namespaceItem struct {
 	namespace servicebus.Namespace
@@ -148,14 +120,6 @@ func compactPreview(s string, max int) string {
 		return out[:max] + "..."
 	}
 	return out
-}
-
-func subscriptionsToItems(subs []azure.Subscription) []list.Item {
-	items := make([]list.Item, 0, len(subs))
-	for _, s := range subs {
-		items = append(items, subscriptionItem{subscription: s})
-	}
-	return items
 }
 
 func namespacesToItems(namespaces []servicebus.Namespace) []list.Item {

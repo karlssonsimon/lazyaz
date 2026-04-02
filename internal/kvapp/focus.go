@@ -8,19 +8,18 @@ import (
 
 func (m *Model) nextFocus() {
 	m.blurAllFilters()
-	m.focus = (m.focus + 1) % 4
+	m.focus = (m.focus + 1) % 3
 }
 
 func (m *Model) previousFocus() {
 	m.blurAllFilters()
 	m.focus--
 	if m.focus < 0 {
-		m.focus = 3
+		m.focus = 2
 	}
 }
 
 func (m *Model) blurAllFilters() {
-	m.subscriptionsList.FilterInput.Blur()
 	m.vaultsList.FilterInput.Blur()
 	m.secretsList.FilterInput.Blur()
 	m.versionsList.FilterInput.Blur()
@@ -30,8 +29,6 @@ func (m *Model) commitFocusedFilter() {
 	m.blurAllFilters()
 
 	switch m.focus {
-	case subscriptionsPane:
-		ui.ApplyFilterState(&m.subscriptionsList)
 	case vaultsPane:
 		ui.ApplyFilterState(&m.vaultsList)
 	case secretsPane:
@@ -48,8 +45,6 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 
 	var target *list.Model
 	switch m.focus {
-	case subscriptionsPane:
-		target = &m.subscriptionsList
 	case vaultsPane:
 		target = &m.vaultsList
 	case secretsPane:
@@ -72,8 +67,6 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 
 func (m Model) focusedListSettingFilter() bool {
 	switch m.focus {
-	case subscriptionsPane:
-		return m.subscriptionsList.SettingFilter()
 	case vaultsPane:
 		return m.vaultsList.SettingFilter()
 	case secretsPane:

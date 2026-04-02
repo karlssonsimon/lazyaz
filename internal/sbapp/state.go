@@ -15,8 +15,7 @@ import (
 const peekMaxMessages = 50
 
 const (
-	subscriptionsPane = iota
-	namespacesPane
+	namespacesPane = iota
 	entitiesPane
 	detailPane
 )
@@ -33,7 +32,6 @@ type Model struct {
 
 	spinner spinner.Model
 
-	subscriptionsList list.Model
 	namespacesList    list.Model
 	entitiesList      list.Model
 	detailList        list.Model
@@ -71,6 +69,7 @@ type Model struct {
 	schemes      []ui.Scheme
 	themeOverlay ui.ThemeOverlayState
 	helpOverlay  ui.HelpOverlayState
+	subOverlay   ui.SubscriptionOverlayState
 
 	cache sbCache
 
@@ -84,7 +83,7 @@ type Model struct {
 
 	width      int
 	height     int
-	paneWidths    [5]int // sub, ns, ent, det, preview — set by resize
+	paneWidths    [4]int // ns, ent, det, preview — set by resize
 	paneHeight    int
 }
 
@@ -150,15 +149,6 @@ func NewModel(svc *servicebus.Service, cfg ui.Config, db *cache.DB) Model {
 func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, keymap KeyMap, db *cache.DB) Model {
 	delegate := list.NewDefaultDelegate()
 
-	subscriptions := list.New([]list.Item{}, delegate, 28, 10)
-	subscriptions.Title = "Subscriptions"
-	subscriptions.SetShowHelp(false)
-	subscriptions.SetShowPagination(false)
-	subscriptions.SetShowStatusBar(true)
-	subscriptions.SetStatusBarItemName("subscription", "subscriptions")
-	subscriptions.SetFilteringEnabled(true)
-	subscriptions.DisableQuitKeybindings()
-
 	namespaces := list.New([]list.Item{}, delegate, 24, 10)
 	namespaces.Title = "Namespaces"
 	namespaces.SetShowHelp(false)
@@ -192,11 +182,10 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, keymap KeyMap, d
 	m := Model{
 		service:           svc,
 		spinner:           spin,
-		subscriptionsList: subscriptions,
 		namespacesList:    namespaces,
 		entitiesList:      entities,
 		detailList:        detail,
-		focus:             subscriptionsPane,
+		focus:             namespacesPane,
 		markedMessages:    make(map[string]struct{}),
 		duplicateMessages: make(map[string]struct{}),
 		cache:   newCache(db),
@@ -222,7 +211,7 @@ func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores SBStores) 
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.styles = ui.NewStyles(scheme)
 	m.styles.ApplyToLists([]*list.Model{
-		&m.subscriptionsList, &m.namespacesList, &m.entitiesList, &m.detailList,
+		&m.namespacesList, &m.entitiesList, &m.detailList,
 	}, &m.spinner)
 }
 
@@ -236,6 +225,21 @@ func (m Model) HelpSections() []ui.HelpSection {
 	return m.keymap.HelpSections()
 }
 
+// CurrentSubscription returns the active subscription and whether one is set.
+func (m Model) CurrentSubscription() (azure.Subscription, bool) {
+	return m.currentSub, m.hasSubscription
+}
+
+// SetSubscription sets the active subscription without triggering navigation.
+func (m *Model) SetSubscription(sub azure.Subscription) {
+	m.currentSub = sub
+	m.hasSubscription = true
+}
+
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
+	cmds := []tea.Cmd{spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions)}
+	if m.hasSubscription {
+		cmds = append(cmds, fetchNamespacesCmd(m.service, m.cache.namespaces, m.currentSub.ID))
+	}
+	return tea.Batch(cmds...)
 }

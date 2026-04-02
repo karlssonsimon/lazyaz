@@ -37,13 +37,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.lastErr = ""
 		m.subscriptions = msg.subscriptions
-		m.subscriptionsList.Title = fmt.Sprintf("Subscriptions (%d)", len(msg.subscriptions))
-		ui.SetItemsPreserveIndex(&m.subscriptionsList, subscriptionsToItems(msg.subscriptions))
 
 		if msg.done {
 			m.loading = false
 			m.cache.subscriptions.Set("", msg.subscriptions)
 			m.status = fmt.Sprintf("Loaded %d subscriptions.", len(msg.subscriptions))
+			if !m.hasSubscription {
+				m.subOverlay.Open()
+			}
 		}
 
 		return m, msg.next
@@ -148,6 +149,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		key := msg.String()
+
+		if m.subOverlay.Active {
+			if sub, ok := m.subOverlay.HandleKey(key, ui.ThemeKeyBindings{
+				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
+				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
+			}, m.subscriptions); ok {
+				return m.selectSubscription(sub)
+			}
+			return m, nil
+		}
+
 		if !m.EmbeddedMode && m.helpOverlay.Active {
 			m.helpOverlay.HandleKey(key, ui.HelpKeyBindings{
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
@@ -231,6 +243,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
+		case m.keymap.SubscriptionPicker.Matches(key):
+			if !focusedFilterActive {
+				m.subOverlay.Open()
+				return m, nil
+			}
 		case m.keymap.BackspaceUp.Matches(key):
 			if !focusedFilterActive {
 				return m.handleBackspace()
@@ -239,8 +256,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.focus {
-	case subscriptionsPane:
-		m.subscriptionsList, cmd = m.subscriptionsList.Update(msg)
 	case vaultsPane:
 		m.vaultsList, cmd = m.vaultsList.Update(msg)
 	case secretsPane:

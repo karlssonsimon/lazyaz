@@ -52,6 +52,7 @@ type KeyMap struct {
 	DownloadSelection   KeyBinding
 	FilterInput         KeyBinding
 	BlobVisualMove      KeyBinding
+	SubscriptionPicker  KeyBinding
 	ToggleThemePicker   KeyBinding
 	ToggleHelp          KeyBinding
 
@@ -89,6 +90,7 @@ func DefaultKeyMap() KeyMap {
 		DownloadSelection:   NewKeyBinding("D"),
 		FilterInput:         NewKeyBinding("/"),
 		BlobVisualMove:      NewKeyBinding("up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G"),
+		SubscriptionPicker:  NewKeyBinding("S"),
 		ToggleThemePicker:   NewKeyBinding("T"),
 		ToggleHelp:          NewKeyBinding("?"),
 
@@ -150,6 +152,7 @@ func (k KeyMap) HelpSections() []ui.HelpSection {
 		{
 			Title: "App",
 			Items: []string{
+				helpEntry(k.SubscriptionPicker, "change subscription"),
 				helpEntry(k.ToggleThemePicker, "open theme picker"),
 				helpEntry(k.RefreshScope, "refresh current scope"),
 				helpEntry(k.ReloadSubscriptions, "reload subscriptions"),

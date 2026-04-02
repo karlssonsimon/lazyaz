@@ -16,8 +16,7 @@ const defaultBlobPrefixSearchLimit = 500
 const defaultHierarchyBlobLoadLimit = 500
 
 const (
-	subscriptionsPane = iota
-	accountsPane
+	accountsPane = iota
 	containersPane
 	blobsPane
 	previewPane
@@ -28,10 +27,9 @@ type Model struct {
 
 	spinner spinner.Model
 
-	subscriptionsList list.Model
-	accountsList      list.Model
-	containersList    list.Model
-	blobsList         list.Model
+	accountsList   list.Model
+	containersList list.Model
+	blobsList      list.Model
 
 	focus int
 
@@ -59,6 +57,7 @@ type Model struct {
 	schemes      []ui.Scheme
 	themeOverlay ui.ThemeOverlayState
 	helpOverlay  ui.HelpOverlayState
+	subOverlay   ui.SubscriptionOverlayState
 
 	cache blobCache
 
@@ -72,7 +71,7 @@ type Model struct {
 
 	width      int
 	height     int
-	paneWidths [5]int // sub, acc, con, blob, preview — set by resize
+	paneWidths [4]int // acc, con, blob, preview — set by resize
 	paneHeight int
 }
 
@@ -140,15 +139,6 @@ func NewModel(svc *blob.Service, cfg ui.Config, db *cache.DB) Model {
 func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, keymap KeyMap, db *cache.DB) Model {
 	delegate := list.NewDefaultDelegate()
 
-	subscriptions := list.New([]list.Item{}, delegate, 28, 10)
-	subscriptions.Title = "Subscriptions"
-	subscriptions.SetShowHelp(false)
-	subscriptions.SetShowPagination(false)
-	subscriptions.SetShowStatusBar(true)
-	subscriptions.SetStatusBarItemName("subscription", "subscriptions")
-	subscriptions.SetFilteringEnabled(true)
-	subscriptions.DisableQuitKeybindings()
-
 	accounts := list.New([]list.Item{}, delegate, 24, 10)
 	accounts.Title = "Storage Accounts"
 	accounts.SetShowHelp(false)
@@ -180,21 +170,20 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, keymap KeyMap, db *cac
 	spin.Spinner = spinner.Dot
 
 	m := Model{
-		service:           svc,
-		spinner:           spin,
-		subscriptionsList: subscriptions,
-		accountsList:      accounts,
-		containersList:    containers,
-		blobsList:         blobs,
-		markedBlobs:       make(map[string]blob.BlobEntry),
-		preview:           newPreviewState(),
-		cache:             newCache(db),
-		keymap:            keymap,
-		schemes:           cfg.Schemes,
+		service:        svc,
+		spinner:        spin,
+		accountsList:   accounts,
+		containersList: containers,
+		blobsList:      blobs,
+		markedBlobs:    make(map[string]blob.BlobEntry),
+		preview:        newPreviewState(),
+		cache:          newCache(db),
+		keymap:         keymap,
+		schemes:        cfg.Schemes,
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
-		focus:   subscriptionsPane,
+		focus:   accountsPane,
 		status:  "Loading Azure subscriptions...",
 		loading: true,
 	}
@@ -213,7 +202,7 @@ func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores) Mode
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.styles = ui.NewStyles(scheme)
 	m.styles.ApplyToLists([]*list.Model{
-		&m.subscriptionsList, &m.accountsList, &m.containersList, &m.blobsList,
+		&m.accountsList, &m.containersList, &m.blobsList,
 	}, &m.spinner)
 }
 
@@ -227,6 +216,21 @@ func (m Model) HelpSections() []ui.HelpSection {
 	return m.keymap.HelpSections()
 }
 
+// CurrentSubscription returns the active subscription and whether one is set.
+func (m Model) CurrentSubscription() (azure.Subscription, bool) {
+	return m.currentSub, m.hasSubscription
+}
+
+// SetSubscription sets the active subscription without triggering navigation.
+func (m *Model) SetSubscription(sub azure.Subscription) {
+	m.currentSub = sub
+	m.hasSubscription = true
+}
+
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
+	cmds := []tea.Cmd{spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions)}
+	if m.hasSubscription {
+		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.currentSub.ID))
+	}
+	return tea.Batch(cmds...)
 }

@@ -8,7 +8,7 @@ import (
 )
 
 func (m Model) refresh() (Model, tea.Cmd) {
-	if m.focus == subscriptionsPane || !m.hasSubscription {
+	if !m.hasSubscription {
 		m.loading = true
 		m.lastErr = ""
 		m.status = "Refreshing subscriptions..."

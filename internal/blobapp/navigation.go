@@ -12,8 +12,52 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
+	// Re-selecting the same subscription: no-op.
+	if m.hasSubscription && m.currentSub.ID == sub.ID {
+		return m, nil
+	}
+
+	m.currentSub = sub
+	m.hasSubscription = true
+	m.hasAccount = false
+	m.hasContainer = false
+	m.currentAccount = blob.Account{}
+	m.containerName = ""
+	m.prefix = ""
+	m.clearBlobSelectionState()
+	m.resetBlobLoadState()
+	m.resetPreviewState()
+	m.focus = accountsPane
+
+	if cached, ok := m.cache.accounts.Get(sub.ID); ok {
+		m.accounts = cached
+		m.accountsList.ResetFilter()
+		ui.SetItemsPreserveIndex(&m.accountsList, accountsToItems(cached))
+		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(cached))
+	} else {
+		m.accounts = nil
+		m.accountsList.ResetFilter()
+		m.accountsList.SetItems(nil)
+		m.accountsList.Title = "Storage Accounts"
+	}
+
+	m.containers = nil
+	m.blobs = nil
+	m.containersList.ResetFilter()
+	m.blobsList.ResetFilter()
+	m.containersList.SetItems(nil)
+	m.blobsList.SetItems(nil)
+	m.containersList.Title = "Containers"
+	m.blobsList.Title = "Blobs"
+
+	m.loading = true
+	m.status = fmt.Sprintf("Loading storage accounts in %s", subscriptionDisplayName(sub))
+	return m, tea.Batch(spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, sub.ID))
+}
+
 func (m Model) refresh() (Model, tea.Cmd) {
-	if m.focus == subscriptionsPane || !m.hasSubscription {
+	if !m.hasSubscription {
 		m.loading = true
 		m.lastErr = ""
 		m.status = "Refreshing subscriptions..."
@@ -85,7 +129,6 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 		m.focus = accountsPane
 		return m, nil
 	case accountsPane:
-		m.focus = subscriptionsPane
 		return m, nil
 	default:
 		return m, nil
@@ -93,56 +136,6 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
-	if m.focus == subscriptionsPane {
-		item, ok := m.subscriptionsList.SelectedItem().(subscriptionItem)
-		if !ok {
-			return m, nil
-		}
-
-		// Re-selecting the same subscription: just move focus.
-		if m.hasSubscription && m.currentSub.ID == item.subscription.ID {
-			m.focus = accountsPane
-			return m, nil
-		}
-
-		m.currentSub = item.subscription
-		m.hasSubscription = true
-		m.hasAccount = false
-		m.hasContainer = false
-		m.currentAccount = blob.Account{}
-		m.containerName = ""
-		m.prefix = ""
-		m.clearBlobSelectionState()
-		m.resetBlobLoadState()
-		m.resetPreviewState()
-		m.focus = accountsPane
-
-		if cached, ok := m.cache.accounts.Get(item.subscription.ID); ok {
-			m.accounts = cached
-			m.accountsList.ResetFilter()
-			ui.SetItemsPreserveIndex(&m.accountsList, accountsToItems(cached))
-			m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(cached))
-		} else {
-			m.accounts = nil
-			m.accountsList.ResetFilter()
-			m.accountsList.SetItems(nil)
-			m.accountsList.Title = "Storage Accounts"
-		}
-
-		m.containers = nil
-		m.blobs = nil
-		m.containersList.ResetFilter()
-		m.blobsList.ResetFilter()
-		m.containersList.SetItems(nil)
-		m.blobsList.SetItems(nil)
-		m.containersList.Title = "Containers"
-		m.blobsList.Title = "Blobs"
-
-		m.loading = true
-		m.status = fmt.Sprintf("Loading storage accounts in %s", subscriptionDisplayName(item.subscription))
-		return m, tea.Batch(spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, item.subscription.ID))
-	}
-
 	if m.focus == accountsPane {
 		item, ok := m.accountsList.SelectedItem().(accountItem)
 		if !ok {
@@ -260,8 +253,6 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 func paneName(pane int) string {
 	switch pane {
-	case subscriptionsPane:
-		return "subscriptions"
 	case accountsPane:
 		return "storage accounts"
 	case containersPane:

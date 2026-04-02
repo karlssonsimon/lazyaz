@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 
+	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/azure/servicebus"
@@ -68,6 +69,9 @@ func (m *Model) addTab(kind TabKind) {
 	id := m.nextID
 	m.nextID++
 
+	// Inherit the active tab's subscription so new tabs start in context.
+	sub, hasSub := m.activeSubscription()
+
 	var child tea.Model
 	switch kind {
 	case TabBlob:
@@ -78,6 +82,9 @@ func (m *Model) addTab(kind TabKind) {
 			Blobs:         m.stores.blobs,
 		})
 		bm.EmbeddedMode = true
+		if hasSub {
+			bm.SetSubscription(sub)
+		}
 		child = bm
 	case TabServiceBus:
 		sm := sbapp.NewModelWithCache(m.sbSvc, m.cfg, sbapp.SBStores{
@@ -87,6 +94,9 @@ func (m *Model) addTab(kind TabKind) {
 			TopicSubs:     m.stores.sbTopicSubs,
 		})
 		sm.EmbeddedMode = true
+		if hasSub {
+			sm.SetSubscription(sub)
+		}
 		child = sm
 	case TabKeyVault:
 		km := kvapp.NewModelWithCache(m.kvSvc, m.cfg, kvapp.KVStores{
@@ -96,11 +106,30 @@ func (m *Model) addTab(kind TabKind) {
 			Versions:      m.stores.kvVersions,
 		})
 		km.EmbeddedMode = true
+		if hasSub {
+			km.SetSubscription(sub)
+		}
 		child = km
 	}
 
 	m.tabs = append(m.tabs, Tab{ID: id, Kind: kind, Model: child})
 	m.activeIdx = len(m.tabs) - 1
+}
+
+// activeSubscription returns the current subscription from the active tab.
+func (m *Model) activeSubscription() (azure.Subscription, bool) {
+	if len(m.tabs) == 0 {
+		return azure.Subscription{}, false
+	}
+	switch child := m.tabs[m.activeIdx].Model.(type) {
+	case blobapp.Model:
+		return child.CurrentSubscription()
+	case sbapp.Model:
+		return child.CurrentSubscription()
+	case kvapp.Model:
+		return child.CurrentSubscription()
+	}
+	return azure.Subscription{}, false
 }
 
 func (m *Model) closeTab(idx int) {
