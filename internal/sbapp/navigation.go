@@ -63,6 +63,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Re-selecting the same subscription: just move focus.
+		if m.hasSubscription && m.currentSub.ID == item.subscription.ID {
+			m.focus = namespacesPane
+			return m, nil
+		}
+
 		m.currentSub = item.subscription
 		m.hasSubscription = true
 		m.hasNamespace = false
@@ -103,6 +109,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Re-selecting the same namespace: just move focus.
+		if m.hasNamespace && m.currentNS.Name == item.namespace.Name {
+			m.focus = entitiesPane
+			return m, nil
+		}
+
 		m.currentNS = item.namespace
 		m.hasNamespace = true
 		m.hasEntity = false
@@ -135,6 +147,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 	if m.focus == entitiesPane {
 		item, ok := m.entitiesList.SelectedItem().(entityItem)
 		if !ok {
+			return m, nil
+		}
+
+		// Re-selecting the same entity: just move focus.
+		if m.hasEntity && m.currentEntity.Name == item.entity.Name && m.currentEntity.Kind == item.entity.Kind {
+			m.focus = detailPane
 			return m, nil
 		}
 

@@ -99,6 +99,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Re-selecting the same subscription: just move focus.
+		if m.hasSubscription && m.currentSub.ID == item.subscription.ID {
+			m.focus = accountsPane
+			return m, nil
+		}
+
 		m.currentSub = item.subscription
 		m.hasSubscription = true
 		m.hasAccount = false
@@ -143,6 +149,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Re-selecting the same account: just move focus.
+		if m.hasAccount && sameAccount(m.currentAccount, item.account) {
+			m.focus = containersPane
+			return m, nil
+		}
+
 		m.currentAccount = item.account
 		m.hasAccount = true
 		m.hasContainer = false
@@ -178,6 +190,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 	if m.focus == containersPane {
 		item, ok := m.containersList.SelectedItem().(containerItem)
 		if !ok {
+			return m, nil
+		}
+
+		// Re-selecting the same container: just move focus.
+		if m.hasContainer && m.containerName == item.container.Name {
+			m.focus = blobsPane
 			return m, nil
 		}
 

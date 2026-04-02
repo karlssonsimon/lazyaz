@@ -41,6 +41,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Re-selecting the same subscription: just move focus.
+		if m.hasSubscription && m.currentSub.ID == item.subscription.ID {
+			m.focus = vaultsPane
+			return m, nil
+		}
+
 		m.currentSub = item.subscription
 		m.hasSubscription = true
 		m.hasVault = false
@@ -81,6 +87,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Re-selecting the same vault: just move focus.
+		if m.hasVault && m.currentVault.Name == item.vault.Name {
+			m.focus = secretsPane
+			return m, nil
+		}
+
 		m.currentVault = item.vault
 		m.hasVault = true
 		m.hasSecret = false
@@ -112,6 +124,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 	if m.focus == secretsPane {
 		item, ok := m.secretsList.SelectedItem().(secretItem)
 		if !ok {
+			return m, nil
+		}
+
+		// Re-selecting the same secret: just move focus.
+		if m.hasSecret && m.currentSecret.Name == item.secret.Name {
+			m.focus = versionsPane
 			return m, nil
 		}
 
