@@ -3,6 +3,7 @@ package sbapp
 import (
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/servicebus"
+	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -142,11 +143,11 @@ type entitiesRefreshedMsg struct {
 	err      error
 }
 
-func NewModel(svc *servicebus.Service, cfg ui.Config) Model {
-	return NewModelWithKeyMap(svc, cfg, DefaultKeyMap())
+func NewModel(svc *servicebus.Service, cfg ui.Config, db *cache.DB) Model {
+	return NewModelWithKeyMap(svc, cfg, DefaultKeyMap(), db)
 }
 
-func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, keymap KeyMap) Model {
+func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, keymap KeyMap, db *cache.DB) Model {
 	delegate := list.NewDefaultDelegate()
 
 	subscriptions := list.New([]list.Item{}, delegate, 28, 10)
@@ -198,7 +199,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, keymap KeyMap) M
 		focus:             subscriptionsPane,
 		markedMessages:    make(map[string]struct{}),
 		duplicateMessages: make(map[string]struct{}),
-		cache:   newCache(),
+		cache:   newCache(db),
 		schemes: cfg.Schemes,
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
@@ -213,7 +214,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, keymap KeyMap) M
 
 // NewModelWithCache creates a Model using pre-built shared cache stores.
 func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores SBStores) Model {
-	m := NewModel(svc, cfg)
+	m := NewModel(svc, cfg, nil)
 	m.cache = NewCacheWithStores(stores)
 	return m
 }

@@ -117,10 +117,7 @@ func (i messageItem) Title() string {
 
 func (i messageItem) Description() string {
 	enqueued := ui.FormatTime(i.message.EnqueuedAt)
-	preview := i.message.BodyPreview
-	if len(preview) > 80 {
-		preview = preview[:80] + "..."
-	}
+	preview := compactPreview(i.message.BodyPreview, 50)
 	if preview == "" {
 		return enqueued
 	}
@@ -129,6 +126,28 @@ func (i messageItem) Description() string {
 
 func (i messageItem) FilterValue() string {
 	return i.message.MessageID + " " + i.message.BodyPreview
+}
+
+func compactPreview(s string, max int) string {
+	// Collapse whitespace (newlines, tabs, runs of spaces) into single spaces.
+	var b strings.Builder
+	inSpace := false
+	for _, r := range s {
+		if r == '\n' || r == '\r' || r == '\t' || r == ' ' {
+			if !inSpace && b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			inSpace = true
+			continue
+		}
+		inSpace = false
+		b.WriteRune(r)
+	}
+	out := strings.TrimSpace(b.String())
+	if len(out) > max {
+		return out[:max] + "..."
+	}
+	return out
 }
 
 func subscriptionsToItems(subs []azure.Subscription) []list.Item {

@@ -18,7 +18,15 @@ type sbCache struct {
 	topicSubs     *cache.Loader[servicebus.TopicSubscription]
 }
 
-func newCache() sbCache {
+func newCache(db *cache.DB) sbCache {
+	if db != nil {
+		return sbCache{
+			subscriptions: cache.NewLoader[azure.Subscription](cache.NewStore[azure.Subscription](db, "subscriptions")),
+			namespaces:    cache.NewLoader[servicebus.Namespace](cache.NewStore[servicebus.Namespace](db, "sb_namespaces")),
+			entities:      cache.NewLoader[servicebus.Entity](cache.NewStore[servicebus.Entity](db, "sb_entities")),
+			topicSubs:     cache.NewLoader[servicebus.TopicSubscription](cache.NewStore[servicebus.TopicSubscription](db, "sb_topic_subs")),
+		}
+	}
 	return sbCache{
 		subscriptions: cache.NewLoader(cache.NewMap[azure.Subscription]()),
 		namespaces:    cache.NewLoader(cache.NewMap[servicebus.Namespace]()),

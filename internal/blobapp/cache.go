@@ -16,7 +16,15 @@ type blobCache struct {
 	blobs         *cache.Loader[blob.BlobEntry]     // key: subscriptionID, accountName, container, prefix, loadAll
 }
 
-func newCache() blobCache {
+func newCache(db *cache.DB) blobCache {
+	if db != nil {
+		return blobCache{
+			subscriptions: cache.NewLoader[azure.Subscription](cache.NewStore[azure.Subscription](db, "subscriptions")),
+			accounts:      cache.NewLoader[blob.Account](cache.NewStore[blob.Account](db, "blob_accounts")),
+			containers:    cache.NewLoader[blob.ContainerInfo](cache.NewStore[blob.ContainerInfo](db, "blob_containers")),
+			blobs:         cache.NewLoader[blob.BlobEntry](cache.NewStore[blob.BlobEntry](db, "blobs")),
+		}
+	}
 	return blobCache{
 		subscriptions: cache.NewLoader(cache.NewMap[azure.Subscription]()),
 		accounts:      cache.NewLoader(cache.NewMap[blob.Account]()),

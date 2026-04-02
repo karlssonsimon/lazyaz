@@ -7,6 +7,7 @@ import (
 	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/blobapp"
+	"azure-storage/internal/cache"
 	"azure-storage/internal/kvapp"
 	"azure-storage/internal/sbapp"
 	"azure-storage/internal/ui"
@@ -34,7 +35,7 @@ type Model struct {
 	themeOverlay ui.ThemeOverlayState
 	helpOverlay  ui.HelpOverlayState
 
-	tabPicker  bool // true when the new-tab picker overlay is showing
+	tabPicker  tabPickerState
 	cmdPalette commandPalette
 
 	width  int
@@ -42,12 +43,13 @@ type Model struct {
 }
 
 // NewModel creates the parent tabbed model.
-func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.Service, cfg ui.Config) Model {
+// If db is non-nil, a persistent SQLite cache is used; otherwise in-memory.
+func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.Service, cfg ui.Config, db *cache.DB) Model {
 	m := Model{
 		blobSvc: blobSvc,
 		sbSvc:   sbSvc,
 		kvSvc:   kvSvc,
-		stores:  newSharedStores(),
+		stores:  newSharedStores(db),
 		cfg:     cfg,
 		keymap:  defaultTabKeyMap(),
 		schemes: cfg.Schemes,
@@ -191,7 +193,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 
 	case tabPickerMsg:
-		m.tabPicker = false
+		m.tabPicker.active = false
 		m.addTab(msg.kind)
 		// Init the new tab and send it a resize.
 		tab := &m.tabs[m.activeIdx]
@@ -254,8 +256,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Tab picker overlay.
-		if m.tabPicker {
-			return m.handleTabPicker(key)
+		if m.tabPicker.active {
+			if kind, ok := m.tabPicker.handleKey(key, ui.ThemeKeyBindings{
+				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
+				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
+			}); ok {
+				return m.Update(tabPickerMsg{kind: kind})
+			}
+			return m, nil
 		}
 
 		// Help overlay.
@@ -287,7 +295,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cmdPalette.open(m.buildCommands())
 			return m, nil
 		case m.keymap.NewTab.Matches(key):
-			m.tabPicker = true
+			m.tabPicker.open()
 			return m, nil
 		case m.keymap.CloseTab.Matches(key):
 			if len(m.tabs) <= 1 {
@@ -431,17 +439,3 @@ func (m Model) handleCommandPalette(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleTabPicker(key string) (tea.Model, tea.Cmd) {
-	switch key {
-	case "1", "b", "B":
-		return m, func() tea.Msg { return tabPickerMsg{kind: TabBlob} }
-	case "2", "s", "S":
-		return m, func() tea.Msg { return tabPickerMsg{kind: TabServiceBus} }
-	case "3", "k", "K":
-		return m, func() tea.Msg { return tabPickerMsg{kind: TabKeyVault} }
-	case "esc", "ctrl+c":
-		m.tabPicker = false
-		return m, nil
-	}
-	return m, nil
-}

@@ -41,22 +41,39 @@ type Tab struct {
 
 // sharedStores holds all shared cache stores owned by the parent.
 type sharedStores struct {
-	subscriptions *cache.Map[azure.Subscription]
+	subscriptions cache.Store[azure.Subscription]
 
-	blobAccounts   *cache.Map[blob.Account]
-	blobContainers *cache.Map[blob.ContainerInfo]
-	blobs          *cache.Map[blob.BlobEntry]
+	blobAccounts   cache.Store[blob.Account]
+	blobContainers cache.Store[blob.ContainerInfo]
+	blobs          cache.Store[blob.BlobEntry]
 
-	sbNamespaces *cache.Map[servicebus.Namespace]
-	sbEntities   *cache.Map[servicebus.Entity]
-	sbTopicSubs  *cache.Map[servicebus.TopicSubscription]
+	sbNamespaces cache.Store[servicebus.Namespace]
+	sbEntities   cache.Store[servicebus.Entity]
+	sbTopicSubs  cache.Store[servicebus.TopicSubscription]
 
-	kvVaults   *cache.Map[keyvault.Vault]
-	kvSecrets  *cache.Map[keyvault.Secret]
-	kvVersions *cache.Map[keyvault.SecretVersion]
+	kvVaults   cache.Store[keyvault.Vault]
+	kvSecrets  cache.Store[keyvault.Secret]
+	kvVersions cache.Store[keyvault.SecretVersion]
 }
 
-func newSharedStores() sharedStores {
+func newSharedStores(db *cache.DB) sharedStores {
+	if db != nil {
+		return sharedStores{
+			subscriptions: cache.NewStore[azure.Subscription](db, "subscriptions"),
+
+			blobAccounts:   cache.NewStore[blob.Account](db, "blob_accounts"),
+			blobContainers: cache.NewStore[blob.ContainerInfo](db, "blob_containers"),
+			blobs:          cache.NewStore[blob.BlobEntry](db, "blobs"),
+
+			sbNamespaces: cache.NewStore[servicebus.Namespace](db, "sb_namespaces"),
+			sbEntities:   cache.NewStore[servicebus.Entity](db, "sb_entities"),
+			sbTopicSubs:  cache.NewStore[servicebus.TopicSubscription](db, "sb_topic_subs"),
+
+			kvVaults:   cache.NewStore[keyvault.Vault](db, "kv_vaults"),
+			kvSecrets:  cache.NewStore[keyvault.Secret](db, "kv_secrets"),
+			kvVersions: cache.NewStore[keyvault.SecretVersion](db, "kv_secret_versions"),
+		}
+	}
 	return sharedStores{
 		subscriptions: cache.NewMap[azure.Subscription](),
 

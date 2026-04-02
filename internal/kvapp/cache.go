@@ -16,7 +16,15 @@ type kvCache struct {
 	versions      *cache.Loader[keyvault.SecretVersion]
 }
 
-func newCache() kvCache {
+func newCache(db *cache.DB) kvCache {
+	if db != nil {
+		return kvCache{
+			subscriptions: cache.NewLoader[azure.Subscription](cache.NewStore[azure.Subscription](db, "subscriptions")),
+			vaults:        cache.NewLoader[keyvault.Vault](cache.NewStore[keyvault.Vault](db, "kv_vaults")),
+			secrets:       cache.NewLoader[keyvault.Secret](cache.NewStore[keyvault.Secret](db, "kv_secrets")),
+			versions:      cache.NewLoader[keyvault.SecretVersion](cache.NewStore[keyvault.SecretVersion](db, "kv_secret_versions")),
+		}
+	}
 	return kvCache{
 		subscriptions: cache.NewLoader(cache.NewMap[azure.Subscription]()),
 		vaults:        cache.NewLoader(cache.NewMap[keyvault.Vault]()),

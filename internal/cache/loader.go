@@ -62,7 +62,13 @@ func (l *Loader[T]) Fetch(
 	ctx, cancel := context.WithCancel(context.Background())
 	l.cancel = cancel
 
-	ch := make(chan Page[T], 1)
+	ch := make(chan Page[T], 2)
+
+	// Emit cached data immediately so the UI doesn't wait for the network.
+	if items, ok := l.store.Get(key); ok && len(items) > 0 {
+		ch <- Page[T]{Key: key, Items: items}
+	}
+
 	go func() {
 		defer close(ch)
 		var all []T
