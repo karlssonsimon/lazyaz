@@ -65,21 +65,22 @@ func (m Model) View() string {
 	entitiesView := lipgloss.JoinVertical(lipgloss.Left, m.entitiesList.View(), entHints)
 	detailView := lipgloss.JoinVertical(lipgloss.Left, m.detailList.View(), detHints)
 
-	namespacesPaneStyle := styles.Pane.Copy().Width(pw[0])
-	entitiesPaneStyle := styles.Pane.Copy().Width(pw[1])
-	detailPaneStyle := styles.Pane.Copy().Width(pw[2])
+	h := m.paneHeight
+	namespacesPaneStyle := styles.Pane.Copy().Width(pw[0]).Height(h)
+	entitiesPaneStyle := styles.Pane.Copy().Width(pw[1]).Height(h)
+	detailPaneStyle := styles.Pane.Copy().Width(pw[2]).Height(h)
 
 	if m.focus == namespacesPane {
-		namespacesPaneStyle = styles.FocusedPane.Copy().Width(pw[0])
+		namespacesPaneStyle = styles.FocusedPane.Copy().Width(pw[0]).Height(h)
 	}
 	if m.focus == entitiesPane {
-		entitiesPaneStyle = styles.FocusedPane.Copy().Width(pw[1])
+		entitiesPaneStyle = styles.FocusedPane.Copy().Width(pw[1]).Height(h)
 	}
 
 	if m.deadLetter && m.detailMode == detailMessages {
-		detailPaneStyle = styles.Pane.Copy().Width(pw[2]).BorderForeground(m.styles.Danger.GetForeground())
+		detailPaneStyle = styles.Pane.Copy().Width(pw[2]).Height(h).BorderForeground(m.styles.Danger.GetForeground())
 	} else if m.focus == detailPane && !m.viewingMessage {
-		detailPaneStyle = styles.FocusedPane.Copy().Width(pw[2])
+		detailPaneStyle = styles.FocusedPane.Copy().Width(pw[2]).Height(h)
 	}
 
 	panesList := []string{
@@ -94,7 +95,7 @@ func (m Model) View() string {
 		previewTitle := previewTitleStyle.Render(fmt.Sprintf("Message: %s", msgID))
 		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, m.messageViewport.View())
 
-		previewPaneStyle := styles.FocusedPane.Copy().Width(pw[3])
+		previewPaneStyle := styles.FocusedPane.Copy().Width(pw[3]).Height(h)
 		panesList = append(panesList, previewPaneStyle.Render(previewContent))
 	}
 

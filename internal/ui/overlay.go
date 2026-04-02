@@ -106,6 +106,7 @@ func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, s
 			start = max(0, end-visible)
 		}
 
+		itemRows := 0
 		for ci := start; ci < end; ci++ {
 			item := items[ci]
 			marker := "  "
@@ -133,14 +134,23 @@ func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, s
 				style = cursorStyle
 			}
 			rows = append(rows, style.Render(entry))
+			itemRows++
 
 			if item.Desc != "" {
 				rows = append(rows, style.Render("  "+item.Desc))
+				itemRows++
 			}
 		}
 
-		// Pad to constant height.
-		for i := visible; i < maxVis; i++ {
+		// Pad to constant height based on max visible row count.
+		// If items have Desc fields, each takes 2 rows.
+		hasDesc := len(items) > 0 && items[0].Desc != ""
+		rowsPerItem := 1
+		if hasDesc {
+			rowsPerItem = 2
+		}
+		targetRows := maxVis * rowsPerItem
+		for i := itemRows; i < targetRows; i++ {
 			rows = append(rows, emptyRow)
 		}
 	}

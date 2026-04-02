@@ -102,8 +102,10 @@ func RenderSubscriptionOverlay(state SubscriptionOverlayState, subs []azure.Subs
 	}
 
 	cfg := OverlayListConfig{
-		Title: "Subscriptions",
-		Query: state.Query,
+		Title:      "Subscriptions",
+		Query:      state.Query,
+		MaxVisible: 12,
+		Center:     true,
 	}
 	return RenderOverlayList(cfg, items, state.CursorIdx, styles.Overlay, width, height, base)
 }

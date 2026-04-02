@@ -80,22 +80,23 @@ func (m Model) View() string {
 		previewView = lipgloss.JoinVertical(lipgloss.Left, previewView, previewHints)
 	}
 
-	accountsPaneStyle := styles.Pane.Copy().Width(pw[0])
-	containersPaneStyle := styles.Pane.Copy().Width(pw[1])
-	blobsPaneStyle := styles.Pane.Copy().Width(pw[2])
-	previewPaneStyle := styles.Pane.Copy().Width(pw[3])
+	h := m.paneHeight
+	accountsPaneStyle := styles.Pane.Copy().Width(pw[0]).Height(h)
+	containersPaneStyle := styles.Pane.Copy().Width(pw[1]).Height(h)
+	blobsPaneStyle := styles.Pane.Copy().Width(pw[2]).Height(h)
+	previewPaneStyle := styles.Pane.Copy().Width(pw[3]).Height(h)
 
 	if m.focus == accountsPane {
-		accountsPaneStyle = styles.FocusedPane.Copy().Width(pw[0])
+		accountsPaneStyle = styles.FocusedPane.Copy().Width(pw[0]).Height(h)
 	}
 	if m.focus == containersPane {
-		containersPaneStyle = styles.FocusedPane.Copy().Width(pw[1])
+		containersPaneStyle = styles.FocusedPane.Copy().Width(pw[1]).Height(h)
 	}
 	if m.focus == blobsPane {
-		blobsPaneStyle = styles.FocusedPane.Copy().Width(pw[2])
+		blobsPaneStyle = styles.FocusedPane.Copy().Width(pw[2]).Height(h)
 	}
 	if m.preview.open && m.focus == previewPane {
-		previewPaneStyle = styles.FocusedPane.Copy().Width(pw[3])
+		previewPaneStyle = styles.FocusedPane.Copy().Width(pw[3]).Height(h)
 	}
 
 	paneParts := []string{
