@@ -18,7 +18,8 @@ func (m *Model) resize() {
 	}
 	m.paneHeight = height
 
-	m.vaultsList.SetSize(ui.PaneContentWidth(pane, widths[0]), height)
-	m.secretsList.SetSize(ui.PaneContentWidth(pane, widths[1]), height)
-	m.versionsList.SetSize(ui.PaneContentWidth(pane, widths[2]), height)
+	listHeight := height - ui.PaneHintHeight
+	m.vaultsList.SetSize(ui.PaneContentWidth(pane, widths[0]), listHeight)
+	m.secretsList.SetSize(ui.PaneContentWidth(pane, widths[1]), listHeight)
+	m.versionsList.SetSize(ui.PaneContentWidth(pane, widths[2]), listHeight)
 }

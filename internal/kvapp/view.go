@@ -27,9 +27,30 @@ func (m Model) View() string {
 
 	pw := m.paneWidths
 
-	vaultsView := m.vaultsList.View()
-	secretsView := m.secretsList.View()
-	versionsView := m.versionsList.View()
+	pane := m.styles.Chrome.Pane
+	km := m.keymap
+
+	vaultsHints := ui.RenderPaneHints([]ui.PaneHint{
+		{km.OpenFocusedAlt.Short(), "open"},
+		{km.FilterInput.Short(), "filter"},
+		{km.NextFocus.Short(), "next"},
+		{km.SubscriptionPicker.Short(), "sub"},
+	}, m.styles, ui.PaneContentWidth(pane, pw[0]))
+
+	secretsHints := ui.RenderPaneHints([]ui.PaneHint{
+		{km.OpenFocusedAlt.Short(), "versions"},
+		{km.YankSecret.Short(), "yank"},
+		{km.NavigateLeft.Short(), "back"},
+	}, m.styles, ui.PaneContentWidth(pane, pw[1]))
+
+	versionsHints := ui.RenderPaneHints([]ui.PaneHint{
+		{km.YankSecret.Short(), "yank version"},
+		{km.NavigateLeft.Short(), "back"},
+	}, m.styles, ui.PaneContentWidth(pane, pw[2]))
+
+	vaultsView := lipgloss.JoinVertical(lipgloss.Left, m.vaultsList.View(), vaultsHints)
+	secretsView := lipgloss.JoinVertical(lipgloss.Left, m.secretsList.View(), secretsHints)
+	versionsView := lipgloss.JoinVertical(lipgloss.Left, m.versionsList.View(), versionsHints)
 
 	vaultsPaneStyle := styles.Pane.Copy().Width(pw[0])
 	secretsPaneStyle := styles.Pane.Copy().Width(pw[1])
