@@ -2,6 +2,8 @@ package ui
 
 import (
 	"strings"
+
+	"azure-storage/internal/fuzzy"
 )
 
 type HelpKeyBindings struct {
@@ -71,22 +73,9 @@ func (s *HelpOverlayState) HandleKey(key string, bindings HelpKeyBindings) {
 }
 
 func (s *HelpOverlayState) refilter() {
-	if s.Query == "" {
-		s.filtered = make([]int, len(s.items))
-		for i := range s.items {
-			s.filtered[i] = i
-		}
-	} else {
-		q := strings.ToLower(s.Query)
-		s.filtered = s.filtered[:0]
-		for i, item := range s.items {
-			if strings.Contains(strings.ToLower(item.keys), q) ||
-				strings.Contains(strings.ToLower(item.desc), q) ||
-				strings.Contains(strings.ToLower(item.section), q) {
-				s.filtered = append(s.filtered, i)
-			}
-		}
-	}
+	s.filtered = fuzzy.Filter(s.Query, s.items, func(item helpItem) string {
+		return item.keys + " " + item.desc + " " + item.section
+	})
 	if s.CursorIdx >= len(s.filtered) {
 		s.CursorIdx = max(0, len(s.filtered)-1)
 	}

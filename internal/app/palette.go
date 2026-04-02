@@ -1,8 +1,7 @@
 package app
 
 import (
-	"strings"
-
+	"azure-storage/internal/fuzzy"
 	"azure-storage/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,20 +46,7 @@ func (p *commandPalette) close() {
 }
 
 func (p *commandPalette) refilter() {
-	if p.query == "" {
-		p.filtered = make([]int, len(p.commands))
-		for i := range p.commands {
-			p.filtered[i] = i
-		}
-	} else {
-		q := strings.ToLower(p.query)
-		p.filtered = p.filtered[:0]
-		for i, cmd := range p.commands {
-			if strings.Contains(strings.ToLower(cmd.name), q) {
-				p.filtered = append(p.filtered, i)
-			}
-		}
-	}
+	p.filtered = fuzzy.Filter(p.query, p.commands, func(c command) string { return c.name })
 	if p.cursor >= len(p.filtered) {
 		p.cursor = max(0, len(p.filtered)-1)
 	}

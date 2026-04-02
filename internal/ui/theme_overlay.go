@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"strings"
+	"azure-storage/internal/fuzzy"
 )
 
 type KeyMatcher interface {
@@ -28,20 +28,7 @@ func (s *ThemeOverlayState) Open() {
 }
 
 func (s *ThemeOverlayState) refilter(schemes []Scheme) {
-	if s.Query == "" {
-		s.filtered = make([]int, len(schemes))
-		for i := range schemes {
-			s.filtered[i] = i
-		}
-	} else {
-		q := strings.ToLower(s.Query)
-		s.filtered = s.filtered[:0]
-		for i, sc := range schemes {
-			if strings.Contains(strings.ToLower(sc.Name), q) {
-				s.filtered = append(s.filtered, i)
-			}
-		}
-	}
+	s.filtered = fuzzy.Filter(s.Query, schemes, func(sc Scheme) string { return sc.Name })
 	if s.CursorIdx >= len(s.filtered) {
 		s.CursorIdx = max(0, len(s.filtered)-1)
 	}
