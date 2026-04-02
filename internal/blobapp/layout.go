@@ -34,12 +34,13 @@ func (m *Model) resize() {
 	}
 	m.paneHeight = height
 
-	m.accountsList.SetSize(ui.PaneContentWidth(pane, widths[0]), height)
-	m.containersList.SetSize(ui.PaneContentWidth(pane, widths[1]), height)
-	m.blobsList.SetSize(ui.PaneContentWidth(pane, widths[2]), height)
+	listHeight := height - ui.PaneHintHeight
+	m.accountsList.SetSize(ui.PaneContentWidth(pane, widths[0]), listHeight)
+	m.containersList.SetSize(ui.PaneContentWidth(pane, widths[1]), listHeight)
+	m.blobsList.SetSize(ui.PaneContentWidth(pane, widths[2]), listHeight)
 	if m.preview.open {
 		m.preview.viewport.Width = ui.PaneContentWidth(pane, widths[3])
-		m.preview.viewport.Height = height
+		m.preview.viewport.Height = listHeight
 	}
 }
 

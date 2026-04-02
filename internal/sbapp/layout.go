@@ -26,16 +26,18 @@ func (m *Model) resize() {
 	}
 	m.paneHeight = height
 
+	listHeight := height - ui.PaneHintHeight
+
 	if m.viewingMessage {
-		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), height)
+		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), listHeight)
 		m.messageViewport.Width = ui.PaneContentWidth(pane, widths[3])
-		m.messageViewport.Height = height - 2
+		m.messageViewport.Height = listHeight - 2
 	} else {
-		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), height)
+		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), listHeight)
 		m.messageViewport.Width = 0
 		m.messageViewport.Height = 0
 	}
 
-	m.namespacesList.SetSize(ui.PaneContentWidth(pane, widths[0]), height)
-	m.entitiesList.SetSize(ui.PaneContentWidth(pane, widths[1]), height)
+	m.namespacesList.SetSize(ui.PaneContentWidth(pane, widths[0]), listHeight)
+	m.entitiesList.SetSize(ui.PaneContentWidth(pane, widths[1]), listHeight)
 }

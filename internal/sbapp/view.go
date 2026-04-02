@@ -39,9 +39,31 @@ func (m Model) View() string {
 
 	pw := m.paneWidths
 
-	namespacesView := m.namespacesList.View()
-	entitiesView := m.entitiesList.View()
-	detailView := m.detailList.View()
+	pane := m.styles.Chrome.Pane
+	km := m.keymap
+
+	nsHints := ui.RenderPaneHints([]ui.PaneHint{
+		{km.OpenFocusedAlt.Short(), "open"},
+		{km.FilterInput.Short(), "filter"},
+		{km.NextFocus.Short(), "next"},
+		{km.SubscriptionPicker.Short(), "sub"},
+	}, m.styles, ui.PaneContentWidth(pane, pw[0]))
+
+	entHints := ui.RenderPaneHints([]ui.PaneHint{
+		{km.OpenFocusedAlt.Short(), "open"},
+		{km.NavigateLeft.Short(), "back"},
+		{km.ToggleDLQFilter.Short(), "DLQ filter"},
+	}, m.styles, ui.PaneContentWidth(pane, pw[1]))
+
+	detHints := ui.RenderPaneHints([]ui.PaneHint{
+		{km.ToggleMark.Short(), "mark"},
+		{km.ShowActiveQueue.Short() + "/" + km.ShowDeadLetterQueue.Short(), "active/DLQ"},
+		{km.RequeueDLQ.Short(), "requeue"},
+	}, m.styles, ui.PaneContentWidth(pane, pw[2]))
+
+	namespacesView := lipgloss.JoinVertical(lipgloss.Left, m.namespacesList.View(), nsHints)
+	entitiesView := lipgloss.JoinVertical(lipgloss.Left, m.entitiesList.View(), entHints)
+	detailView := lipgloss.JoinVertical(lipgloss.Left, m.detailList.View(), detHints)
 
 	namespacesPaneStyle := styles.Pane.Copy().Width(pw[0])
 	entitiesPaneStyle := styles.Pane.Copy().Width(pw[1])

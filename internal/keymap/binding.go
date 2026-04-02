@@ -40,6 +40,17 @@ func (b Binding) Label() string {
 	return strings.Join(labels, "/")
 }
 
+// Short returns the first key only (for compact hint display).
+func (b Binding) Short() string {
+	if len(b.Keys) == 0 {
+		return ""
+	}
+	if b.Keys[0] == " " {
+		return "space"
+	}
+	return b.Keys[0]
+}
+
 // HelpEntry formats a binding and description as a help line.
 func HelpEntry(b Binding, description string) string {
 	return b.Label() + "  " + description

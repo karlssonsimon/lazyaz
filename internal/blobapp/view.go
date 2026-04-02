@@ -42,13 +42,44 @@ func (m Model) View() string {
 
 	pw := m.paneWidths
 
-	accountsView := m.accountsList.View()
-	containersView := m.containersList.View()
-	blobsView := m.blobsList.View()
+	pane := m.styles.Chrome.Pane
+	km := m.keymap
+
+	accountsHints := ui.RenderPaneHints([]ui.PaneHint{
+		{km.OpenFocusedAlt.Short(), "open"},
+		{km.FilterInput.Short(), "filter"},
+		{km.NextFocus.Short(), "next"},
+		{km.SubscriptionPicker.Short(), "sub"},
+	}, m.styles, ui.PaneContentWidth(pane, pw[0]))
+
+	containersHints := ui.RenderPaneHints([]ui.PaneHint{
+		{km.OpenFocusedAlt.Short(), "open"},
+		{km.NavigateLeft.Short(), "back"},
+		{km.FilterInput.Short(), "filter"},
+	}, m.styles, ui.PaneContentWidth(pane, pw[1]))
+
+	blobsHints := ui.RenderPaneHints([]ui.PaneHint{
+		{km.ToggleMark.Short(), "mark"},
+		{km.ToggleVisualLine.Short(), "visual"},
+		{km.DownloadSelection.Short(), "download"},
+		{km.OpenFocusedAlt.Short(), "preview"},
+	}, m.styles, ui.PaneContentWidth(pane, pw[2]))
+
+	accountsView := lipgloss.JoinVertical(lipgloss.Left, m.accountsList.View(), accountsHints)
+	containersView := lipgloss.JoinVertical(lipgloss.Left, m.containersList.View(), containersHints)
+	blobsView := lipgloss.JoinVertical(lipgloss.Left, m.blobsList.View(), blobsHints)
+
 	previewView := ""
 	if m.preview.open {
+		previewHints := ui.RenderPaneHints([]ui.PaneHint{
+			{km.PreviewBack.Short(), "back"},
+			{km.PreviewDown.Short() + "/" + km.PreviewUp.Short(), "scroll"},
+			{km.PreviewBottom.Short(), "bottom"},
+		}, m.styles, ui.PaneContentWidth(pane, pw[3]))
 		previewView = m.preview.viewport.View()
+		previewView = lipgloss.JoinVertical(lipgloss.Left, previewView, previewHints)
 	}
+
 	accountsPaneStyle := styles.Pane.Copy().Width(pw[0])
 	containersPaneStyle := styles.Pane.Copy().Width(pw[1])
 	blobsPaneStyle := styles.Pane.Copy().Width(pw[2])
