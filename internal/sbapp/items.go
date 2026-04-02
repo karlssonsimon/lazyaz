@@ -112,7 +112,7 @@ func (i messageItem) Title() string {
 	if i.marked {
 		return "* " + id
 	}
-	return "  " + id
+	return id
 }
 
 func (i messageItem) Description() string {
