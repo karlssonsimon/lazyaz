@@ -1,8 +1,11 @@
 local Explorer = require("aztools.explorer")
+local clipboard = require("aztools.clipboard")
 local config = require("aztools.config")
 
 local M = {}
 local instance
+
+local uv = vim.uv or vim.loop
 
 local function field(item, ...)
   if type(item) ~= "table" then
@@ -52,6 +55,166 @@ local function download_root(snapshot)
     return root
   end
   return vim.fs.joinpath(root, account, container)
+end
+
+local function staging_root()
+  return vim.fs.joinpath(config.get().runtime.cache_root, "blob", "staging", tostring(uv.hrtime()))
+end
+
+local function blob_destination(root, blob_name)
+  local normalized = tostring(blob_name or ""):gsub("\\", "/")
+  normalized = vim.trim(normalized)
+  normalized = normalized:gsub("^/+", "")
+  if normalized == "" then
+    return nil
+  end
+
+  local parts = vim.split(normalized, "/", { plain = true, trimempty = true })
+  if #parts == 0 then
+    return nil
+  end
+  for _, part in ipairs(parts) do
+    if part == "." or part == ".." then
+      return nil
+    end
+  end
+  return vim.fs.joinpath(root, unpack(parts)), table.concat(parts, "/")
+end
+
+local function notify(msg, level)
+  vim.notify(msg, level or vim.log.levels.INFO)
+end
+
+local function staged_entries(root, blob_names)
+  local entries = {}
+  for _, blob_name in ipairs(blob_names) do
+    local abs_path, relative_path = blob_destination(root, blob_name)
+    if abs_path and uv.fs_stat(abs_path) then
+      entries[#entries + 1] = {
+        source_path = abs_path,
+        relative_path = relative_path,
+        blob_name = blob_name,
+      }
+    end
+  end
+  return entries
+end
+
+local function selected_blob_names(explorer, opts)
+  local pane, items = explorer:entries_from_range(opts.line1, opts.line2)
+  if not pane or pane.key ~= "blobs" or not items or #items == 0 then
+    return nil, "Select one or more blobs first"
+  end
+
+  local names = {}
+  for _, item in ipairs(items) do
+    local name = field(item, "name", "Name")
+    local is_prefix = field(item, "is_prefix", "IsPrefix")
+    if name and not is_prefix then
+      names[#names + 1] = name
+    end
+  end
+
+  if #names == 0 then
+    return nil, "Select one or more blobs first"
+  end
+
+  return names
+end
+
+local function copy_file(source_path, target_path)
+  local target_dir = vim.fs.dirname(target_path)
+  if target_dir and target_dir ~= "" then
+    local ok = vim.fn.mkdir(target_dir, "p")
+    if ok == 0 then
+      return false, "Failed to create destination directory " .. target_dir
+    end
+  end
+
+  local ok, res = pcall(uv.fs_copyfile, source_path, target_path)
+  if ok and (res == true or res == nil) then
+    return true
+  end
+
+  local err = type(res) == "string" and res or (not ok and tostring(res) or "copy failed")
+  return false, string.format("Failed to copy %s to %s: %s", source_path, target_path, err)
+end
+
+local function yank(explorer, opts)
+  local names, err = selected_blob_names(explorer, opts)
+  if not names then
+    notify(err, vim.log.levels.WARN)
+    return
+  end
+
+  local root = staging_root()
+  clipboard.clear_blob()
+  explorer:invoke({ Action = "blob.download", BlobNames = names, DestinationRoot = root, VisibleLines = 20 })
+
+  local entries = staged_entries(root, names)
+  if #entries == 0 then
+    pcall(vim.fn.delete, root, "rf")
+    local level = (explorer.snapshot and explorer.snapshot.last_err and explorer.snapshot.last_err ~= "") and vim.log.levels.ERROR or vim.log.levels.WARN
+    notify((explorer.snapshot and explorer.snapshot.last_err and explorer.snapshot.last_err ~= "") and explorer.snapshot.last_err or "No blobs were yanked", level)
+    return
+  end
+
+  clipboard.set_blob({
+    staging_root = root,
+    entries = entries,
+    account = explorer.snapshot and field(explorer.snapshot.current_account, "name", "Name") or nil,
+    container = explorer.snapshot and field(explorer.snapshot, "container_name", "ContainerName") or nil,
+  })
+  notify(string.format("Yanked %d blob(s)", #entries))
+end
+
+local function put()
+  local payload = clipboard.get_blob()
+  if not payload or type(payload.entries) ~= "table" or #payload.entries == 0 then
+    notify("No yanked blobs to put", vim.log.levels.WARN)
+    return
+  end
+
+  local ok, integration = pcall(require, "aztools.integrations.minifiles")
+  if not ok then
+    notify("mini.files integration is unavailable", vim.log.levels.ERROR)
+    return
+  end
+
+  local target_dir, MiniFiles = integration.resolve_target_dir()
+  if not target_dir then
+    notify(MiniFiles, vim.log.levels.WARN)
+    return
+  end
+
+  local copied, skipped = 0, 0
+  for _, entry in ipairs(payload.entries) do
+    local target_path = vim.fs.joinpath(target_dir, unpack(vim.split(entry.relative_path, "/", { plain = true, trimempty = true })))
+    if uv.fs_stat(target_path) then
+      skipped = skipped + 1
+      notify("File already exists: " .. target_path, vim.log.levels.WARN)
+    else
+      local success, err = copy_file(entry.source_path, target_path)
+      if success then
+        copied = copied + 1
+      else
+        notify(err, vim.log.levels.ERROR)
+      end
+    end
+  end
+
+  integration.refresh(MiniFiles)
+  clipboard.clear_blob()
+
+  if copied > 0 and skipped > 0 then
+    notify(string.format("Put %d blob(s); skipped %d existing file(s)", copied, skipped))
+    return
+  end
+  if copied > 0 then
+    notify(string.format("Put %d blob(s)", copied))
+    return
+  end
+  notify("No blobs were put", vim.log.levels.WARN)
 end
 
 local function panes(snapshot)
@@ -154,6 +317,10 @@ function M.command(action, opts)
     return explorer:toggle()
   end
 
+  if action == "put" then
+    return put()
+  end
+
   if not explorer.proc then
     return
   end
@@ -167,23 +334,17 @@ function M.command(action, opts)
   end
 
   if action == "download" then
-    local pane, items = explorer:entries_from_range(opts.line1, opts.line2)
-    if not pane or pane.key ~= "blobs" or not items or #items == 0 then
+    local names, err = selected_blob_names(explorer, opts)
+    if not names then
+      notify(err, vim.log.levels.WARN)
       return
     end
     local root = download_root(explorer.snapshot)
-    local names = {}
-    for _, item in ipairs(items) do
-      local name = field(item, "name", "Name")
-      local is_prefix = field(item, "is_prefix", "IsPrefix")
-      if name and not is_prefix then
-        names[#names + 1] = name
-      end
-    end
-    if #names == 0 then
-      return
-    end
     return explorer:invoke({ Action = "blob.download", BlobNames = names, DestinationRoot = root, VisibleLines = 20 })
+  end
+
+  if action == "yank" then
+    return yank(explorer, opts)
   end
 end
 

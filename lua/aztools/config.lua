@@ -1,5 +1,7 @@
 local M = {}
 
+local defaults
+
 local function expand_path(path)
   if type(path) ~= "string" or path == "" then
     return path
@@ -18,6 +20,11 @@ local function normalize(cfg)
   cfg.runtime.cache_root = expand_path(cfg.runtime.cache_root)
   for _, name in ipairs({ "blob", "kv", "sb" }) do
     local mod = cfg[name]
+    if type(mod) ~= "table" then
+      mod = {}
+    end
+    mod = vim.tbl_deep_extend("force", vim.deepcopy(defaults[name]), mod)
+    cfg[name] = mod
     mod.binary_path = expand_path(mod.binary_path)
     mod.cache_db = expand_path(mod.cache_db)
     if mod.download_root then
@@ -27,7 +34,7 @@ local function normalize(cfg)
   return cfg
 end
 
-local defaults = {
+defaults = {
   install = {
     repo = "karlssonsimon/azure-storage-tui",
     binary_dir = vim.fn.stdpath("data") .. "/aztools/bin",

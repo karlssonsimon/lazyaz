@@ -29,7 +29,7 @@ end, {
   nargs = 1,
   range = true,
   complete = function()
-    return { "open", "refresh", "download", "loadall" }
+    return { "open", "refresh", "download", "loadall", "yank", "put" }
   end,
 })
 
