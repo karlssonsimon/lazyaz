@@ -3,6 +3,7 @@ package blobapp
 import (
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/blob"
+	blobrpc "azure-storage/internal/blobapp/rpc"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/keymap"
 	"azure-storage/internal/ui"
@@ -24,7 +25,9 @@ const (
 )
 
 type Model struct {
-	service *blob.Service
+	service   *blob.Service
+	client    *blobrpc.Client
+	sessionID string
 
 	spinner spinner.Model
 
@@ -137,7 +140,15 @@ func NewModel(svc *blob.Service, cfg ui.Config, db *cache.DB) Model {
 	return NewModelWithKeyMap(svc, cfg, keymap.Default(), db)
 }
 
+func NewRPCModel(client *blobrpc.Client, cfg ui.Config, km keymap.Keymap) Model {
+	return newModel(nil, client, cfg, km, nil)
+}
+
 func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *cache.DB) Model {
+	return newModel(svc, nil, cfg, km, db)
+}
+
+func newModel(svc *blob.Service, client *blobrpc.Client, cfg ui.Config, km keymap.Keymap, db *cache.DB) Model {
 	delegate := list.NewDefaultDelegate()
 
 	accounts := list.New([]list.Item{}, delegate, 24, 10)
@@ -172,6 +183,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 
 	m := Model{
 		service:        svc,
+		client:         client,
 		spinner:        spin,
 		accountsList:   accounts,
 		containersList: containers,
@@ -276,9 +288,20 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 }
 
 func (m Model) Init() tea.Cmd {
+	if m.rpcEnabled() {
+		return tea.Batch(spinner.Tick, rpcCreateSessionCmd(m.client))
+	}
 	cmds := []tea.Cmd{spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions)}
 	if m.hasSubscription {
 		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.currentSub.ID))
 	}
 	return tea.Batch(cmds...)
+}
+
+func (m Model) Close() error {
+	if m.client == nil {
+		return nil
+	}
+	_ = m.client.CloseSession()
+	return m.client.Close()
 }

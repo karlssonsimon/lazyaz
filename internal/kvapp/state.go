@@ -5,6 +5,7 @@ import (
 	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/keymap"
+	kvrpc "azure-storage/internal/kvapp/rpc"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -19,7 +20,9 @@ const (
 )
 
 type Model struct {
-	service *keyvault.Service
+	service   *keyvault.Service
+	client    *kvrpc.Client
+	sessionID string
 
 	spinner spinner.Model
 
@@ -107,7 +110,15 @@ func NewModel(svc *keyvault.Service, cfg ui.Config, db *cache.DB) Model {
 	return NewModelWithKeyMap(svc, cfg, keymap.Default(), db)
 }
 
+func NewRPCModel(client *kvrpc.Client, cfg ui.Config, km keymap.Keymap) Model {
+	return newModel(nil, client, cfg, km, nil)
+}
+
 func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, db *cache.DB) Model {
+	return newModel(svc, nil, cfg, km, db)
+}
+
+func newModel(svc *keyvault.Service, client *kvrpc.Client, cfg ui.Config, km keymap.Keymap, db *cache.DB) Model {
 	delegate := list.NewDefaultDelegate()
 
 	vaults := list.New([]list.Item{}, delegate, 24, 10)
@@ -142,6 +153,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 
 	m := Model{
 		service:      svc,
+		client:       client,
 		spinner:      spin,
 		vaultsList:   vaults,
 		secretsList:  secrets,
@@ -227,9 +239,20 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 }
 
 func (m Model) Init() tea.Cmd {
+	if m.rpcEnabled() {
+		return tea.Batch(spinner.Tick, rpcCreateSessionCmd(m.client))
+	}
 	cmds := []tea.Cmd{spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions)}
 	if m.hasSubscription {
 		cmds = append(cmds, fetchVaultsCmd(m.service, m.cache.vaults, m.currentSub.ID))
 	}
 	return tea.Batch(cmds...)
+}
+
+func (m Model) Close() error {
+	if m.client == nil {
+		return nil
+	}
+	_ = m.client.CloseSession()
+	return m.client.Close()
 }

@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"azure-storage/internal/azure"
-	"azure-storage/internal/cache"
 	"azure-storage/internal/azure/servicebus"
+	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -13,6 +13,9 @@ import (
 )
 
 func (m Model) navigateLeft() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		return m, m.rpcNavigateLeft()
+	}
 	switch m.focus {
 	case detailPane:
 		if m.viewingTopicSub {
@@ -39,6 +42,9 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 }
 
 func (m Model) handleBackspace() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		return m, m.rpcBackspace()
+	}
 	if m.focus == detailPane {
 		if m.viewingTopicSub {
 			m.viewingTopicSub = false
@@ -57,6 +63,12 @@ func (m Model) handleBackspace() (Model, tea.Cmd) {
 }
 
 func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		m.loading = true
+		m.lastErr = ""
+		m.status = fmt.Sprintf("Loading namespaces in %s", subscriptionDisplayName(sub))
+		return m, m.rpcSelectSubscription(sub)
+	}
 	// Re-selecting the same subscription: no-op.
 	if m.hasSubscription && m.currentSub.ID == sub.ID {
 		return m, nil
@@ -97,6 +109,45 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		if m.focus == namespacesPane {
+			item, ok := m.namespacesList.SelectedItem().(namespaceItem)
+			if !ok {
+				return m, nil
+			}
+			m.loading = true
+			m.lastErr = ""
+			return m, m.rpcSelectNamespace(item.namespace)
+		}
+		if m.focus == entitiesPane {
+			item, ok := m.entitiesList.SelectedItem().(entityItem)
+			if !ok {
+				return m, nil
+			}
+			m.loading = true
+			m.lastErr = ""
+			return m, m.rpcSelectEntity(item.entity)
+		}
+		if m.focus == detailPane {
+			if m.detailMode == detailTopicSubscriptions && !m.viewingTopicSub {
+				item, ok := m.detailList.SelectedItem().(topicSubItem)
+				if !ok {
+					return m, nil
+				}
+				m.loading = true
+				m.lastErr = ""
+				return m, m.rpcSelectTopicSub(item.sub)
+			}
+			if m.detailMode == detailMessages {
+				item, ok := m.detailList.SelectedItem().(messageItem)
+				if !ok {
+					return m, nil
+				}
+				return m, m.rpcOpenMessage(item.message)
+			}
+		}
+		return m, nil
+	}
 	if m.focus == namespacesPane {
 		item, ok := m.namespacesList.SelectedItem().(namespaceItem)
 		if !ok {

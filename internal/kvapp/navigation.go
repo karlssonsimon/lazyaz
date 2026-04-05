@@ -13,6 +13,9 @@ import (
 )
 
 func (m Model) navigateLeft() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		return m, m.rpcNavigateLeft()
+	}
 	switch m.focus {
 	case versionsPane:
 		m.focus = secretsPane
@@ -28,6 +31,9 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 }
 
 func (m Model) handleBackspace() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		return m, m.rpcBackspace()
+	}
 	if m.focus == versionsPane {
 		m.focus = secretsPane
 	}
@@ -35,6 +41,12 @@ func (m Model) handleBackspace() (Model, tea.Cmd) {
 }
 
 func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		m.loading = true
+		m.lastErr = ""
+		m.status = fmt.Sprintf("Loading key vaults in %s", subscriptionDisplayName(sub))
+		return m, m.rpcSelectSubscription(sub)
+	}
 	// Re-selecting the same subscription: no-op.
 	if m.hasSubscription && m.currentSub.ID == sub.ID {
 		return m, nil
@@ -75,6 +87,27 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		if m.focus == vaultsPane {
+			item, ok := m.vaultsList.SelectedItem().(vaultItem)
+			if !ok {
+				return m, nil
+			}
+			m.loading = true
+			m.lastErr = ""
+			return m, m.rpcSelectVault(item.vault)
+		}
+		if m.focus == secretsPane {
+			item, ok := m.secretsList.SelectedItem().(secretItem)
+			if !ok {
+				return m, nil
+			}
+			m.loading = true
+			m.lastErr = ""
+			return m, m.rpcSelectSecret(item.secret)
+		}
+		return m, nil
+	}
 	if m.focus == vaultsPane {
 		item, ok := m.vaultsList.SelectedItem().(vaultItem)
 		if !ok {

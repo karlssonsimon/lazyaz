@@ -149,6 +149,54 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 
 func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
+	if m.rpcEnabled() {
+		switch {
+		case ui.ShouldQuit(key, m.keymap.Quit, false):
+			return m, tea.Quit
+		case m.keymap.PreviewBack.Matches(key):
+			m.pendingPreviewG = false
+			m.loading = true
+			return m, m.rpcClosePreview()
+		case m.keymap.PreviewNextFocus.Matches(key):
+			m.pendingPreviewG = false
+			return m, m.rpcNextFocus()
+		case m.keymap.PreviewPreviousFocus.Matches(key):
+			m.pendingPreviewG = false
+			return m, m.rpcPreviousFocus()
+		case m.keymap.PreviewDown.Matches(key):
+			m.pendingPreviewG = false
+			m.loading = true
+			return m, m.rpcPreviewMove(1)
+		case m.keymap.PreviewUp.Matches(key):
+			m.pendingPreviewG = false
+			m.loading = true
+			return m, m.rpcPreviewMove(-1)
+		case m.keymap.HalfPageDown.Matches(key):
+			m.pendingPreviewG = false
+			m.loading = true
+			return m, m.rpcPreviewMove(max(1, m.preview.viewport.Height/2))
+		case m.keymap.HalfPageUp.Matches(key):
+			m.pendingPreviewG = false
+			m.loading = true
+			return m, m.rpcPreviewMove(-max(1, m.preview.viewport.Height/2))
+		case m.keymap.PreviewBottom.Matches(key):
+			m.pendingPreviewG = false
+			m.loading = true
+			return m, m.rpcPreviewBottom()
+		case m.keymap.PreviewTopPrefix.Matches(key):
+			if m.pendingPreviewG {
+				m.pendingPreviewG = false
+				m.loading = true
+				return m, m.rpcPreviewTop()
+			}
+			m.pendingPreviewG = true
+			m.status = "Press g again for top"
+			return m, nil
+		default:
+			m.pendingPreviewG = false
+			return m, nil
+		}
+	}
 	switch {
 	case ui.ShouldQuit(key, m.keymap.Quit, false):
 		return m, tea.Quit

@@ -4,11 +4,7 @@ import (
 	"fmt"
 
 	"azure-storage/internal/azure"
-	"azure-storage/internal/azure/blob"
-	"azure-storage/internal/azure/keyvault"
-	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/blobapp"
-	"azure-storage/internal/cache"
 	"azure-storage/internal/keymap"
 	"azure-storage/internal/kvapp"
 	"azure-storage/internal/sbapp"
@@ -24,13 +20,9 @@ type Model struct {
 	activeIdx int
 	nextID    int
 
-	blobSvc *blob.Service
-	sbSvc   *servicebus.Service
-	kvSvc   *keyvault.Service
-
-	stores sharedStores
-	cfg    ui.Config
-	keymap keymap.Keymap
+	runtime *Runtime
+	cfg     ui.Config
+	keymap  keymap.Keymap
 
 	styles       ui.Styles
 	schemes      []ui.Scheme
@@ -44,14 +36,10 @@ type Model struct {
 	height int
 }
 
-// NewModel creates the parent tabbed model.
-// If db is non-nil, a persistent SQLite cache is used; otherwise in-memory.
-func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.Service, cfg ui.Config, db *cache.DB, km keymap.Keymap) Model {
+// NewModel creates the parent tabbed model backed by long-lived RPC servers.
+func NewModel(runtime *Runtime, cfg ui.Config, km keymap.Keymap) Model {
 	m := Model{
-		blobSvc: blobSvc,
-		sbSvc:   sbSvc,
-		kvSvc:   kvSvc,
-		stores:  newSharedStores(db),
+		runtime: runtime,
 		cfg:     cfg,
 		keymap:  km,
 		schemes: cfg.Schemes,
@@ -76,36 +64,33 @@ func (m *Model) addTab(kind TabKind) {
 	var child tea.Model
 	switch kind {
 	case TabBlob:
-		bm := blobapp.NewModelWithCache(m.blobSvc, m.cfg, blobapp.BlobStores{
-			Subscriptions: m.stores.subscriptions,
-			Accounts:      m.stores.blobAccounts,
-			Containers:    m.stores.blobContainers,
-			Blobs:         m.stores.blobs,
-		}, m.keymap)
+		client, err := m.runtime.NewBlobClient()
+		if err != nil {
+			return
+		}
+		bm := blobapp.NewRPCModel(client, m.cfg, m.keymap)
 		bm.EmbeddedMode = true
 		if hasSub {
 			bm.SetSubscription(sub)
 		}
 		child = bm
 	case TabServiceBus:
-		sm := sbapp.NewModelWithCache(m.sbSvc, m.cfg, sbapp.SBStores{
-			Subscriptions: m.stores.subscriptions,
-			Namespaces:    m.stores.sbNamespaces,
-			Entities:      m.stores.sbEntities,
-			TopicSubs:     m.stores.sbTopicSubs,
-		}, m.keymap)
+		client, err := m.runtime.NewSBClient()
+		if err != nil {
+			return
+		}
+		sm := sbapp.NewRPCModel(client, m.cfg, m.keymap)
 		sm.EmbeddedMode = true
 		if hasSub {
 			sm.SetSubscription(sub)
 		}
 		child = sm
 	case TabKeyVault:
-		kvm := kvapp.NewModelWithCache(m.kvSvc, m.cfg, kvapp.KVStores{
-			Subscriptions: m.stores.subscriptions,
-			Vaults:        m.stores.kvVaults,
-			Secrets:       m.stores.kvSecrets,
-			Versions:      m.stores.kvVersions,
-		}, m.keymap)
+		client, err := m.runtime.NewKVClient()
+		if err != nil {
+			return
+		}
+		kvm := kvapp.NewRPCModel(client, m.cfg, m.keymap)
 		kvm.EmbeddedMode = true
 		if hasSub {
 			kvm.SetSubscription(sub)
@@ -137,12 +122,24 @@ func (m *Model) closeTab(idx int) {
 	if idx < 0 || idx >= len(m.tabs) {
 		return
 	}
+	m.closeTabResources(m.tabs[idx].Model)
 	m.tabs = append(m.tabs[:idx], m.tabs[idx+1:]...)
 	if m.activeIdx >= len(m.tabs) {
 		m.activeIdx = len(m.tabs) - 1
 	}
 	if m.activeIdx < 0 {
 		m.activeIdx = 0
+	}
+}
+
+func (m *Model) closeTabResources(model tea.Model) {
+	switch child := model.(type) {
+	case blobapp.Model:
+		_ = child.Close()
+	case sbapp.Model:
+		_ = child.Close()
+	case kvapp.Model:
+		_ = child.Close()
 	}
 }
 
@@ -468,4 +465,3 @@ func (m Model) handleCommandPalette(key string) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
-

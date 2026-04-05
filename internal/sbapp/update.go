@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"azure-storage/internal/cache"
 	"azure-storage/internal/azure/servicebus"
+	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -14,6 +14,9 @@ import (
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+	if updated, rpcCmd, ok := m.handleRPCMsg(msg); ok {
+		return updated, rpcCmd
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -239,6 +242,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.viewingMessage {
+			if m.rpcEnabled() {
+				switch {
+				case ui.ShouldQuit(key, m.keymap.Quit, false):
+					return m, tea.Quit
+				case m.keymap.MessageBack.Matches(key):
+					return m, m.rpcCloseMessage()
+				default:
+					m.messageViewport, cmd = m.messageViewport.Update(msg)
+					return m, cmd
+				}
+			}
 			switch {
 			case ui.ShouldQuit(key, m.keymap.Quit, false):
 				return m, tea.Quit
@@ -259,24 +273,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case ui.ShouldQuit(key, m.keymap.Quit, focusedFilterActive):
 			return m, tea.Quit
+		case m.rpcEnabled() && m.keymap.NextFocus.Matches(key):
+			if !focusedFilterActive {
+				return m, m.rpcFocusNext()
+			}
+		case m.rpcEnabled() && m.keymap.PreviousFocus.Matches(key):
+			if !focusedFilterActive {
+				return m, m.rpcFocusPrevious()
+			}
 		case m.keymap.HalfPageDown.Matches(key):
 			m.scrollFocusedHalfPage(1)
 			return m, nil
 		case m.keymap.HalfPageUp.Matches(key):
 			m.scrollFocusedHalfPage(-1)
 			return m, nil
-		case m.keymap.NextFocus.Matches(key):
+		case !m.rpcEnabled() && m.keymap.NextFocus.Matches(key):
 			if !focusedFilterActive {
 				m.nextFocus()
 				return m, nil
 			}
-		case m.keymap.PreviousFocus.Matches(key):
+		case !m.rpcEnabled() && m.keymap.PreviousFocus.Matches(key):
 			if !focusedFilterActive {
 				m.previousFocus()
 				return m, nil
 			}
 		case m.keymap.ReloadSubscriptions.Matches(key):
 			if !focusedFilterActive {
+				if m.rpcEnabled() {
+					m.loading = true
+					m.lastErr = ""
+					m.status = "Refreshing subscriptions..."
+					return m, m.rpcRefresh()
+				}
 				m.loading = true
 				m.lastErr = ""
 				m.status = "Refreshing subscriptions..."
@@ -307,6 +335,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !ok {
 					return m, nil
 				}
+				if m.rpcEnabled() {
+					return m, m.rpcToggleMark(item.message.MessageID, item.duplicate)
+				}
 				if item.duplicate {
 					return m, nil
 				}
@@ -323,6 +354,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.keymap.ShowActiveQueue.Matches(key):
 			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages {
+				if m.rpcEnabled() {
+					return m, m.rpcShowActive()
+				}
 				if m.deadLetter {
 					m.deadLetter = false
 					m.markedMessages = make(map[string]struct{})
@@ -332,6 +366,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.keymap.ShowDeadLetterQueue.Matches(key):
 			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages {
+				if m.rpcEnabled() {
+					return m, m.rpcShowDLQ()
+				}
 				if !m.deadLetter {
 					m.deadLetter = true
 					m.markedMessages = make(map[string]struct{})
@@ -341,6 +378,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.keymap.RequeueDLQ.Matches(key):
 			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages && m.deadLetter {
+				if m.rpcEnabled() {
+					item, _ := m.detailList.SelectedItem().(messageItem)
+					messageIDs := m.collectRequeueIDs()
+					if len(messageIDs) == 0 && item.message.MessageID == "" {
+						return m, nil
+					}
+					m.loading = true
+					m.lastErr = ""
+					return m, m.rpcRequeue(messageIDs, item.message.MessageID, item.duplicate)
+				}
 				messageIDs := m.collectRequeueIDs()
 				if len(messageIDs) == 0 {
 					return m, nil
@@ -356,6 +403,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !ok || !item.duplicate {
 					return m, nil
 				}
+				if m.rpcEnabled() {
+					m.loading = true
+					m.lastErr = ""
+					return m, m.rpcDeleteDuplicate(item.message.MessageID)
+				}
 				m.loading = true
 				m.lastErr = ""
 				m.status = "Deleting duplicate message..."
@@ -363,6 +415,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.keymap.ToggleDLQFilter.Matches(key):
 			if !focusedFilterActive {
+				if m.rpcEnabled() {
+					return m, m.rpcToggleDLQFilter()
+				}
 				m.dlqFilter = !m.dlqFilter
 				m.applyEntityFilter()
 				if m.dlqFilter {
@@ -393,6 +448,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.keymap.BackspaceUp.Matches(key):
 			if !focusedFilterActive {
+				if m.rpcEnabled() {
+					return m, m.rpcBackspace()
+				}
 				return m.handleBackspace()
 			}
 		}

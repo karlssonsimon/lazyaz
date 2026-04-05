@@ -9,7 +9,6 @@ import (
 	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/azure/servicebus"
-	"azure-storage/internal/cache"
 	"azure-storage/internal/keymap"
 	"azure-storage/internal/ui"
 
@@ -23,38 +22,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	db := openCacheDB()
-	if db != nil {
-		defer db.Close()
-	}
-
 	cfg := ui.LoadConfig()
 	km := keymap.Load(ui.ConfigDir())
-	model := app.NewModel(
+	runtime, err := app.NewRuntime(
 		blob.NewService(cred),
 		servicebus.NewService(cred),
 		keyvault.NewService(cred),
-		cfg,
-		db,
-		km,
 	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to start app runtime: %v\n", err)
+		os.Exit(1)
+	}
+	defer runtime.Close()
+
+	model := app.NewModel(runtime, cfg, km)
 
 	program := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "application error: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func openCacheDB() *cache.DB {
-	path, err := cache.DefaultDBPath()
-	if err != nil {
-		return nil
-	}
-	db, err := cache.OpenDB(path)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: cache unavailable: %v\n", err)
-		return nil
-	}
-	return db
 }

@@ -14,6 +14,9 @@ import (
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	markVisualAfterListUpdate := false
+	if updated, rpcCmd, ok := m.handleRPCMsg(msg); ok {
+		return updated, rpcCmd
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -225,6 +228,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case ui.ShouldQuit(key, m.keymap.Quit, focusedFilterActive):
 			return m, tea.Quit
+		case m.rpcEnabled() && m.keymap.NextFocus.Matches(key):
+			if !focusedFilterActive {
+				return m, m.rpcNextFocus()
+			}
+		case m.rpcEnabled() && m.keymap.PreviousFocus.Matches(key):
+			if !focusedFilterActive {
+				return m, m.rpcPreviousFocus()
+			}
 		case m.keymap.HalfPageDown.Matches(key):
 			m.scrollFocusedHalfPage(1)
 			return m, nil
@@ -233,6 +244,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case m.keymap.DownloadSelection.Matches(key):
 			if m.focus == blobsPane && !focusedFilterActive {
+				if m.rpcEnabled() {
+					cmd := m.rpcDownloadSelection()
+					if cmd == nil {
+						m.status = "Select blobs with space or visual mode before downloading"
+						return m, nil
+					}
+					m.loading = true
+					return m, cmd
+				}
 				return m.startMarkedAction("download")
 			}
 		case m.keymap.ToggleLoadAll.Matches(key):
@@ -241,34 +261,54 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.keymap.ToggleVisualLine.Matches(key):
 			if m.focus == blobsPane && !focusedFilterActive {
+				if m.rpcEnabled() {
+					return m, m.rpcToggleVisual()
+				}
 				m.toggleVisualLineMode()
 				return m, nil
 			}
 		case m.keymap.ToggleMark.Matches(key):
 			if m.focus == blobsPane && !focusedFilterActive {
+				if m.rpcEnabled() {
+					item, ok := m.blobsList.SelectedItem().(blobItem)
+					if !ok {
+						m.status = "No blob selected"
+						return m, nil
+					}
+					return m, m.rpcToggleMark(item)
+				}
 				m.toggleCurrentBlobMark()
 				return m, nil
 			}
 		case m.keymap.ExitVisualLine.Matches(key):
 			if m.focus == blobsPane && m.visualLineMode && !focusedFilterActive {
+				if m.rpcEnabled() {
+					return m, m.rpcExitVisual()
+				}
 				m.visualLineMode = false
 				m.visualAnchor = ""
 				m.refreshBlobItems()
 				m.status = "Visual mode off"
 				return m, nil
 			}
-		case m.keymap.NextFocus.Matches(key):
+		case !m.rpcEnabled() && m.keymap.NextFocus.Matches(key):
 			if !focusedFilterActive {
 				m.nextFocus()
 				return m, nil
 			}
-		case m.keymap.PreviousFocus.Matches(key):
+		case !m.rpcEnabled() && m.keymap.PreviousFocus.Matches(key):
 			if !focusedFilterActive {
 				m.previousFocus()
 				return m, nil
 			}
 		case m.keymap.ReloadSubscriptions.Matches(key):
 			if !focusedFilterActive {
+				if m.rpcEnabled() {
+					m.loading = true
+					m.lastErr = ""
+					m.status = "Refreshing subscriptions..."
+					return m, m.rpcRefresh()
+				}
 				m.loading = true
 				m.lastErr = ""
 				m.status = "Refreshing subscriptions..."
@@ -313,6 +353,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.keymap.BackspaceUp.Matches(key):
 			if !focusedFilterActive {
+				if m.rpcEnabled() && m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != "" {
+					m.loading = true
+					m.lastErr = ""
+					return m, m.rpcNavigateLeft()
+				}
 				if m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != "" {
 					m.prefix = parentPrefix(m.prefix)
 					m.blobSearchQuery = ""

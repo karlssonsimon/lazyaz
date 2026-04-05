@@ -35,6 +35,15 @@ func (m *Model) refreshBlobItems() {
 }
 
 func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		if !m.hasContainer {
+			m.status = "Open a container before loading blobs"
+			return m, nil
+		}
+		m.loading = true
+		m.lastErr = ""
+		return m, m.rpcToggleLoadAll()
+	}
 	if !m.hasContainer {
 		m.status = "Open a container before loading blobs"
 		return m, nil
@@ -234,6 +243,21 @@ func (m Model) startMarkedAction(action string) (Model, tea.Cmd) {
 }
 
 func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		if !m.hasAccount || !m.hasContainer {
+			m.status = "Open a container before downloading"
+			return m, nil
+		}
+		cmd := m.rpcDownloadSelection()
+		if cmd == nil {
+			m.status = "Select blobs with space or visual mode before downloading"
+			return m, nil
+		}
+		m.loading = true
+		m.lastErr = ""
+		m.status = fmt.Sprintf("Downloading selection from %s/%s", m.currentAccount.Name, m.containerName)
+		return m, cmd
+	}
 	if !m.hasAccount || !m.hasContainer {
 		m.status = "Open a container before downloading"
 		return m, nil

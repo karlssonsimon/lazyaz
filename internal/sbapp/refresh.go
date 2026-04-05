@@ -3,14 +3,19 @@ package sbapp
 import (
 	"fmt"
 
-	"azure-storage/internal/cache"
 	"azure-storage/internal/azure/servicebus"
+	"azure-storage/internal/cache"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m Model) refresh() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		m.loading = true
+		m.lastErr = ""
+		return m, m.rpcRefresh()
+	}
 	if !m.hasSubscription {
 		m.loading = true
 		m.lastErr = ""
@@ -59,6 +64,11 @@ func (m Model) refreshDetail() (Model, tea.Cmd) {
 }
 
 func (m Model) rePeekMessages() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		m.loading = true
+		m.lastErr = ""
+		return m, m.rpcRefresh()
+	}
 	m.loading = true
 	m.lastErr = ""
 	dlqLabel := "active"

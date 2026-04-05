@@ -157,3 +157,24 @@ func TestDefaultDBPath(t *testing.T) {
 		t.Fatalf("expected absolute path, got %s", path)
 	}
 }
+
+func TestDefaultServerDBPath(t *testing.T) {
+	path, err := DefaultServerDBPath("Blob Server")
+	if err != nil {
+		t.Fatalf("DefaultServerDBPath: %v", err)
+	}
+	if filepath.Base(path) != "cache.db" {
+		t.Fatalf("expected cache.db, got %s", filepath.Base(path))
+	}
+	if filepath.Base(filepath.Dir(path)) != "blob-server" {
+		t.Fatalf("expected sanitized server directory, got %s", filepath.Base(filepath.Dir(path)))
+	}
+}
+
+func TestNeovimServerDBPath(t *testing.T) {
+	path := NeovimServerDBPath("/tmp/nvim-data", "Service Bus")
+	want := filepath.Join("/tmp/nvim-data", "aztools", "service-bus", "cache.db")
+	if path != want {
+		t.Fatalf("got %s, want %s", path, want)
+	}
+}

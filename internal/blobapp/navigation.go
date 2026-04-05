@@ -13,6 +13,12 @@ import (
 )
 
 func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		m.loading = true
+		m.lastErr = ""
+		m.status = fmt.Sprintf("Loading storage accounts in %s", subscriptionDisplayName(sub))
+		return m, m.rpcSelectSubscription(sub)
+	}
 	// Re-selecting the same subscription: no-op.
 	if m.hasSubscription && m.currentSub.ID == sub.ID {
 		return m, nil
@@ -57,6 +63,11 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 }
 
 func (m Model) refresh() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		m.loading = true
+		m.lastErr = ""
+		return m, m.rpcRefresh()
+	}
 	if !m.hasSubscription {
 		m.loading = true
 		m.lastErr = ""
@@ -98,6 +109,11 @@ func (m Model) refresh() (Model, tea.Cmd) {
 }
 
 func (m Model) navigateLeft() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		m.loading = true
+		m.lastErr = ""
+		return m, m.rpcNavigateLeft()
+	}
 	switch m.focus {
 	case previewPane:
 		m.focus = blobsPane
@@ -136,6 +152,36 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		if m.focus == accountsPane {
+			item, ok := m.accountsList.SelectedItem().(accountItem)
+			if !ok {
+				return m, nil
+			}
+			m.loading = true
+			m.lastErr = ""
+			return m, m.rpcSelectAccount(item.account)
+		}
+		if m.focus == containersPane {
+			item, ok := m.containersList.SelectedItem().(containerItem)
+			if !ok {
+				return m, nil
+			}
+			m.loading = true
+			m.lastErr = ""
+			return m, m.rpcSelectContainer(item.container.Name)
+		}
+		if m.focus == blobsPane {
+			item, ok := m.blobsList.SelectedItem().(blobItem)
+			if !ok {
+				return m, nil
+			}
+			m.loading = true
+			m.lastErr = ""
+			return m, m.rpcOpenSelectedBlob(item)
+		}
+		return m, nil
+	}
 	if m.focus == accountsPane {
 		item, ok := m.accountsList.SelectedItem().(accountItem)
 		if !ok {

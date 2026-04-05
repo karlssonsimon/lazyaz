@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -23,6 +24,50 @@ func DefaultDBPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, ".aztui", "cache.db"), nil
+}
+
+// DefaultServerDBPath returns the default cache database path for a named
+// server owned by the standalone TUI (~/.aztui/<server>/cache.db).
+func DefaultServerDBPath(server string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".aztui", sanitizePathName(server), "cache.db"), nil
+}
+
+// NeovimServerDBPath returns the cache database path for a named Neovim-owned
+// server rooted under stdpath("data")/aztools/<server>/cache.db.
+func NeovimServerDBPath(dataRoot, server string) string {
+	return filepath.Join(dataRoot, "aztools", sanitizePathName(server), "cache.db")
+}
+
+func sanitizePathName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "default"
+	}
+	var b strings.Builder
+	b.Grow(len(trimmed))
+	for _, r := range trimmed {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + ('a' - 'A'))
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-' || r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "default"
+	}
+	return out
 }
 
 // OpenDB opens or creates a SQLite database at the given path.

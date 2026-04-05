@@ -12,6 +12,9 @@ import (
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+	if updated, rpcCmd, ok := m.handleRPCMsg(msg); ok {
+		return updated, rpcCmd
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -183,24 +186,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case ui.ShouldQuit(key, m.keymap.Quit, focusedFilterActive):
 			return m, tea.Quit
+		case m.rpcEnabled() && m.keymap.NextFocus.Matches(key):
+			if !focusedFilterActive {
+				return m, m.rpcFocusNext()
+			}
+		case m.rpcEnabled() && m.keymap.PreviousFocus.Matches(key):
+			if !focusedFilterActive {
+				return m, m.rpcFocusPrevious()
+			}
 		case m.keymap.HalfPageDown.Matches(key):
 			m.scrollFocusedHalfPage(1)
 			return m, nil
 		case m.keymap.HalfPageUp.Matches(key):
 			m.scrollFocusedHalfPage(-1)
 			return m, nil
-		case m.keymap.NextFocus.Matches(key):
+		case !m.rpcEnabled() && m.keymap.NextFocus.Matches(key):
 			if !focusedFilterActive {
 				m.nextFocus()
 				return m, nil
 			}
-		case m.keymap.PreviousFocus.Matches(key):
+		case !m.rpcEnabled() && m.keymap.PreviousFocus.Matches(key):
 			if !focusedFilterActive {
 				m.previousFocus()
 				return m, nil
 			}
 		case m.keymap.ReloadSubscriptions.Matches(key):
 			if !focusedFilterActive {
+				if m.rpcEnabled() {
+					m.loading = true
+					m.lastErr = ""
+					m.status = "Refreshing subscriptions..."
+					return m, m.rpcRefresh()
+				}
 				m.loading = true
 				m.lastErr = ""
 				m.status = "Refreshing subscriptions..."
@@ -227,6 +244,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.keymap.YankSecret.Matches(key):
 			if !focusedFilterActive {
+				if m.rpcEnabled() {
+					return m.handleRPCYank()
+				}
 				return m.handleYank()
 			}
 		case !m.EmbeddedMode && m.keymap.ToggleThemePicker.Matches(key):
@@ -290,5 +310,29 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 		return m, tea.Batch(spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))
 	}
 
+	return m, nil
+}
+
+func (m Model) handleRPCYank() (Model, tea.Cmd) {
+	if m.focus == secretsPane {
+		item, ok := m.secretsList.SelectedItem().(secretItem)
+		if !ok {
+			return m, nil
+		}
+		m.loading = true
+		m.lastErr = ""
+		m.status = fmt.Sprintf("Fetching secret value for %s...", item.secret.Name)
+		return m, m.rpcYank("")
+	}
+	if m.focus == versionsPane {
+		item, ok := m.versionsList.SelectedItem().(versionItem)
+		if !ok {
+			return m, nil
+		}
+		m.loading = true
+		m.lastErr = ""
+		m.status = fmt.Sprintf("Fetching secret value for %s@%s...", m.currentSecret.Name, item.version.Version)
+		return m, m.rpcYank(item.version.Version)
+	}
 	return m, nil
 }

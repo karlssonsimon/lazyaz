@@ -8,6 +8,11 @@ import (
 )
 
 func (m Model) refresh() (Model, tea.Cmd) {
+	if m.rpcEnabled() {
+		m.loading = true
+		m.lastErr = ""
+		return m, m.rpcRefresh()
+	}
 	if !m.hasSubscription {
 		m.loading = true
 		m.lastErr = ""
