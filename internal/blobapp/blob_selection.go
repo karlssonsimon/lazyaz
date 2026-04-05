@@ -26,10 +26,18 @@ func (m *Model) clearBlobSelectionState() {
 
 func (m *Model) resetBlobLoadState() {
 	m.blobLoadAll = false
-	m.blobSearchQuery = ""
+	m.deactivateSearch()
 }
 
 func (m *Model) refreshBlobItems() {
+	if m.search.active && m.search.fuzzyQuery != "" && m.search.filtered != nil {
+		m.searchRebuildItems()
+		return
+	}
+	if m.search.active && len(m.search.results) > 0 {
+		m.searchRebuildItems()
+		return
+	}
 	m.blobsList.SetItems(blobsToItems(m.blobs, m.prefix, m.markedBlobs, m.visualSelectionNames()))
 	ui.ClampListSelection(&m.blobsList)
 }
@@ -40,8 +48,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.blobsList.ResetFilter()
-	m.blobSearchQuery = ""
+	m.deactivateSearch()
 	m.lastErr = ""
 
 	if m.blobLoadAll {

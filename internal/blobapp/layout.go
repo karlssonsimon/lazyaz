@@ -2,12 +2,10 @@ package blobapp
 
 import (
 	"fmt"
-	"strings"
 
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -37,7 +35,11 @@ func (m *Model) resize() {
 	listHeight := height - ui.PaneHintHeight
 	m.accountsList.SetSize(ui.PaneContentWidth(pane, widths[0]), listHeight)
 	m.containersList.SetSize(ui.PaneContentWidth(pane, widths[1]), listHeight)
-	m.blobsList.SetSize(ui.PaneContentWidth(pane, widths[2]), listHeight)
+	blobListHeight := listHeight
+	if m.search.active {
+		blobListHeight -= searchInputHeight
+	}
+	m.blobsList.SetSize(ui.PaneContentWidth(pane, widths[2]), blobListHeight)
 	if m.preview.open {
 		m.preview.viewport.Width = ui.PaneContentWidth(pane, widths[3])
 		m.preview.viewport.Height = listHeight
@@ -92,31 +94,6 @@ func (m *Model) commitFocusedFilter() tea.Cmd {
 		ui.ApplyFilterState(&m.containersList)
 		m.status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
 		return nil
-	case blobsPane:
-		if !m.hasContainer {
-			m.status = "Open a container before searching blobs"
-			return nil
-		}
-
-		if m.blobLoadAll {
-			ui.ApplyFilterState(&m.blobsList)
-			m.status = "Filter applied for blobs"
-			return nil
-		}
-
-		query := strings.TrimSpace(m.blobsList.FilterValue())
-		if query == "" {
-			m.blobsList.ResetFilter()
-			m.blobSearchQuery = ""
-			m.loading = true
-			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-			return tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
-		}
-
-		m.blobSearchQuery = query
-		m.loading = true
-		m.status = fmt.Sprintf("Searching blobs by prefix %q...", blobSearchPrefix(m.prefix, query))
-		return tea.Batch(spinner.Tick, fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, query, defaultBlobPrefixSearchLimit))
 	}
 
 	return nil
@@ -159,8 +136,6 @@ func (m Model) focusedListSettingFilter() bool {
 		return m.accountsList.SettingFilter()
 	case containersPane:
 		return m.containersList.SettingFilter()
-	case blobsPane:
-		return m.blobsList.SettingFilter()
 	default:
 		return false
 	}
