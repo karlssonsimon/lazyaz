@@ -551,6 +551,7 @@ function Explorer:render(force_focus)
     keep[item.key] = true
 
     local lines, highlights, prefixes = {}, {}, {}
+    local virtual_texts = {}
     for _, entry in ipairs(item.pane.visible_items) do
       local raw = self.adapter.item_label and self.adapter.item_label(item.key, entry) or tostring(entry)
       local prefix_text, prefix_hl = nil, nil
@@ -558,6 +559,11 @@ function Explorer:render(force_focus)
         prefix_text, prefix_hl = self.adapter.item_prefix(item.key, entry)
       end
       prefixes[#prefixes + 1] = { text = prefix_text, hl = prefix_hl }
+      if self.adapter.item_virtual_text then
+        virtual_texts[#virtual_texts + 1] = self.adapter.item_virtual_text(item.key, entry)
+      else
+        virtual_texts[#virtual_texts + 1] = nil
+      end
       local prefix_width = (prefix_text and prefix_text ~= "") and vim.fn.strdisplaywidth(prefix_text .. " ") or 0
       local available_width = item.rect.width - 2 - prefix_width
       lines[#lines + 1] = truncate(raw, available_width)
@@ -605,6 +611,14 @@ function Explorer:render(force_focus)
           virt_text = { { prefix.text .. " ", prefix.hl or "Directory" } },
           virt_text_pos = "inline",
           right_gravity = false,
+        })
+      end
+    end
+    for row, virt in ipairs(virtual_texts) do
+      if virt and #virt > 0 then
+        vim.api.nvim_buf_set_extmark(pane.buf, pane_ns, row - 1, 0, {
+          virt_text = virt,
+          virt_text_pos = "right_align",
         })
       end
     end

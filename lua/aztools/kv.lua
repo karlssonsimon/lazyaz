@@ -28,7 +28,7 @@ local function panes(snapshot)
     local versions = {}
     for i, item in ipairs(snapshot.versions or {}) do
       local entry = vim.deepcopy(item)
-      entry._aztools_version_state = i == 1 and "latest" or "previous"
+      entry._aztools_version_state = i == 1 and "latest" or nil
       versions[#versions + 1] = entry
     end
     out[#out + 1] = { key = "versions", title = "Versions", items = versions }
@@ -69,14 +69,8 @@ local adapter = {
     local kind = pane_key == "versions" and "file" or "dir"
     return icon_info(label, kind)
   end,
-  item_label = function(pane_key, item)
+  item_label = function(_, item)
     local label = field(item, "name", "Name", "id", "ID", "version", "Version") or tostring(item)
-    if pane_key == "versions" then
-      local state = field(item, "_aztools_version_state")
-      if state then
-        return string.format("%s  %s", label, state)
-      end
-    end
     return label
   end,
   item_name_highlight = function(pane_key)
@@ -84,19 +78,15 @@ local adapter = {
       return "Directory"
     end
   end,
-  item_extra_highlights = function(pane_key, item, label)
+  item_virtual_text = function(pane_key, item)
     if pane_key ~= "versions" or type(item) ~= "table" then
       return nil
     end
     local state = field(item, "_aztools_version_state")
-    if not state or type(label) ~= "string" then
+    if not state then
       return nil
     end
-    local start_col, end_col = label:find(state, 1, true)
-    if not start_col then
-      return nil
-    end
-    return { { group = "AztoolsGhostText", start_col = start_col - 1, end_col = end_col } }
+    return { { " " .. state, "AztoolsGhostText" } }
   end,
   should_bootstrap = function(snapshot)
     snapshot = snapshot or {}
