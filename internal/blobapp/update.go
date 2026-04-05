@@ -112,6 +112,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cache.blobs.Set(blobsCacheKey(msg.account.SubscriptionID, msg.account.Name, msg.container, msg.prefix, msg.loadAll), msg.blobs)
 		}
 
+		// Route to search handler if search is actively fetching.
+		if m.search.active && m.search.fetching && msg.query != "" {
+			return m.handleSearchBlobsLoaded(msg)
+		}
+
 		if !m.hasAccount || !m.hasContainer {
 			return m, msg.next
 		}
@@ -124,7 +129,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.blobLoadAll != msg.loadAll {
 			return m, msg.next
 		}
-		if m.blobSearchQuery != msg.query {
+		// Non-search results should only apply when search is not active.
+		if msg.query != "" && !m.search.active {
 			return m, msg.next
 		}
 
@@ -144,9 +150,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loading = false
 			if msg.loadAll {
 				m.status = fmt.Sprintf("Loaded all %d blobs in %s/%s", len(msg.blobs), msg.account.Name, msg.container)
-			} else if msg.query != "" {
-				effectivePrefix := blobSearchPrefix(m.prefix, msg.query)
-				m.status = fmt.Sprintf("Found %d blobs by prefix %q in %s/%s", len(msg.blobs), effectivePrefix, msg.account.Name, msg.container)
 			} else {
 				m.status = fmt.Sprintf("Loaded %d entries (max %d) in %s/%s under %q", len(msg.blobs), defaultHierarchyBlobLoadLimit, msg.account.Name, msg.container, msg.prefix)
 			}
@@ -211,7 +214,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handlePreviewKey(msg)
 		}
 
-		focusedFilterActive := m.focusedListSettingFilter()
+		// Blob search pipeline.
+		if m.search.active && m.focus == blobsPane {
+			return m.handleSearchKey(msg)
+		}
+
+		focusedFilterActive := m.focusedListSettingFilter() || (m.focus == blobsPane && m.search.active)
 		if m.focus == blobsPane && m.visualLineMode && m.keymap.FilterInput.Matches(key) {
 			m.visualLineMode = false
 			m.visualAnchor = ""
@@ -311,15 +319,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.subOverlay.Open()
 				return m, nil
 			}
+		case m.keymap.FilterInput.Matches(key):
+			if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
+				m.activateSearch()
+				return m, nil
+			}
 		case m.keymap.BackspaceUp.Matches(key):
 			if !focusedFilterActive {
 				if m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != "" {
+					m.deactivateSearch()
 					m.prefix = parentPrefix(m.prefix)
-					m.blobSearchQuery = ""
 
 					if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
 						m.blobs = cached
-						m.blobsList.ResetFilter()
 						m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 						m.refreshBlobItems()
 					}

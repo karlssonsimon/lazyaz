@@ -58,16 +58,31 @@ func (m Model) View() string {
 		{km.FilterInput.Short(), "filter"},
 	}, m.styles, ui.PaneContentWidth(pane, pw[1]))
 
-	blobsHints := ui.RenderPaneHints([]ui.PaneHint{
-		{km.ToggleMark.Short(), "mark"},
-		{km.ToggleVisualLine.Short(), "visual"},
-		{km.DownloadSelection.Short(), "download"},
-		{km.OpenFocusedAlt.Short(), "preview"},
-	}, m.styles, ui.PaneContentWidth(pane, pw[2]))
+	var blobsHints string
+	if m.search.active {
+		blobsHints = ui.RenderPaneHints([]ui.PaneHint{
+			{"enter", "submit"},
+			{"esc", "cancel"},
+			{"backspace", "back"},
+		}, m.styles, ui.PaneContentWidth(pane, pw[2]))
+	} else {
+		blobsHints = ui.RenderPaneHints([]ui.PaneHint{
+			{km.FilterInput.Short(), "search"},
+			{km.ToggleMark.Short(), "mark"},
+			{km.DownloadSelection.Short(), "download"},
+			{km.OpenFocusedAlt.Short(), "preview"},
+		}, m.styles, ui.PaneContentWidth(pane, pw[2]))
+	}
 
 	accountsView := lipgloss.JoinVertical(lipgloss.Left, m.accountsList.View(), accountsHints)
 	containersView := lipgloss.JoinVertical(lipgloss.Left, m.containersList.View(), containersHints)
-	blobsView := lipgloss.JoinVertical(lipgloss.Left, m.blobsList.View(), blobsHints)
+
+	var blobsViewParts []string
+	if m.search.active {
+		blobsViewParts = append(blobsViewParts, m.renderSearchInput(ui.PaneContentWidth(pane, pw[2])))
+	}
+	blobsViewParts = append(blobsViewParts, m.blobsList.View(), blobsHints)
+	blobsView := lipgloss.JoinVertical(lipgloss.Left, blobsViewParts...)
 
 	previewView := ""
 	if m.preview.open {
@@ -182,8 +197,8 @@ func (m Model) blobsPaneTitle() string {
 	if m.hasContainer {
 		if m.blobLoadAll {
 			title = fmt.Sprintf("%s | ALL", title)
-		} else if m.blobSearchQuery != "" {
-			title = fmt.Sprintf("%s | PREFIX:%s", title, blobSearchPrefix(m.prefix, m.blobSearchQuery))
+		} else if m.search.active {
+			title = fmt.Sprintf("%s | SEARCH", title)
 		}
 	}
 	if len(m.markedBlobs) > 0 {

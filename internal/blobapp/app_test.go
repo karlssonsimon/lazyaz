@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -108,23 +107,20 @@ func TestComputePreviewWindow(t *testing.T) {
 	}
 }
 
-func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
+func TestTypingQWhileSearchActiveDoesNotQuit(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
 	m.focus = blobsPane
-	m.blobsList.SetFilterState(list.Filtering)
+	m.hasContainer = true
+	m.search.active = true
+	m.search.stage = searchStagePrefix
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	model, ok := updated.(Model)
-	if !ok {
+	if _, ok := updated.(Model); !ok {
 		t.Fatalf("expected updated model type %T, got %T", Model{}, updated)
 	}
 
 	if isQuitCmd(cmd) {
-		t.Fatal("expected typing q in active filter not to quit")
-	}
-
-	if model.blobsList.FilterValue() != "q" {
-		t.Fatalf("expected filter value %q, got %q", "q", model.blobsList.FilterValue())
+		t.Fatal("expected typing q during active search not to quit")
 	}
 }
 

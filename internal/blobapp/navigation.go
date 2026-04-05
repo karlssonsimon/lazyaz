@@ -87,10 +87,10 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
 		return m, tea.Batch(spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix))
 	}
-	if m.blobSearchQuery != "" {
-		effectivePrefix := blobSearchPrefix(m.prefix, m.blobSearchQuery)
+	if m.search.prefixLocked && m.search.prefixQuery != "" {
+		effectivePrefix := blobSearchPrefix(m.prefix, m.search.prefixQuery)
 		m.status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
-		return m, tea.Batch(spinner.Tick, fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.blobSearchQuery, defaultBlobPrefixSearchLimit))
+		return m, tea.Batch(spinner.Tick, fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.search.prefixQuery, defaultBlobPrefixSearchLimit))
 	}
 	m.loading = true
 	m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
@@ -104,12 +104,11 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 		return m, nil
 	case blobsPane:
 		if m.hasContainer && !m.blobLoadAll && m.prefix != "" {
+			m.deactivateSearch()
 			m.prefix = parentPrefix(m.prefix)
-			m.blobSearchQuery = ""
 
 			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
 				m.blobs = cached
-				m.blobsList.ResetFilter()
 				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 				m.refreshBlobItems()
 			}
@@ -228,16 +227,13 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 				m.status = "Directory navigation is unavailable when all blobs are loaded"
 				return m, nil
 			}
+			m.deactivateSearch()
 			m.prefix = item.blob.Name
-			m.blobSearchQuery = ""
 
 			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
 				m.blobs = cached
-				m.blobsList.ResetFilter()
 				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 				m.refreshBlobItems()
-			} else {
-				m.blobsList.ResetFilter()
 			}
 
 			m.loading = true

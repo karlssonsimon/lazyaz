@@ -23,6 +23,23 @@ const (
 	previewPane
 )
 
+const (
+	searchStagePrefix = 0
+	searchStageFuzzy  = 1
+)
+
+type blobSearch struct {
+	active       bool
+	stage        int               // searchStagePrefix or searchStageFuzzy
+	prefixQuery  string            // user-typed prefix for API search
+	prefixLocked bool              // prefix submitted via Enter
+	fuzzyQuery   string            // user-typed fuzzy filter text
+	fetching     bool              // API fetch in progress
+	results      []blob.BlobEntry  // API results (separate from m.blobs)
+	filtered     []int             // fuzzy.Filter indices into results
+	totalResults int               // count before fzf filtering
+}
+
 type Model struct {
 	service *blob.Service
 
@@ -47,10 +64,10 @@ type Model struct {
 	currentAccount  blob.Account
 	hasContainer    bool
 	containerName   string
-	prefix          string
-	blobLoadAll     bool
-	blobSearchQuery string
-	preview         previewState
+	prefix      string
+	blobLoadAll bool
+	search      blobSearch
+	preview     previewState
 	pendingPreviewG bool
 	keymap          keymap.Keymap
 	styles          ui.Styles
@@ -164,7 +181,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	blobs.SetShowPagination(false)
 	blobs.SetShowStatusBar(true)
 	blobs.SetStatusBarItemName("entry", "entries")
-	blobs.SetFilteringEnabled(true)
+	blobs.SetFilteringEnabled(false)
 	blobs.DisableQuitKeybindings()
 
 	spin := spinner.New()
