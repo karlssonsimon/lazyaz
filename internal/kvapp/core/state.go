@@ -35,6 +35,7 @@ type LoadRequest struct {
 	Vault          keyvault.Vault
 	SecretName     string
 	Version        string
+	Force          bool
 	Status         string
 }
 
@@ -180,21 +181,21 @@ func (s *Session) Backspace() string {
 
 func (s *Session) RefreshRequest() LoadRequest {
 	if !s.HasSubscription {
-		return LoadRequest{Kind: LoadSubscriptions, Status: "Refreshing subscriptions..."}
+		return LoadRequest{Kind: LoadSubscriptions, Force: true, Status: "Refreshing subscriptions..."}
 	}
 	if s.Focus == SubscriptionsPane {
-		return LoadRequest{Kind: LoadSubscriptions, Status: "Refreshing subscriptions..."}
+		return LoadRequest{Kind: LoadSubscriptions, Force: true, Status: "Refreshing subscriptions..."}
 	}
 	if !s.HasVault || s.Focus == VaultsPane {
-		return LoadRequest{Kind: LoadVaults, SubscriptionID: s.CurrentSubscription.ID, Status: fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(s.CurrentSubscription))}
+		return LoadRequest{Kind: LoadVaults, SubscriptionID: s.CurrentSubscription.ID, Force: true, Status: fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(s.CurrentSubscription))}
 	}
 	if !s.HasSecret || s.Focus == SecretsPane {
-		return LoadRequest{Kind: LoadSecrets, Vault: s.CurrentVault, Status: fmt.Sprintf("Loading secrets in %s", s.CurrentVault.Name)}
+		return LoadRequest{Kind: LoadSecrets, Vault: s.CurrentVault, Force: true, Status: fmt.Sprintf("Loading secrets in %s", s.CurrentVault.Name)}
 	}
 	if s.Focus == PreviewPane {
 		return LoadRequest{Kind: LoadPreviewSecret, Vault: s.CurrentVault, SecretName: s.CurrentSecret.Name, Version: s.PreviewVersion, Status: fmt.Sprintf("Loading secret value for %s", s.CurrentSecret.Name)}
 	}
-	return LoadRequest{Kind: LoadVersions, Vault: s.CurrentVault, SecretName: s.CurrentSecret.Name, Status: fmt.Sprintf("Loading versions for %s", s.CurrentSecret.Name)}
+	return LoadRequest{Kind: LoadVersions, Vault: s.CurrentVault, SecretName: s.CurrentSecret.Name, Force: true, Status: fmt.Sprintf("Loading versions for %s", s.CurrentSecret.Name)}
 }
 
 func (s *Session) SelectSubscriptionRequest(sub azure.Subscription) LoadRequest {

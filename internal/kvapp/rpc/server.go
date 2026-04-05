@@ -145,6 +145,9 @@ func (s *Server) executeLoadRequest(session *kvcore.Session, req kvcore.LoadRequ
 	case kvcore.LoadSubscriptions:
 		if items, ok := s.cache.subscriptions.Get(""); ok {
 			session.ApplySubscriptionsResult(items, false, nil)
+			if !req.Force {
+				return nil
+			}
 		}
 		items, err := collectSubscriptions(ctx, s.service)
 		if err == nil {
@@ -155,6 +158,9 @@ func (s *Server) executeLoadRequest(session *kvcore.Session, req kvcore.LoadRequ
 	case kvcore.LoadVaults:
 		if items, ok := s.cache.vaults.Get(req.SubscriptionID); ok {
 			session.ApplyVaultsResult(req.SubscriptionID, items, false, nil)
+			if !req.Force {
+				return nil
+			}
 		}
 		items, err := collectVaults(ctx, s.service, req.SubscriptionID)
 		if err == nil {
@@ -166,6 +172,9 @@ func (s *Server) executeLoadRequest(session *kvcore.Session, req kvcore.LoadRequ
 		key := cache.Key(req.Vault.SubscriptionID, req.Vault.Name)
 		if items, ok := s.cache.secrets.Get(key); ok {
 			session.ApplySecretsResult(req.Vault, items, false, nil)
+			if !req.Force {
+				return nil
+			}
 		}
 		items, err := collectSecrets(ctx, s.service, req.Vault)
 		if err == nil {
@@ -177,6 +186,9 @@ func (s *Server) executeLoadRequest(session *kvcore.Session, req kvcore.LoadRequ
 		key := cache.Key(req.Vault.SubscriptionID, req.Vault.Name, req.SecretName)
 		if items, ok := s.cache.versions.Get(key); ok {
 			session.ApplyVersionsResult(req.Vault, req.SecretName, items, false, nil)
+			if !req.Force {
+				return nil
+			}
 		}
 		items, err := collectVersions(ctx, s.service, req.Vault, req.SecretName)
 		if err == nil {

@@ -146,6 +146,9 @@ func (s *Server) executeLoadRequest(session *sbcore.Session, req sbcore.LoadRequ
 	case sbcore.LoadSubscriptions:
 		if items, ok := s.cache.subscriptions.Get(""); ok {
 			session.ApplySubscriptionsResult(items, false, nil)
+			if !req.Force {
+				return nil
+			}
 		}
 		items, err := collectSubscriptions(ctx, s.service)
 		if err == nil {
@@ -156,6 +159,9 @@ func (s *Server) executeLoadRequest(session *sbcore.Session, req sbcore.LoadRequ
 	case sbcore.LoadNamespaces:
 		if items, ok := s.cache.namespaces.Get(req.SubscriptionID); ok {
 			session.ApplyNamespacesResult(req.SubscriptionID, items, false, nil)
+			if !req.Force {
+				return nil
+			}
 		}
 		items, err := collectNamespaces(ctx, s.service, req.SubscriptionID)
 		if err == nil {
@@ -167,6 +173,9 @@ func (s *Server) executeLoadRequest(session *sbcore.Session, req sbcore.LoadRequ
 		key := cache.Key(req.Namespace.SubscriptionID, req.Namespace.Name)
 		if items, ok := s.cache.entities.Get(key); ok {
 			session.ApplyEntitiesResult(req.Namespace, items, false, nil)
+			if !req.Force {
+				return nil
+			}
 		}
 		items, err := collectEntities(ctx, s.service, req.Namespace)
 		if err == nil {
@@ -178,6 +187,9 @@ func (s *Server) executeLoadRequest(session *sbcore.Session, req sbcore.LoadRequ
 		key := cache.Key(req.Namespace.SubscriptionID, req.Namespace.Name, req.TopicName)
 		if items, ok := s.cache.topicSubs.Get(key); ok {
 			session.ApplyTopicSubscriptionsResult(req.Namespace, req.TopicName, items, false, nil)
+			if !req.Force {
+				return nil
+			}
 		}
 		items, err := collectTopicSubscriptions(ctx, s.service, req.Namespace, req.TopicName)
 		if err == nil {

@@ -51,6 +51,7 @@ type LoadRequest struct {
 	DeadLetter     bool
 	MessageIDs     []string
 	MessageID      string
+	Force          bool
 	Status         string
 }
 
@@ -231,16 +232,16 @@ func (s *Session) Backspace() string {
 
 func (s *Session) RefreshRequest() LoadRequest {
 	if !s.HasSubscription {
-		return LoadRequest{Kind: LoadSubscriptions, Status: "Refreshing subscriptions..."}
+		return LoadRequest{Kind: LoadSubscriptions, Force: true, Status: "Refreshing subscriptions..."}
 	}
 	if s.Focus == SubscriptionsPane {
-		return LoadRequest{Kind: LoadSubscriptions, Status: "Refreshing subscriptions..."}
+		return LoadRequest{Kind: LoadSubscriptions, Force: true, Status: "Refreshing subscriptions..."}
 	}
 	if !s.HasNamespace || s.Focus == NamespacesPane {
-		return LoadRequest{Kind: LoadNamespaces, SubscriptionID: s.CurrentSubscription.ID, Status: fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(s.CurrentSubscription))}
+		return LoadRequest{Kind: LoadNamespaces, SubscriptionID: s.CurrentSubscription.ID, Force: true, Status: fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(s.CurrentSubscription))}
 	}
 	if s.Focus == EntitiesPane || !s.HasEntity {
-		return LoadRequest{Kind: LoadEntities, Namespace: s.CurrentNamespace, Status: fmt.Sprintf("Loading entities in %s", s.CurrentNamespace.Name)}
+		return LoadRequest{Kind: LoadEntities, Namespace: s.CurrentNamespace, Force: true, Status: fmt.Sprintf("Loading entities in %s", s.CurrentNamespace.Name)}
 	}
 	return s.refreshDetailRequest()
 }
@@ -252,7 +253,7 @@ func (s *Session) refreshDetailRequest() LoadRequest {
 	if s.ViewingTopicSub {
 		return LoadRequest{Kind: LoadSubscriptionMessages, Namespace: s.CurrentNamespace, Entity: s.CurrentEntity, TopicSub: s.CurrentTopicSub, DeadLetter: s.DeadLetter, Status: fmt.Sprintf("Peeking messages from %s/%s", s.CurrentEntity.Name, s.CurrentTopicSub.Name), Source: s.CurrentEntity.Name + "/" + s.CurrentTopicSub.Name}
 	}
-	return LoadRequest{Kind: LoadTopicSubscriptions, Namespace: s.CurrentNamespace, TopicName: s.CurrentEntity.Name, Status: fmt.Sprintf("Loading subscriptions for topic %s", s.CurrentEntity.Name)}
+	return LoadRequest{Kind: LoadTopicSubscriptions, Namespace: s.CurrentNamespace, TopicName: s.CurrentEntity.Name, Force: true, Status: fmt.Sprintf("Loading subscriptions for topic %s", s.CurrentEntity.Name)}
 }
 
 func (s *Session) SelectSubscriptionRequest(sub azure.Subscription) LoadRequest {
