@@ -131,6 +131,10 @@ function M.command(action, opts)
     return
   end
 
+  if action == "refresh" then
+    return explorer:invoke(adapter.refresh_action(explorer))
+  end
+
   if action == "active" then
     return explorer:invoke({ Action = "sb.show.active" })
   end

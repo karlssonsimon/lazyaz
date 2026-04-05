@@ -658,7 +658,6 @@ function Explorer:attach_keymaps(buf)
   end
 
   map("q", function() self:close() end)
-  map("r", function() self:invoke(self.adapter.refresh_action(self)) end)
   map("j", function() self:move_cursor(1) end)
   map("k", function() self:move_cursor(-1) end)
   map("l", function() self:open_selected() end)

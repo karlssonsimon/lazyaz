@@ -29,7 +29,7 @@ end, {
   nargs = 1,
   range = true,
   complete = function()
-    return { "open", "download", "loadall" }
+    return { "open", "refresh", "download", "loadall" }
   end,
 })
 
@@ -38,7 +38,7 @@ vim.api.nvim_create_user_command("Azkv", function(opts)
 end, {
   nargs = 1,
   complete = function()
-    return { "open" }
+    return { "open", "refresh" }
   end,
 })
 
@@ -48,7 +48,7 @@ end, {
   nargs = 1,
   range = true,
   complete = function()
-    return { "open", "active", "dlq", "filter", "requeue", "delete" }
+    return { "open", "refresh", "active", "dlq", "filter", "requeue", "delete" }
   end,
 })
 vim.api.nvim_create_user_command("AztoolsBuild", function(opts)

@@ -107,6 +107,14 @@ function M.command(action)
   if action == "open" then
     return explorer:toggle()
   end
+
+  if not explorer.proc then
+    return
+  end
+
+  if action == "refresh" then
+    return explorer:invoke(adapter.refresh_action(explorer))
+  end
 end
 
 function M.open() get():open() end

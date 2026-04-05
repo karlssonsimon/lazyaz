@@ -158,6 +158,10 @@ function M.command(action, opts)
     return
   end
 
+  if action == "refresh" then
+    return explorer:invoke(adapter.refresh_action(explorer))
+  end
+
   if action == "loadall" then
     return explorer:invoke({ Action = "blob.toggle_load_all", HierarchyLimit = 200, PrefixSearchLimit = 200, VisibleLines = 20 })
   end
