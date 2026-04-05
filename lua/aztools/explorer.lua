@@ -246,13 +246,18 @@ end
 
 function Explorer:invoke_with_opts(action, opts)
   local action_name = type(action) == "table" and action.Action or nil
+  local previous_key = self:current_pane_key()
   local show_spinner = action_name and SPINNER_ACTIONS[action_name] or false
   if show_spinner then self.spinner:start_spinner(action_name) end
   local result = rpc.action(self.proc.socket, self.proc.session, action)
   self.snapshot = result.state
   self:render(not opts.keep_focus)
+  local target_key = nil
+  if self.adapter.post_invoke_focus then
+    target_key = self.adapter.post_invoke_focus(self, action, self.snapshot, previous_key)
+  end
   if not opts.keep_focus then
-    self:ensure_focus((self.snapshot and self.snapshot.focus) or (self.pane_defs[1] and self.pane_defs[1].key))
+    self:ensure_focus(target_key or (self.snapshot and self.snapshot.focus) or (self.pane_defs[1] and self.pane_defs[1].key))
   end
   if show_spinner then
     local status = self.snapshot and self.snapshot.status or "Done"
@@ -566,7 +571,7 @@ function Explorer:render(force_focus)
       end
       local prefix_width = (prefix_text and prefix_text ~= "") and vim.fn.strdisplaywidth(prefix_text .. " ") or 0
       local available_width = item.rect.width - 2 - prefix_width
-      lines[#lines + 1] = truncate(raw, available_width)
+      lines[#lines + 1] = item.key == "preview" and raw or truncate(raw, available_width)
       if item.key ~= "preview" and (type(entry) == "table" or type(entry) == "string") then
         local label = lines[#lines]
         local hl = prefix_hl

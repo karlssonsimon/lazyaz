@@ -168,6 +168,15 @@ local adapter = {
     local pane = explorer:current_pane_key()
     if explorer.snapshot and explorer.snapshot.viewing_message and (pane == "preview" or pane == "detail") then return { Action = "sb.close.message" } end
   end,
+  post_invoke_focus = function(_, action, snapshot, previous_key)
+    local action_name = type(action) == "table" and action.Action or nil
+    if action_name == "sb.open.message" and snapshot and snapshot.viewing_message then
+      return "preview"
+    end
+    if action_name == "sb.close.message" and previous_key == "preview" then
+      return "detail"
+    end
+  end,
   focus_next_action = function() return { Action = "sb.focus.next" } end,
   focus_prev_action = function() return { Action = "sb.focus.previous" } end,
   reveal_action = function(_, pane, item)
