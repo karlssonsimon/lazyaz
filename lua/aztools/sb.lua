@@ -11,6 +11,26 @@ local function file_hl()
   return vim.fn.hlexists("MiniFilesFile") == 1 and "MiniFilesFile" or "Normal"
 end
 
+local function format_preview_body(body)
+  if type(body) ~= "string" or body == "" then
+    return body
+  end
+
+  local ok = pcall(vim.json.decode, body)
+  if not ok then
+    return body
+  end
+
+  if vim.fn.executable("jq") == 1 then
+    local output = vim.fn.system({ "jq", "." }, body)
+    if vim.v.shell_error == 0 and type(output) == "string" and output ~= "" then
+      return output:gsub("\n$", "")
+    end
+  end
+
+  return body
+end
+
 local function field(item, ...)
   if type(item) ~= "table" then
     return nil
@@ -47,7 +67,7 @@ local function panes(snapshot)
   end
   if snapshot.viewing_message and snapshot.selected_message then
     local selected = snapshot.selected_message
-    local body = field(selected, "full_body", "FullBody") or ""
+    local body = format_preview_body(field(selected, "full_body", "FullBody") or "")
     local lines = body ~= "" and vim.split(body, "\n", { plain = true }) or { "<empty message body>" }
     out[#out + 1] = { key = "preview", title = field(selected, "message_id", "MessageID") or "Message", items = lines, preview = true }
   end

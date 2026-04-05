@@ -69,8 +69,14 @@ local adapter = {
     local kind = pane_key == "versions" and "file" or "dir"
     return icon_info(label, kind)
   end,
-  item_label = function(_, item)
+  item_label = function(pane_key, item)
     local label = field(item, "name", "Name", "id", "ID", "version", "Version") or tostring(item)
+    if pane_key == "versions" then
+      local state = field(item, "_aztools_version_state")
+      if state then
+        return string.format("%s  %s", label, state)
+      end
+    end
     return label
   end,
   item_name_highlight = function(pane_key)
@@ -78,15 +84,19 @@ local adapter = {
       return "Directory"
     end
   end,
-  item_virtual_lines = function(pane_key, item)
+  item_extra_highlights = function(pane_key, item, label)
     if pane_key ~= "versions" or type(item) ~= "table" then
       return nil
     end
     local state = field(item, "_aztools_version_state")
-    if not state then
+    if not state or type(label) ~= "string" then
       return nil
     end
-    return { { "  " .. state, "AztoolsGhostText" } }
+    local start_col, end_col = label:find(state, 1, true)
+    if not start_col then
+      return nil
+    end
+    return { { group = "AztoolsGhostText", start_col = start_col - 1, end_col = end_col } }
   end,
   should_bootstrap = function(snapshot)
     snapshot = snapshot or {}
