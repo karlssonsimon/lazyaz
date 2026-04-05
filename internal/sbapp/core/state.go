@@ -163,7 +163,7 @@ func (s *Session) SelectEntity(entity servicebus.Entity) {
 	s.HasEntity = true
 	s.Focus = DetailPane
 	s.ClearDetailState()
-	s.DeadLetter = entity.DeadLetterCount > 0
+	s.DeadLetter = false
 }
 
 func (s *Session) SelectTopicSub(sub servicebus.TopicSubscription) {
@@ -174,7 +174,7 @@ func (s *Session) SelectTopicSub(sub servicebus.TopicSubscription) {
 	s.SelectedMessage = servicebus.PeekedMessage{}
 	s.clearMarkedMessages()
 	s.clearDuplicateMessages()
-	s.DeadLetter = sub.DeadLetterCount > 0
+	s.DeadLetter = false
 }
 
 func (s *Session) OpenMessage(msg servicebus.PeekedMessage) string {

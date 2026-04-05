@@ -3,6 +3,14 @@ local Explorer = require("aztools.explorer")
 local M = {}
 local instance
 
+local function directory_hl()
+  return vim.fn.hlexists("MiniFilesDirectory") == 1 and "MiniFilesDirectory" or "Directory"
+end
+
+local function file_hl()
+  return vim.fn.hlexists("MiniFilesFile") == 1 and "MiniFilesFile" or "Normal"
+end
+
 local function field(item, ...)
   if type(item) ~= "table" then
     return nil
@@ -23,13 +31,23 @@ local function panes(snapshot)
   if snapshot.has_subscription then
     out[#out + 1] = { key = "namespaces", title = "Namespaces", items = snapshot.namespaces or {} }
   end
-  if snapshot.has_namespace then out[#out + 1] = { key = "entities", title = "Entities", items = snapshot.entities or {} } end
+  if snapshot.has_namespace then
+    local entities = snapshot.entities or {}
+    if snapshot.dlq_filter then
+      entities = vim.tbl_filter(function(item)
+        return (field(item, "dead_letter_count", "DeadLetterCount") or 0) > 0
+      end, entities)
+    end
+    out[#out + 1] = { key = "entities", title = "Entities", items = entities }
+  end
   if snapshot.has_entity then
     local detail_items = snapshot.detail_mode == "topic_subscriptions" and (snapshot.topic_subs or {}) or (snapshot.peeked_messages or {})
-    out[#out + 1] = { key = "detail", title = "Detail", items = detail_items }
+    local detail_title = snapshot.dead_letter and "Detail [DLQ]" or "Detail [Active]"
+    out[#out + 1] = { key = "detail", title = detail_title, items = detail_items }
   end
   if snapshot.viewing_message and snapshot.selected_message then
-    local lines = vim.split(snapshot.selected_message.full_body or "", "\n", { plain = true })
+    local body = snapshot.selected_message.full_body or ""
+    local lines = body ~= "" and vim.split(body, "\n", { plain = true }) or { "<empty message body>" }
     out[#out + 1] = { key = "preview", title = snapshot.selected_message.message_id or "Message", items = lines, preview = true }
   end
   return out
@@ -45,11 +63,33 @@ local function icon_info(name, kind)
   return "", vim.fn.hlexists("MiniFilesFile") == 1 and "MiniFilesFile" or "Normal"
 end
 
+local function entity_icon(item)
+  if field(item, "kind", "Kind") == 1 then
+    return "󱅫", "DiagnosticWarn"
+  end
+  return "󰉋", directory_hl()
+end
+
+local function json_icon()
+  if _G.MiniIcons ~= nil then
+    local icon, hl = _G.MiniIcons.get("file", "message.json")
+    return icon, hl
+  end
+  return icon_info("message.json", "file")
+end
+
 local adapter = {
   panes = panes,
   pane_filetype = function(key)
     if key == "preview" then return "json" end
     return "azsb"
+  end,
+  pane_winhl = function(key, _, snapshot, active)
+    if key ~= "detail" or not snapshot or not snapshot.dead_letter then
+      return nil
+    end
+    local normal = active and "AztoolsPaneActive" or "AztoolsPane"
+    return "Normal:" .. normal .. ",FloatBorder:AztoolsBorderDlq,FloatTitle:AztoolsTitleDlq"
   end,
   item_prefix = function(pane_key, item)
     if type(item) ~= "table" then return nil, nil end
@@ -57,8 +97,11 @@ local adapter = {
     if pane_key == "subscriptions" or pane_key == "namespaces" then
       return icon_info(label, "dir")
     end
-    if pane_key == "detail" and field(item, "name", "Name") and not field(item, "message_id", "MessageID") then
-      return icon_info(label, "dir")
+    if pane_key == "entities" then
+      return entity_icon(item)
+    end
+    if pane_key == "detail" then
+      return json_icon()
     end
     return nil, nil
   end,
@@ -66,10 +109,9 @@ local adapter = {
     if type(item) == "string" then return item end
     local label = field(item, "name", "Name", "id", "ID", "message_id", "MessageID") or tostring(item)
     if pane_key == "entities" then
-      local prefix = field(item, "kind", "Kind") == 1 and "[T]" or "[Q]"
       local active = field(item, "active_msg_count", "ActiveMsgCount") or 0
       local dlq = field(item, "dead_letter_count", "DeadLetterCount") or 0
-      return string.format("%s %s [A:%d DLQ:%d]", prefix, label, active, dlq)
+      return string.format("%s [A:%d DLQ:%d]", label, active, dlq)
     end
     return label
   end,
@@ -77,9 +119,23 @@ local adapter = {
     if pane_key == "subscriptions" or pane_key == "namespaces" then
       return "Directory"
     end
-    if pane_key == "detail" and field(item, "name", "Name") and not field(item, "message_id", "MessageID") then
-      return "Directory"
+    if pane_key == "detail" then
+      return file_hl()
     end
+  end,
+  item_extra_highlights = function(pane_key, item, label)
+    if pane_key ~= "entities" then
+      return nil
+    end
+    local dlq = field(item, "dead_letter_count", "DeadLetterCount") or 0
+    if dlq <= 0 then
+      return nil
+    end
+    local start_col, end_col = label:find("DLQ:" .. tostring(dlq), 1, true)
+    if not start_col then
+      return nil
+    end
+    return { { group = "AztoolsDangerText", start_col = start_col - 1, end_col = end_col } }
   end,
   should_bootstrap = function(snapshot)
     snapshot = snapshot or {}
