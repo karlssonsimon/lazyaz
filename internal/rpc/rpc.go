@@ -18,10 +18,18 @@ type Request struct {
 }
 
 type Response struct {
-	ID     string      `json:"id"`
-	OK     bool        `json:"ok"`
-	Result interface{} `json:"result,omitempty"`
-	Error  string      `json:"error,omitempty"`
+	ID     string          `json:"id"`
+	OK     bool            `json:"ok"`
+	Result json.RawMessage `json:"result,omitempty"`
+	Error  string          `json:"error,omitempty"`
+}
+
+func EncodeResult(id string, value interface{}) Response {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return Response{ID: id, Error: fmt.Sprintf("encode result: %v", err)}
+	}
+	return Response{ID: id, OK: true, Result: data}
 }
 
 type Handler func(Request) Response

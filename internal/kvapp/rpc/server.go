@@ -70,13 +70,13 @@ func (s *Server) handleRequest(req sharedrpc.Request) sharedrpc.Response {
 		if err != nil {
 			return sharedrpc.Response{ID: req.ID, Error: err.Error()}
 		}
-		return sharedrpc.Response{ID: req.ID, OK: true, Result: SessionCreateResult{Session: id, State: session.core.Snapshot()}}
+		return sharedrpc.EncodeResult(req.ID, SessionCreateResult{Session: id, State: session.core.Snapshot()})
 	case "session.close":
 		if strings.TrimSpace(req.Session) == "" {
 			return sharedrpc.Response{ID: req.ID, Error: "session is required"}
 		}
 		s.sessions.Delete(req.Session)
-		return sharedrpc.Response{ID: req.ID, OK: true, Result: map[string]bool{"closed": true}}
+		return sharedrpc.EncodeResult(req.ID, map[string]bool{"closed": true})
 	case "state.get":
 		session, resp := s.requireSession(req)
 		if session == nil {
@@ -84,7 +84,7 @@ func (s *Server) handleRequest(req sharedrpc.Request) sharedrpc.Response {
 		}
 		session.mu.Lock()
 		defer session.mu.Unlock()
-		return sharedrpc.Response{ID: req.ID, OK: true, Result: session.core.Snapshot()}
+		return sharedrpc.EncodeResult(req.ID, session.core.Snapshot())
 	case "action.invoke":
 		session, resp := s.requireSession(req)
 		if session == nil {
@@ -100,7 +100,7 @@ func (s *Server) handleRequest(req sharedrpc.Request) sharedrpc.Response {
 		if err != nil {
 			return sharedrpc.Response{ID: req.ID, Error: err.Error()}
 		}
-		return sharedrpc.Response{ID: req.ID, OK: true, Result: result}
+		return sharedrpc.EncodeResult(req.ID, result)
 	default:
 		return sharedrpc.Response{ID: req.ID, Error: fmt.Sprintf("unsupported method %q", req.Method)}
 	}

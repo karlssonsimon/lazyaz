@@ -64,7 +64,7 @@ func (c *Client) CreateSession() (kvcore.Snapshot, error) {
 		return kvcore.Snapshot{}, errors.New(resp.Error)
 	}
 	var result SessionCreateResult
-	if err := decodeResult(resp.Result, &result); err != nil {
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return kvcore.Snapshot{}, err
 	}
 	c.session = result.Session
@@ -95,7 +95,7 @@ func (c *Client) GetState() (kvcore.Snapshot, error) {
 		return kvcore.Snapshot{}, errors.New(resp.Error)
 	}
 	var snapshot kvcore.Snapshot
-	if err := decodeResult(resp.Result, &snapshot); err != nil {
+	if err := json.Unmarshal(resp.Result, &snapshot); err != nil {
 		return kvcore.Snapshot{}, err
 	}
 	return snapshot, nil
@@ -114,19 +114,8 @@ func (c *Client) InvokeAction(req kvcore.ActionRequest) (ActionInvokeResult, err
 		return ActionInvokeResult{}, errors.New(resp.Error)
 	}
 	var result ActionInvokeResult
-	if err := decodeResult(resp.Result, &result); err != nil {
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return ActionInvokeResult{}, err
 	}
 	return result, nil
-}
-
-func decodeResult(result interface{}, target interface{}) error {
-	data, err := json.Marshal(result)
-	if err != nil {
-		return fmt.Errorf("marshal rpc result: %w", err)
-	}
-	if err := json.Unmarshal(data, target); err != nil {
-		return fmt.Errorf("decode rpc result: %w", err)
-	}
-	return nil
 }

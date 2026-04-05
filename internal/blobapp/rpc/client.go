@@ -65,7 +65,7 @@ func (c *Client) CreateSession() (blobcore.Snapshot, error) {
 		return blobcore.Snapshot{}, errors.New(resp.Error)
 	}
 	var result SessionCreateResult
-	if err := decodeResult(resp.Result, &result); err != nil {
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return blobcore.Snapshot{}, err
 	}
 	c.session = result.Session
@@ -96,7 +96,7 @@ func (c *Client) GetState() (blobcore.Snapshot, error) {
 		return blobcore.Snapshot{}, errors.New(resp.Error)
 	}
 	var snapshot blobcore.Snapshot
-	if err := decodeResult(resp.Result, &snapshot); err != nil {
+	if err := json.Unmarshal(resp.Result, &snapshot); err != nil {
 		return blobcore.Snapshot{}, err
 	}
 	return snapshot, nil
@@ -115,19 +115,8 @@ func (c *Client) InvokeAction(req blobcore.ActionRequest) (ActionInvokeResult, e
 		return ActionInvokeResult{}, errors.New(resp.Error)
 	}
 	var result ActionInvokeResult
-	if err := decodeResult(resp.Result, &result); err != nil {
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
 		return ActionInvokeResult{}, err
 	}
 	return result, nil
-}
-
-func decodeResult(result interface{}, target interface{}) error {
-	data, err := json.Marshal(result)
-	if err != nil {
-		return fmt.Errorf("marshal rpc result: %w", err)
-	}
-	if err := json.Unmarshal(data, target); err != nil {
-		return fmt.Errorf("decode rpc result: %w", err)
-	}
-	return nil
 }
