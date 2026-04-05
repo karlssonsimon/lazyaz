@@ -48,7 +48,7 @@ function M.refresh(mod)
   if not MiniFiles then
     return false
   end
-  local ok = pcall(MiniFiles.refresh)
+  local ok = pcall(MiniFiles.refresh, { content = { filter = MiniFiles.config.content.filter } })
   return ok
 end
 
