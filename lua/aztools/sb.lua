@@ -46,9 +46,10 @@ local function panes(snapshot)
     out[#out + 1] = { key = "detail", title = detail_title, items = detail_items }
   end
   if snapshot.viewing_message and snapshot.selected_message then
-    local body = snapshot.selected_message.full_body or ""
+    local selected = snapshot.selected_message
+    local body = field(selected, "full_body", "FullBody") or ""
     local lines = body ~= "" and vim.split(body, "\n", { plain = true }) or { "<empty message body>" }
-    out[#out + 1] = { key = "preview", title = snapshot.selected_message.message_id or "Message", items = lines, preview = true }
+    out[#out + 1] = { key = "preview", title = field(selected, "message_id", "MessageID") or "Message", items = lines, preview = true }
   end
   return out
 end

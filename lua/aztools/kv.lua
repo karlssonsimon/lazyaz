@@ -24,7 +24,15 @@ local function panes(snapshot)
     out[#out + 1] = { key = "vaults", title = "Vaults", items = snapshot.vaults or {} }
   end
   if snapshot.has_vault then out[#out + 1] = { key = "secrets", title = "Secrets", items = snapshot.secrets or {} } end
-  if snapshot.has_secret then out[#out + 1] = { key = "versions", title = "Versions", items = snapshot.versions or {} } end
+  if snapshot.has_secret then
+    local versions = {}
+    for i, item in ipairs(snapshot.versions or {}) do
+      local entry = vim.deepcopy(item)
+      entry._aztools_version_state = i == 1 and "latest" or "previous"
+      versions[#versions + 1] = entry
+    end
+    out[#out + 1] = { key = "versions", title = "Versions", items = versions }
+  end
   if snapshot.preview_open then
     local text = snapshot.preview_value or ""
     local preview_lines = text ~= "" and vim.split((text:gsub("\r", "")), "\n", { plain = true }) or {}
@@ -69,6 +77,16 @@ local adapter = {
     if pane_key == "subscriptions" or pane_key == "vaults" or pane_key == "secrets" then
       return "Directory"
     end
+  end,
+  item_virtual_lines = function(pane_key, item)
+    if pane_key ~= "versions" or type(item) ~= "table" then
+      return nil
+    end
+    local state = field(item, "_aztools_version_state")
+    if not state then
+      return nil
+    end
+    return { { "  " .. state, "AztoolsGhostText" } }
   end,
   should_bootstrap = function(snapshot)
     snapshot = snapshot or {}
