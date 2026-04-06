@@ -79,8 +79,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.Err.Error()
-		m.Status = "Failed to load subscriptions"
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
 		return m, nil
 	}
 
@@ -123,8 +122,7 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.err.Error()
-		m.Status = fmt.Sprintf("Failed to load namespaces in %s", ui.SubscriptionDisplayName(m.CurrentSub))
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load namespaces in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
 		m.namespacesSession = nil
 		return m, nil
 	}
@@ -158,8 +156,7 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.err.Error()
-		m.Status = fmt.Sprintf("Failed to load entities in %s", msg.namespace.Name)
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load entities in %s: %s", msg.namespace.Name, msg.err.Error()))
 		m.entitiesSession = nil
 		return m, nil
 	}
@@ -199,8 +196,7 @@ func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.err.Error()
-		m.Status = fmt.Sprintf("Failed to load subscriptions for topic %s", msg.topicName)
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load subscriptions for topic %s: %s", msg.topicName, msg.err.Error()))
 		m.topicSubsSession = nil
 		m.topicSubsFetching = ""
 		return m, nil
@@ -228,8 +224,7 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	// Messages are ephemeral peek results — not cached.
 	m.ClearLoading()
 	if msg.err != nil {
-		m.LastErr = msg.err.Error()
-		m.Status = fmt.Sprintf("Failed to peek messages from %s", msg.source)
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to peek messages from %s: %s", msg.source, msg.err.Error()))
 		return m, nil
 	}
 
@@ -269,23 +264,21 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 
 func (m Model) handleRequeueDone(msg requeueDoneMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
-	if msg.err != nil {
+	// Successful requeues consume the marks for the current scope.
+	m.clearScopeMarks()
+	switch {
+	case msg.err != nil:
 		var dupErr *servicebus.DuplicateError
 		if errors.As(msg.err, &dupErr) {
 			m.ensureDuplicates()[dupErr.MessageID] = struct{}{}
-			m.LastErr = fmt.Sprintf("message %s sent but not removed from DLQ (possible duplicate)", dupErr.MessageID)
+			m.Notify(appshell.LevelWarn, fmt.Sprintf("Message %s sent but not removed from DLQ (possible duplicate)", dupErr.MessageID))
 		} else {
-			m.LastErr = msg.err.Error()
+			m.Notify(appshell.LevelError, fmt.Sprintf("Failed to requeue messages: %s", msg.err.Error()))
 		}
-	} else {
-		m.LastErr = ""
-	}
-	// Successful requeues consume the marks for the current scope.
-	m.clearScopeMarks()
-	if msg.requeued > 0 {
-		m.Status = fmt.Sprintf("%d of %d message(s) requeued", msg.requeued, msg.total)
-	} else {
-		m.Status = "Failed to requeue messages"
+	case msg.requeued > 0:
+		m.Notify(appshell.LevelSuccess, fmt.Sprintf("%d of %d message(s) requeued", msg.requeued, msg.total))
+	default:
+		m.Notify(appshell.LevelError, "Failed to requeue messages")
 	}
 	var peekCmd tea.Cmd
 	m, peekCmd = m.rePeekMessages(true)
@@ -295,15 +288,13 @@ func (m Model) handleRequeueDone(msg requeueDoneMsg) (Model, tea.Cmd) {
 func (m Model) handleDeleteDuplicateDone(msg deleteDuplicateDoneMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.LastErr = msg.err.Error()
-		m.Status = "Failed to delete duplicate message"
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to delete duplicate message: %s", msg.err.Error()))
 		return m, nil
 	}
-	m.LastErr = ""
 	if dups := m.currentDuplicates(); dups != nil {
 		delete(dups, msg.messageID)
 	}
-	m.Status = "Duplicate message deleted"
+	m.Notify(appshell.LevelSuccess, "Duplicate message deleted")
 	var peekCmd tea.Cmd
 	m, peekCmd = m.rePeekMessages(true)
 	return m, tea.Batch(peekCmd, refreshEntitiesCmd(m.service, m.currentNS))

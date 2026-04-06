@@ -69,8 +69,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.Err.Error()
-		m.Status = "Failed to load subscriptions"
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
 		return m, nil
 	}
 
@@ -114,8 +113,7 @@ func (m Model) handleVaultsLoaded(msg vaultsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.err.Error()
-		m.Status = fmt.Sprintf("Failed to load key vaults in %s", ui.SubscriptionDisplayName(m.CurrentSub))
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load key vaults in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
 		m.vaultsSession = nil // abandon session, keep accumulated items visible
 		return m, nil
 	}
@@ -149,8 +147,7 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.err.Error()
-		m.Status = fmt.Sprintf("Failed to load secrets in %s", msg.vault.Name)
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load secrets in %s: %s", msg.vault.Name, msg.err.Error()))
 		m.secretsSession = nil
 		return m, nil
 	}
@@ -187,8 +184,7 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.err.Error()
-		m.Status = fmt.Sprintf("Failed to load versions for %s", msg.secretName)
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.secretName, msg.err.Error()))
 		m.versionsSession = nil
 		return m, nil
 	}
@@ -215,12 +211,10 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 func (m Model) handleSecretValueYanked(msg secretValueYankedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.LastErr = msg.err.Error()
-		m.Status = "Failed to yank secret value"
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to yank secret value: %s", msg.err.Error()))
 		return m, nil
 	}
 
-	m.LastErr = ""
 	label := msg.secretName
 	if msg.version != "" {
 		v := msg.version
@@ -229,7 +223,7 @@ func (m Model) handleSecretValueYanked(msg secretValueYankedMsg) (Model, tea.Cmd
 		}
 		label = fmt.Sprintf("%s@%s", msg.secretName, v)
 	}
-	m.Status = fmt.Sprintf("Yanked %s to clipboard", label)
+	m.Notify(appshell.LevelSuccess, fmt.Sprintf("Yanked %s to clipboard", label))
 	return m, nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
@@ -217,8 +218,7 @@ func (m Model) handleSearchBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		m.ClearLoading()
 		m.search.fetching = false
-		m.LastErr = msg.err.Error()
-		m.Status = "Search failed"
+		m.Notify(appshell.LevelError, fmt.Sprintf("Search failed: %s", msg.err.Error()))
 		return m, nil
 	}
 
