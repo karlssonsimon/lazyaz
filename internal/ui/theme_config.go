@@ -45,13 +45,15 @@ func loadConfigFromDir(dir string) Config {
 	data, err := os.ReadFile(cfgFile)
 	if err == nil {
 		var fileCfg struct {
-			ThemeName string      `yaml:"theme"`
-			Tabs      []TabConfig `yaml:"tabs"`
+			ThemeName   string      `yaml:"theme"`
+			DownloadDir string      `yaml:"download_dir"`
+			Tabs        []TabConfig `yaml:"tabs"`
 		}
 		if yaml.Unmarshal(data, &fileCfg) == nil {
 			if fileCfg.ThemeName != "" {
 				cfg.ThemeName = fileCfg.ThemeName
 			}
+			cfg.DownloadDir = fileCfg.DownloadDir
 			cfg.Tabs = fileCfg.Tabs
 		}
 	} else {

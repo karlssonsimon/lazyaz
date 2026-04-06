@@ -307,7 +307,12 @@ func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 		blobNames = []string{item.blob.Name}
 	}
 
-	destinationRoot := filepath.Join(defaultDownloadRoot, m.currentAccount.Name, m.containerName)
+	if m.downloadDir == "" {
+		m.LastErr = "no download directory available — set download_dir in ~/.config/lazyaz/config.yaml"
+		m.Status = "Download cancelled"
+		return m, nil
+	}
+	destinationRoot := filepath.Join(m.downloadDir, m.currentAccount.Name, m.containerName)
 	m.SetLoading(blobsPane)
 	m.LastErr = ""
 	m.Status = fmt.Sprintf("Downloading %d blob(s) to %s", len(blobNames), destinationRoot)
