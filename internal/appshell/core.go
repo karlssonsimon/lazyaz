@@ -60,6 +60,12 @@ type Model struct {
 	Status  string
 	LastErr string
 
+	// Notifier is the shared notification log. The parent tabapp
+	// installs a single notifier into every tab so notifications are
+	// global. Standalone single-app binaries get a per-process notifier
+	// from appshell.New so calls never hit nil.
+	Notifier *Notifier
+
 	// Terminal size.
 	Width  int
 	Height int
@@ -77,6 +83,7 @@ func New(cfg ui.Config, km keymap.Keymap) Model {
 		Keymap:      km,
 		Schemes:     cfg.Schemes,
 		LoadingPane: -1,
+		Notifier:    NewNotifier(1000),
 		ThemeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},

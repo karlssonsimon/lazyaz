@@ -21,6 +21,7 @@ func Default() Keymap {
 		SubscriptionPicker:  New("S"),
 		ToggleThemePicker:   New("T"),
 		ToggleHelp:          New("?", "f1"),
+		ToggleNotifications: New("N"),
 
 		// Overlay navigation.
 		ThemeUp:     New("up", "ctrl+k"),

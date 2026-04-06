@@ -1,6 +1,9 @@
 package app
 
 import (
+	"time"
+
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/blobapp"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/kvapp"
@@ -24,6 +27,13 @@ func (m Model) View() string {
 
 	view := lipgloss.JoinVertical(lipgloss.Left, tabBar, childView)
 
+	// Toasts paint before any modal overlays so the picker/help still
+	// covers them when open — modals are deliberate user actions and
+	// should win over passive notifications.
+	if active := m.notifier.Active(time.Now()); len(active) > 0 {
+		view = ui.RenderToasts(notifierToToasts(active), m.styles, m.width, m.height, view)
+	}
+
 	if m.cmdPalette.active {
 		view = renderCommandPalette(&m.cmdPalette, m.styles.Overlay, m.width, m.height, view)
 	}
@@ -36,8 +46,47 @@ func (m Model) View() string {
 	if m.helpOverlay.Active {
 		view = ui.RenderHelpOverlay(m.helpOverlay, m.styles, m.width, m.height, view)
 	}
+	if m.notificationsOverlay.Active {
+		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, notifierToEntries(m.notifier.Snapshot()), m.styles, m.width, m.height, view)
+	}
 
 	return ui.RenderCanvas(view, m.width, m.height, m.styles.Bg)
+}
+
+// notifierToToasts converts the notifier's domain types to the
+// renderer's leaf types so the ui package stays free of an appshell
+// import (which would cycle).
+func notifierToToasts(ns []appshell.Notification) []ui.Toast {
+	out := make([]ui.Toast, len(ns))
+	for i, n := range ns {
+		out[i] = ui.Toast{Level: notifierLevelToToast(n.Level), Message: n.Message}
+	}
+	return out
+}
+
+func notifierToEntries(ns []appshell.Notification) []ui.NotificationEntry {
+	out := make([]ui.NotificationEntry, len(ns))
+	for i, n := range ns {
+		out[i] = ui.NotificationEntry{
+			Time:    n.Time,
+			Level:   notifierLevelToToast(n.Level),
+			Message: n.Message,
+		}
+	}
+	return out
+}
+
+func notifierLevelToToast(l appshell.NotificationLevel) ui.ToastLevel {
+	switch l {
+	case appshell.LevelError:
+		return ui.ToastError
+	case appshell.LevelWarn:
+		return ui.ToastWarn
+	case appshell.LevelSuccess:
+		return ui.ToastSuccess
+	default:
+		return ui.ToastInfo
+	}
 }
 
 func (m Model) activeHelpSections() []ui.HelpSection {

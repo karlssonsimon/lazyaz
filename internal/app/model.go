@@ -3,7 +3,9 @@ package app
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
@@ -19,6 +21,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// toastTickInterval is how often the parent re-renders while toasts
+// are visible. 100ms is well below the 3-second toast lifetime, so
+// expiry feels instant without burning CPU when nothing's happening
+// (the ticker self-extinguishes when no toasts are active).
+const toastTickInterval = 100 * time.Millisecond
+
 // Model is the top-level Bubble Tea model that manages tabs.
 type Model struct {
 	tabs      []Tab
@@ -33,10 +41,21 @@ type Model struct {
 	cfg    ui.Config
 	keymap keymap.Keymap
 
-	styles       ui.Styles
-	schemes      []ui.Scheme
-	themeOverlay ui.ThemeOverlayState
-	helpOverlay  ui.HelpOverlayState
+	// notifier is the single global notification log shared with every
+	// tab. The parent owns it and renders both the toast stack and the
+	// history overlay from it.
+	notifier *appshell.Notifier
+
+	// toastTickActive is true while a self-extinguishing tea.Tick is
+	// running to drive toast expiry re-renders. Set when the first
+	// active toast appears, cleared when no toasts are active.
+	toastTickActive bool
+
+	styles               ui.Styles
+	schemes              []ui.Scheme
+	themeOverlay         ui.ThemeOverlayState
+	helpOverlay          ui.HelpOverlayState
+	notificationsOverlay ui.NotificationsOverlayState
 
 	tabPicker  tabPickerState
 	cmdPalette commandPalette
@@ -49,13 +68,14 @@ type Model struct {
 // If db is non-nil, a persistent SQLite cache is used; otherwise in-memory.
 func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.Service, cfg ui.Config, db *cache.DB, km keymap.Keymap) Model {
 	m := Model{
-		blobSvc: blobSvc,
-		sbSvc:   sbSvc,
-		kvSvc:   kvSvc,
-		stores:  newSharedStores(db),
-		cfg:     cfg,
-		keymap:  km,
-		schemes: cfg.Schemes,
+		blobSvc:  blobSvc,
+		sbSvc:    sbSvc,
+		kvSvc:    kvSvc,
+		stores:   newSharedStores(db),
+		cfg:      cfg,
+		keymap:   km,
+		schemes:  cfg.Schemes,
+		notifier: appshell.NewNotifier(1000),
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
@@ -155,6 +175,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 			Blobs:         m.stores.blobs,
 		}, m.keymap)
 		bm.EmbeddedMode = true
+		bm.Notifier = m.notifier
 		applyInitialSub(&bm)
 		child = bm
 	case TabServiceBus:
@@ -165,6 +186,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 			TopicSubs:     m.stores.sbTopicSubs,
 		}, m.keymap)
 		sm.EmbeddedMode = true
+		sm.Notifier = m.notifier
 		applyInitialSub(&sm)
 		child = sm
 	case TabKeyVault:
@@ -175,6 +197,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 			Versions:      m.stores.kvVersions,
 		}, m.keymap)
 		kvm.EmbeddedMode = true
+		kvm.Notifier = m.notifier
 		applyInitialSub(&kvm)
 		child = kvm
 	}
@@ -286,7 +309,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		updated, cmd := m.tabs[idx].Model.Update(msg.inner)
 		m.tabs[idx].Model = updated
-		return m, wrapCmd(msg.tabID, cmd)
+		// The child may have published a notification via m.Notify()
+		// during this update — start the toast ticker if so and we
+		// aren't already ticking.
+		toastCmd := m.maybeStartToastTick()
+		return m, tea.Batch(wrapCmd(msg.tabID, cmd), toastCmd)
 
 	case closeTabMsg:
 		if len(m.tabs) <= 1 {
@@ -344,6 +371,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case toggleNotificationsMsg:
+		if m.notificationsOverlay.Active {
+			m.notificationsOverlay.Close()
+		} else {
+			m.notificationsOverlay.Open()
+		}
+		return m, nil
+
+	case toastTickMsg:
+		// Self-extinguishing tick: re-render to drop expired toasts,
+		// reschedule only if any are still active.
+		if !m.notifier.HasActive(time.Now()) {
+			m.toastTickActive = false
+			return m, nil
+		}
+		return m, tea.Tick(toastTickInterval, func(time.Time) tea.Msg {
+			return toastTickMsg{}
+		})
+
 	case spinner.TickMsg:
 		// Forward spinner ticks to active tab only.
 		if len(m.tabs) == 0 {
@@ -379,6 +425,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
 				Close: m.keymap.ToggleHelp,
 			})
+			return m, nil
+		}
+
+		// Notifications overlay.
+		if m.notificationsOverlay.Active {
+			m.notificationsOverlay.HandleKey(key, ui.HelpKeyBindings{
+				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
+				Close: m.keymap.ToggleNotifications,
+			}, m.notifier.Len())
 			return m, nil
 		}
 
@@ -431,6 +486,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.keymap.ToggleHelp.Matches(key):
 			m.helpOverlay.Open("Azure TUI Help", m.activeHelpSections())
 			return m, nil
+		case m.keymap.ToggleNotifications.Matches(key):
+			return m.Update(toggleNotificationsMsg{})
 		}
 
 		if idx, ok := m.keymap.JumpIndex(key); ok {
@@ -447,6 +504,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Any other message — forward to active tab.
 	return m, m.forwardToActive(msg)
+}
+
+// maybeStartToastTick starts the self-extinguishing toast ticker if a
+// notification just appeared and we aren't already ticking. Returns nil
+// if no action is needed. The ticker re-renders the view every
+// toastTickInterval until no toasts are active, at which point the
+// toastTickMsg handler clears the flag and stops scheduling more.
+func (m *Model) maybeStartToastTick() tea.Cmd {
+	if m.toastTickActive {
+		return nil
+	}
+	if !m.notifier.HasActive(time.Now()) {
+		return nil
+	}
+	m.toastTickActive = true
+	return tea.Tick(toastTickInterval, func(time.Time) tea.Msg {
+		return toastTickMsg{}
+	})
 }
 
 func (m *Model) forwardToActive(msg tea.Msg) tea.Cmd {
