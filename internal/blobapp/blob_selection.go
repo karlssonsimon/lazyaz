@@ -29,7 +29,7 @@ func (m *Model) resetBlobLoadState() {
 	m.deactivateSearch()
 }
 
-func (m *Model) refreshBlobItems() {
+func (m *Model) refreshItems() {
 	if m.search.active && m.search.fuzzyQuery != "" && m.search.filtered != nil {
 		m.searchRebuildItems()
 		return
@@ -57,7 +57,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
 			m.blobs = cached
 			m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
-			m.refreshBlobItems()
+			m.refreshItems()
 		}
 
 		m.setLoading(blobsPane)
@@ -70,7 +70,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 	if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, true)); ok {
 		m.blobs = cached
 		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
-		m.refreshBlobItems()
+		m.refreshItems()
 	}
 
 	m.setLoading(blobsPane)
@@ -88,14 +88,14 @@ func (m *Model) toggleVisualLineMode() {
 		m.commitVisualSelection()
 		m.visualLineMode = false
 		m.visualAnchor = ""
-		m.refreshBlobItems()
+		m.refreshItems()
 		m.status = fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs))
 		return
 	}
 
 	m.visualLineMode = true
 	m.visualAnchor = m.currentBlobName()
-	m.refreshBlobItems()
+	m.refreshItems()
 	if m.visualAnchor == "" {
 		m.status = "Visual mode on. Move up/down to select a range."
 		return
@@ -157,13 +157,13 @@ func (m *Model) toggleCurrentBlobMark() {
 
 	if _, exists := m.markedBlobs[item.blob.Name]; exists {
 		delete(m.markedBlobs, item.blob.Name)
-		m.refreshBlobItems()
+		m.refreshItems()
 		m.status = fmt.Sprintf("Unmarked %s (%d marked)", item.displayName, len(m.markedBlobs))
 		return
 	}
 
 	m.markedBlobs[item.blob.Name] = item.blob
-	m.refreshBlobItems()
+	m.refreshItems()
 	m.status = fmt.Sprintf("Marked %s (%d marked)", item.displayName, len(m.markedBlobs))
 }
 

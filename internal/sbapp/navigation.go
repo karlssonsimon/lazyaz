@@ -92,7 +92,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.detailList.Title = "Detail"
 
 	m.setLoading(m.focus)
-	m.status = fmt.Sprintf("Loading namespaces in %s", subscriptionDisplayName(sub))
+	m.status = fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub))
 	return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID))
 }
 

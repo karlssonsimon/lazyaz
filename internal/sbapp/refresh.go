@@ -3,8 +3,9 @@ package sbapp
 import (
 	"fmt"
 
-	"azure-storage/internal/cache"
 	"azure-storage/internal/azure/servicebus"
+	"azure-storage/internal/cache"
+	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,7 +24,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	if !m.hasNamespace || m.focus == namespacesPane {
 		m.setLoading(m.focus)
 		m.lastErr = ""
-		m.status = fmt.Sprintf("Loading namespaces in %s", subscriptionDisplayName(m.currentSub))
+		m.status = fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(m.currentSub))
 		return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, m.currentSub.ID))
 	}
 

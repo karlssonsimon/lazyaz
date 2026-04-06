@@ -3,7 +3,6 @@ package sbapp
 import (
 	"fmt"
 
-	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/ui"
 )
@@ -21,10 +20,6 @@ func paneName(pane int) string {
 	}
 }
 
-func subscriptionDisplayName(sub azure.Subscription) string {
-	return ui.SubscriptionDisplayName(sub)
-}
-
 func entityDisplayName(e servicebus.Entity) string {
 	tag := "[Q]"
 	if e.Kind == servicebus.EntityTopic {
@@ -36,7 +31,7 @@ func entityDisplayName(e servicebus.Entity) string {
 func (m Model) namespacesPaneTitle() string {
 	title := "Namespaces"
 	if m.hasSubscription {
-		title = fmt.Sprintf("Namespaces · %s", subscriptionDisplayName(m.currentSub))
+		title = fmt.Sprintf("Namespaces · %s", ui.SubscriptionDisplayName(m.currentSub))
 	}
 	if len(m.namespaces) > 0 {
 		title = fmt.Sprintf("%s (%d)", title, len(m.namespaces))
