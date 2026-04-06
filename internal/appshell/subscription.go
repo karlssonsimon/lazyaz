@@ -37,6 +37,31 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Status = ""
 }
 
+// SetPreferredSubscription records a subscription ID that the app should
+// auto-select once subscriptions are loaded. Used by the tabapp to honor
+// per-tab subscription configuration.
+func (m *Model) SetPreferredSubscription(id string) {
+	m.PreferredSub = id
+}
+
+// TryApplyPreferredSubscription looks up the preferred subscription ID
+// in the currently loaded Subscriptions list. If a match exists, the
+// preferred ID is cleared (so it doesn't fire twice) and the matched
+// subscription is returned with ok=true. The caller is responsible for
+// actually applying it via SetSubscription / selectSubscription.
+func (m *Model) TryApplyPreferredSubscription() (azure.Subscription, bool) {
+	if m.PreferredSub == "" {
+		return azure.Subscription{}, false
+	}
+	for _, s := range m.Subscriptions {
+		if s.ID == m.PreferredSub {
+			m.PreferredSub = ""
+			return s, true
+		}
+	}
+	return azure.Subscription{}, false
+}
+
 // HydrateSubscriptionsFromCache populates Subscriptions from the given loader
 // without hitting Azure. Safe to call from an app constructor.
 func (m *Model) HydrateSubscriptionsFromCache(loader *cache.Loader[azure.Subscription]) {

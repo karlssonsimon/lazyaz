@@ -45,10 +45,14 @@ func loadConfigFromDir(dir string) Config {
 	data, err := os.ReadFile(cfgFile)
 	if err == nil {
 		var fileCfg struct {
-			ThemeName string `yaml:"theme"`
+			ThemeName string      `yaml:"theme"`
+			Tabs      []TabConfig `yaml:"tabs"`
 		}
-		if yaml.Unmarshal(data, &fileCfg) == nil && fileCfg.ThemeName != "" {
-			cfg.ThemeName = fileCfg.ThemeName
+		if yaml.Unmarshal(data, &fileCfg) == nil {
+			if fileCfg.ThemeName != "" {
+				cfg.ThemeName = fileCfg.ThemeName
+			}
+			cfg.Tabs = fileCfg.Tabs
 		}
 	} else {
 		// Migrate from old per-app config files if config.yaml doesn't exist.

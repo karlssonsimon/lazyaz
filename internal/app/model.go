@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/blob"
@@ -61,17 +62,88 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 	}
 	m.styles = ui.NewStyles(cfg.ActiveScheme())
 
-	// Open a default blob tab.
-	m.addTab(TabBlob)
+	// Resolve configured startup tabs. Invalid kinds are skipped and
+	// surfaced as a warning on the first opened tab. If nothing valid
+	// remains, fall back to a single blob tab so the app is usable.
+	var warnings []string
+	opened := 0
+	for _, tc := range cfg.Tabs {
+		kind, ok := TabKindFromString(tc.Kind)
+		if !ok {
+			warnings = append(warnings, fmt.Sprintf("unknown tab kind %q in config", tc.Kind))
+			continue
+		}
+		m.addTab(kind, tc.Subscription)
+		opened++
+	}
+	if opened == 0 {
+		m.addTab(TabBlob, "")
+	}
+	m.activeIdx = 0
+
+	if len(warnings) > 0 && len(m.tabs) > 0 {
+		m.setTabStatus(0, "Config: "+strings.Join(warnings, "; "))
+	}
+
 	return m
 }
 
-func (m *Model) addTab(kind TabKind) {
+// setTabStatus pokes a status string into the given tab's appshell so
+// the user sees parent-level warnings (e.g. unknown tab kinds) on the
+// child's status bar — the parent has no status bar of its own.
+func (m *Model) setTabStatus(idx int, status string) {
+	if idx < 0 || idx >= len(m.tabs) {
+		return
+	}
+	switch child := m.tabs[idx].Model.(type) {
+	case blobapp.Model:
+		child.Status = status
+		m.tabs[idx].Model = child
+	case sbapp.Model:
+		child.Status = status
+		m.tabs[idx].Model = child
+	case kvapp.Model:
+		child.Status = status
+		m.tabs[idx].Model = child
+	}
+}
+
+func (m *Model) addTab(kind TabKind, preferredSub string) {
 	id := m.nextID
 	m.nextID++
 
 	// Inherit the active tab's subscription so new tabs start in context.
 	sub, hasSub := m.activeSubscription()
+
+	// applyInitialSub wires up the tab's starting subscription. The
+	// inherited active-tab sub takes precedence over the configured
+	// preferred sub. If neither matches a known subscription up front,
+	// preferredSub is stashed on the model so handleSubscriptionsLoaded
+	// can apply it once a fetch completes.
+	//
+	// Note: SetSubscription must be called on the *outer* app model
+	// pointer (e.g. *blobapp.Model), not the embedded *appshell.Model.
+	// Each app overrides SetSubscription to also seed the per-resource
+	// fetch session — passing the embedded pointer would dispatch to
+	// the appshell base method and the override would never run, which
+	// silently drops the data on the next fetch.
+	applyInitialSub := func(s interface {
+		SetSubscription(azure.Subscription)
+		SetPreferredSubscription(string)
+		TryApplyPreferredSubscription() (azure.Subscription, bool)
+	}) {
+		if hasSub {
+			s.SetSubscription(sub)
+			return
+		}
+		if preferredSub == "" {
+			return
+		}
+		s.SetPreferredSubscription(preferredSub)
+		if matched, ok := s.TryApplyPreferredSubscription(); ok {
+			s.SetSubscription(matched)
+		}
+	}
 
 	var child tea.Model
 	switch kind {
@@ -83,9 +155,7 @@ func (m *Model) addTab(kind TabKind) {
 			Blobs:         m.stores.blobs,
 		}, m.keymap)
 		bm.EmbeddedMode = true
-		if hasSub {
-			bm.SetSubscription(sub)
-		}
+		applyInitialSub(&bm)
 		child = bm
 	case TabServiceBus:
 		sm := sbapp.NewModelWithCache(m.sbSvc, m.cfg, sbapp.SBStores{
@@ -95,9 +165,7 @@ func (m *Model) addTab(kind TabKind) {
 			TopicSubs:     m.stores.sbTopicSubs,
 		}, m.keymap)
 		sm.EmbeddedMode = true
-		if hasSub {
-			sm.SetSubscription(sub)
-		}
+		applyInitialSub(&sm)
 		child = sm
 	case TabKeyVault:
 		kvm := kvapp.NewModelWithCache(m.kvSvc, m.cfg, kvapp.KVStores{
@@ -107,9 +175,7 @@ func (m *Model) addTab(kind TabKind) {
 			Versions:      m.stores.kvVersions,
 		}, m.keymap)
 		kvm.EmbeddedMode = true
-		if hasSub {
-			kvm.SetSubscription(sub)
-		}
+		applyInitialSub(&kvm)
 		child = kvm
 	}
 
@@ -188,9 +254,17 @@ func (m Model) Init() tea.Cmd {
 	if len(m.tabs) == 0 {
 		return nil
 	}
-	// Init the first tab and wrap its commands.
-	cmd := m.tabs[0].Model.Init()
-	return wrapCmd(m.tabs[0].ID, cmd)
+	// Init every tab so configured startup tabs all kick off their
+	// initial fetches in the background — not just the active one.
+	// Each tab's commands are wrapped so their results route back to
+	// the correct tab via tabMsg.
+	cmds := make([]tea.Cmd, 0, len(m.tabs))
+	for _, tab := range m.tabs {
+		if c := tab.Model.Init(); c != nil {
+			cmds = append(cmds, wrapCmd(tab.ID, c))
+		}
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -227,7 +301,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tabPickerMsg:
 		m.tabPicker.active = false
-		m.addTab(msg.kind)
+		m.addTab(msg.kind, "")
 		// Init the new tab and send it a resize.
 		tab := &m.tabs[m.activeIdx]
 		initCmd := wrapCmd(tab.ID, tab.Model.Init())

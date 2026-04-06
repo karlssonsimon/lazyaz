@@ -89,10 +89,19 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 
 	if msg.Done {
 		m.cache.subscriptions.Set("", msg.Subscriptions)
+		status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.Subscriptions), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		if !m.HasSubscription {
+			if matched, ok := m.TryApplyPreferredSubscription(); ok {
+				// The constructor opened the picker overlay; selectSubscription
+				// drives navigation but doesn't dismiss it (the interactive
+				// path is dismissed inside the overlay's HandleKey). Close
+				// it here so the data loading behind it actually shows.
+				m.SubOverlay.Close()
+				next, selectCmd := m.selectSubscription(matched)
+				return next, tea.Batch(selectCmd, next.FinishLoading(status))
+			}
 			m.SubOverlay.Open()
 		}
-		status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.Subscriptions), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
 

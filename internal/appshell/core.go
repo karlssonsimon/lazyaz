@@ -32,6 +32,11 @@ type Model struct {
 	HasSubscription bool
 	CurrentSub      azure.Subscription
 
+	// PreferredSub is the subscription ID a parent (like the tabapp)
+	// would like this app to auto-select once subscriptions are loaded.
+	// Cleared after a successful match — see TryApplyPreferredSubscription.
+	PreferredSub string
+
 	// Keymap + styling.
 	Keymap  keymap.Keymap
 	Styles  ui.Styles
