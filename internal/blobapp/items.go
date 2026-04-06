@@ -50,21 +50,10 @@ type blobItem struct {
 }
 
 func (i blobItem) Title() string {
-	prefix := ""
-	switch {
-	case i.marked && i.visual:
-		prefix = ">* "
-	case i.marked:
-		prefix = "* "
-	case i.visual:
-		prefix = "> "
-	}
-
 	if i.blob.IsPrefix {
-		return prefix + "[DIR] " + i.displayName
+		return "[DIR] " + i.displayName
 	}
-
-	return prefix + i.displayName
+	return i.displayName
 }
 
 func (i blobItem) Description() string {

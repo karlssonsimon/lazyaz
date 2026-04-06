@@ -84,14 +84,16 @@ func (m *Model) toggleVisualLineMode() {
 		return
 	}
 
-	m.visualLineMode = !m.visualLineMode
-	if !m.visualLineMode {
+	if m.visualLineMode {
+		m.commitVisualSelection()
+		m.visualLineMode = false
 		m.visualAnchor = ""
 		m.refreshBlobItems()
-		m.status = fmt.Sprintf("Visual mode off. %d marked with space.", len(m.markedBlobs))
+		m.status = fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs))
 		return
 	}
 
+	m.visualLineMode = true
 	m.visualAnchor = m.currentBlobName()
 	m.refreshBlobItems()
 	if m.visualAnchor == "" {
@@ -100,6 +102,41 @@ func (m *Model) toggleVisualLineMode() {
 	}
 	selectionCount := len(m.visualSelectionBlobNames())
 	m.status = fmt.Sprintf("Visual mode on. %d in range.", selectionCount)
+}
+
+// commitVisualSelection merges the current visual range into markedBlobs.
+func (m *Model) commitVisualSelection() {
+	if !m.visualLineMode {
+		return
+	}
+	for _, item := range m.visualSelectionItems() {
+		if item.blob.IsPrefix {
+			continue
+		}
+		m.markedBlobs[item.blob.Name] = item.blob
+	}
+}
+
+// swapVisualAnchor moves the cursor to the visual anchor position and sets
+// the anchor to the old cursor position. Lets you extend the range from
+// either end.
+func (m *Model) swapVisualAnchor() {
+	if !m.visualLineMode || m.visualAnchor == "" {
+		return
+	}
+	oldAnchor := m.visualAnchor
+	oldCursor := m.currentBlobName()
+	if oldCursor == "" || oldCursor == oldAnchor {
+		return
+	}
+	// Find index of the anchor in the visible list.
+	for i, it := range m.blobsList.VisibleItems() {
+		if b, ok := it.(blobItem); ok && b.blob.Name == oldAnchor {
+			m.blobsList.Select(i)
+			m.visualAnchor = oldCursor
+			return
+		}
+	}
 }
 
 func (m *Model) toggleCurrentBlobMark() {
@@ -246,14 +283,14 @@ func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	blobNameSet := make(map[string]struct{})
-	for _, name := range m.sortedMarkedBlobNames() {
-		blobNameSet[name] = struct{}{}
+	// If visual mode is active, commit the range first.
+	if m.visualLineMode {
+		m.commitVisualSelection()
+		m.visualLineMode = false
+		m.visualAnchor = ""
 	}
-	for _, name := range m.visualSelectionBlobNames() {
-		blobNameSet[name] = struct{}{}
-	}
-	blobNames := sortedBlobNameSet(blobNameSet)
+
+	blobNames := m.sortedMarkedBlobNames()
 	if len(blobNames) == 0 {
 		item, ok := m.blobsList.SelectedItem().(blobItem)
 		if !ok || item.blob.IsPrefix {

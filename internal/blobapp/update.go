@@ -265,13 +265,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.toggleCurrentBlobMark()
 				return m, nil
 			}
-		case m.keymap.ExitVisualLine.Matches(key):
+		case m.keymap.VisualSwapAnchor.Matches(key):
 			if m.focus == blobsPane && m.visualLineMode && !focusedFilterActive {
-				m.visualLineMode = false
-				m.visualAnchor = ""
+				m.swapVisualAnchor()
 				m.refreshBlobItems()
-				m.status = "Visual mode off"
 				return m, nil
+			}
+		case m.keymap.ExitVisualLine.Matches(key):
+			if m.focus == blobsPane && !focusedFilterActive {
+				if m.visualLineMode {
+					// Commit visual range into marks, then exit visual mode.
+					m.commitVisualSelection()
+					m.visualLineMode = false
+					m.visualAnchor = ""
+					m.refreshBlobItems()
+					m.status = fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs))
+					return m, nil
+				}
+				if len(m.markedBlobs) > 0 {
+					// Clear all marks.
+					count := len(m.markedBlobs)
+					for name := range m.markedBlobs {
+						delete(m.markedBlobs, name)
+					}
+					m.refreshBlobItems()
+					m.status = fmt.Sprintf("Cleared %d marks", count)
+					return m, nil
+				}
 			}
 		case m.keymap.NextFocus.Matches(key):
 			if !focusedFilterActive {
