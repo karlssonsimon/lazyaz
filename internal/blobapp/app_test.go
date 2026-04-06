@@ -126,6 +126,7 @@ func TestTypingQWhileSearchActiveDoesNotQuit(t *testing.T) {
 
 func TestHelpToggleOpensAndCloses(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
+	m.subOverlay.Close() // close auto-opened picker so keys reach help handler
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model := updated.(Model)

@@ -150,7 +150,7 @@ func (m Model) View() string {
 		view = ui.RenderInspectOverlay(m.inspectTitle, m.inspectFields, m.styles, m.width, m.height, view)
 	}
 	if m.subOverlay.Active {
-		view = ui.RenderSubscriptionOverlay(m.subOverlay, m.subscriptions, m.currentSub, m.styles, m.width, m.height, view)
+		view = ui.RenderSubscriptionOverlay(m.subOverlay, m.subscriptions, m.currentSub, m.loading, m.loadingStartedAt, m.styles, m.width, m.height, view)
 	}
 	if !m.EmbeddedMode && m.themeOverlay.Active {
 		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)

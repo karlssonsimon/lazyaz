@@ -51,6 +51,7 @@ func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
 
 func TestHelpToggleOpensAndCloses(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
+	m.subOverlay.Close()
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model := updated.(Model)

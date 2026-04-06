@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"azure-storage/internal/azure"
 	"azure-storage/internal/fuzzy"
 
@@ -82,7 +84,8 @@ func (s *SubscriptionOverlayState) HandleKey(key string, bindings ThemeKeyBindin
 }
 
 // RenderSubscriptionOverlay renders the subscription picker overlay.
-func RenderSubscriptionOverlay(state SubscriptionOverlayState, subs []azure.Subscription, currentSub azure.Subscription, styles Styles, width, height int, base string) string {
+// If loading is true, a spinner frame is appended to the title.
+func RenderSubscriptionOverlay(state SubscriptionOverlayState, subs []azure.Subscription, currentSub azure.Subscription, loading bool, loadingStartedAt time.Time, styles Styles, width, height int, base string) string {
 	filtered := state.filtered
 	if filtered == nil {
 		filtered = make([]int, len(subs))
@@ -101,8 +104,13 @@ func RenderSubscriptionOverlay(state SubscriptionOverlayState, subs []azure.Subs
 		}
 	}
 
+	title := "Subscriptions"
+	if loading {
+		title += " " + SpinnerFrameAt(time.Since(loadingStartedAt))
+	}
+
 	cfg := OverlayListConfig{
-		Title:      "Subscriptions",
+		Title:      title,
 		Query:      state.Query,
 		MaxVisible: 12,
 		Center:     true,

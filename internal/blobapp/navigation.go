@@ -58,6 +58,8 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 
 func (m Model) refresh() (Model, tea.Cmd) {
 	if !m.hasSubscription {
+		// Can't refresh anything without a subscription; open the picker instead.
+		m.subOverlay.Open()
 		m.setLoading(-1)
 		m.lastErr = ""
 		m.status = "Refreshing subscriptions..."

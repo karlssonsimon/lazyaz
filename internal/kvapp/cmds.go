@@ -12,14 +12,19 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func fetchSubscriptionsCmd(svc *keyvault.Service, loader *cache.Loader[azure.Subscription]) tea.Cmd {
-	return loader.Fetch("", func(ctx context.Context, send func([]azure.Subscription)) error {
+func fetchSubscriptionsCmd(svc *keyvault.Service, loader *cache.Loader[azure.Subscription], fresh bool) tea.Cmd {
+	fetchFn := func(ctx context.Context, send func([]azure.Subscription)) error {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		return svc.ListSubscriptions(ctx, send)
-	}, func(p cache.Page[azure.Subscription]) tea.Msg {
+	}
+	wrap := func(p cache.Page[azure.Subscription]) tea.Msg {
 		return subscriptionsLoadedMsg{subscriptions: p.Items, done: p.Done, err: p.Err, next: p.Next}
-	})
+	}
+	if fresh {
+		return loader.FetchFresh("", fetchFn, wrap)
+	}
+	return loader.Fetch("", fetchFn, wrap)
 }
 
 func fetchVaultsCmd(svc *keyvault.Service, loader *cache.Loader[keyvault.Vault], subscriptionID string) tea.Cmd {
