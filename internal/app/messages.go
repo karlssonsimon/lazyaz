@@ -26,6 +26,12 @@ type prevTabMsg struct{}
 type jumpTabMsg struct{ index int }
 type openThemePickerMsg struct{}
 type toggleHelpMsg struct{}
+type toggleNotificationsMsg struct{}
+
+// toastTickMsg drives the periodic re-render that lets toasts expire
+// off-screen. It self-extinguishes once no toasts are active. See
+// the toastTickActive flag on Model.
+type toastTickMsg struct{}
 
 // wrapCmd wraps a tea.Cmd so its resulting message is tagged with tabID.
 // It recursively handles tea.BatchMsg to wrap each sub-command.

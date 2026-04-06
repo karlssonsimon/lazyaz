@@ -74,8 +74,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.Err.Error()
-		m.Status = "Failed to load subscriptions"
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
 		return m, nil
 	}
 
@@ -241,19 +240,17 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 func (m Model) handleBlobsDownloaded(msg blobsDownloadedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.LastErr = msg.err.Error()
-		m.Status = "Failed to download blobs"
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to download blobs: %s", msg.err.Error()))
 		return m, nil
 	}
 
 	if msg.failed > 0 {
-		m.LastErr = strings.Join(msg.failures, " | ")
-		m.Status = fmt.Sprintf("Downloaded %d/%d blobs to %s", msg.downloaded, msg.total, msg.destinationRoot)
+		m.Notify(appshell.LevelWarn, fmt.Sprintf("Downloaded %d/%d blobs to %s — failures: %s",
+			msg.downloaded, msg.total, msg.destinationRoot, strings.Join(msg.failures, " | ")))
 		return m, nil
 	}
 
-	m.LastErr = ""
-	m.Status = fmt.Sprintf("Downloaded %d blob(s) to %s", msg.downloaded, msg.destinationRoot)
+	m.Notify(appshell.LevelSuccess, fmt.Sprintf("Downloaded %d blob(s) to %s", msg.downloaded, msg.destinationRoot))
 	return m, nil
 }
 
