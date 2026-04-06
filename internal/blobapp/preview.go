@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
@@ -119,8 +120,7 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 
 	m.ClearLoading()
 	if msg.err != nil {
-		m.LastErr = msg.err.Error()
-		m.Status = fmt.Sprintf("Failed to load preview for %s", msg.blobName)
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load preview for %s: %s", msg.blobName, msg.err.Error()))
 		return m, nil
 	}
 

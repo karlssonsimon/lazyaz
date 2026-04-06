@@ -592,6 +592,9 @@ func (m *Model) buildCommands() []command {
 		command{name: "Theme Picker", hint: "T", action: func() commandAction {
 			return commandAction{msg: openThemePickerMsg{}}
 		}},
+		command{name: "Notifications History", hint: "N", action: func() commandAction {
+			return commandAction{msg: toggleNotificationsMsg{}}
+		}},
 		command{name: "Help", hint: "?", action: func() commandAction {
 			return commandAction{msg: toggleHelpMsg{}}
 		}},

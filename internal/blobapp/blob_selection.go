@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
@@ -308,8 +309,7 @@ func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 	}
 
 	if m.downloadDir == "" {
-		m.LastErr = "no download directory available — set download_dir in ~/.config/lazyaz/config.yaml"
-		m.Status = "Download cancelled"
+		m.Notify(appshell.LevelError, "no download directory available — set download_dir in ~/.config/lazyaz/config.yaml")
 		return m, nil
 	}
 	destinationRoot := filepath.Join(m.downloadDir, m.currentAccount.Name, m.containerName)

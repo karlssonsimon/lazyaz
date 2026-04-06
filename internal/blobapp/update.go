@@ -117,8 +117,7 @@ func (m Model) handleAccountsLoaded(msg accountsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.err.Error()
-		m.Status = fmt.Sprintf("Failed to load storage accounts in %s", ui.SubscriptionDisplayName(m.CurrentSub))
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load storage accounts in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
 		m.accountsSession = nil
 		return m, nil
 	}
@@ -152,8 +151,7 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (Model, tea.Cmd) 
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.err.Error()
-		m.Status = fmt.Sprintf("Failed to load containers for %s", msg.account.Name)
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load containers for %s: %s", msg.account.Name, msg.err.Error()))
 		m.containersSession = nil
 		return m, nil
 	}
@@ -206,8 +204,7 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.LastErr = msg.err.Error()
-		m.Status = fmt.Sprintf("Failed to load blobs in %s/%s", msg.account.Name, msg.container)
+		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load blobs in %s/%s: %s", msg.account.Name, msg.container, msg.err.Error()))
 		m.blobsSession = nil
 		return m, nil
 	}
