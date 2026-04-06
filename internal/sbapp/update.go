@@ -396,7 +396,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if !focusedFilterActive && m.focus == detailPane && m.hasPeekTarget {
 			if m.deadLetter {
 				m.deadLetter = false
-				m.detailList.ResetFilter()
+				m.clearDetailListForRePeek()
 				return m.rePeekMessages(false)
 			}
 			return m, nil
@@ -410,7 +410,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if !focusedFilterActive && m.focus == detailPane && m.hasPeekTarget {
 			if !m.deadLetter {
 				m.deadLetter = true
-				m.detailList.ResetFilter()
+				m.clearDetailListForRePeek()
 				return m.rePeekMessages(false)
 			}
 			return m, nil
