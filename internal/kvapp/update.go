@@ -103,17 +103,6 @@ func (m Model) handleVaultsLoaded(msg vaultsLoadedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Cached emit: re-seed the session and update the list without
-	// touching seen. This gives instant display from cache without
-	// poisoning the sweep logic.
-	if msg.cached {
-		m.vaultsSession.Reseed(msg.vaults)
-		m.vaults = m.vaultsSession.Items()
-		m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(m.vaults))
-		ui.SetItemsPreserveKey(&m.vaultsList, vaultsToItems(m.vaults), vaultItemKey)
-		return m, msg.next
-	}
-
 	if msg.err != nil {
 		m.ClearLoading()
 		m.LastErr = msg.err.Error()
@@ -147,14 +136,6 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 	}
 	if m.secretsSession == nil || m.secretsSession.Gen() != msg.gen {
 		return m, nil
-	}
-
-	if msg.cached {
-		m.secretsSession.Reseed(msg.secrets)
-		m.secrets = m.secretsSession.Items()
-		m.secretsList.Title = fmt.Sprintf("Secrets (%d)", len(m.secrets))
-		ui.SetItemsPreserveKey(&m.secretsList, secretsToItems(m.secrets), secretItemKey)
-		return m, msg.next
 	}
 
 	if msg.err != nil {
@@ -193,14 +174,6 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 	}
 	if m.versionsSession == nil || m.versionsSession.Gen() != msg.gen {
 		return m, nil
-	}
-
-	if msg.cached {
-		m.versionsSession.Reseed(msg.versions)
-		m.versions = m.versionsSession.Items()
-		m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(m.versions))
-		ui.SetItemsPreserveKey(&m.versionsList, versionsToItems(m.versions), versionItemKey)
-		return m, msg.next
 	}
 
 	if msg.err != nil {

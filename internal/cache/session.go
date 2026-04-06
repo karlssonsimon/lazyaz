@@ -76,19 +76,6 @@ func (s *FetchSession[T]) Apply(page []T) {
 	}
 }
 
-// Reseed replaces the session's item baseline without marking any of the
-// given items as "seen". Use this when a Loader delivers a cached page
-// (Page.Cached==true) at the start of a fetch — those items are what we
-// thought was true, not what the server just confirmed, so they must not
-// count toward the sweep decision in [FetchSession.Finalize].
-//
-// The generation token is preserved; the seen set is left untouched so
-// that any real network pages already applied are still honored.
-func (s *FetchSession[T]) Reseed(items []T) {
-	s.items = make([]T, len(items))
-	copy(s.items, items)
-}
-
 // Finalize drops items whose keys were never seen during the session and
 // returns the resulting slice. Call this exactly once, when the final
 // streaming page arrives successfully (done=true, err=nil). Do not call

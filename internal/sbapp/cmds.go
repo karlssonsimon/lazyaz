@@ -33,7 +33,7 @@ func fetchNamespacesCmd(svc *servicebus.Service, loader *cache.Loader[servicebus
 		defer cancel()
 		return svc.ListNamespaces(ctx, subscriptionID, send)
 	}, func(p cache.Page[servicebus.Namespace]) tea.Msg {
-		return namespacesLoadedMsg{gen: gen, cached: p.Cached, subscriptionID: subscriptionID, namespaces: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return namespacesLoadedMsg{gen: gen, subscriptionID: subscriptionID, namespaces: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
@@ -43,7 +43,7 @@ func fetchEntitiesCmd(svc *servicebus.Service, loader *cache.Loader[servicebus.E
 		defer cancel()
 		return svc.ListEntities(ctx, ns, send)
 	}, func(p cache.Page[servicebus.Entity]) tea.Msg {
-		return entitiesLoadedMsg{gen: gen, cached: p.Cached, namespace: ns, entities: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return entitiesLoadedMsg{gen: gen, namespace: ns, entities: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
@@ -53,7 +53,7 @@ func fetchTopicSubscriptionsCmd(svc *servicebus.Service, loader *cache.Loader[se
 		defer cancel()
 		return svc.ListTopicSubscriptions(ctx, ns, topicName, send)
 	}, func(p cache.Page[servicebus.TopicSubscription]) tea.Msg {
-		return topicSubscriptionsLoadedMsg{gen: gen, cached: p.Cached, namespace: ns, topicName: topicName, subs: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return topicSubscriptionsLoadedMsg{gen: gen, namespace: ns, topicName: topicName, subs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
