@@ -15,7 +15,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const defaultDownloadRoot = "downloads"
 const defaultBlobPrefixSearchLimit = 500
 const defaultHierarchyBlobLoadLimit = 500
 
@@ -102,6 +101,14 @@ type Model struct {
 	committedFilter committedFilter
 	preview         previewState
 	pendingPreviewG bool
+
+	// downloadDir is the resolved root directory under which marked
+	// blobs are saved. Set once at construction time from
+	// ui.Config.ResolvedDownloadDir(). May be empty if neither the
+	// configured nor the default OS Downloads folder could be
+	// resolved — in that case the download action surfaces an error
+	// rather than silently picking a fallback path.
+	downloadDir string
 
 	cache blobCache
 
@@ -211,6 +218,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 		markedBlobs:       make(map[string]blob.BlobEntry),
 		preview:           newPreviewState(),
 		cache:             newCache(db),
+		downloadDir:       cfg.ResolvedDownloadDir(),
 		focus:             accountsPane,
 		accountsHistory:   make(map[string]ui.ListState),
 		containersHistory: make(map[string]ui.ListState),

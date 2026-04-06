@@ -1,6 +1,15 @@
 package ui
 
-import "reflect"
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+)
+
+// homeDir is split out so tests could swap it; in normal use it's just
+// os.UserHomeDir.
+var homeDir = os.UserHomeDir
 
 // schemeFile is the YAML structure of a Base16 scheme file.
 // The palette field contains the 16 base colors as hex strings (no #).
@@ -14,9 +23,49 @@ type schemeFile struct {
 
 // Config holds the loaded configuration and available schemes.
 type Config struct {
-	ThemeName string      `yaml:"theme"`
-	Tabs      []TabConfig `yaml:"tabs"`
-	Schemes   []Scheme    `yaml:"-"`
+	ThemeName   string      `yaml:"theme"`
+	DownloadDir string      `yaml:"download_dir"`
+	Tabs        []TabConfig `yaml:"tabs"`
+	Schemes     []Scheme    `yaml:"-"`
+}
+
+// ResolvedDownloadDir returns the directory under which marked blobs
+// should be saved. Resolution order:
+//
+//  1. If DownloadDir is configured, expand `~`/`~/...` against $HOME
+//     and return it as-is (absolute or relative — caller's choice).
+//  2. Otherwise return the OS-conventional user Downloads folder
+//     (`$HOME/Downloads` on Unix and macOS, `%USERPROFILE%\Downloads`
+//     on Windows — both resolved via os.UserHomeDir).
+//
+// Returns an empty string only if neither the configured nor the
+// default path can be resolved (no $HOME and no explicit config).
+// Callers MUST treat that as an error and surface it to the user
+// instead of inventing a fallback path — silent fallbacks hide the
+// problem and put files somewhere unexpected.
+func (c Config) ResolvedDownloadDir() string {
+	if c.DownloadDir != "" {
+		if c.DownloadDir == "~" {
+			home, err := homeDir()
+			if err != nil {
+				return ""
+			}
+			return home
+		}
+		if strings.HasPrefix(c.DownloadDir, "~/") {
+			home, err := homeDir()
+			if err != nil {
+				return ""
+			}
+			return home + c.DownloadDir[1:]
+		}
+		return c.DownloadDir
+	}
+	home, err := homeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "Downloads")
 }
 
 // TabConfig is one startup-tab entry from the user config. Kind names
