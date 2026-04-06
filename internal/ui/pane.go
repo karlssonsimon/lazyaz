@@ -41,6 +41,13 @@ func RenderPane(content string, frame PaneFrame, styles Styles) string {
 // along the bottom. Apps construct one per frame in View() and pass it
 // to [RenderListPane].
 //
+// Header is optional; when non-empty it is rendered as the very first
+// row of pane content, above the title. Use this for tab strips or
+// section selectors that conceptually own the pane (e.g. sbapp's
+// active/DLQ tabs). The caller is responsible for making the list
+// height accommodate the header — i.e. subtract its rendered height
+// from the list size in resize().
+//
 // Prefix is optional; when non-empty it is rendered between the title
 // and the list body. blobapp uses this to slot its search input above
 // the blobs list when search is active.
@@ -67,6 +74,7 @@ type ListPane struct {
 	Loading  bool
 	LoadedAt time.Time
 	Hints    []PaneHint
+	Header   string
 	Prefix   string
 	Footer   string
 	Frame    PaneFrame
@@ -88,7 +96,11 @@ func RenderListPane(p ListPane, styles Styles) string {
 
 	hints := RenderPaneHints(p.Hints, styles, contentWidth)
 
-	parts := []string{title}
+	parts := make([]string, 0, 6)
+	if p.Header != "" {
+		parts = append(parts, p.Header)
+	}
+	parts = append(parts, title)
 	if p.Prefix != "" {
 		parts = append(parts, p.Prefix)
 	}

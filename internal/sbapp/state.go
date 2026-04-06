@@ -22,13 +22,21 @@ const (
 	namespacesPane = iota
 	entitiesPane
 	detailPane
+	// messagePreviewPane is the optional 4th pane that hosts the
+	// scrolling JSON body of the currently selected message. It is only
+	// part of the focus cycle while m.viewingMessage is true.
+	messagePreviewPane
 )
 
-type detailView int
+// entityFilterMode controls which kinds of entities the entities pane
+// shows. Toggled via the tab strip at the top of the pane (and the
+// [/] keys when focused).
+type entityFilterMode int
 
 const (
-	detailMessages           detailView = iota // peeked messages (queue or topic sub)
-	detailTopicSubscriptions                   // list of topic subscriptions
+	entityFilterAll    entityFilterMode = iota // queues + topics
+	entityFilterQueues                         // queues only
+	entityFilterTopics                         // topics only
 )
 
 type Model struct {
@@ -44,14 +52,30 @@ type Model struct {
 
 	namespaces     []servicebus.Namespace
 	entities       []servicebus.Entity
-	topicSubs      []servicebus.TopicSubscription
 	peekedMessages []servicebus.PeekedMessage
+
+	// topicSubsByTopic holds the subscriptions for each expanded topic
+	// in the current namespace, keyed by topic name. Populated lazily
+	// when the user expands a topic in the entities pane. Cleared when
+	// the namespace changes.
+	topicSubsByTopic map[string][]servicebus.TopicSubscription
+
+	// expandedTopics tracks which topics in the current namespace are
+	// expanded in the entities pane tree view. Cleared on namespace
+	// change.
+	expandedTopics map[string]bool
 
 	// Streaming-refresh sessions. See cache.FetchSession. Peeked messages
 	// are deliberately excluded — they're ephemeral and use plain replace.
 	namespacesSession *cache.FetchSession[servicebus.Namespace]
 	entitiesSession   *cache.FetchSession[servicebus.Entity]
-	topicSubsSession  *cache.FetchSession[servicebus.TopicSubscription]
+	// topicSubsSession is the session for whichever topic is currently
+	// being fetched (when the user just expanded a topic). Only one runs
+	// at a time; expanding a different topic abandons the previous session.
+	topicSubsSession *cache.FetchSession[servicebus.TopicSubscription]
+	// topicSubsFetching is the topic name whose subscriptions are
+	// currently being fetched, used to validate incoming pages.
+	topicSubsFetching string
 
 	// Per-scope list state history. Snapshots of cursor + filter for
 	// each list are stashed here when the user navigates to a different
@@ -59,28 +83,48 @@ type Model struct {
 	// scope identifier the cache uses.
 	namespacesHistory map[string]ui.ListState // keyed by subscription ID
 	entitiesHistory   map[string]ui.ListState // keyed by sub+namespace
-	topicSubsHistory  map[string]ui.ListState // keyed by sub+namespace+entity
 
 	// fetchGen is the monotonic generation token copied into each fetch
 	// so pages from superseded or cancelled fetches can be dropped.
 	fetchGen int
 
-	hasNamespace  bool
-	currentNS     servicebus.Namespace
-	hasEntity     bool
-	currentEntity servicebus.Entity
+	hasNamespace bool
+	currentNS    servicebus.Namespace
 
-	detailMode      detailView
-	viewingTopicSub bool
-	currentTopicSub servicebus.TopicSubscription
-	deadLetter      bool
-	dlqFilter       bool
+	// hasPeekTarget is true when the detail pane is bound to a queue or
+	// topic-subscription and showing (or about to show) its messages.
+	// When false, the detail pane is empty.
+	hasPeekTarget bool
+	// currentEntity is the queue or topic backing the current peek.
+	// For a queue peek, currentSubName is "". For a topic-sub peek,
+	// currentEntity is the topic and currentSubName is the sub name.
+	currentEntity  servicebus.Entity
+	currentSubName string
 
-	messageViewport   viewport.Model
-	viewingMessage    bool
-	selectedMessage   servicebus.PeekedMessage
-	markedMessages    map[string]struct{}
-	duplicateMessages map[string]struct{}
+	deadLetter bool
+
+	// dlqSort, when true, pulls entities with DLQ messages to the top
+	// of the entities pane (sorted by DLQ count desc) instead of hiding
+	// the rest. Toggled with ToggleDLQFilter — the keymap name is kept
+	// for backwards compatibility but the behavior is sort-not-filter.
+	dlqSort bool
+
+	// entityFilter is the currently selected tab in the entities pane —
+	// All, Queues only, or Topics only. Cycled via [ / ] when focus is
+	// on the entities pane.
+	entityFilter entityFilterMode
+
+	messageViewport viewport.Model
+	viewingMessage  bool
+	selectedMessage servicebus.PeekedMessage
+
+	// markedMessages and duplicateMessages are scoped by peek target
+	// (entity + sub + active/DLQ) so switching tabs no longer destroys
+	// the user's selections. Outer key is the scope string returned by
+	// markScope(...); inner set is the marked / duplicate message IDs
+	// for that scope.
+	markedMessages    map[string]map[string]struct{}
+	duplicateMessages map[string]map[string]struct{}
 
 	cache sbCache
 
@@ -126,7 +170,12 @@ type messagesLoadedMsg struct {
 	namespace servicebus.Namespace
 	source    string
 	messages  []servicebus.PeekedMessage
-	err       error
+	// repeek is true when this peek is replacing an existing message list
+	// the user was already browsing (after requeue or delete-duplicate),
+	// so the handler should preserve cursor position by message ID rather
+	// than resetting to the top.
+	repeek bool
+	err    error
 }
 
 type requeueDoneMsg struct {
@@ -186,12 +235,13 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 		entitiesList:      entities,
 		detailList:        detail,
 		focus:             namespacesPane,
-		markedMessages:    make(map[string]struct{}),
-		duplicateMessages: make(map[string]struct{}),
+		markedMessages:    make(map[string]map[string]struct{}),
+		duplicateMessages: make(map[string]map[string]struct{}),
 		cache:             newCache(db),
 		namespacesHistory: make(map[string]ui.ListState),
 		entitiesHistory:   make(map[string]ui.ListState),
-		topicSubsHistory:  make(map[string]ui.ListState),
+		topicSubsByTopic:  make(map[string][]servicebus.TopicSubscription),
+		expandedTopics:    make(map[string]bool),
 		inspectPanes:      make(map[int]bool),
 	}
 	m.applyScheme(cfg.ActiveScheme())
@@ -247,7 +297,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 			Items: []string{
 				keymap.HelpEntry(km.ToggleMark, "mark message"),
 				keymap.HelpEntry(keymap.New(km.ShowActiveQueue.Label()+"/"+km.ShowDeadLetterQueue.Label()), "switch active and DLQ"),
-				keymap.HelpEntry(km.ToggleDLQFilter, "toggle entities with DLQ only"),
+				keymap.HelpEntry(km.ToggleDLQFilter, "toggle DLQ-first sort"),
 				keymap.HelpEntry(km.RequeueDLQ, "requeue marked/current DLQ messages"),
 				keymap.HelpEntry(km.DeleteDuplicate, "delete duplicate DLQ message"),
 				keymap.HelpEntry(km.MessageBack, "close message preview"),

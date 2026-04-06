@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"azure-storage/internal/azure"
-	"azure-storage/internal/cache"
 	"azure-storage/internal/azure/servicebus"
+	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -14,21 +14,25 @@ import (
 
 func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
+	case messagePreviewPane:
+		// Move focus to the message list. The preview pane stays
+		// mounted and follows the cursor — it's only torn down when
+		// the user actually leaves the entity (one more 'left').
+		m.focus = detailPane
+		return m, nil
 	case detailPane:
-		if m.viewingTopicSub {
-			m.viewingTopicSub = false
-			m.currentTopicSub = servicebus.TopicSubscription{}
-			m.peekedMessages = nil
-			m.detailMode = detailTopicSubscriptions
-			m.detailList.ResetFilter()
-			m.detailList.SetItems(topicSubsToItems(m.topicSubs))
-			m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(m.topicSubs))
-			m.Status = "Back to topic subscriptions"
-			return m, nil
-		}
+		// Leaving the entity entirely → close the preview pane.
+		m.closePreview()
 		m.focus = entitiesPane
 		return m, nil
 	case entitiesPane:
+		// If the cursor is on a topic-sub child, collapse the parent
+		// topic and move the cursor onto it. Otherwise, if the cursor
+		// is on an expanded topic, just collapse it. Otherwise, go to
+		// the namespaces pane.
+		if collapsed, ok := m.collapseFocusedTopic(); ok {
+			return collapsed, nil
+		}
 		m.focus = namespacesPane
 		return m, nil
 	case namespacesPane:
@@ -39,21 +43,56 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 }
 
 func (m Model) handleBackspace() (Model, tea.Cmd) {
+	if m.focus == messagePreviewPane {
+		m.focus = detailPane
+		return m, nil
+	}
 	if m.focus == detailPane {
-		if m.viewingTopicSub {
-			m.viewingTopicSub = false
-			m.currentTopicSub = servicebus.TopicSubscription{}
-			m.peekedMessages = nil
-			m.detailMode = detailTopicSubscriptions
-			m.detailList.ResetFilter()
-			m.detailList.SetItems(topicSubsToItems(m.topicSubs))
-			m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(m.topicSubs))
-			m.Status = "Back to topic subscriptions"
-			return m, nil
-		}
+		m.closePreview()
 		m.focus = entitiesPane
+		return m, nil
+	}
+	if m.focus == entitiesPane {
+		if collapsed, ok := m.collapseFocusedTopic(); ok {
+			return collapsed, nil
+		}
 	}
 	return m, nil
+}
+
+// closePreview tears down the message preview pane state. Called when
+// the user navigates away from the current entity (back to entities
+// pane, into a different queue/sub, or namespace/sub change).
+func (m *Model) closePreview() {
+	m.viewingMessage = false
+	m.selectedMessage = servicebus.PeekedMessage{}
+}
+
+// collapseFocusedTopic handles the "h / backspace" semantics for the
+// entities tree: if the cursor is on a topic-sub child, collapse the
+// parent and move the cursor onto it. If the cursor is on an expanded
+// topic, just collapse. Returns (m, true) if anything was collapsed.
+func (m Model) collapseFocusedTopic() (Model, bool) {
+	switch sel := m.entitiesList.SelectedItem().(type) {
+	case topicSubChildItem:
+		delete(m.expandedTopics, sel.parentTopic)
+		m.rebuildEntitiesItems()
+		// Move cursor to the parent topic.
+		for i, it := range m.entitiesList.VisibleItems() {
+			if ei, ok := it.(entityItem); ok && ei.entity.Name == sel.parentTopic {
+				m.entitiesList.Select(i)
+				break
+			}
+		}
+		return m, true
+	case entityItem:
+		if sel.entity.Kind == servicebus.EntityTopic && m.expandedTopics[sel.entity.Name] {
+			delete(m.expandedTopics, sel.entity.Name)
+			m.rebuildEntitiesItems()
+			return m, true
+		}
+	}
+	return m, false
 }
 
 func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
@@ -70,10 +109,11 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.CurrentSub = sub
 	m.HasSubscription = true
 	m.hasNamespace = false
-	m.hasEntity = false
 	m.currentNS = servicebus.Namespace{}
-	m.currentEntity = servicebus.Entity{}
-	m.clearDetailState()
+	m.expandedTopics = make(map[string]bool)
+	m.topicSubsByTopic = make(map[string][]servicebus.TopicSubscription)
+	m.clearPeekState()
+	m.clearAllMarks()
 	m.focus = namespacesPane
 
 	if cached, ok := m.cache.namespaces.Get(sub.ID); ok {
@@ -94,6 +134,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.detailList.SetItems(nil)
 	m.entitiesList.Title = "Entities"
 	m.detailList.Title = "Detail"
+	m.resize() // peek state cleared → reclaim DLQ tab strip space
 
 	m.fetchGen++
 	m.namespacesSession = cache.NewFetchSession(m.namespaces, m.fetchGen, namespaceKey)
@@ -118,31 +159,33 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		// Snapshot current entities list under the outgoing namespace.
 		if m.hasNamespace {
 			oldKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name)
-			m.entitiesHistory[oldKey] = ui.SnapshotListState(&m.entitiesList, entityItemKey)
+			m.entitiesHistory[oldKey] = ui.SnapshotListState(&m.entitiesList, entitiesTreeItemKey)
 		}
 
 		m.currentNS = item.namespace
 		m.hasNamespace = true
-		m.hasEntity = false
-		m.currentEntity = servicebus.Entity{}
-		m.clearDetailState()
+		m.expandedTopics = make(map[string]bool)
+		m.topicSubsByTopic = make(map[string][]servicebus.TopicSubscription)
+		m.clearPeekState()
+		m.clearAllMarks()
 		m.focus = entitiesPane
 
 		entityCacheKey := cache.Key(m.CurrentSub.ID, item.namespace.Name)
 		if cached, ok := m.cache.entities.Get(entityCacheKey); ok {
 			m.entities = cached
-			m.entitiesList.SetItems(entitiesToFilteredItems(cached, m.dlqFilter))
+			m.entitiesList.SetItems(entitiesTreeToItems(cached, m.topicSubsByTopic, m.expandedTopics, m.entityFilter, m.dlqSort))
 			m.entitiesList.Title = m.entitiesPaneTitle()
 		} else {
 			m.entities = nil
 			m.entitiesList.SetItems(nil)
 			m.entitiesList.Title = "Entities"
 		}
-		ui.RestoreListState(&m.entitiesList, m.entitiesHistory[entityCacheKey], entityItemKey)
+		ui.RestoreListState(&m.entitiesList, m.entitiesHistory[entityCacheKey], entitiesTreeItemKey)
 
 		m.detailList.ResetFilter()
 		m.detailList.SetItems(nil)
 		m.detailList.Title = "Detail"
+		m.resize() // peek state cleared → reclaim DLQ tab strip space
 
 		m.fetchGen++
 		m.entitiesSession = cache.NewFetchSession(m.entities, m.fetchGen, entityKey)
@@ -152,92 +195,136 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 	}
 
 	if m.focus == entitiesPane {
-		item, ok := m.entitiesList.SelectedItem().(entityItem)
-		if !ok {
-			return m, nil
-		}
-
-		// Re-selecting the same entity: just move focus.
-		if m.hasEntity && m.currentEntity.Name == item.entity.Name && m.currentEntity.Kind == item.entity.Kind {
-			m.focus = detailPane
-			return m, nil
-		}
-
-		// Snapshot the current detail list (topic subs mode) under the
-		// outgoing entity. Message-mode detail state is ephemeral and
-		// not worth preserving — marks are already cleared by clearDetailState.
-		if m.hasEntity && m.detailMode == detailTopicSubscriptions {
-			oldKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, m.currentEntity.Name)
-			m.topicSubsHistory[oldKey] = ui.SnapshotListState(&m.detailList, topicSubItemKey)
-		}
-
-		m.currentEntity = item.entity
-		m.hasEntity = true
-		m.clearDetailState()
-		m.focus = detailPane
-
-		if item.entity.Kind == servicebus.EntityTopic {
-			topicCacheKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, item.entity.Name)
-			if cached, ok := m.cache.topicSubs.Get(topicCacheKey); ok {
-				m.topicSubs = cached
-				m.detailMode = detailTopicSubscriptions
-				m.detailList.SetItems(topicSubsToItems(cached))
-				m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(cached))
-			} else {
-				m.detailList.SetItems(nil)
-				m.detailList.Title = "Detail"
+		switch sel := m.entitiesList.SelectedItem().(type) {
+		case entityItem:
+			if sel.entity.Kind == servicebus.EntityQueue {
+				return m.peekQueue(sel.entity)
 			}
-			ui.RestoreListState(&m.detailList, m.topicSubsHistory[topicCacheKey], topicSubItemKey)
-
-			m.fetchGen++
-			m.topicSubsSession = cache.NewFetchSession(m.topicSubs, m.fetchGen, topicSubKey)
-			m.SetLoading(m.focus)
-			m.Status = fmt.Sprintf("Loading subscriptions for topic %s", item.entity.Name)
-			return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, item.entity.Name, topicCacheKey, m.fetchGen))
+			// Topic — toggle expansion.
+			return m.toggleTopicExpansion(sel.entity)
+		case topicSubChildItem:
+			return m.peekTopicSub(sel.parentTopic, sel.sub)
+		default:
+			return m, nil
 		}
-
-		// Queue — messages are not cached (ephemeral)
-		m.detailList.ResetFilter()
-		m.detailList.SetItems(nil)
-		m.detailList.Title = "Detail"
-
-		m.SetLoading(m.focus)
-		m.Status = fmt.Sprintf("Peeking messages from queue %s", item.entity.Name)
-		return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, item.entity.Name, m.deadLetter))
 	}
 
 	if m.focus == detailPane {
-		if m.detailMode == detailTopicSubscriptions && !m.viewingTopicSub {
-			item, ok := m.detailList.SelectedItem().(topicSubItem)
-			if !ok {
-				return m, nil
-			}
-
-			m.currentTopicSub = item.sub
-			m.viewingTopicSub = true
-			m.peekedMessages = nil
-			m.detailList.ResetFilter()
-			m.detailList.SetItems(nil)
-
-			m.SetLoading(m.focus)
-			m.Status = fmt.Sprintf("Peeking messages from %s/%s", m.currentEntity.Name, item.sub.Name)
-			return m, tea.Batch(spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, item.sub.Name, m.deadLetter))
-		}
-
-		if m.detailMode == detailMessages {
-			item, ok := m.detailList.SelectedItem().(messageItem)
-			if !ok {
-				return m, nil
-			}
-			m.selectedMessage = item.message
-			m.viewingMessage = true
-			m.resize()
-			m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))
-			m.messageViewport.GotoTop()
-			m.Status = fmt.Sprintf("Viewing message %s (Esc/h to go back)", ui.EmptyToDash(item.message.MessageID))
+		item, ok := m.detailList.SelectedItem().(messageItem)
+		if !ok {
 			return m, nil
 		}
+		m.selectedMessage = item.message
+		m.viewingMessage = true
+		m.focus = messagePreviewPane
+		m.resize()
+		m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))
+		m.messageViewport.GotoTop()
+		m.Status = fmt.Sprintf("Viewing message %s (shift+tab to navigate, esc to close)", ui.EmptyToDash(item.message.MessageID))
+		return m, nil
+	}
+
+	if m.focus == messagePreviewPane {
+		// Pressing Enter while focused on the preview pane is a no-op —
+		// the message is already selected. (Could re-yank to clipboard
+		// or similar in the future.)
+		return m, nil
 	}
 
 	return m, nil
 }
+
+// peekQueue starts a fresh peek of a queue's messages, binding the
+// detail pane to it.
+func (m Model) peekQueue(entity servicebus.Entity) (Model, tea.Cmd) {
+	// Re-selecting the same queue: just move focus.
+	if m.hasPeekTarget && m.currentSubName == "" && m.currentEntity.Name == entity.Name {
+		m.focus = detailPane
+		return m, nil
+	}
+
+	m.closePreview()
+	m.currentEntity = entity
+	m.currentSubName = ""
+	m.hasPeekTarget = true
+	m.peekedMessages = nil
+	m.deadLetter = false
+	m.focus = detailPane
+
+	m.detailList.ResetFilter()
+	m.detailList.SetItems(nil)
+	m.detailList.Title = "Detail"
+	m.resize() // make room for the DLQ tab strip
+
+	m.SetLoading(m.focus)
+	m.Status = fmt.Sprintf("Peeking messages from queue %s", entity.Name)
+	return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, entity.Name, m.deadLetter, false))
+}
+
+// peekTopicSub starts a fresh peek of a topic subscription's messages,
+// binding the detail pane to it.
+func (m Model) peekTopicSub(topicName string, sub servicebus.TopicSubscription) (Model, tea.Cmd) {
+	// Re-selecting the same sub: just move focus.
+	if m.hasPeekTarget && m.currentSubName == sub.Name && m.currentEntity.Name == topicName {
+		m.focus = detailPane
+		return m, nil
+	}
+
+	// Find the parent topic entity in m.entities so we have its full
+	// metadata (kind etc.) available for refresh paths.
+	var parent servicebus.Entity
+	for _, e := range m.entities {
+		if e.Name == topicName {
+			parent = e
+			break
+		}
+	}
+
+	m.closePreview()
+	m.currentEntity = parent
+	m.currentSubName = sub.Name
+	m.hasPeekTarget = true
+	m.peekedMessages = nil
+	m.deadLetter = false
+	m.focus = detailPane
+
+	m.detailList.ResetFilter()
+	m.detailList.SetItems(nil)
+	m.detailList.Title = "Detail"
+	m.resize() // make room for the DLQ tab strip
+
+	m.SetLoading(m.focus)
+	m.Status = fmt.Sprintf("Peeking messages from %s/%s", topicName, sub.Name)
+	return m, tea.Batch(spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, topicName, sub.Name, m.deadLetter, false))
+}
+
+// toggleTopicExpansion expands or collapses a topic in the entities
+// tree. On first expand, kicks off a fetch of the topic's subscriptions.
+// On collapse, just hides the children.
+func (m Model) toggleTopicExpansion(topic servicebus.Entity) (Model, tea.Cmd) {
+	if m.expandedTopics[topic.Name] {
+		// Collapse.
+		delete(m.expandedTopics, topic.Name)
+		m.rebuildEntitiesItems()
+		return m, nil
+	}
+
+	m.expandedTopics[topic.Name] = true
+
+	// If we already have the subs cached (in-memory or persistent), show
+	// them immediately and re-fetch in the background to refresh.
+	cacheKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, topic.Name)
+	if cached, ok := m.cache.topicSubs.Get(cacheKey); ok {
+		m.topicSubsByTopic[topic.Name] = cached
+	}
+	m.rebuildEntitiesItems()
+
+	// Fire a fetch (always — to refresh).
+	m.fetchGen++
+	m.topicSubsFetching = topic.Name
+	m.topicSubsSession = cache.NewFetchSession(m.topicSubsByTopic[topic.Name], m.fetchGen, topicSubKey)
+	m.SetLoading(m.focus)
+	m.Status = fmt.Sprintf("Loading subscriptions for topic %s", topic.Name)
+	return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, topic.Name, cacheKey, m.fetchGen))
+}
+

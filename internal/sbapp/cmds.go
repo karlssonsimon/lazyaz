@@ -57,7 +57,7 @@ func fetchTopicSubscriptionsCmd(svc *servicebus.Service, loader *cache.Loader[se
 	})
 }
 
-func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queueName string, deadLetter bool) tea.Cmd {
+func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queueName string, deadLetter, repeek bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -65,11 +65,11 @@ func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queu
 		err := svc.PeekQueueMessages(ctx, ns, queueName, peekMaxMessages, deadLetter, func(batch []servicebus.PeekedMessage) {
 			messages = append(messages, batch...)
 		})
-		return messagesLoadedMsg{namespace: ns, source: queueName, messages: messages, err: err}
+		return messagesLoadedMsg{namespace: ns, source: queueName, messages: messages, repeek: repeek, err: err}
 	}
 }
 
-func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, topicName, subName string, deadLetter bool) tea.Cmd {
+func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, topicName, subName string, deadLetter, repeek bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -77,7 +77,7 @@ func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespac
 		err := svc.PeekSubscriptionMessages(ctx, ns, topicName, subName, peekMaxMessages, deadLetter, func(batch []servicebus.PeekedMessage) {
 			messages = append(messages, batch...)
 		})
-		return messagesLoadedMsg{namespace: ns, source: topicName + "/" + subName, messages: messages, err: err}
+		return messagesLoadedMsg{namespace: ns, source: topicName + "/" + subName, messages: messages, repeek: repeek, err: err}
 	}
 }
 
@@ -93,32 +93,39 @@ func refreshEntitiesCmd(svc *servicebus.Service, ns servicebus.Namespace) tea.Cm
 	}
 }
 
-func requeueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, entity servicebus.Entity, isTopicSub bool, topicSub servicebus.TopicSubscription, messageIDs []string) tea.Cmd {
+// requeueMessagesCmd requeues marked messages from a queue's DLQ or
+// from a topic subscription's DLQ. When subName is empty, the entity
+// itself is treated as a queue; otherwise the entity is the parent
+// topic and subName is the subscription.
+func requeueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, entity servicebus.Entity, subName string, messageIDs []string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		var requeued int
 		var err error
-		if entity.Kind == servicebus.EntityQueue {
+		if subName == "" {
 			requeued, err = svc.RequeueFromDLQ(ctx, ns, entity.Name, messageIDs)
-		} else if isTopicSub {
-			requeued, err = svc.RequeueFromSubscriptionDLQ(ctx, ns, entity.Name, topicSub.Name, messageIDs)
+		} else {
+			requeued, err = svc.RequeueFromSubscriptionDLQ(ctx, ns, entity.Name, subName, messageIDs)
 		}
 		return requeueDoneMsg{requeued: requeued, total: len(messageIDs), err: err}
 	}
 }
 
-func deleteDuplicateCmd(svc *servicebus.Service, ns servicebus.Namespace, entity servicebus.Entity, isTopicSub bool, topicSub servicebus.TopicSubscription, messageID string) tea.Cmd {
+// deleteDuplicateCmd deletes a single duplicate message from a queue's
+// DLQ or a topic subscription's DLQ. Same subName convention as
+// requeueMessagesCmd.
+func deleteDuplicateCmd(svc *servicebus.Service, ns servicebus.Namespace, entity servicebus.Entity, subName string, messageID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		var err error
-		if entity.Kind == servicebus.EntityQueue {
+		if subName == "" {
 			err = svc.DeleteFromDLQ(ctx, ns, entity.Name, messageID)
-		} else if isTopicSub {
-			err = svc.DeleteFromSubscriptionDLQ(ctx, ns, entity.Name, topicSub.Name, messageID)
+		} else {
+			err = svc.DeleteFromSubscriptionDLQ(ctx, ns, entity.Name, subName, messageID)
 		}
 		return deleteDuplicateDoneMsg{messageID: messageID, err: err}
 	}
