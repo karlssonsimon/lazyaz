@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/azure/keyvault"
@@ -29,6 +31,22 @@ func (k TabKind) String() string {
 		return "Key Vault"
 	default:
 		return "Unknown"
+	}
+}
+
+// TabKindFromString parses a config-supplied tab kind name into a
+// TabKind. Recognized values (case-insensitive): "blob", "servicebus",
+// "keyvault". Returns ok=false on anything else so the caller can warn.
+func TabKindFromString(s string) (TabKind, bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "blob":
+		return TabBlob, true
+	case "servicebus", "service-bus", "service_bus":
+		return TabServiceBus, true
+	case "keyvault", "key-vault", "key_vault":
+		return TabKeyVault, true
+	default:
+		return 0, false
 	}
 }
 

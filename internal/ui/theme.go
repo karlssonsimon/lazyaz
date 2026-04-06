@@ -14,8 +14,18 @@ type schemeFile struct {
 
 // Config holds the loaded configuration and available schemes.
 type Config struct {
-	ThemeName string   `yaml:"theme"`
-	Schemes   []Scheme `yaml:"-"`
+	ThemeName string      `yaml:"theme"`
+	Tabs      []TabConfig `yaml:"tabs"`
+	Schemes   []Scheme    `yaml:"-"`
+}
+
+// TabConfig is one startup-tab entry from the user config. Kind names
+// the tab type (matched case-insensitively against "blob",
+// "servicebus", "keyvault"). Subscription is an optional Azure
+// subscription ID to auto-select once subscriptions are loaded.
+type TabConfig struct {
+	Kind         string `yaml:"kind"`
+	Subscription string `yaml:"subscription,omitempty"`
 }
 
 // ActiveScheme returns the scheme matching ThemeName, or the first available.
