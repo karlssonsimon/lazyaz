@@ -1,6 +1,8 @@
 package blobapp
 
 import (
+	"fmt"
+
 	"azure-storage/internal/appshell"
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/blob"
@@ -88,7 +90,6 @@ type Model struct {
 
 type accountsLoadedMsg struct {
 	gen            int
-	cached         bool
 	subscriptionID string
 	accounts       []blob.Account
 	done           bool
@@ -98,7 +99,6 @@ type accountsLoadedMsg struct {
 
 type containersLoadedMsg struct {
 	gen        int
-	cached     bool
 	account    blob.Account
 	containers []blob.ContainerInfo
 	done       bool
@@ -108,7 +108,6 @@ type containersLoadedMsg struct {
 
 type blobsLoadedMsg struct {
 	gen       int
-	cached    bool
 	account   blob.Account
 	container string
 	prefix    string
@@ -280,10 +279,16 @@ func (m Model) HelpSections() []ui.HelpSection {
 }
 
 // SetSubscription overrides the embedded appshell.Model method to also
-// prime the initial accounts fetch session. Tabapp calls this after
-// constructing the model and before Init() issues the first fetch.
+// hydrate accounts from cache and prime the initial accounts fetch
+// session. Tabapp calls this after constructing the model and before
+// Init() issues the first fetch.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
+	if cached, ok := m.cache.accounts.Get(sub.ID); ok {
+		m.accounts = cached
+		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(cached))
+		ui.SetItemsPreserveKey(&m.accountsList, accountsToItems(cached), accountItemKey)
+	}
 	m.fetchGen++
 	m.accountsSession = cache.NewFetchSession(m.accounts, m.fetchGen, accountKey)
 }

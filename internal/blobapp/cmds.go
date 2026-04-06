@@ -38,7 +38,7 @@ func fetchAccountsCmd(svc *blob.Service, loader *cache.Loader[blob.Account], sub
 		defer cancel()
 		return svc.DiscoverAccountsForSubscription(ctx, subscriptionID, send)
 	}, func(p cache.Page[blob.Account]) tea.Msg {
-		return accountsLoadedMsg{gen: gen, cached: p.Cached, subscriptionID: subscriptionID, accounts: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return accountsLoadedMsg{gen: gen, subscriptionID: subscriptionID, accounts: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
@@ -48,7 +48,7 @@ func fetchContainersCmd(svc *blob.Service, loader *cache.Loader[blob.ContainerIn
 		defer cancel()
 		return svc.ListContainers(ctx, account, send)
 	}, func(p cache.Page[blob.ContainerInfo]) tea.Msg {
-		return containersLoadedMsg{gen: gen, cached: p.Cached, account: account, containers: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return containersLoadedMsg{gen: gen, account: account, containers: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
@@ -59,7 +59,7 @@ func fetchHierarchyBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEnt
 		defer cancel()
 		return svc.ListBlobsLimited(ctx, account, containerName, prefix, limit, send)
 	}, func(p cache.Page[blob.BlobEntry]) tea.Msg {
-		return blobsLoadedMsg{gen: gen, cached: p.Cached, account: account, container: containerName, prefix: prefix, loadAll: false, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return blobsLoadedMsg{gen: gen, account: account, container: containerName, prefix: prefix, loadAll: false, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
@@ -70,7 +70,7 @@ func fetchAllBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEntry], a
 		defer cancel()
 		return svc.ListAllBlobs(ctx, account, containerName, send)
 	}, func(p cache.Page[blob.BlobEntry]) tea.Msg {
-		return blobsLoadedMsg{gen: gen, cached: p.Cached, account: account, container: containerName, prefix: prefix, loadAll: true, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return blobsLoadedMsg{gen: gen, account: account, container: containerName, prefix: prefix, loadAll: true, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 

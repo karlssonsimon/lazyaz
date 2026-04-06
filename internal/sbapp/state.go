@@ -1,6 +1,8 @@
 package sbapp
 
 import (
+	"fmt"
+
 	"azure-storage/internal/appshell"
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/servicebus"
@@ -80,7 +82,6 @@ type Model struct {
 
 type namespacesLoadedMsg struct {
 	gen            int
-	cached         bool
 	subscriptionID string
 	namespaces     []servicebus.Namespace
 	done           bool
@@ -90,7 +91,6 @@ type namespacesLoadedMsg struct {
 
 type entitiesLoadedMsg struct {
 	gen       int
-	cached    bool
 	namespace servicebus.Namespace
 	entities  []servicebus.Entity
 	done      bool
@@ -100,7 +100,6 @@ type entitiesLoadedMsg struct {
 
 type topicSubscriptionsLoadedMsg struct {
 	gen       int
-	cached    bool
 	namespace servicebus.Namespace
 	topicName string
 	subs      []servicebus.TopicSubscription
@@ -252,10 +251,16 @@ func (m Model) HelpSections() []ui.HelpSection {
 }
 
 // SetSubscription overrides the embedded appshell.Model method to also
-// prime the initial namespaces fetch session. Tabapp calls this after
-// constructing the model and before Init() issues the first fetch.
+// hydrate namespaces from cache and prime the initial namespaces fetch
+// session. Tabapp calls this after constructing the model and before
+// Init() issues the first fetch.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
+	if cached, ok := m.cache.namespaces.Get(sub.ID); ok {
+		m.namespaces = cached
+		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(cached))
+		ui.SetItemsPreserveKey(&m.namespacesList, namespacesToItems(cached), namespaceItemKey)
+	}
 	m.fetchGen++
 	m.namespacesSession = cache.NewFetchSession(m.namespaces, m.fetchGen, namespaceKey)
 }

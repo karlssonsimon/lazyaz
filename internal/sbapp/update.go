@@ -112,14 +112,6 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 		return m, nil
 	}
 
-	if msg.cached {
-		m.namespacesSession.Reseed(msg.namespaces)
-		m.namespaces = m.namespacesSession.Items()
-		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(m.namespaces))
-		ui.SetItemsPreserveKey(&m.namespacesList, namespacesToItems(m.namespaces), namespaceItemKey)
-		return m, msg.next
-	}
-
 	if msg.err != nil {
 		m.ClearLoading()
 		m.LastErr = msg.err.Error()
@@ -153,15 +145,6 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 	}
 	if m.entitiesSession == nil || m.entitiesSession.Gen() != msg.gen {
 		return m, nil
-	}
-
-	if msg.cached {
-		m.entitiesSession.Reseed(msg.entities)
-		m.entities = m.entitiesSession.Items()
-		items := entitiesToFilteredItems(m.entities, m.dlqFilter)
-		ui.SetItemsPreserveKey(&m.entitiesList, items, entityItemKey)
-		m.entitiesList.Title = m.entitiesPaneTitle()
-		return m, msg.next
 	}
 
 	if msg.err != nil {
@@ -202,15 +185,6 @@ func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (
 	}
 	if m.topicSubsSession == nil || m.topicSubsSession.Gen() != msg.gen {
 		return m, nil
-	}
-
-	if msg.cached {
-		m.topicSubsSession.Reseed(msg.subs)
-		m.topicSubs = m.topicSubsSession.Items()
-		m.detailMode = detailTopicSubscriptions
-		m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(m.topicSubs))
-		ui.SetItemsPreserveKey(&m.detailList, topicSubsToItems(m.topicSubs), topicSubItemKey)
-		return m, msg.next
 	}
 
 	if msg.err != nil {

@@ -1,6 +1,8 @@
 package kvapp
 
 import (
+	"fmt"
+
 	"azure-storage/internal/appshell"
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/keyvault"
@@ -60,7 +62,6 @@ type Model struct {
 
 type vaultsLoadedMsg struct {
 	gen            int
-	cached         bool
 	subscriptionID string
 	vaults         []keyvault.Vault
 	done           bool
@@ -70,7 +71,6 @@ type vaultsLoadedMsg struct {
 
 type secretsLoadedMsg struct {
 	gen     int
-	cached  bool
 	vault   keyvault.Vault
 	secrets []keyvault.Secret
 	done    bool
@@ -80,7 +80,6 @@ type secretsLoadedMsg struct {
 
 type versionsLoadedMsg struct {
 	gen        int
-	cached     bool
 	vault      keyvault.Vault
 	secretName string
 	versions   []keyvault.SecretVersion
@@ -208,11 +207,17 @@ func (m Model) HelpSections() []ui.HelpSection {
 }
 
 // SetSubscription overrides the embedded appshell.Model method to also
-// prime the initial vault fetch session. Tabapp calls this after
-// constructing the model and before Init() issues the first fetch, so the
-// vault loader already has a live session to hand its pages to.
+// hydrate vaults from cache and prime the initial vault fetch session.
+// Tabapp calls this after constructing the model and before Init() issues
+// the first fetch, so the user sees cached vaults instantly while the
+// network call runs in the background.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
+	if cached, ok := m.cache.vaults.Get(sub.ID); ok {
+		m.vaults = cached
+		m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(cached))
+		ui.SetItemsPreserveKey(&m.vaultsList, vaultsToItems(cached), vaultItemKey)
+	}
 	m.fetchGen++
 	m.vaultsSession = cache.NewFetchSession(m.vaults, m.fetchGen, vaultKey)
 }

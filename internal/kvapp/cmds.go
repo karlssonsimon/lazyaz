@@ -34,7 +34,7 @@ func fetchVaultsCmd(svc *keyvault.Service, loader *cache.Loader[keyvault.Vault],
 		defer cancel()
 		return svc.ListVaults(ctx, subscriptionID, send)
 	}, func(p cache.Page[keyvault.Vault]) tea.Msg {
-		return vaultsLoadedMsg{gen: gen, cached: p.Cached, subscriptionID: subscriptionID, vaults: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return vaultsLoadedMsg{gen: gen, subscriptionID: subscriptionID, vaults: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
@@ -44,7 +44,7 @@ func fetchSecretsCmd(svc *keyvault.Service, loader *cache.Loader[keyvault.Secret
 		defer cancel()
 		return svc.ListSecrets(ctx, vault, send)
 	}, func(p cache.Page[keyvault.Secret]) tea.Msg {
-		return secretsLoadedMsg{gen: gen, cached: p.Cached, vault: vault, secrets: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return secretsLoadedMsg{gen: gen, vault: vault, secrets: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
@@ -54,7 +54,7 @@ func fetchVersionsCmd(svc *keyvault.Service, loader *cache.Loader[keyvault.Secre
 		defer cancel()
 		return svc.ListSecretVersions(ctx, vault, secretName, send)
 	}, func(p cache.Page[keyvault.SecretVersion]) tea.Msg {
-		return versionsLoadedMsg{gen: gen, cached: p.Cached, vault: vault, secretName: secretName, versions: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return versionsLoadedMsg{gen: gen, vault: vault, secretName: secretName, versions: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 

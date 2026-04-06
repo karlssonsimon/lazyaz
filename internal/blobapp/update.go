@@ -107,14 +107,6 @@ func (m Model) handleAccountsLoaded(msg accountsLoadedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if msg.cached {
-		m.accountsSession.Reseed(msg.accounts)
-		m.accounts = m.accountsSession.Items()
-		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(m.accounts))
-		ui.SetItemsPreserveKey(&m.accountsList, accountsToItems(m.accounts), accountItemKey)
-		return m, msg.next
-	}
-
 	if msg.err != nil {
 		m.ClearLoading()
 		m.LastErr = msg.err.Error()
@@ -148,14 +140,6 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (Model, tea.Cmd) 
 	}
 	if m.containersSession == nil || m.containersSession.Gen() != msg.gen {
 		return m, nil
-	}
-
-	if msg.cached {
-		m.containersSession.Reseed(msg.containers)
-		m.containers = m.containersSession.Items()
-		m.containersList.Title = fmt.Sprintf("Containers (%d)", len(m.containers))
-		ui.SetItemsPreserveKey(&m.containersList, containersToItems(m.containers), containerItemKey)
-		return m, msg.next
 	}
 
 	if msg.err != nil {
@@ -210,14 +194,6 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	}
 	if m.blobsSession == nil || m.blobsSession.Gen() != msg.gen {
 		return m, nil
-	}
-
-	if msg.cached {
-		m.blobsSession.Reseed(msg.blobs)
-		m.blobs = m.blobsSession.Items()
-		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(m.blobs))
-		m.refreshItems()
-		return m, msg.next
 	}
 
 	if msg.err != nil {
