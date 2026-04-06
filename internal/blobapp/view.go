@@ -50,6 +50,7 @@ func (m Model) View() string {
 		{km.FilterInput.Short(), "filter"},
 		{km.NextFocus.Short(), "next"},
 		{km.SubscriptionPicker.Short(), "sub"},
+		{km.Inspect.Short(), "inspect"},
 	}, m.styles, ui.PaneContentWidth(pane, pw[0]))
 
 	containersHints := ui.RenderPaneHints([]ui.PaneHint{
@@ -145,6 +146,9 @@ func (m Model) View() string {
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.styles.Bg)
 
+	if m.inspectFields != nil {
+		view = ui.RenderInspectOverlay(m.inspectTitle, m.inspectFields, m.styles, m.width, m.height, view)
+	}
 	if m.subOverlay.Active {
 		view = ui.RenderSubscriptionOverlay(m.subOverlay, m.subscriptions, m.currentSub, m.styles, m.width, m.height, view)
 	}

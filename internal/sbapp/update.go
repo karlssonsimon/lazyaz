@@ -238,6 +238,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Inspect overlay — dismiss.
+		if m.inspectFields != nil {
+			if m.keymap.Inspect.Matches(key) || key == "esc" || key == "q" {
+				m.inspectFields = nil
+			}
+			return m, nil
+		}
+
+		// Inspect overlay — dismiss.
+		if m.inspectFields != nil {
+			if m.keymap.Inspect.Matches(key) || key == "esc" || key == "q" {
+				m.inspectFields = nil
+			}
+			return m, nil
+		}
+
 		if m.viewingMessage {
 			switch {
 			case ui.ShouldQuit(key, m.keymap.Quit, false):
@@ -389,6 +405,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.helpOverlay.Open("Azure Service Bus Explorer Help", m.HelpSections())
 				}
+				return m, nil
+			}
+		case m.keymap.Inspect.Matches(key):
+			if !focusedFilterActive {
+				m.inspectFocusedItem()
 				return m, nil
 			}
 		case m.keymap.BackspaceUp.Matches(key):

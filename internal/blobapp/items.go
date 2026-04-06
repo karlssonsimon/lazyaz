@@ -19,14 +19,7 @@ func (i accountItem) Title() string {
 }
 
 func (i accountItem) Description() string {
-	shortSub := i.account.SubscriptionID
-	if len(shortSub) > 8 {
-		shortSub = shortSub[:8]
-	}
-	if i.account.ResourceGroup == "" {
-		return fmt.Sprintf("sub %s", shortSub)
-	}
-	return fmt.Sprintf("sub %s | rg %s", shortSub, i.account.ResourceGroup)
+	return ""
 }
 
 func (i accountItem) FilterValue() string {
@@ -42,10 +35,7 @@ func (i containerItem) Title() string {
 }
 
 func (i containerItem) Description() string {
-	if i.container.LastModified.IsZero() {
-		return "-"
-	}
-	return ui.FormatTime(i.container.LastModified)
+	return ""
 }
 
 func (i containerItem) FilterValue() string {
@@ -60,33 +50,45 @@ type blobItem struct {
 }
 
 func (i blobItem) Title() string {
-	prefix := "   "
-	if i.visual {
-		prefix = ">  "
-	}
-	if i.marked {
-		if i.visual {
-			prefix = ">* "
-		} else {
-			prefix = "*  "
-		}
+	prefix := ""
+	switch {
+	case i.marked && i.visual:
+		prefix = ">* "
+	case i.marked:
+		prefix = "* "
+	case i.visual:
+		prefix = "> "
 	}
 
 	if i.blob.IsPrefix {
-		if i.visual {
-			return "> [DIR] " + i.displayName
-		}
-		return "  [DIR] " + i.displayName
+		return prefix + "[DIR] " + i.displayName
 	}
 
-	return prefix + i.displayName
+	size := padField(humanSize(i.blob.Size), 9)
+	tier := padField(ui.EmptyToDash(i.blob.AccessTier), 8)
+	ts := ui.FormatTime(i.blob.LastModified)
+	return fmt.Sprintf("%s%-25s  %s  %s  %s", prefix, truncate(i.displayName, 25), size, tier, ts)
+}
+
+func padField(s string, width int) string {
+	if len(s) >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-len(s))
+}
+
+func truncate(s string, width int) string {
+	if len(s) <= width {
+		return s
+	}
+	if width <= 1 {
+		return s[:width]
+	}
+	return s[:width-1] + "…"
 }
 
 func (i blobItem) Description() string {
-	if i.blob.IsPrefix {
-		return ""
-	}
-	return fmt.Sprintf("%s | %s | %s", humanSize(i.blob.Size), ui.FormatTime(i.blob.LastModified), ui.EmptyToDash(i.blob.AccessTier))
+	return ""
 }
 
 func (i blobItem) FilterValue() string {

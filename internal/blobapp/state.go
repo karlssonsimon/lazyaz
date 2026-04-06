@@ -77,6 +77,9 @@ type Model struct {
 	helpOverlay  ui.HelpOverlayState
 	subOverlay   ui.SubscriptionOverlayState
 
+	inspectFields []ui.InspectField
+	inspectTitle  string
+
 	cache blobCache
 
 	// EmbeddedMode suppresses theme/help overlay handling and quit
@@ -270,6 +273,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 		{
 			Title: "App",
 			Items: []string{
+				keymap.HelpEntry(km.Inspect, "inspect item"),
 				keymap.HelpEntry(km.SubscriptionPicker, "change subscription"),
 				keymap.HelpEntry(km.ToggleThemePicker, "open theme picker"),
 				keymap.HelpEntry(km.RefreshScope, "refresh current scope"),

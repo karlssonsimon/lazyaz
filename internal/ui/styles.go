@@ -191,7 +191,9 @@ func NewStyles(s Scheme) Styles {
 	// Delegate styles are transparent — RenderCanvas fills backgrounds
 	// at the cell level after rendering.
 	delegate := list.NewDefaultDelegate()
+	delegate.SetHeight(1)
 	delegate.SetSpacing(0)
+	delegate.ShowDescription = false
 	delegate.Styles.NormalTitle = lipgloss.NewStyle().
 		Foreground(text).
 		Padding(0, 0, 0, 2)

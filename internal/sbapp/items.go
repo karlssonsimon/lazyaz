@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"azure-storage/internal/azure/servicebus"
-	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 )
@@ -19,14 +18,7 @@ func (i namespaceItem) Title() string {
 }
 
 func (i namespaceItem) Description() string {
-	shortSub := i.namespace.SubscriptionID
-	if len(shortSub) > 8 {
-		shortSub = shortSub[:8]
-	}
-	if i.namespace.ResourceGroup == "" {
-		return fmt.Sprintf("sub %s", shortSub)
-	}
-	return fmt.Sprintf("sub %s | rg %s", shortSub, i.namespace.ResourceGroup)
+	return ""
 }
 
 func (i namespaceItem) FilterValue() string {
@@ -46,11 +38,7 @@ func (i entityItem) Title() string {
 }
 
 func (i entityItem) Description() string {
-	kind := "queue"
-	if i.entity.Kind == servicebus.EntityTopic {
-		kind = "topic"
-	}
-	return fmt.Sprintf("%s · active: %d · dlq: %d", kind, i.entity.ActiveMsgCount, i.entity.DeadLetterCount)
+	return ""
 }
 
 func (i entityItem) FilterValue() string {
@@ -63,7 +51,7 @@ type topicSubItem struct {
 
 func (i topicSubItem) Title() string { return i.sub.Name }
 func (i topicSubItem) Description() string {
-	return fmt.Sprintf("active: %d · dlq: %d", i.sub.ActiveMsgCount, i.sub.DeadLetterCount)
+	return ""
 }
 func (i topicSubItem) FilterValue() string { return i.sub.Name }
 
@@ -88,12 +76,7 @@ func (i messageItem) Title() string {
 }
 
 func (i messageItem) Description() string {
-	enqueued := ui.FormatTime(i.message.EnqueuedAt)
-	preview := compactPreview(i.message.BodyPreview, 50)
-	if preview == "" {
-		return enqueued
-	}
-	return fmt.Sprintf("%s | %s", enqueued, preview)
+	return ""
 }
 
 func (i messageItem) FilterValue() string {
