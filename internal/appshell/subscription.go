@@ -1,8 +1,8 @@
 package appshell
 
 import (
-	"azure-storage/internal/azure"
-	"azure-storage/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

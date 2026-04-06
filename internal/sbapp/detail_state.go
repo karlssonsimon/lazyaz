@@ -1,6 +1,6 @@
 package sbapp
 
-import "azure-storage/internal/azure/servicebus"
+import "github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 
 // markScope returns the scope key under which marks (and duplicate
 // flags) live for the current peek target. Marks are scoped to the

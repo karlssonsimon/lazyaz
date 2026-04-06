@@ -1,11 +1,11 @@
 package app
 
 import (
-	"azure-storage/internal/blobapp"
-	"azure-storage/internal/keymap"
-	"azure-storage/internal/kvapp"
-	"azure-storage/internal/sbapp"
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/blobapp"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
+	"github.com/karlssonsimon/lazyaz/internal/kvapp"
+	"github.com/karlssonsimon/lazyaz/internal/sbapp"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )

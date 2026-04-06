@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"azure-storage/internal/appshell"
-	"azure-storage/internal/azure"
-	"azure-storage/internal/azure/keyvault"
-	"azure-storage/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"azure-storage/internal/appshell"
-	"azure-storage/internal/azure/servicebus"
-	"azure-storage/internal/cache"
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
+	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"

@@ -3,7 +3,7 @@ package ui
 import (
 	"strings"
 
-	"azure-storage/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 )
 
 type HelpKeyBindings struct {

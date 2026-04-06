@@ -1,7 +1,7 @@
 package blobapp
 
 import (
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 	"strings"
 	"testing"
 

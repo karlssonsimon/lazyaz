@@ -1,4 +1,4 @@
-module azure-storage
+module github.com/karlssonsimon/lazyaz
 
 go 1.25.7
 

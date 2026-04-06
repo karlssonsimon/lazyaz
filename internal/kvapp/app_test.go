@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

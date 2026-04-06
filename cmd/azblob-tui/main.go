@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
-	"azure-storage/internal/azure"
-	"azure-storage/internal/azure/blob"
-	"azure-storage/internal/blobapp"
-	"azure-storage/internal/cache"
-	"azure-storage/internal/keymap"
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
+	"github.com/karlssonsimon/lazyaz/internal/blobapp"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

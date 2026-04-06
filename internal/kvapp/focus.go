@@ -1,7 +1,7 @@
 package kvapp
 
 import (
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 )

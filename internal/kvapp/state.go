@@ -3,12 +3,12 @@ package kvapp
 import (
 	"fmt"
 
-	"azure-storage/internal/appshell"
-	"azure-storage/internal/azure"
-	"azure-storage/internal/azure/keyvault"
-	"azure-storage/internal/cache"
-	"azure-storage/internal/keymap"
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"

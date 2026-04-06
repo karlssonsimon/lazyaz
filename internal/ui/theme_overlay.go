@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"azure-storage/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 )
 
 type KeyMatcher interface {

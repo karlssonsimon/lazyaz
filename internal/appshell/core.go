@@ -11,9 +11,9 @@ package appshell
 import (
 	"time"
 
-	"azure-storage/internal/azure"
-	"azure-storage/internal/keymap"
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 )

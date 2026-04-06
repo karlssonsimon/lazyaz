@@ -3,11 +3,11 @@ package app
 import (
 	"strings"
 
-	"azure-storage/internal/azure"
-	"azure-storage/internal/azure/blob"
-	"azure-storage/internal/azure/keyvault"
-	"azure-storage/internal/azure/servicebus"
-	"azure-storage/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
+	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
+	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

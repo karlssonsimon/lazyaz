@@ -1,6 +1,6 @@
 package sbapp
 
-import "azure-storage/internal/ui"
+import "github.com/karlssonsimon/lazyaz/internal/ui"
 
 func (m *Model) resize() {
 	if m.Width <= 0 || m.Height <= 0 {

@@ -3,7 +3,7 @@ package ui
 import (
 	"strings"
 
-	"azure-storage/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
 )
 
 func SubscriptionDisplayName(sub azure.Subscription) string {

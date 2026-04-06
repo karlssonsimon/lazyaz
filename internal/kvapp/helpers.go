@@ -3,7 +3,7 @@ package kvapp
 import (
 	"fmt"
 
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
 func paneName(pane int) string {

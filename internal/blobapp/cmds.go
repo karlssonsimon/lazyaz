@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"azure-storage/internal/appshell"
-	"azure-storage/internal/azure"
-	"azure-storage/internal/azure/blob"
-	"azure-storage/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
