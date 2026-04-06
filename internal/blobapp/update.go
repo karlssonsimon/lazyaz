@@ -397,8 +397,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 	case m.Keymap.Inspect.Matches(key):
-		if !focusedFilterActive {
-			m.inspectFocusedItem()
+		if !focusedFilterActive && m.focus != previewPane {
+			m.toggleInspect()
 			return m, nil
 		}
 	case m.Keymap.BackspaceUp.Matches(key):

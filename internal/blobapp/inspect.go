@@ -6,16 +6,18 @@ import (
 	"azure-storage/internal/ui"
 )
 
-func (m *Model) inspectFocusedItem() {
-	switch m.focus {
+// inspectFor returns the inspect title and field list for the given pane,
+// based on its currently selected item. Returns ("", nil) if the pane has
+// no inspectable selection.
+func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
+	switch pane {
 	case accountsPane:
 		item, ok := m.accountsList.SelectedItem().(accountItem)
 		if !ok {
-			return
+			return "Storage Account", nil
 		}
 		a := item.account
-		m.InspectTitle = "Storage Account"
-		m.InspectFields = []ui.InspectField{
+		return "Storage Account", []ui.InspectField{
 			{Label: "Name", Value: a.Name},
 			{Label: "Subscription", Value: a.SubscriptionID},
 			{Label: "Resource Group", Value: a.ResourceGroup},
@@ -24,29 +26,25 @@ func (m *Model) inspectFocusedItem() {
 	case containersPane:
 		item, ok := m.containersList.SelectedItem().(containerItem)
 		if !ok {
-			return
+			return "Container", nil
 		}
 		c := item.container
-		m.InspectTitle = "Container"
-		m.InspectFields = []ui.InspectField{
+		return "Container", []ui.InspectField{
 			{Label: "Name", Value: c.Name},
 			{Label: "Last Modified", Value: ui.FormatTime(c.LastModified)},
 		}
 	case blobsPane:
 		item, ok := m.blobsList.SelectedItem().(blobItem)
 		if !ok {
-			return
+			return "Blob", nil
 		}
 		b := item.blob
-		m.InspectTitle = "Blob"
 		if b.IsPrefix {
-			m.InspectTitle = "Directory"
-			m.InspectFields = []ui.InspectField{
+			return "Directory", []ui.InspectField{
 				{Label: "Path", Value: b.Name},
 			}
-			return
 		}
-		m.InspectFields = []ui.InspectField{
+		return "Blob", []ui.InspectField{
 			{Label: "Name", Value: b.Name},
 			{Label: "Size", Value: humanSize(b.Size)},
 			{Label: "Content Type", Value: ui.EmptyToDash(b.ContentType)},
@@ -55,4 +53,35 @@ func (m *Model) inspectFocusedItem() {
 			{Label: "Metadata", Value: fmt.Sprintf("%d entries", b.MetadataCount)},
 		}
 	}
+	return "", nil
+}
+
+// inspectFooterHeight returns the rendered row count of the inspect strip
+// for the given pane (when toggled on), or 0 when off. Used by resize() to
+// shrink the list height to make room for the strip.
+func (m Model) inspectFooterHeight(pane int) int {
+	if !m.inspectPanes[pane] {
+		return 0
+	}
+	_, fields := m.inspectFor(pane)
+	return ui.InspectStripHeight(fields)
+}
+
+// inspectFooter returns the rendered inspect strip for the pane (or "" when
+// the toggle is off). Called from View() to populate ListPane.Footer.
+func (m Model) inspectFooter(pane, contentWidth int) string {
+	if !m.inspectPanes[pane] {
+		return ""
+	}
+	title, fields := m.inspectFor(pane)
+	return ui.RenderInspectStrip(title, fields, m.Styles, contentWidth)
+}
+
+// toggleInspect flips the inspect strip on/off for the focused pane.
+func (m *Model) toggleInspect() {
+	if m.inspectPanes == nil {
+		m.inspectPanes = make(map[int]bool)
+	}
+	m.inspectPanes[m.focus] = !m.inspectPanes[m.focus]
+	m.resize()
 }

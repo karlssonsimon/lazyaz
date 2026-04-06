@@ -24,6 +24,7 @@ func (m Model) View() string {
 	pw := m.paneWidths
 	h := m.paneHeight
 	km := m.Keymap
+	paneStyle := m.Styles.Chrome.Pane
 
 	vaults := ui.RenderListPane(ui.ListPane{
 		List:     &m.vaultsList,
@@ -37,7 +38,8 @@ func (m Model) View() string {
 			{Key: km.SubscriptionPicker.Short(), Desc: "sub"},
 			{Key: km.Inspect.Short(), Desc: "inspect"},
 		},
-		Frame: ui.PaneFrame{Width: pw[0], Height: h, Focused: m.focus == vaultsPane},
+		Footer: m.inspectFooter(vaultsPane, ui.PaneContentWidth(paneStyle, pw[0])),
+		Frame:  ui.PaneFrame{Width: pw[0], Height: h, Focused: m.focus == vaultsPane},
 	}, m.Styles)
 
 	secrets := ui.RenderListPane(ui.ListPane{
@@ -50,7 +52,8 @@ func (m Model) View() string {
 			{Key: km.YankSecret.Short(), Desc: "yank"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
 		},
-		Frame: ui.PaneFrame{Width: pw[1], Height: h, Focused: m.focus == secretsPane},
+		Footer: m.inspectFooter(secretsPane, ui.PaneContentWidth(paneStyle, pw[1])),
+		Frame:  ui.PaneFrame{Width: pw[1], Height: h, Focused: m.focus == secretsPane},
 	}, m.Styles)
 
 	versions := ui.RenderListPane(ui.ListPane{
@@ -62,7 +65,8 @@ func (m Model) View() string {
 			{Key: km.YankSecret.Short(), Desc: "yank version"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
 		},
-		Frame: ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == versionsPane},
+		Footer: m.inspectFooter(versionsPane, ui.PaneContentWidth(paneStyle, pw[2])),
+		Frame:  ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == versionsPane},
 	}, m.Styles)
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, vaults, secrets, versions)

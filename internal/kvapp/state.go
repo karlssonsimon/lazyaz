@@ -65,6 +65,12 @@ type Model struct {
 
 	cache kvCache
 
+	// Per-pane inspect strip toggle. When inspectPanes[pane] is true, the
+	// pane renders an inline detail strip (via ui.RenderInspectStrip) under
+	// its list. The strip updates live as the cursor moves so the user can
+	// keep browsing while details remain visible. Toggled with K.
+	inspectPanes map[int]bool
+
 	paneWidths [3]int // vlt, sec, ver — set by resize
 	paneHeight int
 }
@@ -148,6 +154,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 		vaultsHistory:   make(map[string]ui.ListState),
 		secretsHistory:  make(map[string]ui.ListState),
 		versionsHistory: make(map[string]ui.ListState),
+		inspectPanes:    make(map[int]bool),
 	}
 	m.applyScheme(cfg.ActiveScheme())
 	// Hydrate subscriptions from cache without hitting Azure.

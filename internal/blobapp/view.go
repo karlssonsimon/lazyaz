@@ -39,6 +39,7 @@ func (m Model) View() string {
 	pw := m.paneWidths
 	h := m.paneHeight
 	km := m.Keymap
+	paneStyle := m.Styles.Chrome.Pane
 
 	accounts := ui.RenderListPane(ui.ListPane{
 		List:     &m.accountsList,
@@ -52,7 +53,8 @@ func (m Model) View() string {
 			{Key: km.SubscriptionPicker.Short(), Desc: "sub"},
 			{Key: km.Inspect.Short(), Desc: "inspect"},
 		},
-		Frame: ui.PaneFrame{Width: pw[0], Height: h, Focused: m.focus == accountsPane},
+		Footer: m.inspectFooter(accountsPane, ui.PaneContentWidth(paneStyle, pw[0])),
+		Frame:  ui.PaneFrame{Width: pw[0], Height: h, Focused: m.focus == accountsPane},
 	}, m.Styles)
 
 	containers := ui.RenderListPane(ui.ListPane{
@@ -65,7 +67,8 @@ func (m Model) View() string {
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
 			{Key: km.FilterInput.Short(), Desc: "filter"},
 		},
-		Frame: ui.PaneFrame{Width: pw[1], Height: h, Focused: m.focus == containersPane},
+		Footer: m.inspectFooter(containersPane, ui.PaneContentWidth(paneStyle, pw[1])),
+		Frame:  ui.PaneFrame{Width: pw[1], Height: h, Focused: m.focus == containersPane},
 	}, m.Styles)
 
 	var blobsHintSet []ui.PaneHint
@@ -90,6 +93,7 @@ func (m Model) View() string {
 		Loading:  m.Loading && m.LoadingPane == blobsPane,
 		LoadedAt: m.LoadingStartedAt,
 		Hints:    blobsHintSet,
+		Footer:   m.inspectFooter(blobsPane, ui.PaneContentWidth(paneStyle, pw[2])),
 		Frame:    ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == blobsPane},
 	}
 	if m.search.active {

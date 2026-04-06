@@ -38,11 +38,9 @@ type Model struct {
 	Schemes []ui.Scheme
 
 	// Overlays — all managed by appshell.HandleOverlayKeys / RenderOverlays.
-	ThemeOverlay  ui.ThemeOverlayState
-	HelpOverlay   ui.HelpOverlayState
-	SubOverlay    ui.SubscriptionOverlayState
-	InspectFields []ui.InspectField
-	InspectTitle  string
+	ThemeOverlay ui.ThemeOverlayState
+	HelpOverlay  ui.HelpOverlayState
+	SubOverlay   ui.SubscriptionOverlayState
 
 	// EmbeddedMode suppresses theme/help overlay handling and quit
 	// interception so a parent tabapp can own those concerns.

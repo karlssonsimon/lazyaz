@@ -18,8 +18,8 @@ func (m *Model) resize() {
 	}
 	m.paneHeight = height
 
-	listHeight := height - ui.PaneTitleHeight - ui.PaneHintHeight
-	m.vaultsList.SetSize(ui.PaneContentWidth(pane, widths[0]), listHeight)
-	m.secretsList.SetSize(ui.PaneContentWidth(pane, widths[1]), listHeight)
-	m.versionsList.SetSize(ui.PaneContentWidth(pane, widths[2]), listHeight)
+	baseListHeight := height - ui.PaneTitleHeight - ui.PaneHintHeight
+	m.vaultsList.SetSize(ui.PaneContentWidth(pane, widths[0]), baseListHeight-m.inspectFooterHeight(vaultsPane))
+	m.secretsList.SetSize(ui.PaneContentWidth(pane, widths[1]), baseListHeight-m.inspectFooterHeight(secretsPane))
+	m.versionsList.SetSize(ui.PaneContentWidth(pane, widths[2]), baseListHeight-m.inspectFooterHeight(versionsPane))
 }

@@ -29,6 +29,7 @@ func (m Model) View() string {
 	pw := m.paneWidths
 	h := m.paneHeight
 	km := m.Keymap
+	paneStyle := m.Styles.Chrome.Pane
 
 	namespaces := ui.RenderListPane(ui.ListPane{
 		List:     &m.namespacesList,
@@ -42,7 +43,8 @@ func (m Model) View() string {
 			{Key: km.SubscriptionPicker.Short(), Desc: "sub"},
 			{Key: km.Inspect.Short(), Desc: "inspect"},
 		},
-		Frame: ui.PaneFrame{Width: pw[0], Height: h, Focused: m.focus == namespacesPane},
+		Footer: m.inspectFooter(namespacesPane, ui.PaneContentWidth(paneStyle, pw[0])),
+		Frame:  ui.PaneFrame{Width: pw[0], Height: h, Focused: m.focus == namespacesPane},
 	}, m.Styles)
 
 	entities := ui.RenderListPane(ui.ListPane{
@@ -55,7 +57,8 @@ func (m Model) View() string {
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
 			{Key: km.ToggleDLQFilter.Short(), Desc: "DLQ filter"},
 		},
-		Frame: ui.PaneFrame{Width: pw[1], Height: h, Focused: m.focus == entitiesPane},
+		Footer: m.inspectFooter(entitiesPane, ui.PaneContentWidth(paneStyle, pw[1])),
+		Frame:  ui.PaneFrame{Width: pw[1], Height: h, Focused: m.focus == entitiesPane},
 	}, m.Styles)
 
 	// Detail pane: when showing DLQ messages, paint the title and border
@@ -71,7 +74,8 @@ func (m Model) View() string {
 			{Key: km.ShowActiveQueue.Short() + "/" + km.ShowDeadLetterQueue.Short(), Desc: "active/DLQ"},
 			{Key: km.RequeueDLQ.Short(), Desc: "requeue"},
 		},
-		Frame: ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == detailPane && !m.viewingMessage},
+		Footer: m.inspectFooter(detailPane, ui.PaneContentWidth(paneStyle, pw[2])),
+		Frame:  ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == detailPane && !m.viewingMessage},
 	}
 	if m.deadLetter && m.detailMode == detailMessages {
 		dangerTitle := m.Styles.DangerBold.Padding(0, 1)

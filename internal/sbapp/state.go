@@ -84,6 +84,12 @@ type Model struct {
 
 	cache sbCache
 
+	// Per-pane inspect strip toggle. When inspectPanes[pane] is true, the
+	// pane renders an inline detail strip (via ui.RenderInspectStrip) under
+	// its list. The strip updates live as the cursor moves so the user can
+	// keep browsing while details remain visible. Toggled with K.
+	inspectPanes map[int]bool
+
 	paneWidths [4]int // ns, ent, det, preview — set by resize
 	paneHeight int
 }
@@ -186,6 +192,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 		namespacesHistory: make(map[string]ui.ListState),
 		entitiesHistory:   make(map[string]ui.ListState),
 		topicSubsHistory:  make(map[string]ui.ListState),
+		inspectPanes:      make(map[int]bool),
 	}
 	m.applyScheme(cfg.ActiveScheme())
 	// Hydrate subscriptions from cache without hitting Azure.

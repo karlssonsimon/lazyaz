@@ -28,8 +28,8 @@ type OverlayResult struct {
 }
 
 // HandleOverlayKeys dispatches a key press to any active overlay (subscription
-// picker, help, theme, inspect). Returns an OverlayResult describing what
-// happened. Callers must check Handled first and return early.
+// picker, help, theme). Returns an OverlayResult describing what happened.
+// Callers must check Handled first and return early.
 func (m *Model) HandleOverlayKeys(key string) OverlayResult {
 	if m.SubOverlay.Active {
 		if sub, ok := m.SubOverlay.HandleKey(key, ui.ThemeKeyBindings{
@@ -64,24 +64,13 @@ func (m *Model) HandleOverlayKeys(key string) OverlayResult {
 		return OverlayResult{Handled: true}
 	}
 
-	// Inspect overlay — dismiss on inspect/esc/q.
-	if m.InspectFields != nil {
-		if m.Keymap.Inspect.Matches(key) || key == "esc" || key == "q" {
-			m.InspectFields = nil
-		}
-		return OverlayResult{Handled: true}
-	}
-
 	return OverlayResult{}
 }
 
-// RenderOverlays paints the four standard overlays on top of the given base
-// view, in the correct stacking order (inspect → subscription → theme → help).
+// RenderOverlays paints the standard overlays on top of the given base
+// view, in the correct stacking order (subscription → theme → help).
 // Apps should call this at the very end of their View() method.
 func (m Model) RenderOverlays(view string) string {
-	if m.InspectFields != nil {
-		view = ui.RenderInspectOverlay(m.InspectTitle, m.InspectFields, m.Styles, m.Width, m.Height, view)
-	}
 	if m.SubOverlay.Active {
 		view = ui.RenderSubscriptionOverlay(m.SubOverlay, m.Subscriptions, m.CurrentSub, m.Loading, m.LoadingStartedAt, m.Styles, m.Width, m.Height, view)
 	}
