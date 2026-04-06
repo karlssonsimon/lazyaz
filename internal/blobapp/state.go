@@ -1,9 +1,7 @@
 package blobapp
 
 import (
-	"time"
-
-	"azure-storage/internal/azure"
+	"azure-storage/internal/appshell"
 	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/keymap"
@@ -32,20 +30,20 @@ const (
 
 type blobSearch struct {
 	active       bool
-	stage        int               // searchStagePrefix or searchStageFuzzy
-	prefixQuery  string            // user-typed prefix for API search
-	prefixLocked bool              // prefix submitted via Enter
-	fuzzyQuery   string            // user-typed fuzzy filter text
-	fetching     bool              // API fetch in progress
-	results      []blob.BlobEntry  // API results (separate from m.blobs)
-	filtered     []int             // fuzzy.Filter indices into results
-	totalResults int               // count before fzf filtering
+	stage        int              // searchStagePrefix or searchStageFuzzy
+	prefixQuery  string           // user-typed prefix for API search
+	prefixLocked bool             // prefix submitted via Enter
+	fuzzyQuery   string           // user-typed fuzzy filter text
+	fetching     bool             // API fetch in progress
+	results      []blob.BlobEntry // API results (separate from m.blobs)
+	filtered     []int            // fuzzy.Filter indices into results
+	totalResults int              // count before fzf filtering
 }
 
 type Model struct {
-	service *blob.Service
+	appshell.Model
 
-	spinner spinner.Model
+	service *blob.Service
 
 	accountsList   list.Model
 	containersList list.Model
@@ -53,58 +51,27 @@ type Model struct {
 
 	focus int
 
-	subscriptions   []azure.Subscription
-	accounts        []blob.Account
-	containers      []blob.ContainerInfo
-	blobs           []blob.BlobEntry
-	markedBlobs     map[string]blob.BlobEntry
-	visualLineMode  bool
-	visualAnchor    string
-	hasSubscription bool
-	currentSub      azure.Subscription
-	hasAccount      bool
-	currentAccount  blob.Account
-	hasContainer    bool
-	containerName   string
-	prefix      string
-	blobLoadAll bool
-	search      blobSearch
-	preview     previewState
+	accounts       []blob.Account
+	containers     []blob.ContainerInfo
+	blobs          []blob.BlobEntry
+	markedBlobs    map[string]blob.BlobEntry
+	visualLineMode bool
+	visualAnchor   string
+
+	hasAccount     bool
+	currentAccount blob.Account
+	hasContainer   bool
+	containerName  string
+	prefix         string
+	blobLoadAll    bool
+	search         blobSearch
+	preview        previewState
 	pendingPreviewG bool
-	keymap          keymap.Keymap
-	styles          ui.Styles
-
-	schemes      []ui.Scheme
-	themeOverlay ui.ThemeOverlayState
-	helpOverlay  ui.HelpOverlayState
-	subOverlay   ui.SubscriptionOverlayState
-
-	inspectFields []ui.InspectField
-	inspectTitle  string
 
 	cache blobCache
 
-	// EmbeddedMode suppresses theme/help overlay handling and quit
-	// interception so the parent tabapp can own those concerns.
-	EmbeddedMode bool
-
-	loading         bool
-	loadingPane     int // -1 = no specific pane; otherwise the pane being loaded
-	loadingStartedAt time.Time
-	status          string
-	lastErr         string
-
-	width      int
-	height     int
 	paneWidths [4]int // acc, con, blob, preview — set by resize
 	paneHeight int
-}
-
-type subscriptionsLoadedMsg struct {
-	subscriptions []azure.Subscription
-	done          bool
-	err           error
-	next          tea.Cmd
 }
 
 type accountsLoadedMsg struct {
@@ -191,37 +158,26 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	blobs.SetFilteringEnabled(false)
 	blobs.DisableQuitKeybindings()
 
-	spin := spinner.New()
-	spin.Spinner = spinner.Dot
-
 	m := Model{
+		Model:          appshell.New(cfg, km),
 		service:        svc,
-		spinner:        spin,
 		accountsList:   accounts,
 		containersList: containers,
 		blobsList:      blobs,
 		markedBlobs:    make(map[string]blob.BlobEntry),
 		preview:        newPreviewState(),
 		cache:          newCache(db),
-		keymap:         km,
-		schemes:        cfg.Schemes,
-		themeOverlay: ui.ThemeOverlayState{
-			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
-		},
-		focus:       accountsPane,
-		loadingPane: -1,
+		focus:          accountsPane,
 	}
 	m.applyScheme(cfg.ActiveScheme())
 	// Hydrate subscriptions from cache without hitting Azure. The fetch
 	// only runs when the subscription overlay is explicitly opened.
-	if cached, ok := m.cache.subscriptions.Get(""); ok {
-		m.subscriptions = cached
-	}
+	m.HydrateSubscriptionsFromCache(m.cache.subscriptions)
 	// Open the subscription picker on first run (no subscription yet).
-	if !m.hasSubscription {
-		m.subOverlay.Open()
-		m.setLoading(-1)
-		m.status = "Loading Azure subscriptions..."
+	if !m.HasSubscription {
+		m.SubOverlay.Open()
+		m.SetLoading(-1)
+		m.Status = "Loading Azure subscriptions..."
 	}
 	return m
 }
@@ -234,57 +190,17 @@ func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores, km k
 	// Re-hydrate subscriptions from the shared (SQLite-backed) store now
 	// that it's wired up. The constructor's hydration above ran against a
 	// temporary empty in-memory cache.
-	if cached, ok := m.cache.subscriptions.Get(""); ok {
-		m.subscriptions = cached
-	}
+	m.HydrateSubscriptionsFromCache(m.cache.subscriptions)
 	return m
 }
 
-// setLoading marks the model as loading and records which pane is the target
-// of the load (so the pane title can show a spinner). Use pane = -1 when no
-// specific pane should show the spinner (e.g. subscriptions reload).
-func (m *Model) setLoading(pane int) {
-	if !m.loading {
-		m.loadingStartedAt = time.Now()
-	}
-	m.loading = true
-	m.loadingPane = pane
-}
-
-func (m *Model) clearLoading() {
-	m.loading = false
-	m.loadingPane = -1
-}
-
-// loadingHoldExpiredMsg is sent after the min-visible spinner hold elapses,
-// carrying the final status message to display.
-type loadingHoldExpiredMsg struct {
-	status string
-}
-
-// finishLoading completes a load, holding the spinner visible for at least
-// ui.SpinnerMinVisible. If the hold has not yet elapsed, returns a delayed
-// command that will fire loadingHoldExpiredMsg; otherwise clears loading
-// immediately and sets the status.
-func (m *Model) finishLoading(status string) tea.Cmd {
-	remaining := ui.SpinnerMinVisible - time.Since(m.loadingStartedAt)
-	if remaining > 0 {
-		return tea.Tick(remaining, func(t time.Time) tea.Msg {
-			return loadingHoldExpiredMsg{status: status}
-		})
-	}
-	m.clearLoading()
-	m.status = status
-	return nil
-}
-
 func (m *Model) applyScheme(scheme ui.Scheme) {
-	m.styles = ui.NewStyles(scheme)
-	m.styles.ApplyToLists([]*list.Model{
+	m.SetScheme(scheme)
+	m.Styles.ApplyToLists([]*list.Model{
 		&m.accountsList, &m.containersList, &m.blobsList,
-	}, &m.spinner)
+	}, &m.Spinner)
 	// Blobs list uses a custom delegate: two rows + mark/visual borders.
-	m.blobsList.SetDelegate(newBlobDelegate(m.styles.DelegateTwoRow, m.styles))
+	m.blobsList.SetDelegate(newBlobDelegate(m.Styles.DelegateTwoRow, m.Styles))
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.
@@ -294,7 +210,7 @@ func (m *Model) ApplyScheme(scheme ui.Scheme) {
 
 // HelpSections returns the help sections for the blob explorer.
 func (m Model) HelpSections() []ui.HelpSection {
-	km := m.keymap
+	km := m.Keymap
 	return []ui.HelpSection{
 		{
 			Title: "Navigation",
@@ -345,25 +261,14 @@ func (m Model) HelpSections() []ui.HelpSection {
 	}
 }
 
-// CurrentSubscription returns the active subscription and whether one is set.
-func (m Model) CurrentSubscription() (azure.Subscription, bool) {
-	return m.currentSub, m.hasSubscription
-}
-
-// SetSubscription sets the active subscription without triggering navigation.
-func (m *Model) SetSubscription(sub azure.Subscription) {
-	m.currentSub = sub
-	m.hasSubscription = true
-}
-
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{spinner.Tick}
 	// Only fetch subscriptions from Azure if the picker is open.
-	if m.subOverlay.Active {
+	if m.SubOverlay.Active {
 		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 	}
-	if m.hasSubscription {
-		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.currentSub.ID, false))
+	if m.HasSubscription {
+		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.CurrentSub.ID, false))
 	}
 	return tea.Batch(cmds...)
 }

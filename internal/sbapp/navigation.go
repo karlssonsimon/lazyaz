@@ -23,7 +23,7 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 			m.detailList.ResetFilter()
 			m.detailList.SetItems(topicSubsToItems(m.topicSubs))
 			m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(m.topicSubs))
-			m.status = "Back to topic subscriptions"
+			m.Status = "Back to topic subscriptions"
 			return m, nil
 		}
 		m.focus = entitiesPane
@@ -48,7 +48,7 @@ func (m Model) handleBackspace() (Model, tea.Cmd) {
 			m.detailList.ResetFilter()
 			m.detailList.SetItems(topicSubsToItems(m.topicSubs))
 			m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(m.topicSubs))
-			m.status = "Back to topic subscriptions"
+			m.Status = "Back to topic subscriptions"
 			return m, nil
 		}
 		m.focus = entitiesPane
@@ -58,12 +58,12 @@ func (m Model) handleBackspace() (Model, tea.Cmd) {
 
 func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	// Re-selecting the same subscription: no-op.
-	if m.hasSubscription && m.currentSub.ID == sub.ID {
+	if m.HasSubscription && m.CurrentSub.ID == sub.ID {
 		return m, nil
 	}
 
-	m.currentSub = sub
-	m.hasSubscription = true
+	m.CurrentSub = sub
+	m.HasSubscription = true
 	m.hasNamespace = false
 	m.hasEntity = false
 	m.currentNS = servicebus.Namespace{}
@@ -91,8 +91,8 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.entitiesList.Title = "Entities"
 	m.detailList.Title = "Detail"
 
-	m.setLoading(m.focus)
-	m.status = fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub))
+	m.SetLoading(m.focus)
+	m.Status = fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub))
 	return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID))
 }
 
@@ -116,7 +116,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearDetailState()
 		m.focus = entitiesPane
 
-		entityKey := cache.Key(m.currentSub.ID, item.namespace.Name)
+		entityKey := cache.Key(m.CurrentSub.ID, item.namespace.Name)
 		if cached, ok := m.cache.entities.Get(entityKey); ok {
 			m.entities = cached
 			m.entitiesList.ResetFilter()
@@ -133,8 +133,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.detailList.SetItems(nil)
 		m.detailList.Title = "Detail"
 
-		m.setLoading(m.focus)
-		m.status = fmt.Sprintf("Loading entities in %s", item.namespace.Name)
+		m.SetLoading(m.focus)
+		m.Status = fmt.Sprintf("Loading entities in %s", item.namespace.Name)
 		return m, tea.Batch(spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityKey))
 	}
 
@@ -156,7 +156,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.focus = detailPane
 
 		if item.entity.Kind == servicebus.EntityTopic {
-			topicKey := cache.Key(m.currentSub.ID, m.currentNS.Name, item.entity.Name)
+			topicKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, item.entity.Name)
 			if cached, ok := m.cache.topicSubs.Get(topicKey); ok {
 				m.topicSubs = cached
 				m.detailMode = detailTopicSubscriptions
@@ -169,8 +169,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 				m.detailList.Title = "Detail"
 			}
 
-			m.setLoading(m.focus)
-			m.status = fmt.Sprintf("Loading subscriptions for topic %s", item.entity.Name)
+			m.SetLoading(m.focus)
+			m.Status = fmt.Sprintf("Loading subscriptions for topic %s", item.entity.Name)
 			return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, item.entity.Name, topicKey))
 		}
 
@@ -179,8 +179,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.detailList.SetItems(nil)
 		m.detailList.Title = "Detail"
 
-		m.setLoading(m.focus)
-		m.status = fmt.Sprintf("Peeking messages from queue %s", item.entity.Name)
+		m.SetLoading(m.focus)
+		m.Status = fmt.Sprintf("Peeking messages from queue %s", item.entity.Name)
 		return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, item.entity.Name, m.deadLetter))
 	}
 
@@ -197,8 +197,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.detailList.ResetFilter()
 			m.detailList.SetItems(nil)
 
-			m.setLoading(m.focus)
-			m.status = fmt.Sprintf("Peeking messages from %s/%s", m.currentEntity.Name, item.sub.Name)
+			m.SetLoading(m.focus)
+			m.Status = fmt.Sprintf("Peeking messages from %s/%s", m.currentEntity.Name, item.sub.Name)
 			return m, tea.Batch(spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, item.sub.Name, m.deadLetter))
 		}
 
@@ -210,9 +210,9 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.selectedMessage = item.message
 			m.viewingMessage = true
 			m.resize()
-			m.messageViewport.SetContent(m.styles.Syntax.HighlightJSON(item.message.FullBody))
+			m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))
 			m.messageViewport.GotoTop()
-			m.status = fmt.Sprintf("Viewing message %s (Esc/h to go back)", ui.EmptyToDash(item.message.MessageID))
+			m.Status = fmt.Sprintf("Viewing message %s (Esc/h to go back)", ui.EmptyToDash(item.message.MessageID))
 			return m, nil
 		}
 	}

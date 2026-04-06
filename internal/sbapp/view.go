@@ -12,16 +12,16 @@ import (
 // withPaneSpinner is a thin wrapper around ui.RenderPaneSpinner that
 // checks whether the given pane is the current loading target.
 func (m Model) withPaneSpinner(title string, pane int, width int) string {
-	loading := m.loading && m.loadingPane == pane
-	return ui.RenderPaneSpinner(title, loading, m.loadingStartedAt, m.styles, width)
+	loading := m.Loading && m.LoadingPane == pane
+	return ui.RenderPaneSpinner(title, loading, m.LoadingStartedAt, m.Styles, width)
 }
 
 func (m Model) View() string {
-	if m.width == 0 || m.height == 0 {
+	if m.Width == 0 || m.Height == 0 {
 		return "loading..."
 	}
 
-	styles := m.styles.Chrome
+	styles := m.Styles.Chrome
 
 	var sbItems []ui.StatusBarItem
 	if m.hasNamespace {
@@ -32,22 +32,22 @@ func (m Model) View() string {
 	}
 
 	pw := m.paneWidths
-	pane := m.styles.Chrome.Pane
+	pane := m.Styles.Chrome.Pane
 	m.namespacesList.Title = m.withPaneSpinner(m.namespacesPaneTitle(), namespacesPane, ui.PaneContentWidth(pane, pw[0]))
 	m.entitiesList.Title = m.withPaneSpinner(m.entitiesPaneTitle(), entitiesPane, ui.PaneContentWidth(pane, pw[1]))
 	m.detailList.Title = m.withPaneSpinner(m.detailPaneTitle(), detailPane, ui.PaneContentWidth(pane, pw[2]))
 
 	if m.deadLetter && m.detailMode == detailMessages {
-		m.detailList.Styles.Title = m.styles.DangerBold.Padding(0, 1)
+		m.detailList.Styles.Title = m.Styles.DangerBold.Padding(0, 1)
 	} else {
-		m.detailList.Styles.Title = m.styles.List.Title
+		m.detailList.Styles.Title = m.Styles.List.Title
 	}
 
 	ui.ClampListSelection(&m.namespacesList)
 	ui.ClampListSelection(&m.entitiesList)
 	ui.ClampListSelection(&m.detailList)
 
-	km := m.keymap
+	km := m.Keymap
 
 	nsHints := ui.RenderPaneHints([]ui.PaneHint{
 		{km.OpenFocusedAlt.Short(), "open"},
@@ -55,19 +55,19 @@ func (m Model) View() string {
 		{km.NextFocus.Short(), "next"},
 		{km.SubscriptionPicker.Short(), "sub"},
 		{km.Inspect.Short(), "inspect"},
-	}, m.styles, ui.PaneContentWidth(pane, pw[0]))
+	}, m.Styles, ui.PaneContentWidth(pane, pw[0]))
 
 	entHints := ui.RenderPaneHints([]ui.PaneHint{
 		{km.OpenFocusedAlt.Short(), "open"},
 		{km.NavigateLeft.Short(), "back"},
 		{km.ToggleDLQFilter.Short(), "DLQ filter"},
-	}, m.styles, ui.PaneContentWidth(pane, pw[1]))
+	}, m.Styles, ui.PaneContentWidth(pane, pw[1]))
 
 	detHints := ui.RenderPaneHints([]ui.PaneHint{
 		{km.ToggleMark.Short(), "mark"},
 		{km.ShowActiveQueue.Short() + "/" + km.ShowDeadLetterQueue.Short(), "active/DLQ"},
 		{km.RequeueDLQ.Short(), "requeue"},
-	}, m.styles, ui.PaneContentWidth(pane, pw[2]))
+	}, m.Styles, ui.PaneContentWidth(pane, pw[2]))
 
 	namespacesView := lipgloss.JoinVertical(lipgloss.Left, m.namespacesList.View(), nsHints)
 	entitiesView := lipgloss.JoinVertical(lipgloss.Left, m.entitiesList.View(), entHints)
@@ -86,7 +86,7 @@ func (m Model) View() string {
 	}
 
 	if m.deadLetter && m.detailMode == detailMessages {
-		detailPaneStyle = styles.Pane.Copy().Width(pw[2]).Height(h).BorderForeground(m.styles.Danger.GetForeground())
+		detailPaneStyle = styles.Pane.Copy().Width(pw[2]).Height(h).BorderForeground(m.Styles.Danger.GetForeground())
 	} else if m.focus == detailPane && !m.viewingMessage {
 		detailPaneStyle = styles.FocusedPane.Copy().Width(pw[2]).Height(h)
 	}
@@ -98,7 +98,7 @@ func (m Model) View() string {
 	}
 
 	if m.viewingMessage {
-		previewTitleStyle := m.styles.Accent.Copy().Padding(0, 1)
+		previewTitleStyle := m.Styles.Accent.Copy().Padding(0, 1)
 		msgID := ui.EmptyToDash(m.selectedMessage.MessageID)
 		previewTitle := previewTitleStyle.Render(fmt.Sprintf("Message: %s", msgID))
 		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, m.messageViewport.View())
@@ -109,34 +109,20 @@ func (m Model) View() string {
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, panesList...)
 
-	subBar := ui.RenderSubscriptionBar(m.currentSub, m.hasSubscription, m.styles, m.width)
+	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
 
-	sbStatus := m.status
-	sbErr := m.lastErr != ""
+	sbStatus := m.Status
+	sbErr := m.LastErr != ""
 	if sbErr {
-		sbStatus = m.lastErr
-	} else if m.loading {
-		sbStatus = ui.SpinnerFrameAt(time.Since(m.loadingStartedAt)) + " " + m.status
+		sbStatus = m.LastErr
+	} else if m.Loading {
+		sbStatus = ui.SpinnerFrameAt(time.Since(m.LoadingStartedAt)) + " " + m.Status
 	}
-	statusBar := ui.RenderStatusBar(m.styles, sbItems, sbStatus, sbErr, m.width)
+	statusBar := ui.RenderStatusBar(m.Styles, sbItems, sbStatus, sbErr, m.Width)
 
 	parts := []string{subBar, panes, statusBar}
 
-	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.styles.Bg)
-
-	if m.inspectFields != nil {
-		view = ui.RenderInspectOverlay(m.inspectTitle, m.inspectFields, m.styles, m.width, m.height, view)
-	}
-	if m.subOverlay.Active {
-		view = ui.RenderSubscriptionOverlay(m.subOverlay, m.subscriptions, m.currentSub, m.loading, m.loadingStartedAt, m.styles, m.width, m.height, view)
-	}
-	if !m.EmbeddedMode && m.themeOverlay.Active {
-		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
-	}
-	if !m.EmbeddedMode && m.helpOverlay.Active {
-		view = ui.RenderHelpOverlay(m.helpOverlay, m.styles, m.width, m.height, view)
-	}
-
-	return view
+	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.Width, m.Height, m.Styles.Bg)
+	return m.RenderOverlays(view)
 }
 

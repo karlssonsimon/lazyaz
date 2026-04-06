@@ -11,16 +11,16 @@ import (
 // withPaneSpinner is a thin wrapper around ui.RenderPaneSpinner that
 // checks whether the given pane is the current loading target.
 func (m Model) withPaneSpinner(title string, pane int, width int) string {
-	loading := m.loading && m.loadingPane == pane
-	return ui.RenderPaneSpinner(title, loading, m.loadingStartedAt, m.styles, width)
+	loading := m.Loading && m.LoadingPane == pane
+	return ui.RenderPaneSpinner(title, loading, m.LoadingStartedAt, m.Styles, width)
 }
 
 func (m Model) View() string {
-	if m.width == 0 || m.height == 0 {
+	if m.Width == 0 || m.Height == 0 {
 		return "loading..."
 	}
 
-	styles := m.styles.Chrome
+	styles := m.Styles.Chrome
 
 	var sbItems []ui.StatusBarItem
 	if m.hasVault {
@@ -31,12 +31,12 @@ func (m Model) View() string {
 	}
 
 	pw := m.paneWidths
-	pane := m.styles.Chrome.Pane
+	pane := m.Styles.Chrome.Pane
 	m.vaultsList.Title = m.withPaneSpinner(m.vaultsPaneTitle(), vaultsPane, ui.PaneContentWidth(pane, pw[0]))
 	m.secretsList.Title = m.withPaneSpinner(m.secretsPaneTitle(), secretsPane, ui.PaneContentWidth(pane, pw[1]))
 	m.versionsList.Title = m.withPaneSpinner(m.versionsPaneTitle(), versionsPane, ui.PaneContentWidth(pane, pw[2]))
 
-	km := m.keymap
+	km := m.Keymap
 
 	vaultsHints := ui.RenderPaneHints([]ui.PaneHint{
 		{km.OpenFocusedAlt.Short(), "open"},
@@ -44,18 +44,18 @@ func (m Model) View() string {
 		{km.NextFocus.Short(), "next"},
 		{km.SubscriptionPicker.Short(), "sub"},
 		{km.Inspect.Short(), "inspect"},
-	}, m.styles, ui.PaneContentWidth(pane, pw[0]))
+	}, m.Styles, ui.PaneContentWidth(pane, pw[0]))
 
 	secretsHints := ui.RenderPaneHints([]ui.PaneHint{
 		{km.OpenFocusedAlt.Short(), "versions"},
 		{km.YankSecret.Short(), "yank"},
 		{km.NavigateLeft.Short(), "back"},
-	}, m.styles, ui.PaneContentWidth(pane, pw[1]))
+	}, m.Styles, ui.PaneContentWidth(pane, pw[1]))
 
 	versionsHints := ui.RenderPaneHints([]ui.PaneHint{
 		{km.YankSecret.Short(), "yank version"},
 		{km.NavigateLeft.Short(), "back"},
-	}, m.styles, ui.PaneContentWidth(pane, pw[2]))
+	}, m.Styles, ui.PaneContentWidth(pane, pw[2]))
 
 	vaultsView := lipgloss.JoinVertical(lipgloss.Left, m.vaultsList.View(), vaultsHints)
 	secretsView := lipgloss.JoinVertical(lipgloss.Left, m.secretsList.View(), secretsHints)
@@ -82,34 +82,20 @@ func (m Model) View() string {
 		versionsPaneStyle.Render(versionsView),
 	)
 
-	subBar := ui.RenderSubscriptionBar(m.currentSub, m.hasSubscription, m.styles, m.width)
+	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
 
-	sbStatus := m.status
-	sbErr := m.lastErr != ""
+	sbStatus := m.Status
+	sbErr := m.LastErr != ""
 	if sbErr {
-		sbStatus = m.lastErr
-	} else if m.loading {
-		sbStatus = ui.SpinnerFrameAt(time.Since(m.loadingStartedAt)) + " " + m.status
+		sbStatus = m.LastErr
+	} else if m.Loading {
+		sbStatus = ui.SpinnerFrameAt(time.Since(m.LoadingStartedAt)) + " " + m.Status
 	}
-	statusBar := ui.RenderStatusBar(m.styles, sbItems, sbStatus, sbErr, m.width)
+	statusBar := ui.RenderStatusBar(m.Styles, sbItems, sbStatus, sbErr, m.Width)
 
 	parts := []string{subBar, panes, statusBar}
 
-	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.styles.Bg)
-
-	if m.inspectFields != nil {
-		view = ui.RenderInspectOverlay(m.inspectTitle, m.inspectFields, m.styles, m.width, m.height, view)
-	}
-	if m.subOverlay.Active {
-		view = ui.RenderSubscriptionOverlay(m.subOverlay, m.subscriptions, m.currentSub, m.loading, m.loadingStartedAt, m.styles, m.width, m.height, view)
-	}
-	if !m.EmbeddedMode && m.themeOverlay.Active {
-		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
-	}
-	if !m.EmbeddedMode && m.helpOverlay.Active {
-		view = ui.RenderHelpOverlay(m.helpOverlay, m.styles, m.width, m.height, view)
-	}
-
-	return view
+	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.Width, m.Height, m.Styles.Bg)
+	return m.RenderOverlays(view)
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"azure-storage/internal/appshell"
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/cache"
@@ -18,7 +19,7 @@ func fetchSubscriptionsCmd(svc *servicebus.Service, loader *cache.Loader[azure.S
 		return svc.ListSubscriptions(ctx, send)
 	}
 	wrap := func(p cache.Page[azure.Subscription]) tea.Msg {
-		return subscriptionsLoadedMsg{subscriptions: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return appshell.SubscriptionsLoadedMsg{Subscriptions: p.Items, Done: p.Done, Err: p.Err, Next: p.Next}
 	}
 	if fresh {
 		return loader.FetchFresh("", fetchFn, wrap)

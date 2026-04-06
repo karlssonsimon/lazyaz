@@ -30,8 +30,8 @@ func entityDisplayName(e servicebus.Entity) string {
 
 func (m Model) namespacesPaneTitle() string {
 	title := "Namespaces"
-	if m.hasSubscription {
-		title = fmt.Sprintf("Namespaces · %s", ui.SubscriptionDisplayName(m.currentSub))
+	if m.HasSubscription {
+		title = fmt.Sprintf("Namespaces · %s", ui.SubscriptionDisplayName(m.CurrentSub))
 	}
 	if len(m.namespaces) > 0 {
 		title = fmt.Sprintf("%s (%d)", title, len(m.namespaces))

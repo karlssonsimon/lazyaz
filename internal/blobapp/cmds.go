@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"azure-storage/internal/appshell"
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/cache"
@@ -27,7 +28,7 @@ func fetchSubscriptionsCmd(svc *blob.Service, loader *cache.Loader[azure.Subscri
 		defer cancel()
 		return svc.ListSubscriptions(ctx, send)
 	}, func(p cache.Page[azure.Subscription]) tea.Msg {
-		return subscriptionsLoadedMsg{subscriptions: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return appshell.SubscriptionsLoadedMsg{Subscriptions: p.Items, Done: p.Done, Err: p.Err, Next: p.Next}
 	})
 }
 

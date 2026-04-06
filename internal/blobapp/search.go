@@ -77,9 +77,9 @@ func (m Model) handleSearchEnter() (Model, tea.Cmd) {
 		// Lock prefix and fetch from API.
 		m.search.prefixLocked = true
 		m.search.fetching = true
-		m.setLoading(blobsPane)
+		m.SetLoading(blobsPane)
 		effectivePrefix := blobSearchPrefix(m.prefix, m.search.prefixQuery)
-		m.status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
+		m.Status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
 		return m, tea.Batch(spinner.Tick,
 			fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.search.prefixQuery, defaultBlobPrefixSearchLimit, false))
 	}
@@ -161,33 +161,33 @@ func (m *Model) searchRebuildItems() {
 
 func (m Model) handleSearchBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
-		m.clearLoading()
+		m.ClearLoading()
 		m.search.fetching = false
-		m.lastErr = msg.err.Error()
-		m.status = "Search failed"
+		m.LastErr = msg.err.Error()
+		m.Status = "Search failed"
 		return m, nil
 	}
 
-	m.lastErr = ""
+	m.LastErr = ""
 	m.search.results = msg.blobs
 	m.search.totalResults = len(msg.blobs)
 	m.searchRebuildItems()
 
 	if msg.done {
-		m.clearLoading()
+		m.ClearLoading()
 		m.search.fetching = false
 		// Auto-switch to fuzzy stage.
 		m.search.stage = searchStageFuzzy
 		effectivePrefix := blobSearchPrefix(m.prefix, m.search.prefixQuery)
-		m.status = fmt.Sprintf("Found %d blobs by prefix %q", len(msg.blobs), effectivePrefix)
+		m.Status = fmt.Sprintf("Found %d blobs by prefix %q", len(msg.blobs), effectivePrefix)
 	}
 
 	return m, msg.next
 }
 
 func (m Model) renderSearchInput(width int) string {
-	muted := m.styles.Muted
-	accent := m.styles.Accent
+	muted := m.Styles.Muted
+	accent := m.Styles.Accent
 
 	var line1 string
 	if m.blobLoadAll || m.search.stage == searchStageFuzzy {

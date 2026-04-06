@@ -126,25 +126,25 @@ func TestTypingQWhileSearchActiveDoesNotQuit(t *testing.T) {
 
 func TestHelpToggleOpensAndCloses(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
-	m.subOverlay.Close() // close auto-opened picker so keys reach help handler
+	m.SubOverlay.Close() // close auto-opened picker so keys reach help handler
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model := updated.(Model)
-	if !model.helpOverlay.Active {
+	if !model.HelpOverlay.Active {
 		t.Fatal("expected ? to open help overlay")
 	}
 
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model = updated.(Model)
-	if model.helpOverlay.Active {
+	if model.HelpOverlay.Active {
 		t.Fatal("expected ? to close help overlay")
 	}
 }
 
 func TestViewShowsStatusBar(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
-	m.width = 120
-	m.height = 40
+	m.Width = 120
+	m.Height = 40
 	m.resize()
 
 	view := m.View()

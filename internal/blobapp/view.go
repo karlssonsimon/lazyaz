@@ -11,11 +11,11 @@ import (
 )
 
 func (m Model) View() string {
-	if m.width == 0 || m.height == 0 {
+	if m.Width == 0 || m.Height == 0 {
 		return "loading..."
 	}
 
-	styles := m.styles.Chrome
+	styles := m.Styles.Chrome
 
 	// Build status bar items.
 	var sbItems []ui.StatusBarItem
@@ -31,7 +31,7 @@ func (m Model) View() string {
 	}
 
 	pw := m.paneWidths
-	pane := m.styles.Chrome.Pane
+	pane := m.Styles.Chrome.Pane
 	m.accountsList.Title = m.withPaneSpinner(m.accountsPaneTitle(), accountsPane, ui.PaneContentWidth(pane, pw[0]))
 	m.containersList.Title = m.withPaneSpinner(m.containersPaneTitle(), containersPane, ui.PaneContentWidth(pane, pw[1]))
 	m.blobsList.Title = m.withPaneSpinner(m.blobsPaneTitle(), blobsPane, ui.PaneContentWidth(pane, pw[2]))
@@ -43,7 +43,7 @@ func (m Model) View() string {
 	ui.ClampListSelection(&m.containersList)
 	ui.ClampListSelection(&m.blobsList)
 
-	km := m.keymap
+	km := m.Keymap
 
 	accountsHints := ui.RenderPaneHints([]ui.PaneHint{
 		{km.OpenFocusedAlt.Short(), "open"},
@@ -51,13 +51,13 @@ func (m Model) View() string {
 		{km.NextFocus.Short(), "next"},
 		{km.SubscriptionPicker.Short(), "sub"},
 		{km.Inspect.Short(), "inspect"},
-	}, m.styles, ui.PaneContentWidth(pane, pw[0]))
+	}, m.Styles, ui.PaneContentWidth(pane, pw[0]))
 
 	containersHints := ui.RenderPaneHints([]ui.PaneHint{
 		{km.OpenFocusedAlt.Short(), "open"},
 		{km.NavigateLeft.Short(), "back"},
 		{km.FilterInput.Short(), "filter"},
-	}, m.styles, ui.PaneContentWidth(pane, pw[1]))
+	}, m.Styles, ui.PaneContentWidth(pane, pw[1]))
 
 	var blobsHints string
 	if m.search.active {
@@ -65,14 +65,14 @@ func (m Model) View() string {
 			{"enter", "submit"},
 			{"esc", "cancel"},
 			{"backspace", "back"},
-		}, m.styles, ui.PaneContentWidth(pane, pw[2]))
+		}, m.Styles, ui.PaneContentWidth(pane, pw[2]))
 	} else {
 		blobsHints = ui.RenderPaneHints([]ui.PaneHint{
 			{km.FilterInput.Short(), "search"},
 			{km.ToggleMark.Short(), "mark"},
 			{km.DownloadSelection.Short(), "download"},
 			{km.OpenFocusedAlt.Short(), "preview"},
-		}, m.styles, ui.PaneContentWidth(pane, pw[2]))
+		}, m.Styles, ui.PaneContentWidth(pane, pw[2]))
 	}
 
 	accountsView := lipgloss.JoinVertical(lipgloss.Left, m.accountsList.View(), accountsHints)
@@ -91,7 +91,7 @@ func (m Model) View() string {
 			{km.PreviewBack.Short(), "back"},
 			{km.PreviewDown.Short() + "/" + km.PreviewUp.Short(), "scroll"},
 			{km.PreviewBottom.Short(), "bottom"},
-		}, m.styles, ui.PaneContentWidth(pane, pw[3]))
+		}, m.Styles, ui.PaneContentWidth(pane, pw[3]))
 		previewView = m.preview.viewport.View()
 		previewView = lipgloss.JoinVertical(lipgloss.Left, previewView, previewHints)
 	}
@@ -121,9 +121,9 @@ func (m Model) View() string {
 		blobsPaneStyle.Render(blobsView),
 	}
 	if m.preview.open {
-		previewTitle := m.preview.title(m.styles)
+		previewTitle := m.preview.title(m.Styles)
 		previewPaneContent := lipgloss.JoinVertical(lipgloss.Left,
-			m.styles.Accent.Render(previewTitle),
+			m.Styles.Accent.Render(previewTitle),
 			previewView,
 		)
 		paneParts = append(paneParts, previewPaneStyle.Render(previewPaneContent))
@@ -131,48 +131,34 @@ func (m Model) View() string {
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, paneParts...)
 
-	subBar := ui.RenderSubscriptionBar(m.currentSub, m.hasSubscription, m.styles, m.width)
+	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
 
-	sbStatus := m.status
-	sbErr := m.lastErr != ""
+	sbStatus := m.Status
+	sbErr := m.LastErr != ""
 	if sbErr {
-		sbStatus = m.lastErr
-	} else if m.loading {
-		sbStatus = ui.SpinnerFrameAt(time.Since(m.loadingStartedAt)) + " " + m.status
+		sbStatus = m.LastErr
+	} else if m.Loading {
+		sbStatus = ui.SpinnerFrameAt(time.Since(m.LoadingStartedAt)) + " " + m.Status
 	}
-	statusBar := ui.RenderStatusBar(m.styles, sbItems, sbStatus, sbErr, m.width)
+	statusBar := ui.RenderStatusBar(m.Styles, sbItems, sbStatus, sbErr, m.Width)
 
 	parts := []string{subBar, panes, statusBar}
 
-	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.width, m.height, m.styles.Bg)
-
-	if m.inspectFields != nil {
-		view = ui.RenderInspectOverlay(m.inspectTitle, m.inspectFields, m.styles, m.width, m.height, view)
-	}
-	if m.subOverlay.Active {
-		view = ui.RenderSubscriptionOverlay(m.subOverlay, m.subscriptions, m.currentSub, m.loading, m.loadingStartedAt, m.styles, m.width, m.height, view)
-	}
-	if !m.EmbeddedMode && m.themeOverlay.Active {
-		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
-	}
-	if !m.EmbeddedMode && m.helpOverlay.Active {
-		view = ui.RenderHelpOverlay(m.helpOverlay, m.styles, m.width, m.height, view)
-	}
-
-	return view
+	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.Width, m.Height, m.Styles.Bg)
+	return m.RenderOverlays(view)
 }
 
 // withPaneSpinner is a thin wrapper around ui.RenderPaneSpinner that
 // checks whether the given pane is the current loading target.
 func (m Model) withPaneSpinner(title string, pane int, width int) string {
-	loading := m.loading && m.loadingPane == pane
-	return ui.RenderPaneSpinner(title, loading, m.loadingStartedAt, m.styles, width)
+	loading := m.Loading && m.LoadingPane == pane
+	return ui.RenderPaneSpinner(title, loading, m.LoadingStartedAt, m.Styles, width)
 }
 
 func (m Model) accountsPaneTitle() string {
 	title := "Storage Accounts"
-	if m.hasSubscription {
-		title = fmt.Sprintf("Storage Accounts · %s", ui.SubscriptionDisplayName(m.currentSub))
+	if m.HasSubscription {
+		title = fmt.Sprintf("Storage Accounts · %s", ui.SubscriptionDisplayName(m.CurrentSub))
 	}
 	if len(m.accounts) > 0 {
 		title = fmt.Sprintf("%s (%d)", title, len(m.accounts))
