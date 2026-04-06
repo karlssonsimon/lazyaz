@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"azure-storage/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 
 	"github.com/charmbracelet/bubbles/list"
 )

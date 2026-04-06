@@ -1,7 +1,7 @@
 package kvapp
 
 import (
-	"azure-storage/internal/azure/keyvault"
+	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 
 	"github.com/charmbracelet/bubbles/list"
 )

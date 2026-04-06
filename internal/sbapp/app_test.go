@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"azure-storage/internal/azure/servicebus"
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"

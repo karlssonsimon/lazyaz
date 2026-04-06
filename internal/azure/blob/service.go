@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"azure-storage/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage"

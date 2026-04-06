@@ -3,8 +3,8 @@ package ui
 import (
 	"time"
 
-	"azure-storage/internal/azure"
-	"azure-storage/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 
 	"github.com/charmbracelet/lipgloss"
 )

@@ -3,7 +3,7 @@ package sbapp
 import (
 	"fmt"
 
-	"azure-storage/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 
 	"github.com/charmbracelet/lipgloss"
 )

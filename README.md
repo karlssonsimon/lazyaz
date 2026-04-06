@@ -1,6 +1,16 @@
-# Azure Blob Explorer TUI (Go)
+# lazyaz
 
-Small Azure Storage Explorer variant focused on Blob Storage, built with Bubble Tea.
+A keyboard-driven TUI for Azure — Blob Storage, Service Bus, and Key Vault — built with Bubble Tea.
+
+`lazyaz` is to `az` what `lazygit` is to `git`: a fast, fully-keyboard explorer that turns common Azure browse/inspect tasks into a few keystrokes.
+
+## Install
+
+```bash
+go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest
+```
+
+Single-resource binaries are also available: `azblob-tui`, `azsb-tui`, `azkv-tui`.
 
 ## Features
 
@@ -28,7 +38,7 @@ Small Azure Storage Explorer variant focused on Blob Storage, built with Bubble 
 ## Run
 
 ```bash
-go run ./cmd/azblob-tui
+go run ./cmd/lazyaz
 ```
 
 ## Keys

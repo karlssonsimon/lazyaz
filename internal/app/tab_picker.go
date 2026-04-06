@@ -1,8 +1,8 @@
 package app
 
 import (
-	"azure-storage/internal/fuzzy"
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
 var tabKinds = []struct {

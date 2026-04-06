@@ -3,7 +3,7 @@ package blobapp
 import (
 	"io"
 
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"

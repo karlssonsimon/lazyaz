@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"azure-storage/internal/azure/blob"
-	"azure-storage/internal/fuzzy"
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
+	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"

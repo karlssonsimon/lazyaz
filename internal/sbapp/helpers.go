@@ -3,8 +3,8 @@ package sbapp
 import (
 	"fmt"
 
-	"azure-storage/internal/azure/servicebus"
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
 func paneName(pane int) string {

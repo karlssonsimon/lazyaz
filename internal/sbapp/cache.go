@@ -1,9 +1,9 @@
 package sbapp
 
 import (
-	"azure-storage/internal/azure"
-	"azure-storage/internal/azure/servicebus"
-	"azure-storage/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
 )
 
 // sbCache provides an in-memory, stale-while-revalidate cache for:

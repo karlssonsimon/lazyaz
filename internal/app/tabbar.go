@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
 func renderTabBar(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, width int) string {

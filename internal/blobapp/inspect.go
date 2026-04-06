@@ -3,7 +3,7 @@ package blobapp
 import (
 	"fmt"
 
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
 // inspectFor returns the inspect title and field list for the given pane,

@@ -3,7 +3,7 @@ package kvapp
 import (
 	"time"
 
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )

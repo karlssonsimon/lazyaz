@@ -3,10 +3,10 @@ package kvapp
 import (
 	"fmt"
 
-	"azure-storage/internal/azure"
-	"azure-storage/internal/azure/keyvault"
-	"azure-storage/internal/cache"
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"

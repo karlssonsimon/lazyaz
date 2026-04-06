@@ -16,13 +16,13 @@ type DB struct {
 	db *sql.DB
 }
 
-// DefaultDBPath returns the default cache database path (~/.aztui/cache.db).
+// DefaultDBPath returns the default cache database path (~/.lazyaz/cache.db).
 func DefaultDBPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".aztui", "cache.db"), nil
+	return filepath.Join(home, ".lazyaz", "cache.db"), nil
 }
 
 // OpenDB opens or creates a SQLite database at the given path.

@@ -1,8 +1,8 @@
 package appshell
 
 import (
-	"azure-storage/internal/azure"
-	"azure-storage/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
 // OverlayResult describes how HandleOverlayKeys consumed a key press.

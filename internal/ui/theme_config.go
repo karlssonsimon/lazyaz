@@ -16,13 +16,13 @@ var stockThemesFS embed.FS
 // ConfigDir returns the shared configuration directory.
 func ConfigDir() string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "aztools")
+		return filepath.Join(xdg, "lazyaz")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".config", "aztools")
+	return filepath.Join(home, ".config", "lazyaz")
 }
 
 // LoadConfig loads the shared configuration and all available Base16 schemes.
