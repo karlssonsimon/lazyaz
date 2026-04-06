@@ -271,6 +271,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.handleSearchKey(msg)
 	}
 
+	// Esc on the blob pane clears a committed filter (the search input
+	// is already gone at this point — search.active is false).
+	if key == "esc" && m.focus == blobsPane && m.committedFilter.active {
+		m.clearCommittedFilter()
+		m.Status = "Filter cleared"
+		return m, nil
+	}
+
 	focusedFilterActive := m.focusedListSettingFilter() || (m.focus == blobsPane && m.search.active)
 
 	// Pressing the filter-input key in visual mode on the blobs pane exits
@@ -409,6 +417,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
 
 				m.deactivateSearch()
+				m.discardCommittedFilter()
 				m.prefix = parentPrefix(m.prefix)
 
 				blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)

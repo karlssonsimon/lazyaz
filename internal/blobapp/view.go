@@ -98,6 +98,8 @@ func (m Model) View() string {
 	}
 	if m.search.active {
 		blobsPaneParams.Prefix = m.renderSearchInput(ui.PaneContentWidth(m.Styles.Chrome.Pane, pw[2]))
+	} else if m.committedFilter.active {
+		blobsPaneParams.Prefix = m.renderCommittedFilterBanner()
 	}
 	blobsPane := ui.RenderListPane(blobsPaneParams, m.Styles)
 
@@ -178,6 +180,8 @@ func (m Model) blobsPaneTitle() string {
 			title = fmt.Sprintf("%s | ALL", title)
 		} else if m.search.active {
 			title = fmt.Sprintf("%s | SEARCH", title)
+		} else if m.committedFilter.active {
+			title = fmt.Sprintf("%s | FILTER", title)
 		}
 	}
 	if len(m.markedBlobs) > 0 {

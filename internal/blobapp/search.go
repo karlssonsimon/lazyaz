@@ -2,6 +2,7 @@ package blobapp
 
 import (
 	"fmt"
+	"strings"
 
 	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/fuzzy"
@@ -84,9 +85,62 @@ func (m Model) handleSearchEnter() (Model, tea.Cmd) {
 			fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.search.prefixQuery, defaultBlobPrefixSearchLimit, false))
 	}
 
-	// In fuzzy stage — accept results and close search.
+	// In fuzzy stage — commit the filter: snapshot the current m.blobs
+	// (the unfiltered hierarchy listing) so esc can restore it, then
+	// replace m.blobs with the displayed entries and close the input.
+	m.commitFilter(m.search.prefixQuery, m.search.fuzzyQuery, m.currentSearchEntries())
 	m.deactivateSearch()
 	return m, nil
+}
+
+// commitFilter snapshots the current unfiltered blob list and replaces
+// it with the supplied filtered subset. Call this from search submission
+// only — navigation paths that already reset m.blobs should use
+// discardCommittedFilter instead.
+func (m *Model) commitFilter(prefixQuery, fuzzyQuery string, entries []blob.BlobEntry) {
+	m.committedFilter = committedFilter{
+		active:      true,
+		prefixQuery: prefixQuery,
+		fuzzyQuery:  fuzzyQuery,
+		savedBlobs:  m.blobs,
+	}
+	m.blobs = entries
+	m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(m.blobs))
+}
+
+// clearCommittedFilter restores the unfiltered blob list previously
+// snapshotted by commitFilter and refreshes the displayed items. Safe to
+// call when no filter is active (no-op).
+func (m *Model) clearCommittedFilter() {
+	if !m.committedFilter.active {
+		return
+	}
+	m.blobs = m.committedFilter.savedBlobs
+	m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(m.blobs))
+	m.committedFilter = committedFilter{}
+	m.refreshItems()
+}
+
+// discardCommittedFilter drops the committed-filter snapshot without
+// restoring it. Use this from navigation/refresh paths that are about to
+// replace m.blobs themselves — keeping the stale snapshot would let a
+// later esc resurrect it.
+func (m *Model) discardCommittedFilter() {
+	m.committedFilter = committedFilter{}
+}
+
+// currentSearchEntries returns the entries currently shown in the blob
+// list while a search is active: the fuzzy-filtered subset if a fuzzy
+// query is set, otherwise the full prefix-search results.
+func (m *Model) currentSearchEntries() []blob.BlobEntry {
+	if m.search.fuzzyQuery != "" && m.search.filtered != nil {
+		entries := make([]blob.BlobEntry, len(m.search.filtered))
+		for i, idx := range m.search.filtered {
+			entries[i] = m.search.results[idx]
+		}
+		return entries
+	}
+	return m.search.results
 }
 
 func (m Model) handleSearchBackspace() (Model, tea.Cmd) {
@@ -185,6 +239,25 @@ func (m Model) handleSearchBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	return m, msg.next
 }
 
+// renderCommittedFilterBanner returns a one-line summary of the
+// committed filter, used as the blob pane prefix while no search input
+// is active. Hints how to clear it.
+func (m Model) renderCommittedFilterBanner() string {
+	muted := m.Styles.Muted
+	accent := m.Styles.Accent
+
+	var parts []string
+	if m.committedFilter.prefixQuery != "" {
+		parts = append(parts, "PREFIX: "+m.committedFilter.prefixQuery)
+	}
+	if m.committedFilter.fuzzyQuery != "" {
+		parts = append(parts, "FZF: "+m.committedFilter.fuzzyQuery)
+	}
+	label := accent.Render("FILTER · " + strings.Join(parts, " │ "))
+	hint := muted.Render("  esc: clear")
+	return label + hint
+}
+
 func (m Model) renderSearchInput(width int) string {
 	muted := m.Styles.Muted
 	accent := m.Styles.Accent
@@ -193,9 +266,9 @@ func (m Model) renderSearchInput(width int) string {
 	if m.blobLoadAll || m.search.stage == searchStageFuzzy {
 		if m.search.prefixLocked && m.search.prefixQuery != "" {
 			prefix := muted.Render("PREFIX: " + m.search.prefixQuery + " │ ")
-			line1 = prefix + accent.Render("FZZ: "+m.search.fuzzyQuery) + muted.Render("█")
+			line1 = prefix + accent.Render("FZF: "+m.search.fuzzyQuery) + muted.Render("█")
 		} else {
-			line1 = accent.Render("FZZ: "+m.search.fuzzyQuery) + muted.Render("█")
+			line1 = accent.Render("FZF: "+m.search.fuzzyQuery) + muted.Render("█")
 		}
 	} else {
 		line1 = accent.Render("PREFIX: "+m.search.prefixQuery) + muted.Render("█")

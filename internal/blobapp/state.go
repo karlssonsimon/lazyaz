@@ -31,6 +31,17 @@ const (
 	searchStageFuzzy  = 1
 )
 
+// committedFilter records a search whose input box has been dismissed
+// (via Enter in fuzzy stage). The filtered subset replaces m.blobs while
+// the filter is active; savedBlobs holds the unfiltered listing so esc
+// can restore it. Active reports whether a filter is currently committed.
+type committedFilter struct {
+	active      bool
+	prefixQuery string
+	fuzzyQuery  string
+	savedBlobs  []blob.BlobEntry
+}
+
 type blobSearch struct {
 	active       bool
 	stage        int              // searchStagePrefix or searchStageFuzzy
@@ -86,9 +97,10 @@ type Model struct {
 	hasContainer   bool
 	containerName  string
 	prefix         string
-	blobLoadAll    bool
-	search         blobSearch
-	preview        previewState
+	blobLoadAll     bool
+	search          blobSearch
+	committedFilter committedFilter
+	preview         previewState
 	pendingPreviewG bool
 
 	cache blobCache

@@ -28,6 +28,7 @@ func (m *Model) clearBlobSelectionState() {
 func (m *Model) resetBlobLoadState() {
 	m.blobLoadAll = false
 	m.deactivateSearch()
+	m.discardCommittedFilter()
 }
 
 func (m *Model) refreshItems() {
@@ -50,6 +51,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 	}
 
 	m.deactivateSearch()
+	m.discardCommittedFilter()
 	m.LastErr = ""
 
 	if m.blobLoadAll {
