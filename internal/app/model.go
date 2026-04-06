@@ -166,6 +166,9 @@ func (m *Model) tabIndexByID(id int) int {
 
 func (m *Model) applySchemeToAll(scheme ui.Scheme) {
 	m.styles = ui.NewStyles(scheme)
+	// Keep cfg in sync so newly opened tabs pick up the current theme
+	// instead of the one that was active at program start.
+	m.cfg.ThemeName = scheme.Name
 	for i := range m.tabs {
 		switch child := m.tabs[i].Model.(type) {
 		case blobapp.Model:
