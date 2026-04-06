@@ -38,10 +38,11 @@ type Scheme struct {
 // Styles is the single resolved style collection built from a Scheme.
 // Every render site uses fields from this struct instead of raw colors.
 type Styles struct {
-	Chrome   ChromeStyles
-	Delegate list.DefaultDelegate
-	List     ListStyles
-	Spinner  lipgloss.Style
+	Chrome         ChromeStyles
+	Delegate       list.DefaultDelegate
+	DelegateTwoRow list.DefaultDelegate // two-line variant (title + description)
+	List           ListStyles
+	Spinner        lipgloss.Style
 	Syntax   SyntaxStyles
 	Overlay  OverlayStyles
 	TabBar   TabBarStyles
@@ -219,6 +220,12 @@ func NewStyles(s Scheme) Styles {
 		Foreground(warning).
 		Underline(true)
 
+	// Two-row delegate: inherits all styles but shows descriptions.
+	delegateTwoRow := delegate
+	delegateTwoRow.SetHeight(2)
+	delegateTwoRow.SetSpacing(0)
+	delegateTwoRow.ShowDescription = true
+
 	// --- List Component Styles ---
 	ls := ListStyles{
 		TitleBar: lipgloss.NewStyle().
@@ -351,8 +358,9 @@ func NewStyles(s Scheme) Styles {
 
 	return Styles{
 		Chrome:   chrome,
-		Delegate: delegate,
-		List:     ls,
+		Delegate:       delegate,
+		DelegateTwoRow: delegateTwoRow,
+		List:           ls,
 		Spinner:  spinStyle,
 		Syntax:   syntax,
 		Overlay:  overlay,

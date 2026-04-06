@@ -64,31 +64,18 @@ func (i blobItem) Title() string {
 		return prefix + "[DIR] " + i.displayName
 	}
 
-	size := padField(humanSize(i.blob.Size), 9)
-	tier := padField(ui.EmptyToDash(i.blob.AccessTier), 8)
-	ts := ui.FormatTime(i.blob.LastModified)
-	return fmt.Sprintf("%s%-25s  %s  %s  %s", prefix, truncate(i.displayName, 25), size, tier, ts)
-}
-
-func padField(s string, width int) string {
-	if len(s) >= width {
-		return s
-	}
-	return s + strings.Repeat(" ", width-len(s))
-}
-
-func truncate(s string, width int) string {
-	if len(s) <= width {
-		return s
-	}
-	if width <= 1 {
-		return s[:width]
-	}
-	return s[:width-1] + "…"
+	return prefix + i.displayName
 }
 
 func (i blobItem) Description() string {
-	return ""
+	if i.blob.IsPrefix {
+		return ""
+	}
+	return fmt.Sprintf("%s  %s  %s",
+		humanSize(i.blob.Size),
+		ui.EmptyToDash(i.blob.AccessTier),
+		ui.FormatTime(i.blob.LastModified),
+	)
 }
 
 func (i blobItem) FilterValue() string {
