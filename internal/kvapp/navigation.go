@@ -70,7 +70,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.versionsList.Title = "Versions"
 
 	m.setLoading(m.focus)
-	m.status = fmt.Sprintf("Loading key vaults in %s", subscriptionDisplayName(sub))
+	m.status = fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(sub))
 	return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID))
 }
 

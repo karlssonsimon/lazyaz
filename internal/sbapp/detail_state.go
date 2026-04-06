@@ -34,7 +34,7 @@ func (m Model) collectRequeueIDs() []string {
 	return []string{item.message.MessageID}
 }
 
-func (m *Model) refreshMessageItems() {
+func (m *Model) refreshItems() {
 	idx := m.detailList.Index()
 	m.detailList.SetItems(messagesToItems(m.peekedMessages, m.markedMessages, m.duplicateMessages))
 	m.detailList.Select(idx)

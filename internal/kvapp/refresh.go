@@ -3,6 +3,8 @@ package kvapp
 import (
 	"fmt"
 
+	"azure-storage/internal/ui"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -20,7 +22,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	if !m.hasVault || m.focus == vaultsPane {
 		m.setLoading(m.focus)
 		m.lastErr = ""
-		m.status = fmt.Sprintf("Loading key vaults in %s", subscriptionDisplayName(m.currentSub))
+		m.status = fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(m.currentSub))
 		return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, m.currentSub.ID))
 	}
 

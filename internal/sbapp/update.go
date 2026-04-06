@@ -65,7 +65,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.clearLoading()
 			m.lastErr = msg.err.Error()
-			m.status = fmt.Sprintf("Failed to load namespaces in %s", subscriptionDisplayName(m.currentSub))
+			m.status = fmt.Sprintf("Failed to load namespaces in %s", ui.SubscriptionDisplayName(m.currentSub))
 			return m, nil
 		}
 
@@ -76,7 +76,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if msg.done {
 			m.cache.namespaces.Set(msg.subscriptionID, msg.namespaces)
-			status := fmt.Sprintf("Loaded %d namespaces from %s in %s", len(msg.namespaces), subscriptionDisplayName(m.currentSub), time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			status := fmt.Sprintf("Loaded %d namespaces from %s in %s", len(msg.namespaces), ui.SubscriptionDisplayName(m.currentSub), time.Since(m.loadingStartedAt).Round(time.Millisecond))
 			return m, m.finishLoading(status)
 		}
 
@@ -252,14 +252,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Inspect overlay — dismiss.
-		if m.inspectFields != nil {
-			if m.keymap.Inspect.Matches(key) || key == "esc" || key == "q" {
-				m.inspectFields = nil
-			}
-			return m, nil
-		}
-
 		if m.viewingMessage {
 			switch {
 			case ui.ShouldQuit(key, m.keymap.Quit, false):
@@ -333,7 +325,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.markedMessages[id] = struct{}{}
 					m.status = fmt.Sprintf("Marked %s (%d marked)", id, len(m.markedMessages))
 				}
-				m.refreshMessageItems()
+				m.refreshItems()
 				return m, nil
 			}
 		case m.keymap.ShowActiveQueue.Matches(key):

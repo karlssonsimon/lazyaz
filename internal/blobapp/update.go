@@ -69,7 +69,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.clearLoading()
 			m.lastErr = msg.err.Error()
-			m.status = fmt.Sprintf("Failed to load storage accounts in %s", subscriptionDisplayName(m.currentSub))
+			m.status = fmt.Sprintf("Failed to load storage accounts in %s", ui.SubscriptionDisplayName(m.currentSub))
 			return m, nil
 		}
 
@@ -79,7 +79,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ui.SetItemsPreserveIndex(&m.accountsList, accountsToItems(msg.accounts))
 
 		if msg.done {
-			status := fmt.Sprintf("Loaded %d storage accounts from %s in %s", len(msg.accounts), subscriptionDisplayName(m.currentSub), time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			status := fmt.Sprintf("Loaded %d storage accounts from %s in %s", len(msg.accounts), ui.SubscriptionDisplayName(m.currentSub), time.Since(m.loadingStartedAt).Round(time.Millisecond))
 			return m, m.finishLoading(status)
 		}
 
@@ -150,7 +150,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastErr = ""
 		m.blobs = msg.blobs
 		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(msg.blobs))
-		m.refreshBlobItems()
+		m.refreshItems()
 
 		if msg.done {
 			elapsed := time.Since(m.loadingStartedAt).Round(time.Millisecond)
@@ -239,7 +239,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.focus == blobsPane && m.visualLineMode && m.keymap.FilterInput.Matches(key) {
 			m.visualLineMode = false
 			m.visualAnchor = ""
-			m.refreshBlobItems()
+			m.refreshItems()
 			m.status = "Visual mode off"
 		}
 		if m.focus == blobsPane && m.visualLineMode && !focusedFilterActive && m.keymap.BlobVisualMove.Matches(key) {
@@ -276,7 +276,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.keymap.VisualSwapAnchor.Matches(key):
 			if m.focus == blobsPane && m.visualLineMode && !focusedFilterActive {
 				m.swapVisualAnchor()
-				m.refreshBlobItems()
+				m.refreshItems()
 				return m, nil
 			}
 		case m.keymap.ExitVisualLine.Matches(key):
@@ -286,7 +286,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.commitVisualSelection()
 					m.visualLineMode = false
 					m.visualAnchor = ""
-					m.refreshBlobItems()
+					m.refreshItems()
 					m.status = fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs))
 					return m, nil
 				}
@@ -296,7 +296,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					for name := range m.markedBlobs {
 						delete(m.markedBlobs, name)
 					}
-					m.refreshBlobItems()
+					m.refreshItems()
 					m.status = fmt.Sprintf("Cleared %d marks", count)
 					return m, nil
 				}
@@ -370,7 +370,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
 						m.blobs = cached
 						m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
-						m.refreshBlobItems()
+						m.refreshItems()
 					}
 
 					m.setLoading(blobsPane)
@@ -393,7 +393,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if markVisualAfterListUpdate && m.focus == blobsPane && m.visualLineMode {
-		m.refreshBlobItems()
+		m.refreshItems()
 		m.status = fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames()))
 	}
 

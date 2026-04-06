@@ -28,13 +28,13 @@ func (m *Model) activateSearch() {
 	if m.visualLineMode {
 		m.visualLineMode = false
 		m.visualAnchor = ""
-		m.refreshBlobItems()
+		m.refreshItems()
 	}
 }
 
 func (m *Model) deactivateSearch() {
 	m.search = blobSearch{}
-	m.refreshBlobItems()
+	m.refreshItems()
 }
 
 func (m Model) handleSearchKey(msg tea.KeyMsg) (Model, tea.Cmd) {

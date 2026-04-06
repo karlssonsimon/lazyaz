@@ -3,7 +3,6 @@ package kvapp
 import (
 	"fmt"
 
-	"azure-storage/internal/azure"
 	"azure-storage/internal/ui"
 )
 
@@ -20,14 +19,10 @@ func paneName(pane int) string {
 	}
 }
 
-func subscriptionDisplayName(sub azure.Subscription) string {
-	return ui.SubscriptionDisplayName(sub)
-}
-
 func (m Model) vaultsPaneTitle() string {
 	title := "Vaults"
 	if m.hasSubscription {
-		title = fmt.Sprintf("Vaults · %s", subscriptionDisplayName(m.currentSub))
+		title = fmt.Sprintf("Vaults · %s", ui.SubscriptionDisplayName(m.currentSub))
 	}
 	if len(m.vaults) > 0 {
 		title = fmt.Sprintf("%s (%d)", title, len(m.vaults))

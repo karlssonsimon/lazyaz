@@ -2,7 +2,6 @@ package sbapp
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"azure-storage/internal/ui"
@@ -10,21 +9,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// withPaneSpinner right-aligns a spinner onto the title when the given
-// pane is the current loading target.
+// withPaneSpinner is a thin wrapper around ui.RenderPaneSpinner that
+// checks whether the given pane is the current loading target.
 func (m Model) withPaneSpinner(title string, pane int, width int) string {
-	if !m.loading || m.loadingPane != pane {
-		return title
-	}
-	spin := m.styles.Accent.Render(ui.SpinnerFrameAt(time.Since(m.loadingStartedAt)))
-	titleW := lipgloss.Width(title)
-	spinW := lipgloss.Width(spin)
-	target := width - 5
-	gap := target - titleW - spinW
-	if gap < 1 {
-		gap = 1
-	}
-	return title + strings.Repeat(" ", gap) + spin
+	loading := m.loading && m.loadingPane == pane
+	return ui.RenderPaneSpinner(title, loading, m.loadingStartedAt, m.styles, width)
 }
 
 func (m Model) View() string {

@@ -63,7 +63,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.clearLoading()
 			m.lastErr = msg.err.Error()
-			m.status = fmt.Sprintf("Failed to load key vaults in %s", subscriptionDisplayName(m.currentSub))
+			m.status = fmt.Sprintf("Failed to load key vaults in %s", ui.SubscriptionDisplayName(m.currentSub))
 			return m, nil
 		}
 

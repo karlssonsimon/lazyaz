@@ -52,50 +52,8 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.blobsList.Title = "Blobs"
 
 	m.setLoading(accountsPane)
-	m.status = fmt.Sprintf("Loading storage accounts in %s", subscriptionDisplayName(sub))
+	m.status = fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(sub))
 	return m, tea.Batch(spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, sub.ID, false))
-}
-
-func (m Model) refresh() (Model, tea.Cmd) {
-	if !m.hasSubscription {
-		// Can't refresh anything without a subscription; open the picker instead.
-		m.subOverlay.Open()
-		m.setLoading(-1)
-		m.lastErr = ""
-		m.status = "Refreshing subscriptions..."
-		return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
-	}
-
-	if !m.hasAccount || m.focus == accountsPane {
-		m.setLoading(accountsPane)
-		m.lastErr = ""
-		m.status = fmt.Sprintf("Loading storage accounts in %s", subscriptionDisplayName(m.currentSub))
-		return m, tea.Batch(spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, m.currentSub.ID, true))
-	}
-
-	if m.focus == containersPane || !m.hasContainer {
-		m.setLoading(containersPane)
-		m.lastErr = ""
-		m.status = fmt.Sprintf("Loading containers in %s", m.currentAccount.Name)
-		return m, tea.Batch(spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, m.currentAccount, true))
-	}
-	if m.focus == previewPane && m.preview.open {
-		return m.ensurePreviewWindowAtCursor()
-	}
-
-	m.setLoading(blobsPane)
-	m.lastErr = ""
-	if m.blobLoadAll {
-		m.status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
-		return m, tea.Batch(spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, true))
-	}
-	if m.search.prefixLocked && m.search.prefixQuery != "" {
-		effectivePrefix := blobSearchPrefix(m.prefix, m.search.prefixQuery)
-		m.status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
-		return m, tea.Batch(spinner.Tick, fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.search.prefixQuery, defaultBlobPrefixSearchLimit, true))
-	}
-	m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-	return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, true))
 }
 
 func (m Model) navigateLeft() (Model, tea.Cmd) {
@@ -111,7 +69,7 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
 				m.blobs = cached
 				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
-				m.refreshBlobItems()
+				m.refreshItems()
 			}
 
 			m.setLoading(blobsPane)
@@ -121,7 +79,7 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 		if m.visualLineMode {
 			m.visualLineMode = false
 			m.visualAnchor = ""
-			m.refreshBlobItems()
+			m.refreshItems()
 		}
 		m.focus = containersPane
 		return m, nil
@@ -204,7 +162,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.blobs = cached
 			m.blobsList.ResetFilter()
 			m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
-			m.refreshBlobItems()
+			m.refreshItems()
 		} else {
 			m.blobs = nil
 			m.blobsList.ResetFilter()
@@ -234,7 +192,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
 				m.blobs = cached
 				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
-				m.refreshBlobItems()
+				m.refreshItems()
 			}
 
 			m.setLoading(blobsPane)
@@ -261,10 +219,6 @@ func paneName(pane int) string {
 	default:
 		return "items"
 	}
-}
-
-func subscriptionDisplayName(sub azure.Subscription) string {
-	return ui.SubscriptionDisplayName(sub)
 }
 
 func sameAccount(a, b blob.Account) bool {
