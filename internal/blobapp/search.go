@@ -77,11 +77,11 @@ func (m Model) handleSearchEnter() (Model, tea.Cmd) {
 		// Lock prefix and fetch from API.
 		m.search.prefixLocked = true
 		m.search.fetching = true
-		m.loading = true
+		m.setLoading(blobsPane)
 		effectivePrefix := blobSearchPrefix(m.prefix, m.search.prefixQuery)
 		m.status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
 		return m, tea.Batch(spinner.Tick,
-			fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.search.prefixQuery, defaultBlobPrefixSearchLimit))
+			fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.search.prefixQuery, defaultBlobPrefixSearchLimit, false))
 	}
 
 	// In fuzzy stage — accept results and close search.
@@ -161,7 +161,7 @@ func (m *Model) searchRebuildItems() {
 
 func (m Model) handleSearchBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
-		m.loading = false
+		m.clearLoading()
 		m.search.fetching = false
 		m.lastErr = msg.err.Error()
 		m.status = "Search failed"
@@ -174,7 +174,7 @@ func (m Model) handleSearchBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	m.searchRebuildItems()
 
 	if msg.done {
-		m.loading = false
+		m.clearLoading()
 		m.search.fetching = false
 		// Auto-switch to fuzzy stage.
 		m.search.stage = searchStageFuzzy

@@ -69,7 +69,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.secretsList.Title = "Secrets"
 	m.versionsList.Title = "Versions"
 
-	m.loading = true
+	m.setLoading(m.focus)
 	m.status = fmt.Sprintf("Loading key vaults in %s", subscriptionDisplayName(sub))
 	return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID))
 }
@@ -110,7 +110,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.versionsList.SetItems(nil)
 		m.versionsList.Title = "Versions"
 
-		m.loading = true
+		m.setLoading(m.focus)
 		m.status = fmt.Sprintf("Loading secrets in %s", item.vault.Name)
 		return m, tea.Batch(spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, item.vault))
 	}
@@ -144,7 +144,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.versionsList.Title = "Versions"
 		}
 
-		m.loading = true
+		m.setLoading(m.focus)
 		m.status = fmt.Sprintf("Loading versions for %s", item.secret.Name)
 		return m, tea.Batch(spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, item.secret.Name))
 	}

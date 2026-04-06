@@ -2,11 +2,30 @@ package sbapp
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )
+
+// withPaneSpinner right-aligns a spinner onto the title when the given
+// pane is the current loading target.
+func (m Model) withPaneSpinner(title string, pane int, width int) string {
+	if !m.loading || m.loadingPane != pane {
+		return title
+	}
+	spin := m.styles.Accent.Render(ui.SpinnerFrameAt(time.Since(m.loadingStartedAt)))
+	titleW := lipgloss.Width(title)
+	spinW := lipgloss.Width(spin)
+	target := width - 5
+	gap := target - titleW - spinW
+	if gap < 1 {
+		gap = 1
+	}
+	return title + strings.Repeat(" ", gap) + spin
+}
 
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
@@ -23,9 +42,11 @@ func (m Model) View() string {
 		sbItems = append(sbItems, ui.StatusBarItem{Label: "Entity:", Value: entityDisplayName(m.currentEntity)})
 	}
 
-	m.namespacesList.Title = m.namespacesPaneTitle()
-	m.entitiesList.Title = m.entitiesPaneTitle()
-	m.detailList.Title = m.detailPaneTitle()
+	pw := m.paneWidths
+	pane := m.styles.Chrome.Pane
+	m.namespacesList.Title = m.withPaneSpinner(m.namespacesPaneTitle(), namespacesPane, ui.PaneContentWidth(pane, pw[0]))
+	m.entitiesList.Title = m.withPaneSpinner(m.entitiesPaneTitle(), entitiesPane, ui.PaneContentWidth(pane, pw[1]))
+	m.detailList.Title = m.withPaneSpinner(m.detailPaneTitle(), detailPane, ui.PaneContentWidth(pane, pw[2]))
 
 	if m.deadLetter && m.detailMode == detailMessages {
 		m.detailList.Styles.Title = m.styles.DangerBold.Padding(0, 1)
@@ -37,9 +58,6 @@ func (m Model) View() string {
 	ui.ClampListSelection(&m.entitiesList)
 	ui.ClampListSelection(&m.detailList)
 
-	pw := m.paneWidths
-
-	pane := m.styles.Chrome.Pane
 	km := m.keymap
 
 	nsHints := ui.RenderPaneHints([]ui.PaneHint{
@@ -109,7 +127,7 @@ func (m Model) View() string {
 	if sbErr {
 		sbStatus = m.lastErr
 	} else if m.loading {
-		sbStatus = m.spinner.View() + " " + m.status
+		sbStatus = ui.SpinnerFrameAt(time.Since(m.loadingStartedAt)) + " " + m.status
 	}
 	statusBar := ui.RenderStatusBar(m.styles, sbItems, sbStatus, sbErr, m.width)
 

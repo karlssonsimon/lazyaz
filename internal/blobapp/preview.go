@@ -87,7 +87,7 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.preview.requestID++
 	m.pendingPreviewG = false
 	m.focus = previewPane
-	m.loading = true
+	m.setLoading(previewPane)
 	m.lastErr = ""
 	m.status = fmt.Sprintf("Loading preview for %s", b.Name)
 	m.resize()
@@ -117,7 +117,7 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 		return m, nil
 	}
 
-	m.loading = false
+	m.clearLoading()
 	if msg.err != nil {
 		m.lastErr = msg.err.Error()
 		m.status = fmt.Sprintf("Failed to load preview for %s", msg.blobName)
@@ -254,7 +254,7 @@ func (m Model) ensurePreviewWindowAtCursor() (Model, tea.Cmd) {
 
 	if needLoad {
 		m.preview.requestID++
-		m.loading = true
+		m.setLoading(previewPane)
 		m.lastErr = ""
 		m.status = fmt.Sprintf("Loading preview window for %s", m.preview.blobName)
 		cmd := loadPreviewWindowCmd(

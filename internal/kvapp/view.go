@@ -1,10 +1,30 @@
 package kvapp
 
 import (
+	"strings"
+	"time"
+
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/lipgloss"
 )
+
+// withPaneSpinner right-aligns a spinner onto the title when the given
+// pane is the current loading target.
+func (m Model) withPaneSpinner(title string, pane int, width int) string {
+	if !m.loading || m.loadingPane != pane {
+		return title
+	}
+	spin := m.styles.Accent.Render(ui.SpinnerFrameAt(time.Since(m.loadingStartedAt)))
+	titleW := lipgloss.Width(title)
+	spinW := lipgloss.Width(spin)
+	target := width - 5
+	gap := target - titleW - spinW
+	if gap < 1 {
+		gap = 1
+	}
+	return title + strings.Repeat(" ", gap) + spin
+}
 
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
@@ -21,13 +41,12 @@ func (m Model) View() string {
 		sbItems = append(sbItems, ui.StatusBarItem{Label: "Secret:", Value: m.currentSecret.Name})
 	}
 
-	m.vaultsList.Title = m.vaultsPaneTitle()
-	m.secretsList.Title = m.secretsPaneTitle()
-	m.versionsList.Title = m.versionsPaneTitle()
-
 	pw := m.paneWidths
-
 	pane := m.styles.Chrome.Pane
+	m.vaultsList.Title = m.withPaneSpinner(m.vaultsPaneTitle(), vaultsPane, ui.PaneContentWidth(pane, pw[0]))
+	m.secretsList.Title = m.withPaneSpinner(m.secretsPaneTitle(), secretsPane, ui.PaneContentWidth(pane, pw[1]))
+	m.versionsList.Title = m.withPaneSpinner(m.versionsPaneTitle(), versionsPane, ui.PaneContentWidth(pane, pw[2]))
+
 	km := m.keymap
 
 	vaultsHints := ui.RenderPaneHints([]ui.PaneHint{
@@ -81,7 +100,7 @@ func (m Model) View() string {
 	if sbErr {
 		sbStatus = m.lastErr
 	} else if m.loading {
-		sbStatus = m.spinner.View() + " " + m.status
+		sbStatus = ui.SpinnerFrameAt(time.Since(m.loadingStartedAt)) + " " + m.status
 	}
 	statusBar := ui.RenderStatusBar(m.styles, sbItems, sbStatus, sbErr, m.width)
 

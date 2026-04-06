@@ -1,6 +1,8 @@
 package blobapp
 
 import (
+	"time"
+
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/cache"
@@ -86,9 +88,11 @@ type Model struct {
 	// interception so the parent tabapp can own those concerns.
 	EmbeddedMode bool
 
-	loading bool
-	status  string
-	lastErr string
+	loading         bool
+	loadingPane     int // -1 = no specific pane; otherwise the pane being loaded
+	loadingStartedAt time.Time
+	status          string
+	lastErr         string
 
 	width      int
 	height     int
@@ -204,9 +208,10 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
-		focus:   accountsPane,
-		status:  "Loading Azure subscriptions...",
-		loading: true,
+		focus:       accountsPane,
+		loadingPane: -1,
+		status:      "Loading Azure subscriptions...",
+		loading:     true,
 	}
 	m.applyScheme(cfg.ActiveScheme())
 	return m
@@ -218,6 +223,44 @@ func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores, km k
 	m := NewModelWithKeyMap(svc, cfg, km, nil)
 	m.cache = NewCacheWithStores(stores)
 	return m
+}
+
+// setLoading marks the model as loading and records which pane is the target
+// of the load (so the pane title can show a spinner). Use pane = -1 when no
+// specific pane should show the spinner (e.g. subscriptions reload).
+func (m *Model) setLoading(pane int) {
+	if !m.loading {
+		m.loadingStartedAt = time.Now()
+	}
+	m.loading = true
+	m.loadingPane = pane
+}
+
+func (m *Model) clearLoading() {
+	m.loading = false
+	m.loadingPane = -1
+}
+
+// loadingHoldExpiredMsg is sent after the min-visible spinner hold elapses,
+// carrying the final status message to display.
+type loadingHoldExpiredMsg struct {
+	status string
+}
+
+// finishLoading completes a load, holding the spinner visible for at least
+// ui.SpinnerMinVisible. If the hold has not yet elapsed, returns a delayed
+// command that will fire loadingHoldExpiredMsg; otherwise clears loading
+// immediately and sets the status.
+func (m *Model) finishLoading(status string) tea.Cmd {
+	remaining := ui.SpinnerMinVisible - time.Since(m.loadingStartedAt)
+	if remaining > 0 {
+		return tea.Tick(remaining, func(t time.Time) tea.Msg {
+			return loadingHoldExpiredMsg{status: status}
+		})
+	}
+	m.clearLoading()
+	m.status = status
+	return nil
 }
 
 func (m *Model) applyScheme(scheme ui.Scheme) {
@@ -299,9 +342,9 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions)}
+	cmds := []tea.Cmd{spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, false)}
 	if m.hasSubscription {
-		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.currentSub.ID))
+		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.currentSub.ID, false))
 	}
 	return tea.Batch(cmds...)
 }

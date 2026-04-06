@@ -2,6 +2,7 @@ package kvapp
 
 import (
 	"fmt"
+	"time"
 
 	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
@@ -27,9 +28,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
+	case loadingHoldExpiredMsg:
+		m.clearLoading()
+		m.status = msg.status
+		return m, nil
+
 	case subscriptionsLoadedMsg:
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = "Failed to load subscriptions"
 			return m, nil
@@ -39,12 +45,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.subscriptions = msg.subscriptions
 
 		if msg.done {
-			m.loading = false
 			m.cache.subscriptions.Set("", msg.subscriptions)
-			m.status = fmt.Sprintf("Loaded %d subscriptions.", len(msg.subscriptions))
 			if !m.hasSubscription {
 				m.subOverlay.Open()
 			}
+			status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.subscriptions), time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
@@ -55,7 +61,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load key vaults in %s", subscriptionDisplayName(m.currentSub))
 			return m, nil
@@ -67,9 +73,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ui.SetItemsPreserveIndex(&m.vaultsList, vaultsToItems(msg.vaults))
 
 		if msg.done {
-			m.loading = false
 			m.cache.vaults.Set(msg.subscriptionID, msg.vaults)
-			m.status = fmt.Sprintf("Loaded %d vaults.", len(msg.vaults))
+			status := fmt.Sprintf("Loaded %d vaults in %s", len(msg.vaults), time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
@@ -80,7 +86,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load secrets in %s", msg.vault.Name)
 			return m, nil
@@ -92,9 +98,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ui.SetItemsPreserveIndex(&m.secretsList, secretsToItems(msg.secrets))
 
 		if msg.done {
-			m.loading = false
 			m.cache.secrets.Set(cache.Key(m.currentSub.ID, msg.vault.Name), msg.secrets)
-			m.status = fmt.Sprintf("Loaded %d secrets from %s.", len(msg.secrets), msg.vault.Name)
+			status := fmt.Sprintf("Loaded %d secrets from %s in %s", len(msg.secrets), msg.vault.Name, time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
@@ -108,7 +114,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load versions for %s", msg.secretName)
 			return m, nil
@@ -120,15 +126,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ui.SetItemsPreserveIndex(&m.versionsList, versionsToItems(msg.versions))
 
 		if msg.done {
-			m.loading = false
 			m.cache.versions.Set(cache.Key(m.currentSub.ID, msg.vault.Name, msg.secretName), msg.versions)
-			m.status = fmt.Sprintf("Loaded %d versions for %s.", len(msg.versions), msg.secretName)
+			status := fmt.Sprintf("Loaded %d versions for %s in %s", len(msg.versions), msg.secretName, time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
 
 	case secretValueYankedMsg:
-		m.loading = false
+		m.clearLoading()
 		if msg.err != nil {
 			m.lastErr = msg.err.Error()
 			m.status = "Failed to yank secret value"
@@ -209,7 +215,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.keymap.ReloadSubscriptions.Matches(key):
 			if !focusedFilterActive {
-				m.loading = true
+				m.setLoading(m.focus)
 				m.lastErr = ""
 				m.status = "Refreshing subscriptions..."
 				return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
@@ -286,7 +292,7 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-		m.loading = true
+		m.setLoading(m.focus)
 		m.lastErr = ""
 		m.status = fmt.Sprintf("Fetching secret value for %s...", item.secret.Name)
 		return m, tea.Batch(spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, item.secret.Name, ""))
@@ -297,7 +303,7 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-		m.loading = true
+		m.setLoading(m.focus)
 		m.lastErr = ""
 		m.status = fmt.Sprintf("Fetching secret value for %s@%s...", m.currentSecret.Name, item.version.Version)
 		return m, tea.Batch(spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))

@@ -91,7 +91,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.entitiesList.Title = "Entities"
 	m.detailList.Title = "Detail"
 
-	m.loading = true
+	m.setLoading(m.focus)
 	m.status = fmt.Sprintf("Loading namespaces in %s", subscriptionDisplayName(sub))
 	return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID))
 }
@@ -133,7 +133,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.detailList.SetItems(nil)
 		m.detailList.Title = "Detail"
 
-		m.loading = true
+		m.setLoading(m.focus)
 		m.status = fmt.Sprintf("Loading entities in %s", item.namespace.Name)
 		return m, tea.Batch(spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityKey))
 	}
@@ -169,7 +169,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 				m.detailList.Title = "Detail"
 			}
 
-			m.loading = true
+			m.setLoading(m.focus)
 			m.status = fmt.Sprintf("Loading subscriptions for topic %s", item.entity.Name)
 			return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, item.entity.Name, topicKey))
 		}
@@ -179,7 +179,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.detailList.SetItems(nil)
 		m.detailList.Title = "Detail"
 
-		m.loading = true
+		m.setLoading(m.focus)
 		m.status = fmt.Sprintf("Peeking messages from queue %s", item.entity.Name)
 		return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, item.entity.Name, m.deadLetter))
 	}
@@ -197,7 +197,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.detailList.ResetFilter()
 			m.detailList.SetItems(nil)
 
-			m.loading = true
+			m.setLoading(m.focus)
 			m.status = fmt.Sprintf("Peeking messages from %s/%s", m.currentEntity.Name, item.sub.Name)
 			return m, tea.Batch(spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, item.sub.Name, m.deadLetter))
 		}
