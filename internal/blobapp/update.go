@@ -210,6 +210,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Inspect overlay — dismiss.
+		if m.inspectFields != nil {
+			if m.keymap.Inspect.Matches(key) || key == "esc" || key == "q" {
+				m.inspectFields = nil
+			}
+			return m, nil
+		}
+
 		if m.preview.open && m.focus == previewPane {
 			return m.handlePreviewKey(msg)
 		}
@@ -322,6 +330,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.keymap.FilterInput.Matches(key):
 			if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
 				m.activateSearch()
+				return m, nil
+			}
+		case m.keymap.Inspect.Matches(key):
+			if !focusedFilterActive {
+				m.inspectFocusedItem()
 				return m, nil
 			}
 		case m.keymap.BackspaceUp.Matches(key):

@@ -70,6 +70,9 @@ type Keymap struct {
 
 	// Key Vault app.
 	YankSecret Binding `json:"yank_secret"`
+
+	// Shared — inspect selected item.
+	Inspect Binding `json:"inspect"`
 }
 
 // JumpIndex returns the tab index (0-based) if key matches any Jump binding.

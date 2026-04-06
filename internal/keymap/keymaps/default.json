@@ -53,6 +53,7 @@
     "delete_duplicate": ["D"],
     "toggle_dlq_filter": ["f"],
     "message_back": ["h", "left", "backspace", "esc"],
-    "yank_secret": ["y"]
+    "yank_secret": ["y"],
+    "inspect": ["K"]
   }
 }

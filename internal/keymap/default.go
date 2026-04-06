@@ -71,5 +71,8 @@ func Default() Keymap {
 
 		// Key Vault.
 		YankSecret: New("y"),
+
+		// Shared.
+		Inspect: New("K"),
 	}
 }

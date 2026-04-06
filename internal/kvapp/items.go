@@ -1,10 +1,7 @@
 package kvapp
 
 import (
-	"fmt"
-
 	"azure-storage/internal/azure/keyvault"
-	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
 )
@@ -18,14 +15,7 @@ func (i vaultItem) Title() string {
 }
 
 func (i vaultItem) Description() string {
-	shortSub := i.vault.SubscriptionID
-	if len(shortSub) > 8 {
-		shortSub = shortSub[:8]
-	}
-	if i.vault.ResourceGroup == "" {
-		return fmt.Sprintf("sub %s", shortSub)
-	}
-	return fmt.Sprintf("sub %s | rg %s", shortSub, i.vault.ResourceGroup)
+	return ""
 }
 
 func (i vaultItem) FilterValue() string {
@@ -41,12 +31,10 @@ func (i secretItem) Title() string {
 }
 
 func (i secretItem) Description() string {
-	enabled := "no"
-	if i.secret.Enabled {
-		enabled = "yes"
+	if !i.secret.Enabled {
+		return "disabled"
 	}
-	ct := ui.EmptyToDash(i.secret.ContentType)
-	return fmt.Sprintf("%s | updated %s | enabled: %s", ct, ui.FormatTime(i.secret.UpdatedOn), enabled)
+	return ""
 }
 
 func (i secretItem) FilterValue() string {
@@ -66,12 +54,10 @@ func (i versionItem) Title() string {
 }
 
 func (i versionItem) Description() string {
-	enabled := "no"
-	if i.version.Enabled {
-		enabled = "yes"
+	if !i.version.Enabled {
+		return "disabled"
 	}
-	expires := ui.FormatTime(i.version.ExpiresOn)
-	return fmt.Sprintf("created %s | enabled: %s | expires: %s", ui.FormatTime(i.version.CreatedOn), enabled, expires)
+	return ""
 }
 
 func (i versionItem) FilterValue() string {
