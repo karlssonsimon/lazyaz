@@ -10,12 +10,19 @@ import (
 // Items contains all items accumulated so far (not just the current page).
 // When Done is true, the load is complete and Items holds the final result.
 // Next is the command to receive the next page; nil when Done.
+//
+// Cached is true for the single initial page a non-fresh Fetch emits
+// from the underlying Store before hitting the network. Consumers using
+// cache.FetchSession should treat cached pages as a re-seed (not a merge)
+// so that items in the old cache don't get incorrectly marked as "seen"
+// by the sweep logic.
 type Page[T any] struct {
-	Key   string
-	Items []T
-	Done  bool
-	Err   error
-	Next  tea.Cmd
+	Key    string
+	Items  []T
+	Done   bool
+	Cached bool
+	Err    error
+	Next   tea.Cmd
 }
 
 // Loader wraps a Store with progressive, channel-based loading.
@@ -85,10 +92,11 @@ func (l *Loader[T]) fetch(
 	ch := make(chan Page[T], 2)
 
 	// Emit cached data immediately so the UI doesn't wait for the network.
-	// Skipped for explicit refresh actions.
+	// Skipped for explicit refresh actions. Cached=true tells the consumer
+	// to re-seed any merge session rather than treat these items as "seen".
 	if !fresh {
 		if items, ok := l.store.Get(key); ok && len(items) > 0 {
-			ch <- Page[T]{Key: key, Items: items}
+			ch <- Page[T]{Key: key, Items: items, Cached: true}
 		}
 	}
 

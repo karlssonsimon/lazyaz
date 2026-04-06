@@ -69,9 +69,11 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.secretsList.Title = "Secrets"
 	m.versionsList.Title = "Versions"
 
+	m.fetchGen++
+	m.vaultsSession = cache.NewFetchSession(m.vaults, m.fetchGen, vaultKey)
 	m.SetLoading(m.focus)
 	m.Status = fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(sub))
-	return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID))
+	return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID, m.fetchGen))
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
@@ -110,9 +112,11 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.versionsList.SetItems(nil)
 		m.versionsList.Title = "Versions"
 
+		m.fetchGen++
+		m.secretsSession = cache.NewFetchSession(m.secrets, m.fetchGen, secretKey)
 		m.SetLoading(m.focus)
 		m.Status = fmt.Sprintf("Loading secrets in %s", item.vault.Name)
-		return m, tea.Batch(spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, item.vault))
+		return m, tea.Batch(spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, item.vault, m.fetchGen))
 	}
 
 	if m.focus == secretsPane {
@@ -131,8 +135,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.hasSecret = true
 		m.focus = versionsPane
 
-		versionKey := cache.Key(m.CurrentSub.ID, m.currentVault.Name, item.secret.Name)
-		if cached, ok := m.cache.versions.Get(versionKey); ok {
+		versionCacheKey := cache.Key(m.CurrentSub.ID, m.currentVault.Name, item.secret.Name)
+		if cached, ok := m.cache.versions.Get(versionCacheKey); ok {
 			m.versions = cached
 			m.versionsList.ResetFilter()
 			ui.SetItemsPreserveIndex(&m.versionsList, versionsToItems(cached))
@@ -144,9 +148,11 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.versionsList.Title = "Versions"
 		}
 
+		m.fetchGen++
+		m.versionsSession = cache.NewFetchSession(m.versions, m.fetchGen, versionKey)
 		m.SetLoading(m.focus)
 		m.Status = fmt.Sprintf("Loading versions for %s", item.secret.Name)
-		return m, tea.Batch(spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, item.secret.Name))
+		return m, tea.Batch(spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, item.secret.Name, m.fetchGen))
 	}
 
 	return m, nil

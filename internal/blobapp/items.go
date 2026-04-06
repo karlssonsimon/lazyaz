@@ -136,6 +136,36 @@ func parentPrefix(prefix string) string {
 	return prefix[:idx+1]
 }
 
+// Identity functions used by cache.FetchSession and
+// ui.SetItemsPreserveKey. Blob prefixes (synthetic "folder" entries in
+// hierarchy mode) use the same Name field as real blobs, so a single
+// keyer handles both cases.
+
+func accountKey(a blob.Account) string       { return a.Name }
+func containerKey(c blob.ContainerInfo) string { return c.Name }
+func blobEntryKey(b blob.BlobEntry) string   { return b.Name }
+
+func accountItemKey(it list.Item) string {
+	if ai, ok := it.(accountItem); ok {
+		return ai.account.Name
+	}
+	return ""
+}
+
+func containerItemKey(it list.Item) string {
+	if ci, ok := it.(containerItem); ok {
+		return ci.container.Name
+	}
+	return ""
+}
+
+func blobItemKey(it list.Item) string {
+	if bi, ok := it.(blobItem); ok {
+		return bi.blob.Name
+	}
+	return ""
+}
+
 func blobSearchPrefix(currentPrefix, query string) string {
 	needle := strings.TrimSpace(strings.ReplaceAll(query, "\\", "/"))
 	if needle == "" {

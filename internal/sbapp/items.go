@@ -149,3 +149,32 @@ func messagesToItems(messages []servicebus.PeekedMessage, marked, duplicates map
 	}
 	return items
 }
+
+// Identity functions used by cache.FetchSession and
+// ui.SetItemsPreserveKey. Messages deliberately opt out — they're
+// ephemeral peek results and go through plain replace semantics.
+
+func namespaceKey(ns servicebus.Namespace) string   { return ns.Name }
+func entityKey(e servicebus.Entity) string          { return e.Name }
+func topicSubKey(s servicebus.TopicSubscription) string { return s.Name }
+
+func namespaceItemKey(it list.Item) string {
+	if ni, ok := it.(namespaceItem); ok {
+		return ni.namespace.Name
+	}
+	return ""
+}
+
+func entityItemKey(it list.Item) string {
+	if ei, ok := it.(entityItem); ok {
+		return ei.entity.Name
+	}
+	return ""
+}
+
+func topicSubItemKey(it list.Item) string {
+	if ti, ok := it.(topicSubItem); ok {
+		return ti.sub.Name
+	}
+	return ""
+}

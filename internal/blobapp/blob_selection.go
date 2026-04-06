@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"azure-storage/internal/azure/blob"
+	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -60,9 +61,11 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 			m.refreshItems()
 		}
 
+		m.fetchGen++
+		m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
 		m.SetLoading(blobsPane)
 		m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-		return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false))
+		return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
 	}
 
 	m.blobLoadAll = true
@@ -73,9 +76,11 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		m.refreshItems()
 	}
 
+	m.fetchGen++
+	m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
 	m.SetLoading(blobsPane)
 	m.Status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
-	return m, tea.Batch(spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, false))
+	return m, tea.Batch(spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, false, m.fetchGen))
 }
 
 func (m *Model) toggleVisualLineMode() {

@@ -28,33 +28,33 @@ func fetchSubscriptionsCmd(svc *keyvault.Service, loader *cache.Loader[azure.Sub
 	return loader.Fetch("", fetchFn, wrap)
 }
 
-func fetchVaultsCmd(svc *keyvault.Service, loader *cache.Loader[keyvault.Vault], subscriptionID string) tea.Cmd {
+func fetchVaultsCmd(svc *keyvault.Service, loader *cache.Loader[keyvault.Vault], subscriptionID string, gen int) tea.Cmd {
 	return loader.Fetch(subscriptionID, func(ctx context.Context, send func([]keyvault.Vault)) error {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		return svc.ListVaults(ctx, subscriptionID, send)
 	}, func(p cache.Page[keyvault.Vault]) tea.Msg {
-		return vaultsLoadedMsg{subscriptionID: subscriptionID, vaults: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return vaultsLoadedMsg{gen: gen, cached: p.Cached, subscriptionID: subscriptionID, vaults: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
-func fetchSecretsCmd(svc *keyvault.Service, loader *cache.Loader[keyvault.Secret], vault keyvault.Vault) tea.Cmd {
+func fetchSecretsCmd(svc *keyvault.Service, loader *cache.Loader[keyvault.Secret], vault keyvault.Vault, gen int) tea.Cmd {
 	return loader.Fetch(cache.Key(vault.SubscriptionID, vault.Name), func(ctx context.Context, send func([]keyvault.Secret)) error {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		return svc.ListSecrets(ctx, vault, send)
 	}, func(p cache.Page[keyvault.Secret]) tea.Msg {
-		return secretsLoadedMsg{vault: vault, secrets: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return secretsLoadedMsg{gen: gen, cached: p.Cached, vault: vault, secrets: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
-func fetchVersionsCmd(svc *keyvault.Service, loader *cache.Loader[keyvault.SecretVersion], vault keyvault.Vault, secretName string) tea.Cmd {
+func fetchVersionsCmd(svc *keyvault.Service, loader *cache.Loader[keyvault.SecretVersion], vault keyvault.Vault, secretName string, gen int) tea.Cmd {
 	return loader.Fetch(cache.Key(vault.SubscriptionID, vault.Name, secretName), func(ctx context.Context, send func([]keyvault.SecretVersion)) error {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		return svc.ListSecretVersions(ctx, vault, secretName, send)
 	}, func(p cache.Page[keyvault.SecretVersion]) tea.Msg {
-		return versionsLoadedMsg{vault: vault, secretName: secretName, versions: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return versionsLoadedMsg{gen: gen, cached: p.Cached, vault: vault, secretName: secretName, versions: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 

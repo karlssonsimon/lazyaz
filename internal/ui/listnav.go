@@ -63,3 +63,45 @@ func SetItemsPreserveIndex(l *list.Model, items []list.Item) {
 	}
 	l.Select(idx)
 }
+
+// SetItemsPreserveKey replaces list items while keeping the cursor
+// pointed at the same item by identity (via keyOf), not by numeric index.
+// If the previously selected item is no longer present, the cursor clamps
+// to the same numeric index as before — matching SetItemsPreserveIndex's
+// fallback. Filter text/state is preserved by list.SetItems.
+//
+// Use this for streaming refreshes where items may reorder or disappear
+// as pages arrive, so the cursor sticks to the thing the user was looking
+// at rather than whichever item happens to land in the same slot.
+func SetItemsPreserveKey(l *list.Model, items []list.Item, keyOf func(list.Item) string) {
+	prevIdx := l.Index()
+	prevKey := ""
+	if selected := l.SelectedItem(); selected != nil {
+		prevKey = keyOf(selected)
+	}
+
+	l.SetItems(items)
+
+	n := len(items)
+	if n == 0 {
+		return
+	}
+
+	if prevKey != "" {
+		for i, it := range items {
+			if keyOf(it) == prevKey {
+				l.Select(i)
+				return
+			}
+		}
+	}
+
+	// Previous item is gone (or no prior selection) — clamp index.
+	if prevIdx >= n {
+		prevIdx = n - 1
+	}
+	if prevIdx < 0 {
+		prevIdx = 0
+	}
+	l.Select(prevIdx)
+}

@@ -91,9 +91,11 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.entitiesList.Title = "Entities"
 	m.detailList.Title = "Detail"
 
+	m.fetchGen++
+	m.namespacesSession = cache.NewFetchSession(m.namespaces, m.fetchGen, namespaceKey)
 	m.SetLoading(m.focus)
 	m.Status = fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub))
-	return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID))
+	return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID, m.fetchGen))
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
@@ -116,8 +118,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearDetailState()
 		m.focus = entitiesPane
 
-		entityKey := cache.Key(m.CurrentSub.ID, item.namespace.Name)
-		if cached, ok := m.cache.entities.Get(entityKey); ok {
+		entityCacheKey := cache.Key(m.CurrentSub.ID, item.namespace.Name)
+		if cached, ok := m.cache.entities.Get(entityCacheKey); ok {
 			m.entities = cached
 			m.entitiesList.ResetFilter()
 			ui.SetItemsPreserveIndex(&m.entitiesList, entitiesToFilteredItems(cached, m.dlqFilter))
@@ -133,9 +135,11 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.detailList.SetItems(nil)
 		m.detailList.Title = "Detail"
 
+		m.fetchGen++
+		m.entitiesSession = cache.NewFetchSession(m.entities, m.fetchGen, entityKey)
 		m.SetLoading(m.focus)
 		m.Status = fmt.Sprintf("Loading entities in %s", item.namespace.Name)
-		return m, tea.Batch(spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityKey))
+		return m, tea.Batch(spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityCacheKey, m.fetchGen))
 	}
 
 	if m.focus == entitiesPane {
@@ -156,8 +160,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.focus = detailPane
 
 		if item.entity.Kind == servicebus.EntityTopic {
-			topicKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, item.entity.Name)
-			if cached, ok := m.cache.topicSubs.Get(topicKey); ok {
+			topicCacheKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, item.entity.Name)
+			if cached, ok := m.cache.topicSubs.Get(topicCacheKey); ok {
 				m.topicSubs = cached
 				m.detailMode = detailTopicSubscriptions
 				m.detailList.ResetFilter()
@@ -169,9 +173,11 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 				m.detailList.Title = "Detail"
 			}
 
+			m.fetchGen++
+			m.topicSubsSession = cache.NewFetchSession(m.topicSubs, m.fetchGen, topicSubKey)
 			m.SetLoading(m.focus)
 			m.Status = fmt.Sprintf("Loading subscriptions for topic %s", item.entity.Name)
-			return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, item.entity.Name, topicKey))
+			return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, item.entity.Name, topicCacheKey, m.fetchGen))
 		}
 
 		// Queue — messages are not cached (ephemeral)

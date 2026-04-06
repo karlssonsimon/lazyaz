@@ -86,6 +86,11 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 
 	m.LastErr = ""
 	m.Subscriptions = msg.Subscriptions
+	// Keep the overlay's filtered view in sync with streaming results
+	// so new subscriptions matching the user's query appear immediately.
+	if m.SubOverlay.Active {
+		m.SubOverlay.Refilter(m.Subscriptions)
+	}
 
 	if msg.Done {
 		m.cache.subscriptions.Set("", msg.Subscriptions)
@@ -103,22 +108,39 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 	if !m.HasSubscription || m.CurrentSub.ID != msg.subscriptionID {
 		return m, nil
 	}
+	if m.namespacesSession == nil || m.namespacesSession.Gen() != msg.gen {
+		return m, nil
+	}
+
+	if msg.cached {
+		m.namespacesSession.Reseed(msg.namespaces)
+		m.namespaces = m.namespacesSession.Items()
+		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(m.namespaces))
+		ui.SetItemsPreserveKey(&m.namespacesList, namespacesToItems(m.namespaces), namespaceItemKey)
+		return m, msg.next
+	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.LastErr = msg.err.Error()
 		m.Status = fmt.Sprintf("Failed to load namespaces in %s", ui.SubscriptionDisplayName(m.CurrentSub))
+		m.namespacesSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.namespaces = msg.namespaces
-	m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(msg.namespaces))
-	ui.SetItemsPreserveIndex(&m.namespacesList, namespacesToItems(msg.namespaces))
+	m.namespacesSession.Apply(msg.namespaces)
+	m.namespaces = m.namespacesSession.Items()
+	m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(m.namespaces))
+	ui.SetItemsPreserveKey(&m.namespacesList, namespacesToItems(m.namespaces), namespaceItemKey)
 
 	if msg.done {
-		m.cache.namespaces.Set(msg.subscriptionID, msg.namespaces)
-		status := fmt.Sprintf("Loaded %d namespaces from %s in %s", len(msg.namespaces), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+		m.namespaces = m.namespacesSession.Finalize()
+		m.namespacesSession = nil
+		m.cache.namespaces.Set(msg.subscriptionID, m.namespaces)
+		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(m.namespaces))
+		ui.SetItemsPreserveKey(&m.namespacesList, namespacesToItems(m.namespaces), namespaceItemKey)
+		status := fmt.Sprintf("Loaded %d namespaces from %s in %s", len(m.namespaces), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
 
@@ -129,23 +151,42 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 	if !m.hasNamespace || m.currentNS.Name != msg.namespace.Name {
 		return m, nil
 	}
+	if m.entitiesSession == nil || m.entitiesSession.Gen() != msg.gen {
+		return m, nil
+	}
+
+	if msg.cached {
+		m.entitiesSession.Reseed(msg.entities)
+		m.entities = m.entitiesSession.Items()
+		items := entitiesToFilteredItems(m.entities, m.dlqFilter)
+		ui.SetItemsPreserveKey(&m.entitiesList, items, entityItemKey)
+		m.entitiesList.Title = m.entitiesPaneTitle()
+		return m, msg.next
+	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.LastErr = msg.err.Error()
 		m.Status = fmt.Sprintf("Failed to load entities in %s", msg.namespace.Name)
+		m.entitiesSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.entities = msg.entities
+	m.entitiesSession.Apply(msg.entities)
+	m.entities = m.entitiesSession.Items()
 	items := entitiesToFilteredItems(m.entities, m.dlqFilter)
-	ui.SetItemsPreserveIndex(&m.entitiesList, items)
+	ui.SetItemsPreserveKey(&m.entitiesList, items, entityItemKey)
 	m.entitiesList.Title = m.entitiesPaneTitle()
 
 	if msg.done {
-		m.cache.entities.Set(cache.Key(m.CurrentSub.ID, msg.namespace.Name), msg.entities)
-		status := fmt.Sprintf("Loaded %d entities from %s in %s", len(msg.entities), msg.namespace.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+		m.entities = m.entitiesSession.Finalize()
+		m.entitiesSession = nil
+		m.cache.entities.Set(cache.Key(m.CurrentSub.ID, msg.namespace.Name), m.entities)
+		items = entitiesToFilteredItems(m.entities, m.dlqFilter)
+		ui.SetItemsPreserveKey(&m.entitiesList, items, entityItemKey)
+		m.entitiesList.Title = m.entitiesPaneTitle()
+		status := fmt.Sprintf("Loaded %d entities from %s in %s", len(m.entities), msg.namespace.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
 
@@ -159,23 +200,41 @@ func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (
 	if m.currentNS.Name != msg.namespace.Name || m.currentEntity.Name != msg.topicName {
 		return m, nil
 	}
+	if m.topicSubsSession == nil || m.topicSubsSession.Gen() != msg.gen {
+		return m, nil
+	}
+
+	if msg.cached {
+		m.topicSubsSession.Reseed(msg.subs)
+		m.topicSubs = m.topicSubsSession.Items()
+		m.detailMode = detailTopicSubscriptions
+		m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(m.topicSubs))
+		ui.SetItemsPreserveKey(&m.detailList, topicSubsToItems(m.topicSubs), topicSubItemKey)
+		return m, msg.next
+	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.LastErr = msg.err.Error()
 		m.Status = fmt.Sprintf("Failed to load subscriptions for topic %s", msg.topicName)
+		m.topicSubsSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.topicSubs = msg.subs
+	m.topicSubsSession.Apply(msg.subs)
+	m.topicSubs = m.topicSubsSession.Items()
 	m.detailMode = detailTopicSubscriptions
-	m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(msg.subs))
-	ui.SetItemsPreserveIndex(&m.detailList, topicSubsToItems(msg.subs))
+	m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(m.topicSubs))
+	ui.SetItemsPreserveKey(&m.detailList, topicSubsToItems(m.topicSubs), topicSubItemKey)
 
 	if msg.done {
-		m.cache.topicSubs.Set(cache.Key(m.CurrentSub.ID, msg.namespace.Name, msg.topicName), msg.subs)
-		status := fmt.Sprintf("Loaded %d subscriptions for topic %s in %s", len(msg.subs), msg.topicName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+		m.topicSubs = m.topicSubsSession.Finalize()
+		m.topicSubsSession = nil
+		m.cache.topicSubs.Set(cache.Key(m.CurrentSub.ID, msg.namespace.Name, msg.topicName), m.topicSubs)
+		m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(m.topicSubs))
+		ui.SetItemsPreserveKey(&m.detailList, topicSubsToItems(m.topicSubs), topicSubItemKey)
+		status := fmt.Sprintf("Loaded %d subscriptions for topic %s in %s", len(m.topicSubs), msg.topicName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
 

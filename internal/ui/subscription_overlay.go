@@ -20,7 +20,14 @@ type SubscriptionOverlayState struct {
 	filtered  []int
 }
 
+// Open activates the overlay. If the overlay is already active (e.g. the
+// user is mid-filter and a late subscriptions-loaded message triggers
+// another Open call), this is a no-op — the user's query and cursor are
+// preserved.
 func (s *SubscriptionOverlayState) Open() {
+	if s.Active {
+		return
+	}
 	s.Active = true
 	s.Query = ""
 	s.CursorIdx = 0
@@ -31,7 +38,11 @@ func (s *SubscriptionOverlayState) Close() {
 	s.Active = false
 }
 
-func (s *SubscriptionOverlayState) refilter(subs []azure.Subscription) {
+// Refilter re-applies the current Query against the given subscription
+// list. Call this after the underlying subscriptions change (e.g. when a
+// new page streams in) so the overlay's view stays in sync with the data.
+// Safe to call while the overlay is inactive.
+func (s *SubscriptionOverlayState) Refilter(subs []azure.Subscription) {
 	s.filtered = fuzzy.Filter(s.Query, subs, func(sub azure.Subscription) string {
 		return sub.Name + " " + sub.ID
 	})
@@ -49,7 +60,7 @@ func (s *SubscriptionOverlayState) HandleKey(key string, bindings ThemeKeyBindin
 	}
 
 	if s.filtered == nil {
-		s.refilter(subs)
+		s.Refilter(subs)
 	}
 
 	switch {
@@ -72,12 +83,12 @@ func (s *SubscriptionOverlayState) HandleKey(key string, bindings ThemeKeyBindin
 	case key == "backspace":
 		if len(s.Query) > 0 {
 			s.Query = s.Query[:len(s.Query)-1]
-			s.refilter(subs)
+			s.Refilter(subs)
 		}
 	default:
 		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 			s.Query += key
-			s.refilter(subs)
+			s.Refilter(subs)
 		}
 	}
 	return azure.Subscription{}, false

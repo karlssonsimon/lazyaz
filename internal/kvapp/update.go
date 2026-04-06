@@ -76,6 +76,11 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 
 	m.LastErr = ""
 	m.Subscriptions = msg.Subscriptions
+	// Keep the overlay's filtered view in sync with the streaming results
+	// so new subscriptions matching the user's query appear immediately.
+	if m.SubOverlay.Active {
+		m.SubOverlay.Refilter(m.Subscriptions)
+	}
 
 	if msg.Done {
 		m.cache.subscriptions.Set("", msg.Subscriptions)
@@ -90,25 +95,46 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 }
 
 func (m Model) handleVaultsLoaded(msg vaultsLoadedMsg) (Model, tea.Cmd) {
+	// Scope + generation check. Drop stale pages silently.
 	if !m.HasSubscription || m.CurrentSub.ID != msg.subscriptionID {
 		return m, nil
+	}
+	if m.vaultsSession == nil || m.vaultsSession.Gen() != msg.gen {
+		return m, nil
+	}
+
+	// Cached emit: re-seed the session and update the list without
+	// touching seen. This gives instant display from cache without
+	// poisoning the sweep logic.
+	if msg.cached {
+		m.vaultsSession.Reseed(msg.vaults)
+		m.vaults = m.vaultsSession.Items()
+		m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(m.vaults))
+		ui.SetItemsPreserveKey(&m.vaultsList, vaultsToItems(m.vaults), vaultItemKey)
+		return m, msg.next
 	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.LastErr = msg.err.Error()
 		m.Status = fmt.Sprintf("Failed to load key vaults in %s", ui.SubscriptionDisplayName(m.CurrentSub))
+		m.vaultsSession = nil // abandon session, keep accumulated items visible
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.vaults = msg.vaults
-	m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(msg.vaults))
-	ui.SetItemsPreserveIndex(&m.vaultsList, vaultsToItems(msg.vaults))
+	m.vaultsSession.Apply(msg.vaults)
+	m.vaults = m.vaultsSession.Items()
+	m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(m.vaults))
+	ui.SetItemsPreserveKey(&m.vaultsList, vaultsToItems(m.vaults), vaultItemKey)
 
 	if msg.done {
-		m.cache.vaults.Set(msg.subscriptionID, msg.vaults)
-		status := fmt.Sprintf("Loaded %d vaults in %s", len(msg.vaults), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+		m.vaults = m.vaultsSession.Finalize()
+		m.vaultsSession = nil
+		m.cache.vaults.Set(msg.subscriptionID, m.vaults)
+		m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(m.vaults))
+		ui.SetItemsPreserveKey(&m.vaultsList, vaultsToItems(m.vaults), vaultItemKey)
+		status := fmt.Sprintf("Loaded %d vaults in %s", len(m.vaults), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
 
@@ -119,22 +145,39 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 	if !m.hasVault || m.currentVault.Name != msg.vault.Name {
 		return m, nil
 	}
+	if m.secretsSession == nil || m.secretsSession.Gen() != msg.gen {
+		return m, nil
+	}
+
+	if msg.cached {
+		m.secretsSession.Reseed(msg.secrets)
+		m.secrets = m.secretsSession.Items()
+		m.secretsList.Title = fmt.Sprintf("Secrets (%d)", len(m.secrets))
+		ui.SetItemsPreserveKey(&m.secretsList, secretsToItems(m.secrets), secretItemKey)
+		return m, msg.next
+	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.LastErr = msg.err.Error()
 		m.Status = fmt.Sprintf("Failed to load secrets in %s", msg.vault.Name)
+		m.secretsSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.secrets = msg.secrets
-	m.secretsList.Title = fmt.Sprintf("Secrets (%d)", len(msg.secrets))
-	ui.SetItemsPreserveIndex(&m.secretsList, secretsToItems(msg.secrets))
+	m.secretsSession.Apply(msg.secrets)
+	m.secrets = m.secretsSession.Items()
+	m.secretsList.Title = fmt.Sprintf("Secrets (%d)", len(m.secrets))
+	ui.SetItemsPreserveKey(&m.secretsList, secretsToItems(m.secrets), secretItemKey)
 
 	if msg.done {
-		m.cache.secrets.Set(cache.Key(m.CurrentSub.ID, msg.vault.Name), msg.secrets)
-		status := fmt.Sprintf("Loaded %d secrets from %s in %s", len(msg.secrets), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+		m.secrets = m.secretsSession.Finalize()
+		m.secretsSession = nil
+		m.cache.secrets.Set(cache.Key(m.CurrentSub.ID, msg.vault.Name), m.secrets)
+		m.secretsList.Title = fmt.Sprintf("Secrets (%d)", len(m.secrets))
+		ui.SetItemsPreserveKey(&m.secretsList, secretsToItems(m.secrets), secretItemKey)
+		status := fmt.Sprintf("Loaded %d secrets from %s in %s", len(m.secrets), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
 
@@ -148,22 +191,39 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 	if m.currentVault.Name != msg.vault.Name {
 		return m, nil
 	}
+	if m.versionsSession == nil || m.versionsSession.Gen() != msg.gen {
+		return m, nil
+	}
+
+	if msg.cached {
+		m.versionsSession.Reseed(msg.versions)
+		m.versions = m.versionsSession.Items()
+		m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(m.versions))
+		ui.SetItemsPreserveKey(&m.versionsList, versionsToItems(m.versions), versionItemKey)
+		return m, msg.next
+	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.LastErr = msg.err.Error()
 		m.Status = fmt.Sprintf("Failed to load versions for %s", msg.secretName)
+		m.versionsSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.versions = msg.versions
-	m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(msg.versions))
-	ui.SetItemsPreserveIndex(&m.versionsList, versionsToItems(msg.versions))
+	m.versionsSession.Apply(msg.versions)
+	m.versions = m.versionsSession.Items()
+	m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(m.versions))
+	ui.SetItemsPreserveKey(&m.versionsList, versionsToItems(m.versions), versionItemKey)
 
 	if msg.done {
-		m.cache.versions.Set(cache.Key(m.CurrentSub.ID, msg.vault.Name, msg.secretName), msg.versions)
-		status := fmt.Sprintf("Loaded %d versions for %s in %s", len(msg.versions), msg.secretName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+		m.versions = m.versionsSession.Finalize()
+		m.versionsSession = nil
+		m.cache.versions.Set(cache.Key(m.CurrentSub.ID, msg.vault.Name, msg.secretName), m.versions)
+		m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(m.versions))
+		ui.SetItemsPreserveKey(&m.versionsList, versionsToItems(m.versions), versionItemKey)
+		status := fmt.Sprintf("Loaded %d versions for %s in %s", len(m.versions), msg.secretName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
 

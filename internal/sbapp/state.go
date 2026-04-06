@@ -2,6 +2,7 @@ package sbapp
 
 import (
 	"azure-storage/internal/appshell"
+	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/keymap"
@@ -44,6 +45,16 @@ type Model struct {
 	topicSubs      []servicebus.TopicSubscription
 	peekedMessages []servicebus.PeekedMessage
 
+	// Streaming-refresh sessions. See cache.FetchSession. Peeked messages
+	// are deliberately excluded — they're ephemeral and use plain replace.
+	namespacesSession *cache.FetchSession[servicebus.Namespace]
+	entitiesSession   *cache.FetchSession[servicebus.Entity]
+	topicSubsSession  *cache.FetchSession[servicebus.TopicSubscription]
+
+	// fetchGen is the monotonic generation token copied into each fetch
+	// so pages from superseded or cancelled fetches can be dropped.
+	fetchGen int
+
 	hasNamespace  bool
 	currentNS     servicebus.Namespace
 	hasEntity     bool
@@ -68,6 +79,8 @@ type Model struct {
 }
 
 type namespacesLoadedMsg struct {
+	gen            int
+	cached         bool
 	subscriptionID string
 	namespaces     []servicebus.Namespace
 	done           bool
@@ -76,6 +89,8 @@ type namespacesLoadedMsg struct {
 }
 
 type entitiesLoadedMsg struct {
+	gen       int
+	cached    bool
 	namespace servicebus.Namespace
 	entities  []servicebus.Entity
 	done      bool
@@ -84,6 +99,8 @@ type entitiesLoadedMsg struct {
 }
 
 type topicSubscriptionsLoadedMsg struct {
+	gen       int
+	cached    bool
 	namespace servicebus.Namespace
 	topicName string
 	subs      []servicebus.TopicSubscription
@@ -234,13 +251,22 @@ func (m Model) HelpSections() []ui.HelpSection {
 	}
 }
 
+// SetSubscription overrides the embedded appshell.Model method to also
+// prime the initial namespaces fetch session. Tabapp calls this after
+// constructing the model and before Init() issues the first fetch.
+func (m *Model) SetSubscription(sub azure.Subscription) {
+	m.Model.SetSubscription(sub)
+	m.fetchGen++
+	m.namespacesSession = cache.NewFetchSession(m.namespaces, m.fetchGen, namespaceKey)
+}
+
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{spinner.Tick}
 	if m.SubOverlay.Active {
 		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 	}
 	if m.HasSubscription {
-		cmds = append(cmds, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID))
+		cmds = append(cmds, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID, m.fetchGen))
 	}
 	return tea.Batch(cmds...)
 }
