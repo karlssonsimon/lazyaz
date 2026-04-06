@@ -27,7 +27,7 @@ func (m *Model) resize() {
 	}
 	m.paneHeight = height
 
-	listHeight := height - ui.PaneHintHeight
+	listHeight := height - ui.PaneTitleHeight - ui.PaneHintHeight
 	m.accountsList.SetSize(ui.PaneContentWidth(pane, widths[0]), listHeight)
 	m.containersList.SetSize(ui.PaneContentWidth(pane, widths[1]), listHeight)
 	blobListHeight := listHeight

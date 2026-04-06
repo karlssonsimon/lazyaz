@@ -9,19 +9,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// withPaneSpinner is a thin wrapper around ui.RenderPaneSpinner that
-// checks whether the given pane is the current loading target.
-func (m Model) withPaneSpinner(title string, pane int, width int) string {
-	loading := m.Loading && m.LoadingPane == pane
-	return ui.RenderPaneSpinner(title, loading, m.LoadingStartedAt, m.Styles, width)
-}
-
 func (m Model) View() string {
 	if m.Width == 0 || m.Height == 0 {
 		return "loading..."
 	}
-
-	styles := m.Styles.Chrome
 
 	var sbItems []ui.StatusBarItem
 	if m.hasNamespace {
@@ -31,80 +22,74 @@ func (m Model) View() string {
 		sbItems = append(sbItems, ui.StatusBarItem{Label: "Entity:", Value: entityDisplayName(m.currentEntity)})
 	}
 
-	pw := m.paneWidths
-	pane := m.Styles.Chrome.Pane
-	m.namespacesList.Title = m.withPaneSpinner(m.namespacesPaneTitle(), namespacesPane, ui.PaneContentWidth(pane, pw[0]))
-	m.entitiesList.Title = m.withPaneSpinner(m.entitiesPaneTitle(), entitiesPane, ui.PaneContentWidth(pane, pw[1]))
-	m.detailList.Title = m.withPaneSpinner(m.detailPaneTitle(), detailPane, ui.PaneContentWidth(pane, pw[2]))
-
-	if m.deadLetter && m.detailMode == detailMessages {
-		m.detailList.Styles.Title = m.Styles.DangerBold.Padding(0, 1)
-	} else {
-		m.detailList.Styles.Title = m.Styles.List.Title
-	}
-
 	ui.ClampListSelection(&m.namespacesList)
 	ui.ClampListSelection(&m.entitiesList)
 	ui.ClampListSelection(&m.detailList)
 
+	pw := m.paneWidths
+	h := m.paneHeight
 	km := m.Keymap
 
-	nsHints := ui.RenderPaneHints([]ui.PaneHint{
-		{km.OpenFocusedAlt.Short(), "open"},
-		{km.FilterInput.Short(), "filter"},
-		{km.NextFocus.Short(), "next"},
-		{km.SubscriptionPicker.Short(), "sub"},
-		{km.Inspect.Short(), "inspect"},
-	}, m.Styles, ui.PaneContentWidth(pane, pw[0]))
+	namespaces := ui.RenderListPane(ui.ListPane{
+		List:     &m.namespacesList,
+		Title:    m.namespacesPaneTitle(),
+		Loading:  m.Loading && m.LoadingPane == namespacesPane,
+		LoadedAt: m.LoadingStartedAt,
+		Hints: []ui.PaneHint{
+			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
+			{Key: km.FilterInput.Short(), Desc: "filter"},
+			{Key: km.NextFocus.Short(), Desc: "next"},
+			{Key: km.SubscriptionPicker.Short(), Desc: "sub"},
+			{Key: km.Inspect.Short(), Desc: "inspect"},
+		},
+		Frame: ui.PaneFrame{Width: pw[0], Height: h, Focused: m.focus == namespacesPane},
+	}, m.Styles)
 
-	entHints := ui.RenderPaneHints([]ui.PaneHint{
-		{km.OpenFocusedAlt.Short(), "open"},
-		{km.NavigateLeft.Short(), "back"},
-		{km.ToggleDLQFilter.Short(), "DLQ filter"},
-	}, m.Styles, ui.PaneContentWidth(pane, pw[1]))
+	entities := ui.RenderListPane(ui.ListPane{
+		List:     &m.entitiesList,
+		Title:    m.entitiesPaneTitle(),
+		Loading:  m.Loading && m.LoadingPane == entitiesPane,
+		LoadedAt: m.LoadingStartedAt,
+		Hints: []ui.PaneHint{
+			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
+			{Key: km.NavigateLeft.Short(), Desc: "back"},
+			{Key: km.ToggleDLQFilter.Short(), Desc: "DLQ filter"},
+		},
+		Frame: ui.PaneFrame{Width: pw[1], Height: h, Focused: m.focus == entitiesPane},
+	}, m.Styles)
 
-	detHints := ui.RenderPaneHints([]ui.PaneHint{
-		{km.ToggleMark.Short(), "mark"},
-		{km.ShowActiveQueue.Short() + "/" + km.ShowDeadLetterQueue.Short(), "active/DLQ"},
-		{km.RequeueDLQ.Short(), "requeue"},
-	}, m.Styles, ui.PaneContentWidth(pane, pw[2]))
-
-	namespacesView := lipgloss.JoinVertical(lipgloss.Left, m.namespacesList.View(), nsHints)
-	entitiesView := lipgloss.JoinVertical(lipgloss.Left, m.entitiesList.View(), entHints)
-	detailView := lipgloss.JoinVertical(lipgloss.Left, m.detailList.View(), detHints)
-
-	h := m.paneHeight
-	namespacesPaneStyle := styles.Pane.Copy().Width(pw[0]).Height(h)
-	entitiesPaneStyle := styles.Pane.Copy().Width(pw[1]).Height(h)
-	detailPaneStyle := styles.Pane.Copy().Width(pw[2]).Height(h)
-
-	if m.focus == namespacesPane {
-		namespacesPaneStyle = styles.FocusedPane.Copy().Width(pw[0]).Height(h)
+	// Detail pane: when showing DLQ messages, paint the title and border
+	// with the danger color regardless of focus, so the user has a loud
+	// visual reminder they're operating on dead-lettered data.
+	detailPaneListPane := ui.ListPane{
+		List:     &m.detailList,
+		Title:    m.detailPaneTitle(),
+		Loading:  m.Loading && m.LoadingPane == detailPane,
+		LoadedAt: m.LoadingStartedAt,
+		Hints: []ui.PaneHint{
+			{Key: km.ToggleMark.Short(), Desc: "mark"},
+			{Key: km.ShowActiveQueue.Short() + "/" + km.ShowDeadLetterQueue.Short(), Desc: "active/DLQ"},
+			{Key: km.RequeueDLQ.Short(), Desc: "requeue"},
+		},
+		Frame: ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == detailPane && !m.viewingMessage},
 	}
-	if m.focus == entitiesPane {
-		entitiesPaneStyle = styles.FocusedPane.Copy().Width(pw[1]).Height(h)
-	}
-
 	if m.deadLetter && m.detailMode == detailMessages {
-		detailPaneStyle = styles.Pane.Copy().Width(pw[2]).Height(h).BorderForeground(m.Styles.Danger.GetForeground())
-	} else if m.focus == detailPane && !m.viewingMessage {
-		detailPaneStyle = styles.FocusedPane.Copy().Width(pw[2]).Height(h)
+		dangerTitle := m.Styles.DangerBold.Padding(0, 1)
+		dangerFrame := m.Styles.Chrome.Pane.Copy().BorderForeground(m.Styles.Danger.GetForeground())
+		detailPaneListPane.TitleStyle = &dangerTitle
+		detailPaneListPane.FrameStyle = &dangerFrame
 	}
+	detail := ui.RenderListPane(detailPaneListPane, m.Styles)
 
-	panesList := []string{
-		namespacesPaneStyle.Render(namespacesView),
-		entitiesPaneStyle.Render(entitiesView),
-		detailPaneStyle.Render(detailView),
-	}
+	panesList := []string{namespaces, entities, detail}
 
 	if m.viewingMessage {
 		previewTitleStyle := m.Styles.Accent.Copy().Padding(0, 1)
 		msgID := ui.EmptyToDash(m.selectedMessage.MessageID)
 		previewTitle := previewTitleStyle.Render(fmt.Sprintf("Message: %s", msgID))
 		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, m.messageViewport.View())
-
-		previewPaneStyle := styles.FocusedPane.Copy().Width(pw[3]).Height(h)
-		panesList = append(panesList, previewPaneStyle.Render(previewContent))
+		preview := ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[3], Height: h, Focused: true}, m.Styles)
+		panesList = append(panesList, preview)
 	}
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, panesList...)
@@ -120,9 +105,6 @@ func (m Model) View() string {
 	}
 	statusBar := ui.RenderStatusBar(m.Styles, sbItems, sbStatus, sbErr, m.Width)
 
-	parts := []string{subBar, panes, statusBar}
-
-	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.Width, m.Height, m.Styles.Bg)
+	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)
 	return m.RenderOverlays(view)
 }
-

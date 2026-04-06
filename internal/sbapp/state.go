@@ -139,7 +139,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 	delegate := list.NewDefaultDelegate()
 
 	namespaces := list.New([]list.Item{}, delegate, 24, 10)
-	namespaces.Title = "Namespaces"
+	namespaces.SetShowTitle(false) // title is rendered by ui.RenderListPane
 	namespaces.SetShowHelp(false)
 	namespaces.SetShowPagination(false)
 	namespaces.SetShowStatusBar(true)
@@ -148,7 +148,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 	namespaces.DisableQuitKeybindings()
 
 	entities := list.New([]list.Item{}, delegate, 24, 10)
-	entities.Title = "Entities"
+	entities.SetShowTitle(false)
 	entities.SetShowHelp(false)
 	entities.SetShowPagination(false)
 	entities.SetShowStatusBar(true)
@@ -157,7 +157,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 	entities.DisableQuitKeybindings()
 
 	detail := list.New([]list.Item{}, delegate, 40, 10)
-	detail.Title = "Detail"
+	detail.SetShowTitle(false)
 	detail.SetShowHelp(false)
 	detail.SetShowPagination(false)
 	detail.SetShowStatusBar(true)

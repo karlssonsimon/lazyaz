@@ -15,8 +15,6 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	styles := m.Styles.Chrome
-
 	// Build status bar items.
 	var sbItems []ui.StatusBarItem
 	if m.hasAccount {
@@ -30,11 +28,6 @@ func (m Model) View() string {
 		sbItems = append(sbItems, ui.StatusBarItem{Label: "Container:", Value: label})
 	}
 
-	pw := m.paneWidths
-	pane := m.Styles.Chrome.Pane
-	m.accountsList.Title = m.withPaneSpinner(m.accountsPaneTitle(), accountsPane, ui.PaneContentWidth(pane, pw[0]))
-	m.containersList.Title = m.withPaneSpinner(m.containersPaneTitle(), containersPane, ui.PaneContentWidth(pane, pw[1]))
-	m.blobsList.Title = m.withPaneSpinner(m.blobsPaneTitle(), blobsPane, ui.PaneContentWidth(pane, pw[2]))
 	if m.preview.open {
 		m.preview.viewport.SetContent(m.preview.rendered)
 	}
@@ -43,90 +36,84 @@ func (m Model) View() string {
 	ui.ClampListSelection(&m.containersList)
 	ui.ClampListSelection(&m.blobsList)
 
+	pw := m.paneWidths
+	h := m.paneHeight
 	km := m.Keymap
 
-	accountsHints := ui.RenderPaneHints([]ui.PaneHint{
-		{km.OpenFocusedAlt.Short(), "open"},
-		{km.FilterInput.Short(), "filter"},
-		{km.NextFocus.Short(), "next"},
-		{km.SubscriptionPicker.Short(), "sub"},
-		{km.Inspect.Short(), "inspect"},
-	}, m.Styles, ui.PaneContentWidth(pane, pw[0]))
+	accounts := ui.RenderListPane(ui.ListPane{
+		List:     &m.accountsList,
+		Title:    m.accountsPaneTitle(),
+		Loading:  m.Loading && m.LoadingPane == accountsPane,
+		LoadedAt: m.LoadingStartedAt,
+		Hints: []ui.PaneHint{
+			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
+			{Key: km.FilterInput.Short(), Desc: "filter"},
+			{Key: km.NextFocus.Short(), Desc: "next"},
+			{Key: km.SubscriptionPicker.Short(), Desc: "sub"},
+			{Key: km.Inspect.Short(), Desc: "inspect"},
+		},
+		Frame: ui.PaneFrame{Width: pw[0], Height: h, Focused: m.focus == accountsPane},
+	}, m.Styles)
 
-	containersHints := ui.RenderPaneHints([]ui.PaneHint{
-		{km.OpenFocusedAlt.Short(), "open"},
-		{km.NavigateLeft.Short(), "back"},
-		{km.FilterInput.Short(), "filter"},
-	}, m.Styles, ui.PaneContentWidth(pane, pw[1]))
+	containers := ui.RenderListPane(ui.ListPane{
+		List:     &m.containersList,
+		Title:    m.containersPaneTitle(),
+		Loading:  m.Loading && m.LoadingPane == containersPane,
+		LoadedAt: m.LoadingStartedAt,
+		Hints: []ui.PaneHint{
+			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
+			{Key: km.NavigateLeft.Short(), Desc: "back"},
+			{Key: km.FilterInput.Short(), Desc: "filter"},
+		},
+		Frame: ui.PaneFrame{Width: pw[1], Height: h, Focused: m.focus == containersPane},
+	}, m.Styles)
 
-	var blobsHints string
+	var blobsHintSet []ui.PaneHint
 	if m.search.active {
-		blobsHints = ui.RenderPaneHints([]ui.PaneHint{
-			{"enter", "submit"},
-			{"esc", "cancel"},
-			{"backspace", "back"},
-		}, m.Styles, ui.PaneContentWidth(pane, pw[2]))
+		blobsHintSet = []ui.PaneHint{
+			{Key: "enter", Desc: "submit"},
+			{Key: "esc", Desc: "cancel"},
+			{Key: "backspace", Desc: "back"},
+		}
 	} else {
-		blobsHints = ui.RenderPaneHints([]ui.PaneHint{
-			{km.FilterInput.Short(), "search"},
-			{km.ToggleMark.Short(), "mark"},
-			{km.DownloadSelection.Short(), "download"},
-			{km.OpenFocusedAlt.Short(), "preview"},
-		}, m.Styles, ui.PaneContentWidth(pane, pw[2]))
+		blobsHintSet = []ui.PaneHint{
+			{Key: km.FilterInput.Short(), Desc: "search"},
+			{Key: km.ToggleMark.Short(), Desc: "mark"},
+			{Key: km.DownloadSelection.Short(), Desc: "download"},
+			{Key: km.OpenFocusedAlt.Short(), Desc: "preview"},
+		}
 	}
 
-	accountsView := lipgloss.JoinVertical(lipgloss.Left, m.accountsList.View(), accountsHints)
-	containersView := lipgloss.JoinVertical(lipgloss.Left, m.containersList.View(), containersHints)
-
-	var blobsViewParts []string
+	blobsPaneParams := ui.ListPane{
+		List:     &m.blobsList,
+		Title:    m.blobsPaneTitle(),
+		Loading:  m.Loading && m.LoadingPane == blobsPane,
+		LoadedAt: m.LoadingStartedAt,
+		Hints:    blobsHintSet,
+		Frame:    ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == blobsPane},
+	}
 	if m.search.active {
-		blobsViewParts = append(blobsViewParts, m.renderSearchInput(ui.PaneContentWidth(pane, pw[2])))
+		blobsPaneParams.Prefix = m.renderSearchInput(ui.PaneContentWidth(m.Styles.Chrome.Pane, pw[2]))
 	}
-	blobsViewParts = append(blobsViewParts, m.blobsList.View(), blobsHints)
-	blobsView := lipgloss.JoinVertical(lipgloss.Left, blobsViewParts...)
+	blobsPane := ui.RenderListPane(blobsPaneParams, m.Styles)
 
-	previewView := ""
+	paneParts := []string{accounts, containers, blobsPane}
+
 	if m.preview.open {
 		previewHints := ui.RenderPaneHints([]ui.PaneHint{
-			{km.PreviewBack.Short(), "back"},
-			{km.PreviewDown.Short() + "/" + km.PreviewUp.Short(), "scroll"},
-			{km.PreviewBottom.Short(), "bottom"},
-		}, m.Styles, ui.PaneContentWidth(pane, pw[3]))
-		previewView = m.preview.viewport.View()
-		previewView = lipgloss.JoinVertical(lipgloss.Left, previewView, previewHints)
-	}
-
-	h := m.paneHeight
-	accountsPaneStyle := styles.Pane.Copy().Width(pw[0]).Height(h)
-	containersPaneStyle := styles.Pane.Copy().Width(pw[1]).Height(h)
-	blobsPaneStyle := styles.Pane.Copy().Width(pw[2]).Height(h)
-	previewPaneStyle := styles.Pane.Copy().Width(pw[3]).Height(h)
-
-	if m.focus == accountsPane {
-		accountsPaneStyle = styles.FocusedPane.Copy().Width(pw[0]).Height(h)
-	}
-	if m.focus == containersPane {
-		containersPaneStyle = styles.FocusedPane.Copy().Width(pw[1]).Height(h)
-	}
-	if m.focus == blobsPane {
-		blobsPaneStyle = styles.FocusedPane.Copy().Width(pw[2]).Height(h)
-	}
-	if m.preview.open && m.focus == previewPane {
-		previewPaneStyle = styles.FocusedPane.Copy().Width(pw[3]).Height(h)
-	}
-
-	paneParts := []string{
-		accountsPaneStyle.Render(accountsView),
-		containersPaneStyle.Render(containersView),
-		blobsPaneStyle.Render(blobsView),
-	}
-	if m.preview.open {
-		previewTitle := m.preview.title(m.Styles)
-		previewPaneContent := lipgloss.JoinVertical(lipgloss.Left,
-			m.Styles.Accent.Render(previewTitle),
-			previewView,
+			{Key: km.PreviewBack.Short(), Desc: "back"},
+			{Key: km.PreviewDown.Short() + "/" + km.PreviewUp.Short(), Desc: "scroll"},
+			{Key: km.PreviewBottom.Short(), Desc: "bottom"},
+		}, m.Styles, ui.PaneContentWidth(m.Styles.Chrome.Pane, pw[3]))
+		previewTitle := m.Styles.Accent.Render(m.preview.title(m.Styles))
+		previewContent := lipgloss.JoinVertical(lipgloss.Left,
+			previewTitle,
+			m.preview.viewport.View(),
+			previewHints,
 		)
-		paneParts = append(paneParts, previewPaneStyle.Render(previewPaneContent))
+		focused := m.focus == previewPane
+		preview := ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[3], Height: h, Focused: focused}, m.Styles)
+		paneParts = append(paneParts, preview)
 	}
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, paneParts...)
@@ -142,17 +129,8 @@ func (m Model) View() string {
 	}
 	statusBar := ui.RenderStatusBar(m.Styles, sbItems, sbStatus, sbErr, m.Width)
 
-	parts := []string{subBar, panes, statusBar}
-
-	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, parts...), m.Width, m.Height, m.Styles.Bg)
+	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)
 	return m.RenderOverlays(view)
-}
-
-// withPaneSpinner is a thin wrapper around ui.RenderPaneSpinner that
-// checks whether the given pane is the current loading target.
-func (m Model) withPaneSpinner(title string, pane int, width int) string {
-	loading := m.Loading && m.LoadingPane == pane
-	return ui.RenderPaneSpinner(title, loading, m.LoadingStartedAt, m.Styles, width)
 }
 
 func (m Model) accountsPaneTitle() string {
