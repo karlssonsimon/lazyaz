@@ -2,6 +2,7 @@ package kvapp
 
 import (
 	"azure-storage/internal/appshell"
+	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/keymap"
@@ -33,6 +34,19 @@ type Model struct {
 	secrets  []keyvault.Secret
 	versions []keyvault.SecretVersion
 
+	// Active streaming-refresh sessions. Non-nil while a fetch is in
+	// flight for the corresponding list; pages are merged into the session
+	// and the list is rebuilt as each page arrives. See cache.FetchSession.
+	vaultsSession   *cache.FetchSession[keyvault.Vault]
+	secretsSession  *cache.FetchSession[keyvault.Secret]
+	versionsSession *cache.FetchSession[keyvault.SecretVersion]
+
+	// fetchGen is a monotonic token bumped on every new fetch across any
+	// list. It's copied into each fetch command and checked on arriving
+	// pages so that stale pages from a superseded or cancelled refresh
+	// get dropped.
+	fetchGen int
+
 	hasVault      bool
 	currentVault  keyvault.Vault
 	hasSecret     bool
@@ -45,6 +59,8 @@ type Model struct {
 }
 
 type vaultsLoadedMsg struct {
+	gen            int
+	cached         bool
 	subscriptionID string
 	vaults         []keyvault.Vault
 	done           bool
@@ -53,6 +69,8 @@ type vaultsLoadedMsg struct {
 }
 
 type secretsLoadedMsg struct {
+	gen     int
+	cached  bool
 	vault   keyvault.Vault
 	secrets []keyvault.Secret
 	done    bool
@@ -61,6 +79,8 @@ type secretsLoadedMsg struct {
 }
 
 type versionsLoadedMsg struct {
+	gen        int
+	cached     bool
 	vault      keyvault.Vault
 	secretName string
 	versions   []keyvault.SecretVersion
@@ -187,13 +207,23 @@ func (m Model) HelpSections() []ui.HelpSection {
 	}
 }
 
+// SetSubscription overrides the embedded appshell.Model method to also
+// prime the initial vault fetch session. Tabapp calls this after
+// constructing the model and before Init() issues the first fetch, so the
+// vault loader already has a live session to hand its pages to.
+func (m *Model) SetSubscription(sub azure.Subscription) {
+	m.Model.SetSubscription(sub)
+	m.fetchGen++
+	m.vaultsSession = cache.NewFetchSession(m.vaults, m.fetchGen, vaultKey)
+}
+
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{spinner.Tick}
 	if m.SubOverlay.Active {
 		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 	}
 	if m.HasSubscription {
-		cmds = append(cmds, fetchVaultsCmd(m.service, m.cache.vaults, m.CurrentSub.ID))
+		cmds = append(cmds, fetchVaultsCmd(m.service, m.cache.vaults, m.CurrentSub.ID, m.fetchGen))
 	}
 	return tea.Batch(cmds...)
 }

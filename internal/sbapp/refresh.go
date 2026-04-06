@@ -22,18 +22,22 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	}
 
 	if !m.hasNamespace || m.focus == namespacesPane {
+		m.fetchGen++
+		m.namespacesSession = cache.NewFetchSession(m.namespaces, m.fetchGen, namespaceKey)
 		m.SetLoading(m.focus)
 		m.LastErr = ""
 		m.Status = fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(m.CurrentSub))
-		return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID))
+		return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID, m.fetchGen))
 	}
 
 	if m.focus == entitiesPane || !m.hasEntity {
+		m.fetchGen++
+		m.entitiesSession = cache.NewFetchSession(m.entities, m.fetchGen, entityKey)
 		m.SetLoading(m.focus)
 		m.LastErr = ""
 		m.Status = fmt.Sprintf("Loading entities in %s", m.currentNS.Name)
-		entityKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name)
-		return m, tea.Batch(spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, m.currentNS, entityKey))
+		entityCacheKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name)
+		return m, tea.Batch(spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, m.currentNS, entityCacheKey, m.fetchGen))
 	}
 
 	return m.refreshDetail()
@@ -54,11 +58,13 @@ func (m Model) refreshDetail() (Model, tea.Cmd) {
 		return m, tea.Batch(spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentTopicSub.Name, m.deadLetter))
 	}
 
+	m.fetchGen++
+	m.topicSubsSession = cache.NewFetchSession(m.topicSubs, m.fetchGen, topicSubKey)
 	m.SetLoading(m.focus)
 	m.LastErr = ""
 	m.Status = fmt.Sprintf("Loading subscriptions for topic %s", m.currentEntity.Name)
-	topicKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, m.currentEntity.Name)
-	return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, m.currentEntity.Name, topicKey))
+	topicCacheKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, m.currentEntity.Name)
+	return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, m.currentEntity.Name, topicCacheKey, m.fetchGen))
 }
 
 func (m Model) rePeekMessages() (Model, tea.Cmd) {

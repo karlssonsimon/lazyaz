@@ -27,33 +27,33 @@ func fetchSubscriptionsCmd(svc *servicebus.Service, loader *cache.Loader[azure.S
 	return loader.Fetch("", fetchFn, wrap)
 }
 
-func fetchNamespacesCmd(svc *servicebus.Service, loader *cache.Loader[servicebus.Namespace], subscriptionID string) tea.Cmd {
+func fetchNamespacesCmd(svc *servicebus.Service, loader *cache.Loader[servicebus.Namespace], subscriptionID string, gen int) tea.Cmd {
 	return loader.Fetch(subscriptionID, func(ctx context.Context, send func([]servicebus.Namespace)) error {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		return svc.ListNamespaces(ctx, subscriptionID, send)
 	}, func(p cache.Page[servicebus.Namespace]) tea.Msg {
-		return namespacesLoadedMsg{subscriptionID: subscriptionID, namespaces: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return namespacesLoadedMsg{gen: gen, cached: p.Cached, subscriptionID: subscriptionID, namespaces: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
-func fetchEntitiesCmd(svc *servicebus.Service, loader *cache.Loader[servicebus.Entity], ns servicebus.Namespace, cacheKey string) tea.Cmd {
+func fetchEntitiesCmd(svc *servicebus.Service, loader *cache.Loader[servicebus.Entity], ns servicebus.Namespace, cacheKey string, gen int) tea.Cmd {
 	return loader.Fetch(cacheKey, func(ctx context.Context, send func([]servicebus.Entity)) error {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		return svc.ListEntities(ctx, ns, send)
 	}, func(p cache.Page[servicebus.Entity]) tea.Msg {
-		return entitiesLoadedMsg{namespace: ns, entities: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return entitiesLoadedMsg{gen: gen, cached: p.Cached, namespace: ns, entities: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
-func fetchTopicSubscriptionsCmd(svc *servicebus.Service, loader *cache.Loader[servicebus.TopicSubscription], ns servicebus.Namespace, topicName string, cacheKey string) tea.Cmd {
+func fetchTopicSubscriptionsCmd(svc *servicebus.Service, loader *cache.Loader[servicebus.TopicSubscription], ns servicebus.Namespace, topicName string, cacheKey string, gen int) tea.Cmd {
 	return loader.Fetch(cacheKey, func(ctx context.Context, send func([]servicebus.TopicSubscription)) error {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		return svc.ListTopicSubscriptions(ctx, ns, topicName, send)
 	}, func(p cache.Page[servicebus.TopicSubscription]) tea.Msg {
-		return topicSubscriptionsLoadedMsg{namespace: ns, topicName: topicName, subs: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return topicSubscriptionsLoadedMsg{gen: gen, cached: p.Cached, namespace: ns, topicName: topicName, subs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 

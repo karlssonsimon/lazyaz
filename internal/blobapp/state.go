@@ -2,6 +2,7 @@ package blobapp
 
 import (
 	"azure-storage/internal/appshell"
+	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/blob"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/keymap"
@@ -58,6 +59,17 @@ type Model struct {
 	visualLineMode bool
 	visualAnchor   string
 
+	// Streaming-refresh sessions. See cache.FetchSession. Search results
+	// are not session-merged — they're a separate code path through
+	// search.go that replaces entirely.
+	accountsSession   *cache.FetchSession[blob.Account]
+	containersSession *cache.FetchSession[blob.ContainerInfo]
+	blobsSession      *cache.FetchSession[blob.BlobEntry]
+
+	// fetchGen is the monotonic generation token copied into each fetch
+	// so pages from superseded or cancelled fetches can be dropped.
+	fetchGen int
+
 	hasAccount     bool
 	currentAccount blob.Account
 	hasContainer   bool
@@ -75,6 +87,8 @@ type Model struct {
 }
 
 type accountsLoadedMsg struct {
+	gen            int
+	cached         bool
 	subscriptionID string
 	accounts       []blob.Account
 	done           bool
@@ -83,6 +97,8 @@ type accountsLoadedMsg struct {
 }
 
 type containersLoadedMsg struct {
+	gen        int
+	cached     bool
 	account    blob.Account
 	containers []blob.ContainerInfo
 	done       bool
@@ -91,6 +107,8 @@ type containersLoadedMsg struct {
 }
 
 type blobsLoadedMsg struct {
+	gen       int
+	cached    bool
 	account   blob.Account
 	container string
 	prefix    string
@@ -261,6 +279,15 @@ func (m Model) HelpSections() []ui.HelpSection {
 	}
 }
 
+// SetSubscription overrides the embedded appshell.Model method to also
+// prime the initial accounts fetch session. Tabapp calls this after
+// constructing the model and before Init() issues the first fetch.
+func (m *Model) SetSubscription(sub azure.Subscription) {
+	m.Model.SetSubscription(sub)
+	m.fetchGen++
+	m.accountsSession = cache.NewFetchSession(m.accounts, m.fetchGen, accountKey)
+}
+
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{spinner.Tick}
 	// Only fetch subscriptions from Azure if the picker is open.
@@ -268,7 +295,7 @@ func (m Model) Init() tea.Cmd {
 		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 	}
 	if m.HasSubscription {
-		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.CurrentSub.ID, false))
+		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.CurrentSub.ID, false, m.fetchGen))
 	}
 	return tea.Batch(cmds...)
 }

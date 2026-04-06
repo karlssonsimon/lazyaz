@@ -87,3 +87,32 @@ func versionsToItems(versions []keyvault.SecretVersion) []list.Item {
 	}
 	return items
 }
+
+// Identity functions used by cache.FetchSession and
+// ui.SetItemsPreserveKey. Names are unique within a scope (subscription,
+// vault, secret), which is all the merge semantics require.
+
+func vaultKey(v keyvault.Vault) string           { return v.Name }
+func secretKey(s keyvault.Secret) string         { return s.Name }
+func versionKey(v keyvault.SecretVersion) string { return v.Version }
+
+func vaultItemKey(it list.Item) string {
+	if vi, ok := it.(vaultItem); ok {
+		return vi.vault.Name
+	}
+	return ""
+}
+
+func secretItemKey(it list.Item) string {
+	if si, ok := it.(secretItem); ok {
+		return si.secret.Name
+	}
+	return ""
+}
+
+func versionItemKey(it list.Item) string {
+	if vi, ok := it.(versionItem); ok {
+		return vi.version.Version
+	}
+	return ""
+}
