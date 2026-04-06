@@ -132,3 +132,19 @@ func (m *Model) refreshItems() {
 	m.detailList.SetItems(messagesToItems(m.peekedMessages, m.currentMarks(), m.currentDuplicates()))
 	m.detailList.Select(idx)
 }
+
+// clearDetailListForRePeek empties the message list (and the preview
+// viewport, if mounted) so the user doesn't see stale messages from the
+// previous tab while a new peek is in flight. Used when toggling
+// active↔DLQ — the new message set is entirely different and even a
+// brief lingering of the old data is misleading.
+func (m *Model) clearDetailListForRePeek() {
+	m.peekedMessages = nil
+	m.detailList.ResetFilter()
+	m.detailList.SetItems(nil)
+	if m.viewingMessage {
+		m.selectedMessage = servicebus.PeekedMessage{}
+		m.messageViewport.SetContent(m.Styles.Muted.Render("(loading…)"))
+		m.messageViewport.GotoTop()
+	}
+}
