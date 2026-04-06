@@ -27,16 +27,16 @@ func (m *Model) resize() {
 	}
 	m.paneHeight = height
 
-	listHeight := height - ui.PaneTitleHeight - ui.PaneHintHeight
-	m.accountsList.SetSize(ui.PaneContentWidth(pane, widths[0]), listHeight)
-	m.containersList.SetSize(ui.PaneContentWidth(pane, widths[1]), listHeight)
-	blobListHeight := listHeight
+	baseListHeight := height - ui.PaneTitleHeight - ui.PaneHintHeight
+	m.accountsList.SetSize(ui.PaneContentWidth(pane, widths[0]), baseListHeight-m.inspectFooterHeight(accountsPane))
+	m.containersList.SetSize(ui.PaneContentWidth(pane, widths[1]), baseListHeight-m.inspectFooterHeight(containersPane))
+	blobListHeight := baseListHeight - m.inspectFooterHeight(blobsPane)
 	if m.search.active {
 		blobListHeight -= searchInputHeight
 	}
 	m.blobsList.SetSize(ui.PaneContentWidth(pane, widths[2]), blobListHeight)
 	if m.preview.open {
 		m.preview.viewport.Width = ui.PaneContentWidth(pane, widths[3])
-		m.preview.viewport.Height = listHeight
+		m.preview.viewport.Height = baseListHeight
 	}
 }

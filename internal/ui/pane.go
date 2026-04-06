@@ -45,6 +45,12 @@ func RenderPane(content string, frame PaneFrame, styles Styles) string {
 // and the list body. blobapp uses this to slot its search input above
 // the blobs list when search is active.
 //
+// Footer is optional; when non-empty it is rendered between the list
+// body and the hints row. Apps use this to pin auxiliary content (such
+// as the per-pane inspect strip) inside a pane. The caller is responsible
+// for making the list height accommodate the footer — i.e. subtract
+// lipgloss.Height(footer) from the list height in resize().
+//
 // TitleStyle and FrameStyle are optional overrides for panes that need
 // different title/border styling than the scheme defaults — e.g. sbapp's
 // dead-letter detail pane wants a danger-colored title and border
@@ -62,6 +68,7 @@ type ListPane struct {
 	LoadedAt time.Time
 	Hints    []PaneHint
 	Prefix   string
+	Footer   string
 	Frame    PaneFrame
 
 	TitleStyle *lipgloss.Style
@@ -85,7 +92,11 @@ func RenderListPane(p ListPane, styles Styles) string {
 	if p.Prefix != "" {
 		parts = append(parts, p.Prefix)
 	}
-	parts = append(parts, p.List.View(), hints)
+	parts = append(parts, p.List.View())
+	if p.Footer != "" {
+		parts = append(parts, p.Footer)
+	}
+	parts = append(parts, hints)
 	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
 	paneStyle := styles.Chrome.Pane
