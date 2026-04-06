@@ -18,6 +18,11 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Snapshot the current accounts list under the outgoing sub.
+	if m.HasSubscription {
+		m.accountsHistory[m.CurrentSub.ID] = ui.SnapshotListState(&m.accountsList, accountItemKey)
+	}
+
 	m.CurrentSub = sub
 	m.HasSubscription = true
 	m.hasAccount = false
@@ -32,15 +37,14 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 
 	if cached, ok := m.cache.accounts.Get(sub.ID); ok {
 		m.accounts = cached
-		m.accountsList.ResetFilter()
-		ui.SetItemsPreserveIndex(&m.accountsList, accountsToItems(cached))
+		m.accountsList.SetItems(accountsToItems(cached))
 		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(cached))
 	} else {
 		m.accounts = nil
-		m.accountsList.ResetFilter()
 		m.accountsList.SetItems(nil)
 		m.accountsList.Title = "Storage Accounts"
 	}
+	ui.RestoreListState(&m.accountsList, m.accountsHistory[sub.ID], accountItemKey)
 
 	m.containers = nil
 	m.blobs = nil
@@ -65,14 +69,20 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 		return m, nil
 	case blobsPane:
 		if m.hasContainer && !m.blobLoadAll && m.prefix != "" {
+			// Snapshot current prefix's blobs list before going up.
+			oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
+			m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
+
 			m.deactivateSearch()
 			m.prefix = parentPrefix(m.prefix)
 
-			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
+			blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
+			if cached, ok := m.cache.blobs.Get(blobsScope); ok {
 				m.blobs = cached
 				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 				m.refreshItems()
 			}
+			ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
 			m.fetchGen++
 			m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
@@ -110,6 +120,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Snapshot containers list under the outgoing account.
+		if m.hasAccount {
+			oldKey := cache.Key(m.CurrentSub.ID, m.currentAccount.Name)
+			m.containersHistory[oldKey] = ui.SnapshotListState(&m.containersList, containerItemKey)
+		}
+
 		m.currentAccount = item.account
 		m.hasAccount = true
 		m.hasContainer = false
@@ -120,17 +136,17 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.resetPreviewState()
 		m.focus = containersPane
 
-		if cached, ok := m.cache.containers.Get(cache.Key(m.CurrentSub.ID, item.account.Name)); ok {
+		containersScope := cache.Key(m.CurrentSub.ID, item.account.Name)
+		if cached, ok := m.cache.containers.Get(containersScope); ok {
 			m.containers = cached
-			m.containersList.ResetFilter()
-			ui.SetItemsPreserveIndex(&m.containersList, containersToItems(cached))
+			m.containersList.SetItems(containersToItems(cached))
 			m.containersList.Title = fmt.Sprintf("Containers (%d)", len(cached))
 		} else {
 			m.containers = nil
-			m.containersList.ResetFilter()
 			m.containersList.SetItems(nil)
 			m.containersList.Title = "Containers"
 		}
+		ui.RestoreListState(&m.containersList, m.containersHistory[containersScope], containerItemKey)
 
 		m.blobs = nil
 		m.blobsList.ResetFilter()
@@ -156,6 +172,13 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Snapshot blobs list under outgoing container (including prefix
+		// and load-all flag).
+		if m.hasContainer {
+			oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, m.blobLoadAll)
+			m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
+		}
+
 		m.containerName = item.container.Name
 		m.hasContainer = true
 		m.prefix = ""
@@ -164,17 +187,17 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.resetPreviewState()
 		m.focus = blobsPane
 
-		if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, item.container.Name, "", false)); ok {
+		blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, item.container.Name, "", false)
+		if cached, ok := m.cache.blobs.Get(blobsScope); ok {
 			m.blobs = cached
-			m.blobsList.ResetFilter()
 			m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 			m.refreshItems()
 		} else {
 			m.blobs = nil
-			m.blobsList.ResetFilter()
 			m.blobsList.SetItems(nil)
 			m.blobsList.Title = "Blobs"
 		}
+		ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
 		m.fetchGen++
 		m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
@@ -194,14 +217,20 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 				m.Status = "Directory navigation is unavailable when all blobs are loaded"
 				return m, nil
 			}
+			// Snapshot the current prefix's blobs list before descending.
+			oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, m.blobLoadAll)
+			m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
+
 			m.deactivateSearch()
 			m.prefix = item.blob.Name
 
-			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
+			blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
+			if cached, ok := m.cache.blobs.Get(blobsScope); ok {
 				m.blobs = cached
 				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 				m.refreshItems()
 			}
+			ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
 			m.fetchGen++
 			m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
