@@ -62,6 +62,11 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Snapshot the current namespaces list under the outgoing sub.
+	if m.HasSubscription {
+		m.namespacesHistory[m.CurrentSub.ID] = ui.SnapshotListState(&m.namespacesList, namespaceItemKey)
+	}
+
 	m.CurrentSub = sub
 	m.HasSubscription = true
 	m.hasNamespace = false
@@ -73,15 +78,14 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 
 	if cached, ok := m.cache.namespaces.Get(sub.ID); ok {
 		m.namespaces = cached
-		m.namespacesList.ResetFilter()
-		ui.SetItemsPreserveIndex(&m.namespacesList, namespacesToItems(cached))
+		m.namespacesList.SetItems(namespacesToItems(cached))
 		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(cached))
 	} else {
 		m.namespaces = nil
-		m.namespacesList.ResetFilter()
 		m.namespacesList.SetItems(nil)
 		m.namespacesList.Title = "Namespaces"
 	}
+	ui.RestoreListState(&m.namespacesList, m.namespacesHistory[sub.ID], namespaceItemKey)
 
 	m.entities = nil
 	m.entitiesList.ResetFilter()
@@ -111,6 +115,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Snapshot current entities list under the outgoing namespace.
+		if m.hasNamespace {
+			oldKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name)
+			m.entitiesHistory[oldKey] = ui.SnapshotListState(&m.entitiesList, entityItemKey)
+		}
+
 		m.currentNS = item.namespace
 		m.hasNamespace = true
 		m.hasEntity = false
@@ -121,15 +131,14 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		entityCacheKey := cache.Key(m.CurrentSub.ID, item.namespace.Name)
 		if cached, ok := m.cache.entities.Get(entityCacheKey); ok {
 			m.entities = cached
-			m.entitiesList.ResetFilter()
-			ui.SetItemsPreserveIndex(&m.entitiesList, entitiesToFilteredItems(cached, m.dlqFilter))
+			m.entitiesList.SetItems(entitiesToFilteredItems(cached, m.dlqFilter))
 			m.entitiesList.Title = m.entitiesPaneTitle()
 		} else {
 			m.entities = nil
-			m.entitiesList.ResetFilter()
 			m.entitiesList.SetItems(nil)
 			m.entitiesList.Title = "Entities"
 		}
+		ui.RestoreListState(&m.entitiesList, m.entitiesHistory[entityCacheKey], entityItemKey)
 
 		m.detailList.ResetFilter()
 		m.detailList.SetItems(nil)
@@ -154,6 +163,14 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Snapshot the current detail list (topic subs mode) under the
+		// outgoing entity. Message-mode detail state is ephemeral and
+		// not worth preserving — marks are already cleared by clearDetailState.
+		if m.hasEntity && m.detailMode == detailTopicSubscriptions {
+			oldKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, m.currentEntity.Name)
+			m.topicSubsHistory[oldKey] = ui.SnapshotListState(&m.detailList, topicSubItemKey)
+		}
+
 		m.currentEntity = item.entity
 		m.hasEntity = true
 		m.clearDetailState()
@@ -164,14 +181,13 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			if cached, ok := m.cache.topicSubs.Get(topicCacheKey); ok {
 				m.topicSubs = cached
 				m.detailMode = detailTopicSubscriptions
-				m.detailList.ResetFilter()
-				ui.SetItemsPreserveIndex(&m.detailList, topicSubsToItems(cached))
+				m.detailList.SetItems(topicSubsToItems(cached))
 				m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(cached))
 			} else {
-				m.detailList.ResetFilter()
 				m.detailList.SetItems(nil)
 				m.detailList.Title = "Detail"
 			}
+			ui.RestoreListState(&m.detailList, m.topicSubsHistory[topicCacheKey], topicSubItemKey)
 
 			m.fetchGen++
 			m.topicSubsSession = cache.NewFetchSession(m.topicSubs, m.fetchGen, topicSubKey)

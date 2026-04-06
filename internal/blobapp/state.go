@@ -68,6 +68,15 @@ type Model struct {
 	containersSession *cache.FetchSession[blob.ContainerInfo]
 	blobsSession      *cache.FetchSession[blob.BlobEntry]
 
+	// Per-scope list state history. The blobs list has its scope change
+	// not just on account/container switches but also every time the
+	// user enters or leaves a prefix ("folder"), so blobsHistory keys
+	// are the full prefix path. Search mode and load-all are separate
+	// scopes too — each carries its own cursor/filter memory.
+	accountsHistory   map[string]ui.ListState // keyed by subscription ID
+	containersHistory map[string]ui.ListState // keyed by sub+account
+	blobsHistory      map[string]ui.ListState // keyed by sub+account+container+prefix+loadAll
+
 	// fetchGen is the monotonic generation token copied into each fetch
 	// so pages from superseded or cancelled fetches can be dropped.
 	fetchGen int
@@ -176,15 +185,18 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	blobs.DisableQuitKeybindings()
 
 	m := Model{
-		Model:          appshell.New(cfg, km),
-		service:        svc,
-		accountsList:   accounts,
-		containersList: containers,
-		blobsList:      blobs,
-		markedBlobs:    make(map[string]blob.BlobEntry),
-		preview:        newPreviewState(),
-		cache:          newCache(db),
-		focus:          accountsPane,
+		Model:             appshell.New(cfg, km),
+		service:           svc,
+		accountsList:      accounts,
+		containersList:    containers,
+		blobsList:         blobs,
+		markedBlobs:       make(map[string]blob.BlobEntry),
+		preview:           newPreviewState(),
+		cache:             newCache(db),
+		focus:             accountsPane,
+		accountsHistory:   make(map[string]ui.ListState),
+		containersHistory: make(map[string]ui.ListState),
+		blobsHistory:      make(map[string]ui.ListState),
 	}
 	m.applyScheme(cfg.ActiveScheme())
 	// Hydrate subscriptions from cache without hitting Azure. The fetch

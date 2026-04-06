@@ -53,6 +53,14 @@ type Model struct {
 	entitiesSession   *cache.FetchSession[servicebus.Entity]
 	topicSubsSession  *cache.FetchSession[servicebus.TopicSubscription]
 
+	// Per-scope list state history. Snapshots of cursor + filter for
+	// each list are stashed here when the user navigates to a different
+	// scope, so returning later restores the view. Keyed by the same
+	// scope identifier the cache uses.
+	namespacesHistory map[string]ui.ListState // keyed by subscription ID
+	entitiesHistory   map[string]ui.ListState // keyed by sub+namespace
+	topicSubsHistory  map[string]ui.ListState // keyed by sub+namespace+entity
+
 	// fetchGen is the monotonic generation token copied into each fetch
 	// so pages from superseded or cancelled fetches can be dropped.
 	fetchGen int
@@ -175,6 +183,9 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 		markedMessages:    make(map[string]struct{}),
 		duplicateMessages: make(map[string]struct{}),
 		cache:             newCache(db),
+		namespacesHistory: make(map[string]ui.ListState),
+		entitiesHistory:   make(map[string]ui.ListState),
+		topicSubsHistory:  make(map[string]ui.ListState),
 	}
 	m.applyScheme(cfg.ActiveScheme())
 	// Hydrate subscriptions from cache without hitting Azure.

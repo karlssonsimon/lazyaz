@@ -404,14 +404,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.BackspaceUp.Matches(key):
 		if !focusedFilterActive {
 			if m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != "" {
+				// Snapshot current prefix's blobs list before going up.
+				oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
+				m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
+
 				m.deactivateSearch()
 				m.prefix = parentPrefix(m.prefix)
 
-				if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
+				blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
+				if cached, ok := m.cache.blobs.Get(blobsScope); ok {
 					m.blobs = cached
 					m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 					m.refreshItems()
 				}
+				ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
 				m.fetchGen++
 				m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)

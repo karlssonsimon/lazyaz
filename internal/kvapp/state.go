@@ -43,6 +43,15 @@ type Model struct {
 	secretsSession  *cache.FetchSession[keyvault.Secret]
 	versionsSession *cache.FetchSession[keyvault.SecretVersion]
 
+	// Per-scope list state history. When the user navigates between
+	// scopes (different subscription, different vault, etc.) the cursor
+	// and filter of the previous scope are snapshotted here so that
+	// returning to that scope restores the view where it was left.
+	// Keyed by the same scope identifiers used for the cache.
+	vaultsHistory   map[string]ui.ListState // keyed by subscription ID
+	secretsHistory  map[string]ui.ListState // keyed by sub+vault
+	versionsHistory map[string]ui.ListState // keyed by sub+vault+secret
+
 	// fetchGen is a monotonic token bumped on every new fetch across any
 	// list. It's copied into each fetch command and checked on arriving
 	// pages so that stale pages from a superseded or cancelled refresh
@@ -129,13 +138,16 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 	versionsList.DisableQuitKeybindings()
 
 	m := Model{
-		Model:        appshell.New(cfg, km),
-		service:      svc,
-		vaultsList:   vaults,
-		secretsList:  secrets,
-		versionsList: versionsList,
-		focus:        vaultsPane,
-		cache:        newCache(db),
+		Model:           appshell.New(cfg, km),
+		service:         svc,
+		vaultsList:      vaults,
+		secretsList:     secrets,
+		versionsList:    versionsList,
+		focus:           vaultsPane,
+		cache:           newCache(db),
+		vaultsHistory:   make(map[string]ui.ListState),
+		secretsHistory:  make(map[string]ui.ListState),
+		versionsHistory: make(map[string]ui.ListState),
 	}
 	m.applyScheme(cfg.ActiveScheme())
 	// Hydrate subscriptions from cache without hitting Azure.
