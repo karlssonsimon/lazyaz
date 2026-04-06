@@ -43,6 +43,9 @@ func (m Model) refresh() (Model, tea.Cmd) {
 
 	m.SetLoading(blobsPane)
 	m.LastErr = ""
+	// Refresh refetches m.blobs, so any committed filter snapshot would
+	// be stale — drop it.
+	m.discardCommittedFilter()
 	if m.blobLoadAll {
 		m.fetchGen++
 		m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
