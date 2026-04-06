@@ -28,16 +28,25 @@ func (m *Model) resize() {
 
 	baseListHeight := height - ui.PaneTitleHeight - ui.PaneHintHeight
 
+	detailListHeight := baseListHeight - m.inspectFooterHeight(detailPane)
+	if m.hasPeekTarget {
+		detailListHeight -= dlqTabsHeight
+	}
+
 	if m.viewingMessage {
-		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), baseListHeight-m.inspectFooterHeight(detailPane))
+		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), detailListHeight)
 		m.messageViewport.Width = ui.PaneContentWidth(pane, widths[3])
 		m.messageViewport.Height = baseListHeight - 2
 	} else {
-		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), baseListHeight-m.inspectFooterHeight(detailPane))
+		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), detailListHeight)
 		m.messageViewport.Width = 0
 		m.messageViewport.Height = 0
 	}
 
 	m.namespacesList.SetSize(ui.PaneContentWidth(pane, widths[0]), baseListHeight-m.inspectFooterHeight(namespacesPane))
-	m.entitiesList.SetSize(ui.PaneContentWidth(pane, widths[1]), baseListHeight-m.inspectFooterHeight(entitiesPane))
+	entitiesListHeight := baseListHeight - m.inspectFooterHeight(entitiesPane)
+	if m.hasNamespace {
+		entitiesListHeight -= entityTabsHeight
+	}
+	m.entitiesList.SetSize(ui.PaneContentWidth(pane, widths[1]), entitiesListHeight)
 }

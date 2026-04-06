@@ -18,8 +18,12 @@ func (m Model) View() string {
 	if m.hasNamespace {
 		sbItems = append(sbItems, ui.StatusBarItem{Label: "Namespace:", Value: m.currentNS.Name})
 	}
-	if m.hasEntity {
-		sbItems = append(sbItems, ui.StatusBarItem{Label: "Entity:", Value: entityDisplayName(m.currentEntity)})
+	if m.hasPeekTarget {
+		label := entityDisplayName(m.currentEntity)
+		if m.currentSubName != "" {
+			label += "/" + m.currentSubName
+		}
+		sbItems = append(sbItems, ui.StatusBarItem{Label: "Peeking:", Value: label})
 	}
 
 	ui.ClampListSelection(&m.namespacesList)
@@ -47,6 +51,7 @@ func (m Model) View() string {
 		Frame:  ui.PaneFrame{Width: pw[0], Height: h, Focused: m.focus == namespacesPane},
 	}, m.Styles)
 
+	entitiesContentWidth := ui.PaneContentWidth(paneStyle, pw[1])
 	entities := ui.RenderListPane(ui.ListPane{
 		List:     &m.entitiesList,
 		Title:    m.entitiesPaneTitle(),
@@ -55,9 +60,11 @@ func (m Model) View() string {
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
-			{Key: km.ToggleDLQFilter.Short(), Desc: "DLQ filter"},
+			{Key: "[/]", Desc: "type"},
+			{Key: km.ToggleDLQFilter.Short(), Desc: "DLQ-first"},
 		},
-		Footer: m.inspectFooter(entitiesPane, ui.PaneContentWidth(paneStyle, pw[1])),
+		Header: m.renderEntityTabs(entitiesContentWidth),
+		Footer: m.inspectFooter(entitiesPane, entitiesContentWidth),
 		Frame:  ui.PaneFrame{Width: pw[1], Height: h, Focused: m.focus == entitiesPane},
 	}, m.Styles)
 
@@ -75,9 +82,12 @@ func (m Model) View() string {
 			{Key: km.RequeueDLQ.Short(), Desc: "requeue"},
 		},
 		Footer: m.inspectFooter(detailPane, ui.PaneContentWidth(paneStyle, pw[2])),
-		Frame:  ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == detailPane && !m.viewingMessage},
+		Frame:  ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == detailPane},
 	}
-	if m.deadLetter && m.detailMode == detailMessages {
+	if m.hasPeekTarget {
+		detailPaneListPane.Header = m.renderDLQTabs(ui.PaneContentWidth(paneStyle, pw[2]))
+	}
+	if m.deadLetter && m.hasPeekTarget {
 		dangerTitle := m.Styles.DangerBold.Padding(0, 1)
 		dangerFrame := m.Styles.Chrome.Pane.Copy().BorderForeground(m.Styles.Danger.GetForeground())
 		detailPaneListPane.TitleStyle = &dangerTitle
@@ -92,7 +102,7 @@ func (m Model) View() string {
 		msgID := ui.EmptyToDash(m.selectedMessage.MessageID)
 		previewTitle := previewTitleStyle.Render(fmt.Sprintf("Message: %s", msgID))
 		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, m.messageViewport.View())
-		preview := ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[3], Height: h, Focused: true}, m.Styles)
+		preview := ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[3], Height: h, Focused: m.focus == messagePreviewPane}, m.Styles)
 		panesList = append(panesList, preview)
 	}
 

@@ -8,14 +8,22 @@ import (
 
 func (m *Model) nextFocus() {
 	m.blurAllFilters()
-	m.focus = (m.focus + 1) % 3
+	max := 2 // detailPane
+	if m.viewingMessage {
+		max = 3 // include messagePreviewPane
+	}
+	m.focus = (m.focus + 1) % (max + 1)
 }
 
 func (m *Model) previousFocus() {
 	m.blurAllFilters()
+	max := 2 // detailPane
+	if m.viewingMessage {
+		max = 3 // include messagePreviewPane
+	}
 	m.focus--
 	if m.focus < 0 {
-		m.focus = 2
+		m.focus = max
 	}
 }
 

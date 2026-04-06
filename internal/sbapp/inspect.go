@@ -25,31 +25,30 @@ func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
 			{Label: "FQDN", Value: ns.FQDN},
 		}
 	case entitiesPane:
-		item, ok := m.entitiesList.SelectedItem().(entityItem)
-		if !ok {
-			return "Entity", nil
-		}
-		e := item.entity
-		kind := "Queue"
-		if e.Kind == servicebus.EntityTopic {
-			kind = "Topic"
-		}
-		return kind, []ui.InspectField{
-			{Label: "Name", Value: e.Name},
-			{Label: "Kind", Value: kind},
-			{Label: "Active Messages", Value: fmt.Sprintf("%d", e.ActiveMsgCount)},
-			{Label: "Dead Letter", Value: fmt.Sprintf("%d", e.DeadLetterCount)},
-		}
-	case detailPane:
-		// Could be topic sub or message — check the underlying selection.
-		if item, ok := m.detailList.SelectedItem().(topicSubItem); ok {
-			s := item.sub
+		switch sel := m.entitiesList.SelectedItem().(type) {
+		case entityItem:
+			e := sel.entity
+			kind := "Queue"
+			if e.Kind == servicebus.EntityTopic {
+				kind = "Topic"
+			}
+			return kind, []ui.InspectField{
+				{Label: "Name", Value: e.Name},
+				{Label: "Kind", Value: kind},
+				{Label: "Active Messages", Value: fmt.Sprintf("%d", e.ActiveMsgCount)},
+				{Label: "Dead Letter", Value: fmt.Sprintf("%d", e.DeadLetterCount)},
+			}
+		case topicSubChildItem:
+			s := sel.sub
 			return "Topic Subscription", []ui.InspectField{
 				{Label: "Name", Value: s.Name},
+				{Label: "Parent Topic", Value: sel.parentTopic},
 				{Label: "Active Messages", Value: fmt.Sprintf("%d", s.ActiveMsgCount)},
 				{Label: "Dead Letter", Value: fmt.Sprintf("%d", s.DeadLetterCount)},
 			}
 		}
+		return "Entity", nil
+	case detailPane:
 		if item, ok := m.detailList.SelectedItem().(messageItem); ok {
 			msg := item.message
 			return "Message", []ui.InspectField{

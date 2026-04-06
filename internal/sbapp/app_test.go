@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -82,31 +83,17 @@ func TestPaneName(t *testing.T) {
 
 func TestEntityDisplayName(t *testing.T) {
 	tests := []struct {
-		name   string
-		entity struct {
-			name string
-			kind int
-		}
+		name string
+		e    servicebus.Entity
 		want string
 	}{
-		{name: "queue", entity: struct {
-			name string
-			kind int
-		}{"orders", 0}, want: "[Q] orders"},
-		{name: "topic", entity: struct {
-			name string
-			kind int
-		}{"events", 1}, want: "[T] events"},
+		{name: "queue", e: servicebus.Entity{Name: "orders", Kind: servicebus.EntityQueue}, want: "☰ orders"},
+		{name: "topic", e: servicebus.Entity{Name: "events", Kind: servicebus.EntityTopic}, want: "▶ events"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tag := "[Q]"
-			if tc.entity.kind == 1 {
-				tag = "[T]"
-			}
-			got := tag + " " + tc.entity.name
-			if got != tc.want {
+			if got := entityDisplayName(tc.e); got != tc.want {
 				t.Fatalf("expected %q, got %q", tc.want, got)
 			}
 		})

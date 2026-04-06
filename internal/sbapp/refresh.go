@@ -3,7 +3,6 @@ package sbapp
 import (
 	"fmt"
 
-	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
@@ -30,7 +29,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID, m.fetchGen))
 	}
 
-	if m.focus == entitiesPane || !m.hasEntity {
+	if m.focus == entitiesPane || !m.hasPeekTarget {
 		m.fetchGen++
 		m.entitiesSession = cache.NewFetchSession(m.entities, m.fetchGen, entityKey)
 		m.SetLoading(m.focus)
@@ -40,34 +39,18 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		return m, tea.Batch(spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, m.currentNS, entityCacheKey, m.fetchGen))
 	}
 
-	return m.refreshDetail()
+	return m.rePeekMessages(true)
 }
 
-func (m Model) refreshDetail() (Model, tea.Cmd) {
-	if m.currentEntity.Kind == servicebus.EntityQueue {
-		m.SetLoading(m.focus)
-		m.LastErr = ""
-		m.Status = fmt.Sprintf("Peeking messages from queue %s", m.currentEntity.Name)
-		return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter))
+// rePeekMessages re-fetches the current message list. preserveCursor
+// should be true when the user is browsing the same scope (after
+// requeue/delete-duplicate, R-key refresh) so we keep their position,
+// and false when the scope itself just changed (active↔DLQ toggle)
+// since the new message IDs won't match the old ones anyway.
+func (m Model) rePeekMessages(preserveCursor bool) (Model, tea.Cmd) {
+	if !m.hasPeekTarget {
+		return m, nil
 	}
-
-	if m.viewingTopicSub {
-		m.SetLoading(m.focus)
-		m.LastErr = ""
-		m.Status = fmt.Sprintf("Peeking messages from %s/%s", m.currentEntity.Name, m.currentTopicSub.Name)
-		return m, tea.Batch(spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentTopicSub.Name, m.deadLetter))
-	}
-
-	m.fetchGen++
-	m.topicSubsSession = cache.NewFetchSession(m.topicSubs, m.fetchGen, topicSubKey)
-	m.SetLoading(m.focus)
-	m.LastErr = ""
-	m.Status = fmt.Sprintf("Loading subscriptions for topic %s", m.currentEntity.Name)
-	topicCacheKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, m.currentEntity.Name)
-	return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, m.currentEntity.Name, topicCacheKey, m.fetchGen))
-}
-
-func (m Model) rePeekMessages() (Model, tea.Cmd) {
 	m.SetLoading(m.focus)
 	m.LastErr = ""
 	dlqLabel := "active"
@@ -75,15 +58,11 @@ func (m Model) rePeekMessages() (Model, tea.Cmd) {
 		dlqLabel = "DLQ"
 	}
 
-	if m.currentEntity.Kind == servicebus.EntityQueue {
+	if m.currentSubName == "" {
 		m.Status = fmt.Sprintf("Peeking %s messages from queue %s", dlqLabel, m.currentEntity.Name)
-		return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter))
+		return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, preserveCursor))
 	}
 
-	if m.viewingTopicSub {
-		m.Status = fmt.Sprintf("Peeking %s messages from %s/%s", dlqLabel, m.currentEntity.Name, m.currentTopicSub.Name)
-		return m, tea.Batch(spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentTopicSub.Name, m.deadLetter))
-	}
-
-	return m, nil
+	m.Status = fmt.Sprintf("Peeking %s messages from %s/%s", dlqLabel, m.currentEntity.Name, m.currentSubName)
+	return m, tea.Batch(spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, preserveCursor))
 }
