@@ -225,8 +225,8 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.styles.ApplyToLists([]*list.Model{
 		&m.accountsList, &m.containersList, &m.blobsList,
 	}, &m.spinner)
-	// Blobs list uses two-row delegate for title + metadata on separate lines.
-	m.blobsList.SetDelegate(m.styles.DelegateTwoRow)
+	// Blobs list uses a custom delegate: two rows + mark/visual borders.
+	m.blobsList.SetDelegate(newBlobDelegate(m.styles.DelegateTwoRow, m.styles))
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.

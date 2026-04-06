@@ -49,6 +49,7 @@ func Default() Keymap {
 		ToggleMark:        New(" "),
 		ToggleVisualLine:  New("v", "V"),
 		ExitVisualLine:    New("esc"),
+		VisualSwapAnchor:  New("o"),
 		DownloadSelection: New("D"),
 		BlobVisualMove:    New("up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G"),
 

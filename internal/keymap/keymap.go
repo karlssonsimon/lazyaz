@@ -44,12 +44,13 @@ type Keymap struct {
 	Jump9          Binding `json:"jump_9"`
 
 	// Blob app.
-	ToggleLoadAll   Binding `json:"toggle_load_all"`
-	ToggleMark      Binding `json:"toggle_mark"`
-	ToggleVisualLine Binding `json:"toggle_visual_line"`
-	ExitVisualLine  Binding `json:"exit_visual_line"`
+	ToggleLoadAll     Binding `json:"toggle_load_all"`
+	ToggleMark        Binding `json:"toggle_mark"`
+	ToggleVisualLine  Binding `json:"toggle_visual_line"`
+	ExitVisualLine    Binding `json:"exit_visual_line"`
+	VisualSwapAnchor  Binding `json:"visual_swap_anchor"`
 	DownloadSelection Binding `json:"download_selection"`
-	BlobVisualMove  Binding `json:"blob_visual_move"`
+	BlobVisualMove    Binding `json:"blob_visual_move"`
 
 	// Blob preview.
 	PreviewBack          Binding `json:"preview_back"`

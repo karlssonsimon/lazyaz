@@ -205,11 +205,17 @@ func NewStyles(s Scheme) Styles {
 		Foreground(selText).
 		Background(selBg).
 		Bold(true).
-		Padding(0, 0, 0, 2)
+		Border(lipgloss.ThickBorder(), false, false, false, true).
+		BorderForeground(green).
+		BorderBackground(selBg).
+		Padding(0, 0, 0, 1)
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().
 		Foreground(selText).
 		Background(selBg).
-		Padding(0, 0, 0, 2)
+		Border(lipgloss.ThickBorder(), false, false, false, true).
+		BorderForeground(green).
+		BorderBackground(selBg).
+		Padding(0, 0, 0, 1)
 	delegate.Styles.DimmedTitle = lipgloss.NewStyle().
 		Foreground(muted).
 		Padding(0, 0, 0, 2)

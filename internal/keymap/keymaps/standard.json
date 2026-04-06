@@ -38,6 +38,7 @@
     "toggle_mark": [" "],
     "toggle_visual_line": ["shift+down", "shift+up"],
     "exit_visual_line": ["esc"],
+    "visual_swap_anchor": ["o"],
     "download_selection": ["ctrl+d"],
     "blob_visual_move": ["up", "down", "pgup", "pgdown", "home", "end"],
     "preview_back": ["left", "esc"],
