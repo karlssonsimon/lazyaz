@@ -1,6 +1,8 @@
 package kvapp
 
 import (
+	"time"
+
 	"azure-storage/internal/azure"
 	"azure-storage/internal/azure/keyvault"
 	"azure-storage/internal/cache"
@@ -58,9 +60,11 @@ type Model struct {
 	// interception so the parent tabapp can own those concerns.
 	EmbeddedMode bool
 
-	loading bool
-	status  string
-	lastErr string
+	loading          bool
+	loadingPane      int
+	loadingStartedAt time.Time
+	status           string
+	lastErr          string
 
 	width      int
 	height     int
@@ -150,6 +154,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 		secretsList:  secrets,
 		versionsList: versionsList,
 		focus:        vaultsPane,
+		loadingPane:  -1,
 		cache:        newCache(db),
 		schemes:      cfg.Schemes,
 		themeOverlay: ui.ThemeOverlayState{
@@ -168,6 +173,39 @@ func NewModelWithCache(svc *keyvault.Service, cfg ui.Config, stores KVStores, km
 	m := NewModelWithKeyMap(svc, cfg, km, nil)
 	m.cache = NewCacheWithStores(stores)
 	return m
+}
+
+func (m *Model) setLoading(pane int) {
+	if !m.loading {
+		m.loadingStartedAt = time.Now()
+	}
+	m.loading = true
+	m.loadingPane = pane
+}
+
+func (m *Model) clearLoading() {
+	m.loading = false
+	m.loadingPane = -1
+}
+
+// loadingHoldExpiredMsg is sent after the min-visible spinner hold elapses.
+type loadingHoldExpiredMsg struct {
+	status string
+}
+
+// finishLoading completes a load, holding the spinner visible for at least
+// ui.SpinnerMinVisible. If the hold has not yet elapsed, returns a delayed
+// command; otherwise clears loading immediately and sets the status.
+func (m *Model) finishLoading(status string) tea.Cmd {
+	remaining := ui.SpinnerMinVisible - time.Since(m.loadingStartedAt)
+	if remaining > 0 {
+		return tea.Tick(remaining, func(t time.Time) tea.Msg {
+			return loadingHoldExpiredMsg{status: status}
+		})
+	}
+	m.clearLoading()
+	m.status = status
+	return nil
 }
 
 func (m *Model) applyScheme(scheme ui.Scheme) {

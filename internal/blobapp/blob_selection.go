@@ -60,9 +60,9 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 			m.refreshBlobItems()
 		}
 
-		m.loading = true
+		m.setLoading(blobsPane)
 		m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-		return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+		return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false))
 	}
 
 	m.blobLoadAll = true
@@ -73,9 +73,9 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		m.refreshBlobItems()
 	}
 
-	m.loading = true
+	m.setLoading(blobsPane)
 	m.status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
-	return m, tea.Batch(spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix))
+	return m, tea.Batch(spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, false))
 }
 
 func (m *Model) toggleVisualLineMode() {
@@ -301,7 +301,7 @@ func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 	}
 
 	destinationRoot := filepath.Join(defaultDownloadRoot, m.currentAccount.Name, m.containerName)
-	m.loading = true
+	m.setLoading(blobsPane)
 	m.lastErr = ""
 	m.status = fmt.Sprintf("Downloading %d blob(s) to %s", len(blobNames), destinationRoot)
 	return m, tea.Batch(spinner.Tick, downloadBlobsCmd(m.service, m.currentAccount, m.containerName, blobNames, destinationRoot))

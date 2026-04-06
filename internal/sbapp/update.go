@@ -3,6 +3,7 @@ package sbapp
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"azure-storage/internal/cache"
 	"azure-storage/internal/azure/servicebus"
@@ -29,9 +30,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
+	case loadingHoldExpiredMsg:
+		m.clearLoading()
+		m.status = msg.status
+		return m, nil
+
 	case subscriptionsLoadedMsg:
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = "Failed to load subscriptions"
 			return m, nil
@@ -41,12 +47,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.subscriptions = msg.subscriptions
 
 		if msg.done {
-			m.loading = false
 			m.cache.subscriptions.Set("", msg.subscriptions)
-			m.status = fmt.Sprintf("Loaded %d subscriptions.", len(msg.subscriptions))
 			if !m.hasSubscription {
 				m.subOverlay.Open()
 			}
+			status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.subscriptions), time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
@@ -57,7 +63,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load namespaces in %s", subscriptionDisplayName(m.currentSub))
 			return m, nil
@@ -69,9 +75,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ui.SetItemsPreserveIndex(&m.namespacesList, namespacesToItems(msg.namespaces))
 
 		if msg.done {
-			m.loading = false
 			m.cache.namespaces.Set(msg.subscriptionID, msg.namespaces)
-			m.status = fmt.Sprintf("Loaded %d namespaces from %s.", len(msg.namespaces), subscriptionDisplayName(m.currentSub))
+			status := fmt.Sprintf("Loaded %d namespaces from %s in %s", len(msg.namespaces), subscriptionDisplayName(m.currentSub), time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
@@ -82,7 +88,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load entities in %s", msg.namespace.Name)
 			return m, nil
@@ -95,9 +101,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.entitiesList.Title = m.entitiesPaneTitle()
 
 		if msg.done {
-			m.loading = false
 			m.cache.entities.Set(cache.Key(m.currentSub.ID, msg.namespace.Name), msg.entities)
-			m.status = fmt.Sprintf("Loaded %d entities from %s.", len(msg.entities), msg.namespace.Name)
+			status := fmt.Sprintf("Loaded %d entities from %s in %s", len(msg.entities), msg.namespace.Name, time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
@@ -111,7 +117,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load subscriptions for topic %s", msg.topicName)
 			return m, nil
@@ -124,16 +130,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ui.SetItemsPreserveIndex(&m.detailList, topicSubsToItems(msg.subs))
 
 		if msg.done {
-			m.loading = false
 			m.cache.topicSubs.Set(cache.Key(m.currentSub.ID, msg.namespace.Name, msg.topicName), msg.subs)
-			m.status = fmt.Sprintf("Loaded %d subscriptions for topic %s", len(msg.subs), msg.topicName)
+			status := fmt.Sprintf("Loaded %d subscriptions for topic %s in %s", len(msg.subs), msg.topicName, time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
 
 	case messagesLoadedMsg:
 		// Messages are ephemeral peek results — not cached.
-		m.loading = false
+		m.clearLoading()
 		if msg.err != nil {
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to peek messages from %s", msg.source)
@@ -156,7 +162,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case requeueDoneMsg:
-		m.loading = false
+		m.clearLoading()
 		m.markedMessages = make(map[string]struct{})
 		if msg.err != nil {
 			var dupErr *servicebus.DuplicateError
@@ -179,7 +185,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(peekCmd, refreshEntitiesCmd(m.service, m.currentNS))
 
 	case deleteDuplicateDoneMsg:
-		m.loading = false
+		m.clearLoading()
 		if msg.err != nil {
 			m.lastErr = msg.err.Error()
 			m.status = "Failed to delete duplicate message"
@@ -293,7 +299,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.keymap.ReloadSubscriptions.Matches(key):
 			if !focusedFilterActive {
-				m.loading = true
+				m.setLoading(m.focus)
 				m.lastErr = ""
 				m.status = "Refreshing subscriptions..."
 				return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
@@ -361,7 +367,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(messageIDs) == 0 {
 					return m, nil
 				}
-				m.loading = true
+				m.setLoading(m.focus)
 				m.lastErr = ""
 				m.status = fmt.Sprintf("Requeuing %d message(s)...", len(messageIDs))
 				return m, tea.Batch(spinner.Tick, requeueMessagesCmd(m.service, m.currentNS, m.currentEntity, m.viewingTopicSub, m.currentTopicSub, messageIDs))
@@ -372,7 +378,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if !ok || !item.duplicate {
 					return m, nil
 				}
-				m.loading = true
+				m.setLoading(m.focus)
 				m.lastErr = ""
 				m.status = "Deleting duplicate message..."
 				return m, tea.Batch(spinner.Tick, deleteDuplicateCmd(m.service, m.currentNS, m.currentEntity, m.viewingTopicSub, m.currentTopicSub, item.message.MessageID))

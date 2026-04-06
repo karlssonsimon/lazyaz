@@ -55,6 +55,26 @@ func (l *Loader[T]) Fetch(
 	fetchFn func(ctx context.Context, send func([]T)) error,
 	wrapMsg func(Page[T]) tea.Msg,
 ) tea.Cmd {
+	return l.fetch(key, false, fetchFn, wrapMsg)
+}
+
+// FetchFresh skips the cached emission and goes straight to the network,
+// forcing the user to see the fetch happening. Used for explicit refresh
+// actions where "instant from cache" would be confusing.
+func (l *Loader[T]) FetchFresh(
+	key string,
+	fetchFn func(ctx context.Context, send func([]T)) error,
+	wrapMsg func(Page[T]) tea.Msg,
+) tea.Cmd {
+	return l.fetch(key, true, fetchFn, wrapMsg)
+}
+
+func (l *Loader[T]) fetch(
+	key string,
+	fresh bool,
+	fetchFn func(ctx context.Context, send func([]T)) error,
+	wrapMsg func(Page[T]) tea.Msg,
+) tea.Cmd {
 	if l.cancel != nil {
 		l.cancel()
 	}
@@ -65,8 +85,11 @@ func (l *Loader[T]) Fetch(
 	ch := make(chan Page[T], 2)
 
 	// Emit cached data immediately so the UI doesn't wait for the network.
-	if items, ok := l.store.Get(key); ok && len(items) > 0 {
-		ch <- Page[T]{Key: key, Items: items}
+	// Skipped for explicit refresh actions.
+	if !fresh {
+		if items, ok := l.store.Get(key); ok && len(items) > 0 {
+			ch <- Page[T]{Key: key, Items: items}
+		}
 	}
 
 	go func() {

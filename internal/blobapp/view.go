@@ -3,6 +3,7 @@ package blobapp
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"azure-storage/internal/ui"
 
@@ -29,9 +30,11 @@ func (m Model) View() string {
 		sbItems = append(sbItems, ui.StatusBarItem{Label: "Container:", Value: label})
 	}
 
-	m.accountsList.Title = m.accountsPaneTitle()
-	m.containersList.Title = m.containersPaneTitle()
-	m.blobsList.Title = m.blobsPaneTitle()
+	pw := m.paneWidths
+	pane := m.styles.Chrome.Pane
+	m.accountsList.Title = m.withPaneSpinner(m.accountsPaneTitle(), accountsPane, ui.PaneContentWidth(pane, pw[0]))
+	m.containersList.Title = m.withPaneSpinner(m.containersPaneTitle(), containersPane, ui.PaneContentWidth(pane, pw[1]))
+	m.blobsList.Title = m.withPaneSpinner(m.blobsPaneTitle(), blobsPane, ui.PaneContentWidth(pane, pw[2]))
 	if m.preview.open {
 		m.preview.viewport.SetContent(m.preview.rendered)
 	}
@@ -40,9 +43,6 @@ func (m Model) View() string {
 	ui.ClampListSelection(&m.containersList)
 	ui.ClampListSelection(&m.blobsList)
 
-	pw := m.paneWidths
-
-	pane := m.styles.Chrome.Pane
 	km := m.keymap
 
 	accountsHints := ui.RenderPaneHints([]ui.PaneHint{
@@ -138,7 +138,7 @@ func (m Model) View() string {
 	if sbErr {
 		sbStatus = m.lastErr
 	} else if m.loading {
-		sbStatus = m.spinner.View() + " " + m.status
+		sbStatus = ui.SpinnerFrameAt(time.Since(m.loadingStartedAt)) + " " + m.status
 	}
 	statusBar := ui.RenderStatusBar(m.styles, sbItems, sbStatus, sbErr, m.width)
 
@@ -160,6 +160,27 @@ func (m Model) View() string {
 	}
 
 	return view
+}
+
+// withPaneSpinner right-aligns a spinner onto the title when the given
+// pane is the current loading target.
+//
+// The bubbles list wraps the title with Title padding (Padding(0,1) = 2),
+// appends "  " for status, and truncates to listWidth-1. So our content
+// fits in width-5 (2 title padding + 2 status gap + 1 spinner reserve).
+func (m Model) withPaneSpinner(title string, pane int, width int) string {
+	if !m.loading || m.loadingPane != pane {
+		return title
+	}
+	spin := m.styles.Accent.Render(ui.SpinnerFrameAt(time.Since(m.loadingStartedAt)))
+	titleW := lipgloss.Width(title)
+	spinW := lipgloss.Width(spin)
+	target := width - 5
+	gap := target - titleW - spinW
+	if gap < 1 {
+		gap = 1
+	}
+	return title + strings.Repeat(" ", gap) + spin
 }
 
 func (m Model) accountsPaneTitle() string {

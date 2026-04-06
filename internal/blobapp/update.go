@@ -3,6 +3,7 @@ package blobapp
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
@@ -29,9 +30,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
+	case loadingHoldExpiredMsg:
+		m.clearLoading()
+		m.status = msg.status
+		return m, nil
+
 	case subscriptionsLoadedMsg:
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = "Failed to load subscriptions"
 			return m, nil
@@ -41,12 +47,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.subscriptions = msg.subscriptions
 
 		if msg.done {
-			m.loading = false
 			m.cache.subscriptions.Set("", msg.subscriptions)
-			m.status = fmt.Sprintf("Loaded %d subscriptions.", len(msg.subscriptions))
 			if !m.hasSubscription {
 				m.subOverlay.Open()
 			}
+			status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.subscriptions), time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
@@ -61,7 +67,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load storage accounts in %s", subscriptionDisplayName(m.currentSub))
 			return m, nil
@@ -73,8 +79,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ui.SetItemsPreserveIndex(&m.accountsList, accountsToItems(msg.accounts))
 
 		if msg.done {
-			m.loading = false
-			m.status = fmt.Sprintf("Loaded %d storage accounts from %s.", len(msg.accounts), subscriptionDisplayName(m.currentSub))
+			status := fmt.Sprintf("Loaded %d storage accounts from %s in %s", len(msg.accounts), subscriptionDisplayName(m.currentSub), time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
@@ -89,7 +95,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load containers for %s", msg.account.Name)
 			return m, nil
@@ -101,8 +107,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		ui.SetItemsPreserveIndex(&m.containersList, containersToItems(msg.containers))
 
 		if msg.done {
-			m.loading = false
-			m.status = fmt.Sprintf("Loaded %d containers from %s.", len(msg.containers), msg.account.Name)
+			status := fmt.Sprintf("Loaded %d containers from %s in %s", len(msg.containers), msg.account.Name, time.Since(m.loadingStartedAt).Round(time.Millisecond))
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
@@ -135,7 +141,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.loading = false
+			m.clearLoading()
 			m.lastErr = msg.err.Error()
 			m.status = fmt.Sprintf("Failed to load blobs in %s/%s", msg.account.Name, msg.container)
 			return m, nil
@@ -147,18 +153,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshBlobItems()
 
 		if msg.done {
-			m.loading = false
+			elapsed := time.Since(m.loadingStartedAt).Round(time.Millisecond)
+			var status string
 			if msg.loadAll {
-				m.status = fmt.Sprintf("Loaded all %d blobs in %s/%s", len(msg.blobs), msg.account.Name, msg.container)
+				status = fmt.Sprintf("Loaded all %d blobs in %s/%s in %s", len(msg.blobs), msg.account.Name, msg.container, elapsed)
 			} else {
-				m.status = fmt.Sprintf("Loaded %d entries (max %d) in %s/%s under %q", len(msg.blobs), defaultHierarchyBlobLoadLimit, msg.account.Name, msg.container, msg.prefix)
+				status = fmt.Sprintf("Loaded %d entries in %s/%s under %q in %s", len(msg.blobs), msg.account.Name, msg.container, msg.prefix, elapsed)
 			}
+			return m, m.finishLoading(status)
 		}
 
 		return m, msg.next
 
 	case blobsDownloadedMsg:
-		m.loading = false
+		m.clearLoading()
 		if msg.err != nil {
 			m.lastErr = msg.err.Error()
 			m.status = "Failed to download blobs"
@@ -305,10 +313,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.keymap.ReloadSubscriptions.Matches(key):
 			if !focusedFilterActive {
-				m.loading = true
+				m.setLoading(-1)
 				m.lastErr = ""
 				m.status = "Refreshing subscriptions..."
-				return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
+				return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 			}
 		case m.keymap.RefreshScope.Matches(key):
 			if !focusedFilterActive {
@@ -369,9 +377,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.refreshBlobItems()
 					}
 
-					m.loading = true
+					m.setLoading(blobsPane)
 					m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-					return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit))
+					return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false))
 				}
 			}
 		}

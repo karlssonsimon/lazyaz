@@ -12,21 +12,21 @@ import (
 
 func (m Model) refresh() (Model, tea.Cmd) {
 	if !m.hasSubscription {
-		m.loading = true
+		m.setLoading(m.focus)
 		m.lastErr = ""
 		m.status = "Refreshing subscriptions..."
 		return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
 	}
 
 	if !m.hasNamespace || m.focus == namespacesPane {
-		m.loading = true
+		m.setLoading(m.focus)
 		m.lastErr = ""
 		m.status = fmt.Sprintf("Loading namespaces in %s", subscriptionDisplayName(m.currentSub))
 		return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, m.currentSub.ID))
 	}
 
 	if m.focus == entitiesPane || !m.hasEntity {
-		m.loading = true
+		m.setLoading(m.focus)
 		m.lastErr = ""
 		m.status = fmt.Sprintf("Loading entities in %s", m.currentNS.Name)
 		entityKey := cache.Key(m.currentSub.ID, m.currentNS.Name)
@@ -38,20 +38,20 @@ func (m Model) refresh() (Model, tea.Cmd) {
 
 func (m Model) refreshDetail() (Model, tea.Cmd) {
 	if m.currentEntity.Kind == servicebus.EntityQueue {
-		m.loading = true
+		m.setLoading(m.focus)
 		m.lastErr = ""
 		m.status = fmt.Sprintf("Peeking messages from queue %s", m.currentEntity.Name)
 		return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter))
 	}
 
 	if m.viewingTopicSub {
-		m.loading = true
+		m.setLoading(m.focus)
 		m.lastErr = ""
 		m.status = fmt.Sprintf("Peeking messages from %s/%s", m.currentEntity.Name, m.currentTopicSub.Name)
 		return m, tea.Batch(spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentTopicSub.Name, m.deadLetter))
 	}
 
-	m.loading = true
+	m.setLoading(m.focus)
 	m.lastErr = ""
 	m.status = fmt.Sprintf("Loading subscriptions for topic %s", m.currentEntity.Name)
 	topicKey := cache.Key(m.currentSub.ID, m.currentNS.Name, m.currentEntity.Name)
@@ -59,7 +59,7 @@ func (m Model) refreshDetail() (Model, tea.Cmd) {
 }
 
 func (m Model) rePeekMessages() (Model, tea.Cmd) {
-	m.loading = true
+	m.setLoading(m.focus)
 	m.lastErr = ""
 	dlqLabel := "active"
 	if m.deadLetter {
