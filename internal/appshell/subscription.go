@@ -24,9 +24,17 @@ func (m Model) CurrentSubscription() (azure.Subscription, bool) {
 
 // SetSubscription sets the active subscription without triggering navigation.
 // Callers that need to navigate should call the app's own selectSubscription.
+//
+// This also dismisses the subscription picker overlay and clears any
+// loading state the constructor may have set up. Apps' constructors open
+// the picker when no subscription is present yet — when a parent (like
+// the tabapp) provides one explicitly, that picker is no longer needed.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.CurrentSub = sub
 	m.HasSubscription = true
+	m.SubOverlay.Close()
+	m.ClearLoading()
+	m.Status = ""
 }
 
 // HydrateSubscriptionsFromCache populates Subscriptions from the given loader
