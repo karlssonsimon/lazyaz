@@ -149,7 +149,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	delegate := list.NewDefaultDelegate()
 
 	accounts := list.New([]list.Item{}, delegate, 24, 10)
-	accounts.Title = "Storage Accounts"
+	accounts.SetShowTitle(false) // title is rendered by ui.RenderListPane
 	accounts.SetShowHelp(false)
 	accounts.SetShowPagination(false)
 	accounts.SetShowStatusBar(true)
@@ -158,7 +158,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	accounts.DisableQuitKeybindings()
 
 	containers := list.New([]list.Item{}, delegate, 24, 10)
-	containers.Title = "Containers"
+	containers.SetShowTitle(false)
 	containers.SetShowHelp(false)
 	containers.SetShowPagination(false)
 	containers.SetShowStatusBar(true)
@@ -167,7 +167,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	containers.DisableQuitKeybindings()
 
 	blobs := list.New([]list.Item{}, delegate, 40, 10)
-	blobs.Title = "Blobs"
+	blobs.SetShowTitle(false)
 	blobs.SetShowHelp(false)
 	blobs.SetShowPagination(false)
 	blobs.SetShowStatusBar(true)

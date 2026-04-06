@@ -26,7 +26,7 @@ func (m *Model) resize() {
 	}
 	m.paneHeight = height
 
-	listHeight := height - ui.PaneHintHeight
+	listHeight := height - ui.PaneTitleHeight - ui.PaneHintHeight
 
 	if m.viewingMessage {
 		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), listHeight)
