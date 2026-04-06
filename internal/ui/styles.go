@@ -139,7 +139,6 @@ func NewStyles(s Scheme) Styles {
 	statusFg := color(s.Base04)
 	text := color(s.Base05)
 	selText := color(s.Base06)
-	bright := color(s.Base07)
 	danger := color(s.Base08)
 	orange := color(s.Base09)
 	warning := color(s.Base0A)
@@ -345,14 +344,17 @@ func NewStyles(s Scheme) Styles {
 	}
 
 	// --- Tab Bar ---
+	// Active uses the accent color as a button background so it pops
+	// clearly against the dimmer inactive tabs. Inactive tabs use muted
+	// text on the surface background to recede.
 	tabBar := TabBarStyles{
 		Active: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(bright).
-			Background(selBg).
+			Foreground(bg).
+			Background(blue).
 			Padding(0, 1),
 		Inactive: lipgloss.NewStyle().
-			Foreground(text).
+			Foreground(muted).
 			Background(surface).
 			Padding(0, 1),
 		Sep: lipgloss.NewStyle().
