@@ -12,10 +12,12 @@ import (
 
 func (m Model) refresh() (Model, tea.Cmd) {
 	if !m.hasSubscription {
-		m.setLoading(m.focus)
+		// Can't refresh anything without a subscription; open the picker instead.
+		m.subOverlay.Open()
+		m.setLoading(-1)
 		m.lastErr = ""
 		m.status = "Refreshing subscriptions..."
-		return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions))
+		return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 	}
 
 	if !m.hasNamespace || m.focus == namespacesPane {

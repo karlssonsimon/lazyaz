@@ -311,13 +311,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.previousFocus()
 				return m, nil
 			}
-		case m.keymap.ReloadSubscriptions.Matches(key):
-			if !focusedFilterActive {
-				m.setLoading(-1)
-				m.lastErr = ""
-				m.status = "Refreshing subscriptions..."
-				return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
-			}
 		case m.keymap.RefreshScope.Matches(key):
 			if !focusedFilterActive {
 				return m.refresh()
@@ -353,7 +346,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.keymap.SubscriptionPicker.Matches(key):
 			if !focusedFilterActive {
 				m.subOverlay.Open()
-				return m, nil
+				m.setLoading(-1)
+				m.lastErr = ""
+				m.status = "Refreshing subscriptions..."
+				return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 			}
 		case m.keymap.FilterInput.Matches(key):
 			if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {

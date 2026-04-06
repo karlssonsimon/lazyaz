@@ -202,11 +202,18 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
-		keymap:  km,
-		status:  "Loading Azure subscriptions...",
-		loading: true,
+		keymap: km,
 	}
 	m.applyScheme(cfg.ActiveScheme())
+	// Hydrate subscriptions from cache without hitting Azure.
+	if cached, ok := m.cache.subscriptions.Get(""); ok {
+		m.subscriptions = cached
+	}
+	if !m.hasSubscription {
+		m.subOverlay.Open()
+		m.setLoading(-1)
+		m.status = "Loading Azure subscriptions..."
+	}
 	return m
 }
 
@@ -214,6 +221,10 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores SBStores, km keymap.Keymap) Model {
 	m := NewModelWithKeyMap(svc, cfg, km, nil)
 	m.cache = NewCacheWithStores(stores)
+	// Re-hydrate subscriptions from the shared store.
+	if cached, ok := m.cache.subscriptions.Get(""); ok {
+		m.subscriptions = cached
+	}
 	return m
 }
 
@@ -316,7 +327,10 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions)}
+	cmds := []tea.Cmd{spinner.Tick}
+	if m.subOverlay.Active {
+		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+	}
 	if m.hasSubscription {
 		cmds = append(cmds, fetchNamespacesCmd(m.service, m.cache.namespaces, m.currentSub.ID))
 	}
