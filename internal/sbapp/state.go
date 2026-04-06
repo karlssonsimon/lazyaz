@@ -1,9 +1,7 @@
 package sbapp
 
 import (
-	"time"
-
-	"azure-storage/internal/azure"
+	"azure-storage/internal/appshell"
 	"azure-storage/internal/azure/servicebus"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/keymap"
@@ -31,28 +29,25 @@ const (
 )
 
 type Model struct {
+	appshell.Model
+
 	service *servicebus.Service
 
-	spinner spinner.Model
-
-	namespacesList    list.Model
-	entitiesList      list.Model
-	detailList        list.Model
+	namespacesList list.Model
+	entitiesList   list.Model
+	detailList     list.Model
 
 	focus int
 
-	subscriptions  []azure.Subscription
 	namespaces     []servicebus.Namespace
 	entities       []servicebus.Entity
 	topicSubs      []servicebus.TopicSubscription
 	peekedMessages []servicebus.PeekedMessage
 
-	hasSubscription bool
-	currentSub      azure.Subscription
-	hasNamespace    bool
-	currentNS       servicebus.Namespace
-	hasEntity       bool
-	currentEntity   servicebus.Entity
+	hasNamespace  bool
+	currentNS     servicebus.Namespace
+	hasEntity     bool
+	currentEntity servicebus.Entity
 
 	detailMode      detailView
 	viewingTopicSub bool
@@ -66,40 +61,10 @@ type Model struct {
 	markedMessages    map[string]struct{}
 	duplicateMessages map[string]struct{}
 
-	styles ui.Styles
-	keymap keymap.Keymap
-
-	schemes      []ui.Scheme
-	themeOverlay ui.ThemeOverlayState
-	helpOverlay  ui.HelpOverlayState
-	subOverlay   ui.SubscriptionOverlayState
-
-	inspectFields []ui.InspectField
-	inspectTitle  string
-
 	cache sbCache
 
-	// EmbeddedMode suppresses theme/help overlay handling and quit
-	// interception so the parent tabapp can own those concerns.
-	EmbeddedMode bool
-
-	loading          bool
-	loadingPane      int
-	loadingStartedAt time.Time
-	status           string
-	lastErr          string
-
-	width      int
-	height     int
-	paneWidths    [4]int // ns, ent, det, preview — set by resize
-	paneHeight    int
-}
-
-type subscriptionsLoadedMsg struct {
-	subscriptions []azure.Subscription
-	done          bool
-	err           error
-	next          tea.Cmd
+	paneWidths [4]int // ns, ent, det, preview — set by resize
+	paneHeight int
 }
 
 type namespacesLoadedMsg struct {
@@ -184,35 +149,24 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 	detail.SetFilteringEnabled(true)
 	detail.DisableQuitKeybindings()
 
-	spin := spinner.New()
-	spin.Spinner = spinner.Dot
-
 	m := Model{
+		Model:             appshell.New(cfg, km),
 		service:           svc,
-		spinner:           spin,
 		namespacesList:    namespaces,
 		entitiesList:      entities,
 		detailList:        detail,
 		focus:             namespacesPane,
-		loadingPane:       -1,
 		markedMessages:    make(map[string]struct{}),
 		duplicateMessages: make(map[string]struct{}),
 		cache:             newCache(db),
-		schemes:           cfg.Schemes,
-		themeOverlay: ui.ThemeOverlayState{
-			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
-		},
-		keymap: km,
 	}
 	m.applyScheme(cfg.ActiveScheme())
 	// Hydrate subscriptions from cache without hitting Azure.
-	if cached, ok := m.cache.subscriptions.Get(""); ok {
-		m.subscriptions = cached
-	}
-	if !m.hasSubscription {
-		m.subOverlay.Open()
-		m.setLoading(-1)
-		m.status = "Loading Azure subscriptions..."
+	m.HydrateSubscriptionsFromCache(m.cache.subscriptions)
+	if !m.HasSubscription {
+		m.SubOverlay.Open()
+		m.SetLoading(-1)
+		m.Status = "Loading Azure subscriptions..."
 	}
 	return m
 }
@@ -222,50 +176,15 @@ func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores SBStores, 
 	m := NewModelWithKeyMap(svc, cfg, km, nil)
 	m.cache = NewCacheWithStores(stores)
 	// Re-hydrate subscriptions from the shared store.
-	if cached, ok := m.cache.subscriptions.Get(""); ok {
-		m.subscriptions = cached
-	}
+	m.HydrateSubscriptionsFromCache(m.cache.subscriptions)
 	return m
 }
 
-func (m *Model) setLoading(pane int) {
-	if !m.loading {
-		m.loadingStartedAt = time.Now()
-	}
-	m.loading = true
-	m.loadingPane = pane
-}
-
-func (m *Model) clearLoading() {
-	m.loading = false
-	m.loadingPane = -1
-}
-
-// loadingHoldExpiredMsg is sent after the min-visible spinner hold elapses.
-type loadingHoldExpiredMsg struct {
-	status string
-}
-
-// finishLoading completes a load, holding the spinner visible for at least
-// ui.SpinnerMinVisible. If the hold has not yet elapsed, returns a delayed
-// command; otherwise clears loading immediately and sets the status.
-func (m *Model) finishLoading(status string) tea.Cmd {
-	remaining := ui.SpinnerMinVisible - time.Since(m.loadingStartedAt)
-	if remaining > 0 {
-		return tea.Tick(remaining, func(t time.Time) tea.Msg {
-			return loadingHoldExpiredMsg{status: status}
-		})
-	}
-	m.clearLoading()
-	m.status = status
-	return nil
-}
-
 func (m *Model) applyScheme(scheme ui.Scheme) {
-	m.styles = ui.NewStyles(scheme)
-	m.styles.ApplyToLists([]*list.Model{
+	m.SetScheme(scheme)
+	m.Styles.ApplyToLists([]*list.Model{
 		&m.namespacesList, &m.entitiesList, &m.detailList,
-	}, &m.spinner)
+	}, &m.Spinner)
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.
@@ -275,7 +194,7 @@ func (m *Model) ApplyScheme(scheme ui.Scheme) {
 
 // HelpSections returns the help sections for the service bus explorer.
 func (m Model) HelpSections() []ui.HelpSection {
-	km := m.keymap
+	km := m.Keymap
 	return []ui.HelpSection{
 		{
 			Title: "Navigation",
@@ -315,24 +234,13 @@ func (m Model) HelpSections() []ui.HelpSection {
 	}
 }
 
-// CurrentSubscription returns the active subscription and whether one is set.
-func (m Model) CurrentSubscription() (azure.Subscription, bool) {
-	return m.currentSub, m.hasSubscription
-}
-
-// SetSubscription sets the active subscription without triggering navigation.
-func (m *Model) SetSubscription(sub azure.Subscription) {
-	m.currentSub = sub
-	m.hasSubscription = true
-}
-
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{spinner.Tick}
-	if m.subOverlay.Active {
+	if m.SubOverlay.Active {
 		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 	}
-	if m.hasSubscription {
-		cmds = append(cmds, fetchNamespacesCmd(m.service, m.cache.namespaces, m.currentSub.ID))
+	if m.HasSubscription {
+		cmds = append(cmds, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID))
 	}
 	return tea.Batch(cmds...)
 }

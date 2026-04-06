@@ -51,11 +51,11 @@ func (m *Model) commitFocusedFilter() tea.Cmd {
 	switch m.focus {
 	case accountsPane:
 		ui.ApplyFilterState(&m.accountsList)
-		m.status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
+		m.Status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
 		return nil
 	case containersPane:
 		ui.ApplyFilterState(&m.containersList)
-		m.status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
+		m.Status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
 		return nil
 	}
 
@@ -90,7 +90,7 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 
 	if m.focus == blobsPane && m.visualLineMode {
 		m.refreshItems()
-		m.status = fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames()))
+		m.Status = fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames()))
 	}
 }
 

@@ -36,12 +36,12 @@ func (m Model) handleBackspace() (Model, tea.Cmd) {
 
 func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	// Re-selecting the same subscription: no-op.
-	if m.hasSubscription && m.currentSub.ID == sub.ID {
+	if m.HasSubscription && m.CurrentSub.ID == sub.ID {
 		return m, nil
 	}
 
-	m.currentSub = sub
-	m.hasSubscription = true
+	m.CurrentSub = sub
+	m.HasSubscription = true
 	m.hasVault = false
 	m.hasSecret = false
 	m.currentVault = keyvault.Vault{}
@@ -69,8 +69,8 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.secretsList.Title = "Secrets"
 	m.versionsList.Title = "Versions"
 
-	m.setLoading(m.focus)
-	m.status = fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(sub))
+	m.SetLoading(m.focus)
+	m.Status = fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(sub))
 	return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID))
 }
 
@@ -93,7 +93,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.currentSecret = keyvault.Secret{}
 		m.focus = secretsPane
 
-		if cached, ok := m.cache.secrets.Get(cache.Key(m.currentSub.ID, item.vault.Name)); ok {
+		if cached, ok := m.cache.secrets.Get(cache.Key(m.CurrentSub.ID, item.vault.Name)); ok {
 			m.secrets = cached
 			m.secretsList.ResetFilter()
 			ui.SetItemsPreserveIndex(&m.secretsList, secretsToItems(cached))
@@ -110,8 +110,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.versionsList.SetItems(nil)
 		m.versionsList.Title = "Versions"
 
-		m.setLoading(m.focus)
-		m.status = fmt.Sprintf("Loading secrets in %s", item.vault.Name)
+		m.SetLoading(m.focus)
+		m.Status = fmt.Sprintf("Loading secrets in %s", item.vault.Name)
 		return m, tea.Batch(spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, item.vault))
 	}
 
@@ -131,7 +131,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.hasSecret = true
 		m.focus = versionsPane
 
-		versionKey := cache.Key(m.currentSub.ID, m.currentVault.Name, item.secret.Name)
+		versionKey := cache.Key(m.CurrentSub.ID, m.currentVault.Name, item.secret.Name)
 		if cached, ok := m.cache.versions.Get(versionKey); ok {
 			m.versions = cached
 			m.versionsList.ResetFilter()
@@ -144,8 +144,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.versionsList.Title = "Versions"
 		}
 
-		m.setLoading(m.focus)
-		m.status = fmt.Sprintf("Loading versions for %s", item.secret.Name)
+		m.SetLoading(m.focus)
+		m.Status = fmt.Sprintf("Loading versions for %s", item.secret.Name)
 		return m, tea.Batch(spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, item.secret.Name))
 	}
 

@@ -14,12 +14,12 @@ import (
 
 func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	// Re-selecting the same subscription: no-op.
-	if m.hasSubscription && m.currentSub.ID == sub.ID {
+	if m.HasSubscription && m.CurrentSub.ID == sub.ID {
 		return m, nil
 	}
 
-	m.currentSub = sub
-	m.hasSubscription = true
+	m.CurrentSub = sub
+	m.HasSubscription = true
 	m.hasAccount = false
 	m.hasContainer = false
 	m.currentAccount = blob.Account{}
@@ -51,8 +51,8 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.containersList.Title = "Containers"
 	m.blobsList.Title = "Blobs"
 
-	m.setLoading(accountsPane)
-	m.status = fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(sub))
+	m.SetLoading(accountsPane)
+	m.Status = fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(sub))
 	return m, tea.Batch(spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, sub.ID, false))
 }
 
@@ -66,14 +66,14 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 			m.deactivateSearch()
 			m.prefix = parentPrefix(m.prefix)
 
-			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
+			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
 				m.blobs = cached
 				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 				m.refreshItems()
 			}
 
-			m.setLoading(blobsPane)
-			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+			m.SetLoading(blobsPane)
+			m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
 			return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false))
 		}
 		if m.visualLineMode {
@@ -116,7 +116,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.resetPreviewState()
 		m.focus = containersPane
 
-		if cached, ok := m.cache.containers.Get(cache.Key(m.currentSub.ID, item.account.Name)); ok {
+		if cached, ok := m.cache.containers.Get(cache.Key(m.CurrentSub.ID, item.account.Name)); ok {
 			m.containers = cached
 			m.containersList.ResetFilter()
 			ui.SetItemsPreserveIndex(&m.containersList, containersToItems(cached))
@@ -133,8 +133,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.blobsList.SetItems(nil)
 		m.blobsList.Title = "Blobs"
 
-		m.setLoading(containersPane)
-		m.status = fmt.Sprintf("Loading containers in %s", item.account.Name)
+		m.SetLoading(containersPane)
+		m.Status = fmt.Sprintf("Loading containers in %s", item.account.Name)
 		return m, tea.Batch(spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, item.account, false))
 	}
 
@@ -158,7 +158,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.resetPreviewState()
 		m.focus = blobsPane
 
-		if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, item.container.Name, "", false)); ok {
+		if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, item.container.Name, "", false)); ok {
 			m.blobs = cached
 			m.blobsList.ResetFilter()
 			m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
@@ -170,8 +170,8 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.blobsList.Title = "Blobs"
 		}
 
-		m.setLoading(blobsPane)
-		m.status = fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName)
+		m.SetLoading(blobsPane)
+		m.Status = fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName)
 		return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false))
 	}
 
@@ -183,20 +183,20 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		if item.blob.IsPrefix {
 			if m.blobLoadAll {
-				m.status = "Directory navigation is unavailable when all blobs are loaded"
+				m.Status = "Directory navigation is unavailable when all blobs are loaded"
 				return m, nil
 			}
 			m.deactivateSearch()
 			m.prefix = item.blob.Name
 
-			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
+			if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
 				m.blobs = cached
 				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 				m.refreshItems()
 			}
 
-			m.setLoading(blobsPane)
-			m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+			m.SetLoading(blobsPane)
+			m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
 			return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false))
 		}
 

@@ -14,8 +14,8 @@ func (m *Model) inspectFocusedItem() {
 			return
 		}
 		a := item.account
-		m.inspectTitle = "Storage Account"
-		m.inspectFields = []ui.InspectField{
+		m.InspectTitle = "Storage Account"
+		m.InspectFields = []ui.InspectField{
 			{Label: "Name", Value: a.Name},
 			{Label: "Subscription", Value: a.SubscriptionID},
 			{Label: "Resource Group", Value: a.ResourceGroup},
@@ -27,8 +27,8 @@ func (m *Model) inspectFocusedItem() {
 			return
 		}
 		c := item.container
-		m.inspectTitle = "Container"
-		m.inspectFields = []ui.InspectField{
+		m.InspectTitle = "Container"
+		m.InspectFields = []ui.InspectField{
 			{Label: "Name", Value: c.Name},
 			{Label: "Last Modified", Value: ui.FormatTime(c.LastModified)},
 		}
@@ -38,15 +38,15 @@ func (m *Model) inspectFocusedItem() {
 			return
 		}
 		b := item.blob
-		m.inspectTitle = "Blob"
+		m.InspectTitle = "Blob"
 		if b.IsPrefix {
-			m.inspectTitle = "Directory"
-			m.inspectFields = []ui.InspectField{
+			m.InspectTitle = "Directory"
+			m.InspectFields = []ui.InspectField{
 				{Label: "Path", Value: b.Name},
 			}
 			return
 		}
-		m.inspectFields = []ui.InspectField{
+		m.InspectFields = []ui.InspectField{
 			{Label: "Name", Value: b.Name},
 			{Label: "Size", Value: humanSize(b.Size)},
 			{Label: "Content Type", Value: ui.EmptyToDash(b.ContentType)},

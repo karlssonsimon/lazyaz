@@ -10,31 +10,31 @@ import (
 )
 
 func (m Model) refresh() (Model, tea.Cmd) {
-	if !m.hasSubscription {
+	if !m.HasSubscription {
 		// Can't refresh anything without a subscription; open the picker instead.
-		m.subOverlay.Open()
-		m.setLoading(-1)
-		m.lastErr = ""
-		m.status = "Refreshing subscriptions..."
+		m.SubOverlay.Open()
+		m.SetLoading(-1)
+		m.LastErr = ""
+		m.Status = "Refreshing subscriptions..."
 		return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 	}
 
 	if !m.hasVault || m.focus == vaultsPane {
-		m.setLoading(m.focus)
-		m.lastErr = ""
-		m.status = fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(m.currentSub))
-		return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, m.currentSub.ID))
+		m.SetLoading(m.focus)
+		m.LastErr = ""
+		m.Status = fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(m.CurrentSub))
+		return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, m.CurrentSub.ID))
 	}
 
 	if !m.hasSecret || m.focus == secretsPane {
-		m.setLoading(m.focus)
-		m.lastErr = ""
-		m.status = fmt.Sprintf("Loading secrets in %s", m.currentVault.Name)
+		m.SetLoading(m.focus)
+		m.LastErr = ""
+		m.Status = fmt.Sprintf("Loading secrets in %s", m.currentVault.Name)
 		return m, tea.Batch(spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, m.currentVault))
 	}
 
-	m.setLoading(m.focus)
-	m.lastErr = ""
-	m.status = fmt.Sprintf("Loading versions for %s", m.currentSecret.Name)
+	m.SetLoading(m.focus)
+	m.LastErr = ""
+	m.Status = fmt.Sprintf("Loading versions for %s", m.currentSecret.Name)
 	return m, tea.Batch(spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, m.currentSecret.Name))
 }

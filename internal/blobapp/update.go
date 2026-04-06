@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"azure-storage/internal/appshell"
 	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
@@ -18,69 +19,69 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		m.Width = msg.Width
+		m.Height = msg.Height
 		m.resize()
 		return m, nil
 
 	case spinner.TickMsg:
-		if !m.loading {
+		if !m.Loading {
 			return m, nil
 		}
-		m.spinner, cmd = m.spinner.Update(msg)
+		m.Spinner, cmd = m.Spinner.Update(msg)
 		return m, cmd
 
-	case loadingHoldExpiredMsg:
-		m.clearLoading()
-		m.status = msg.status
+	case appshell.LoadingHoldExpiredMsg:
+		m.ClearLoading()
+		m.Status = msg.Status
 		return m, nil
 
-	case subscriptionsLoadedMsg:
-		if msg.err != nil {
-			m.clearLoading()
-			m.lastErr = msg.err.Error()
-			m.status = "Failed to load subscriptions"
+	case appshell.SubscriptionsLoadedMsg:
+		if msg.Err != nil {
+			m.ClearLoading()
+			m.LastErr = msg.Err.Error()
+			m.Status = "Failed to load subscriptions"
 			return m, nil
 		}
 
-		m.lastErr = ""
-		m.subscriptions = msg.subscriptions
+		m.LastErr = ""
+		m.Subscriptions = msg.Subscriptions
 
-		if msg.done {
-			m.cache.subscriptions.Set("", msg.subscriptions)
-			if !m.hasSubscription {
-				m.subOverlay.Open()
+		if msg.Done {
+			m.cache.subscriptions.Set("", msg.Subscriptions)
+			if !m.HasSubscription {
+				m.SubOverlay.Open()
 			}
-			status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.subscriptions), time.Since(m.loadingStartedAt).Round(time.Millisecond))
-			return m, m.finishLoading(status)
+			status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.Subscriptions), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+			return m, m.FinishLoading(status)
 		}
 
-		return m, msg.next
+		return m, msg.Next
 
 	case accountsLoadedMsg:
 		if msg.done && msg.err == nil {
 			m.cache.accounts.Set(msg.subscriptionID, msg.accounts)
 		}
 
-		if !m.hasSubscription || m.currentSub.ID != msg.subscriptionID {
+		if !m.HasSubscription || m.CurrentSub.ID != msg.subscriptionID {
 			return m, msg.next
 		}
 
 		if msg.err != nil {
-			m.clearLoading()
-			m.lastErr = msg.err.Error()
-			m.status = fmt.Sprintf("Failed to load storage accounts in %s", ui.SubscriptionDisplayName(m.currentSub))
+			m.ClearLoading()
+			m.LastErr = msg.err.Error()
+			m.Status = fmt.Sprintf("Failed to load storage accounts in %s", ui.SubscriptionDisplayName(m.CurrentSub))
 			return m, nil
 		}
 
-		m.lastErr = ""
+		m.LastErr = ""
 		m.accounts = msg.accounts
 		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(msg.accounts))
 		ui.SetItemsPreserveIndex(&m.accountsList, accountsToItems(msg.accounts))
 
 		if msg.done {
-			status := fmt.Sprintf("Loaded %d storage accounts from %s in %s", len(msg.accounts), ui.SubscriptionDisplayName(m.currentSub), time.Since(m.loadingStartedAt).Round(time.Millisecond))
-			return m, m.finishLoading(status)
+			status := fmt.Sprintf("Loaded %d storage accounts from %s in %s", len(msg.accounts), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+			return m, m.FinishLoading(status)
 		}
 
 		return m, msg.next
@@ -95,20 +96,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.clearLoading()
-			m.lastErr = msg.err.Error()
-			m.status = fmt.Sprintf("Failed to load containers for %s", msg.account.Name)
+			m.ClearLoading()
+			m.LastErr = msg.err.Error()
+			m.Status = fmt.Sprintf("Failed to load containers for %s", msg.account.Name)
 			return m, nil
 		}
 
-		m.lastErr = ""
+		m.LastErr = ""
 		m.containers = msg.containers
 		m.containersList.Title = fmt.Sprintf("Containers (%d)", len(msg.containers))
 		ui.SetItemsPreserveIndex(&m.containersList, containersToItems(msg.containers))
 
 		if msg.done {
-			status := fmt.Sprintf("Loaded %d containers from %s in %s", len(msg.containers), msg.account.Name, time.Since(m.loadingStartedAt).Round(time.Millisecond))
-			return m, m.finishLoading(status)
+			status := fmt.Sprintf("Loaded %d containers from %s in %s", len(msg.containers), msg.account.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+			return m, m.FinishLoading(status)
 		}
 
 		return m, msg.next
@@ -141,46 +142,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.clearLoading()
-			m.lastErr = msg.err.Error()
-			m.status = fmt.Sprintf("Failed to load blobs in %s/%s", msg.account.Name, msg.container)
+			m.ClearLoading()
+			m.LastErr = msg.err.Error()
+			m.Status = fmt.Sprintf("Failed to load blobs in %s/%s", msg.account.Name, msg.container)
 			return m, nil
 		}
 
-		m.lastErr = ""
+		m.LastErr = ""
 		m.blobs = msg.blobs
 		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(msg.blobs))
 		m.refreshItems()
 
 		if msg.done {
-			elapsed := time.Since(m.loadingStartedAt).Round(time.Millisecond)
+			elapsed := time.Since(m.LoadingStartedAt).Round(time.Millisecond)
 			var status string
 			if msg.loadAll {
 				status = fmt.Sprintf("Loaded all %d blobs in %s/%s in %s", len(msg.blobs), msg.account.Name, msg.container, elapsed)
 			} else {
 				status = fmt.Sprintf("Loaded %d entries in %s/%s under %q in %s", len(msg.blobs), msg.account.Name, msg.container, msg.prefix, elapsed)
 			}
-			return m, m.finishLoading(status)
+			return m, m.FinishLoading(status)
 		}
 
 		return m, msg.next
 
 	case blobsDownloadedMsg:
-		m.clearLoading()
+		m.ClearLoading()
 		if msg.err != nil {
-			m.lastErr = msg.err.Error()
-			m.status = "Failed to download blobs"
+			m.LastErr = msg.err.Error()
+			m.Status = "Failed to download blobs"
 			return m, nil
 		}
 
 		if msg.failed > 0 {
-			m.lastErr = strings.Join(msg.failures, " | ")
-			m.status = fmt.Sprintf("Downloaded %d/%d blobs to %s", msg.downloaded, msg.total, msg.destinationRoot)
+			m.LastErr = strings.Join(msg.failures, " | ")
+			m.Status = fmt.Sprintf("Downloaded %d/%d blobs to %s", msg.downloaded, msg.total, msg.destinationRoot)
 			return m, nil
 		}
 
-		m.lastErr = ""
-		m.status = fmt.Sprintf("Downloaded %d blob(s) to %s", msg.downloaded, msg.destinationRoot)
+		m.LastErr = ""
+		m.Status = fmt.Sprintf("Downloaded %d blob(s) to %s", msg.downloaded, msg.destinationRoot)
 		return m, nil
 
 	case previewWindowLoadedMsg:
@@ -189,39 +190,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		key := msg.String()
 
-		if m.subOverlay.Active {
-			if sub, ok := m.subOverlay.HandleKey(key, ui.ThemeKeyBindings{
-				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
-				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
-			}, m.subscriptions); ok {
-				return m.selectSubscription(sub)
+		if result := m.HandleOverlayKeys(key); result.Handled {
+			if result.SelectSub != nil {
+				return m.selectSubscription(*result.SelectSub)
 			}
-			return m, nil
-		}
-
-		if !m.EmbeddedMode && m.helpOverlay.Active {
-			m.helpOverlay.HandleKey(key, ui.HelpKeyBindings{
-				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
-				Close: m.keymap.ToggleHelp,
-			})
-			return m, nil
-		}
-
-		if !m.EmbeddedMode && m.themeOverlay.Active {
-			if m.themeOverlay.HandleKey(key, ui.ThemeKeyBindings{
-				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
-				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
-			}, m.schemes) {
-				m.applyScheme(m.schemes[m.themeOverlay.ActiveThemeIdx])
-				ui.SaveThemeName(m.schemes[m.themeOverlay.ActiveThemeIdx].Name)
-			}
-			return m, nil
-		}
-
-		// Inspect overlay — dismiss.
-		if m.inspectFields != nil {
-			if m.keymap.Inspect.Matches(key) || key == "esc" || key == "q" {
-				m.inspectFields = nil
+			if result.ThemeSelected {
+				m.applyScheme(m.Schemes[m.ThemeOverlay.ActiveThemeIdx])
+				ui.SaveThemeName(m.Schemes[m.ThemeOverlay.ActiveThemeIdx].Name)
 			}
 			return m, nil
 		}
@@ -236,50 +211,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		focusedFilterActive := m.focusedListSettingFilter() || (m.focus == blobsPane && m.search.active)
-		if m.focus == blobsPane && m.visualLineMode && m.keymap.FilterInput.Matches(key) {
+		if m.focus == blobsPane && m.visualLineMode && m.Keymap.FilterInput.Matches(key) {
 			m.visualLineMode = false
 			m.visualAnchor = ""
 			m.refreshItems()
-			m.status = "Visual mode off"
+			m.Status = "Visual mode off"
 		}
-		if m.focus == blobsPane && m.visualLineMode && !focusedFilterActive && m.keymap.BlobVisualMove.Matches(key) {
+		if m.focus == blobsPane && m.visualLineMode && !focusedFilterActive && m.Keymap.BlobVisualMove.Matches(key) {
 			markVisualAfterListUpdate = true
 		}
 
 		switch {
-		case ui.ShouldQuit(key, m.keymap.Quit, focusedFilterActive):
+		case ui.ShouldQuit(key, m.Keymap.Quit, focusedFilterActive):
 			return m, tea.Quit
-		case m.keymap.HalfPageDown.Matches(key):
+		case m.Keymap.HalfPageDown.Matches(key):
 			m.scrollFocusedHalfPage(1)
 			return m, nil
-		case m.keymap.HalfPageUp.Matches(key):
+		case m.Keymap.HalfPageUp.Matches(key):
 			m.scrollFocusedHalfPage(-1)
 			return m, nil
-		case m.keymap.DownloadSelection.Matches(key):
+		case m.Keymap.DownloadSelection.Matches(key):
 			if m.focus == blobsPane && !focusedFilterActive {
 				return m.startMarkedAction("download")
 			}
-		case m.keymap.ToggleLoadAll.Matches(key):
+		case m.Keymap.ToggleLoadAll.Matches(key):
 			if m.focus == blobsPane && !focusedFilterActive {
 				return m.toggleBlobLoadAllMode()
 			}
-		case m.keymap.ToggleVisualLine.Matches(key):
+		case m.Keymap.ToggleVisualLine.Matches(key):
 			if m.focus == blobsPane && !focusedFilterActive {
 				m.toggleVisualLineMode()
 				return m, nil
 			}
-		case m.keymap.ToggleMark.Matches(key):
+		case m.Keymap.ToggleMark.Matches(key):
 			if m.focus == blobsPane && !focusedFilterActive {
 				m.toggleCurrentBlobMark()
 				return m, nil
 			}
-		case m.keymap.VisualSwapAnchor.Matches(key):
+		case m.Keymap.VisualSwapAnchor.Matches(key):
 			if m.focus == blobsPane && m.visualLineMode && !focusedFilterActive {
 				m.swapVisualAnchor()
 				m.refreshItems()
 				return m, nil
 			}
-		case m.keymap.ExitVisualLine.Matches(key):
+		case m.Keymap.ExitVisualLine.Matches(key):
 			if m.focus == blobsPane && !focusedFilterActive {
 				if m.visualLineMode {
 					// Commit visual range into marks, then exit visual mode.
@@ -287,7 +262,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.visualLineMode = false
 					m.visualAnchor = ""
 					m.refreshItems()
-					m.status = fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs))
+					m.Status = fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs))
 					return m, nil
 				}
 				if len(m.markedBlobs) > 0 {
@@ -297,84 +272,84 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						delete(m.markedBlobs, name)
 					}
 					m.refreshItems()
-					m.status = fmt.Sprintf("Cleared %d marks", count)
+					m.Status = fmt.Sprintf("Cleared %d marks", count)
 					return m, nil
 				}
 			}
-		case m.keymap.NextFocus.Matches(key):
+		case m.Keymap.NextFocus.Matches(key):
 			if !focusedFilterActive {
 				m.nextFocus()
 				return m, nil
 			}
-		case m.keymap.PreviousFocus.Matches(key):
+		case m.Keymap.PreviousFocus.Matches(key):
 			if !focusedFilterActive {
 				m.previousFocus()
 				return m, nil
 			}
-		case m.keymap.RefreshScope.Matches(key):
+		case m.Keymap.RefreshScope.Matches(key):
 			if !focusedFilterActive {
 				return m.refresh()
 			}
-		case m.keymap.OpenFocused.Matches(key):
+		case m.Keymap.OpenFocused.Matches(key):
 			if focusedFilterActive {
 				cmd := m.commitFocusedFilter()
 				return m, cmd
 			}
 			return m.handleEnter()
-		case m.keymap.OpenFocusedAlt.Matches(key):
+		case m.Keymap.OpenFocusedAlt.Matches(key):
 			if !focusedFilterActive {
 				return m.handleEnter()
 			}
-		case m.keymap.NavigateLeft.Matches(key):
+		case m.Keymap.NavigateLeft.Matches(key):
 			if !focusedFilterActive {
 				return m.navigateLeft()
 			}
-		case !m.EmbeddedMode && m.keymap.ToggleThemePicker.Matches(key):
-			if !focusedFilterActive && !m.themeOverlay.Active {
-				m.themeOverlay.Open()
+		case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):
+			if !focusedFilterActive && !m.ThemeOverlay.Active {
+				m.ThemeOverlay.Open()
 				return m, nil
 			}
-		case !m.EmbeddedMode && m.keymap.ToggleHelp.Matches(key):
-			if !focusedFilterActive && !m.themeOverlay.Active {
-				if m.helpOverlay.Active {
-					m.helpOverlay.Close()
+		case !m.EmbeddedMode && m.Keymap.ToggleHelp.Matches(key):
+			if !focusedFilterActive && !m.ThemeOverlay.Active {
+				if m.HelpOverlay.Active {
+					m.HelpOverlay.Close()
 				} else {
-					m.helpOverlay.Open("Azure Blob Explorer Help", m.HelpSections())
+					m.HelpOverlay.Open("Azure Blob Explorer Help", m.HelpSections())
 				}
 				return m, nil
 			}
-		case m.keymap.SubscriptionPicker.Matches(key):
+		case m.Keymap.SubscriptionPicker.Matches(key):
 			if !focusedFilterActive {
-				m.subOverlay.Open()
-				m.setLoading(-1)
-				m.lastErr = ""
-				m.status = "Refreshing subscriptions..."
+				m.SubOverlay.Open()
+				m.SetLoading(-1)
+				m.LastErr = ""
+				m.Status = "Refreshing subscriptions..."
 				return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 			}
-		case m.keymap.FilterInput.Matches(key):
+		case m.Keymap.FilterInput.Matches(key):
 			if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
 				m.activateSearch()
 				return m, nil
 			}
-		case m.keymap.Inspect.Matches(key):
+		case m.Keymap.Inspect.Matches(key):
 			if !focusedFilterActive {
 				m.inspectFocusedItem()
 				return m, nil
 			}
-		case m.keymap.BackspaceUp.Matches(key):
+		case m.Keymap.BackspaceUp.Matches(key):
 			if !focusedFilterActive {
 				if m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != "" {
 					m.deactivateSearch()
 					m.prefix = parentPrefix(m.prefix)
 
-					if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.currentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
+					if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
 						m.blobs = cached
 						m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 						m.refreshItems()
 					}
 
-					m.setLoading(blobsPane)
-					m.status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+					m.SetLoading(blobsPane)
+					m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
 					return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false))
 				}
 			}
@@ -394,7 +369,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if markVisualAfterListUpdate && m.focus == blobsPane && m.visualLineMode {
 		m.refreshItems()
-		m.status = fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames()))
+		m.Status = fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames()))
 	}
 
 	return m, cmd

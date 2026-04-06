@@ -12,8 +12,8 @@ func (m *Model) inspectFocusedItem() {
 			return
 		}
 		v := item.vault
-		m.inspectTitle = "Key Vault"
-		m.inspectFields = []ui.InspectField{
+		m.InspectTitle = "Key Vault"
+		m.InspectFields = []ui.InspectField{
 			{Label: "Name", Value: v.Name},
 			{Label: "Subscription", Value: v.SubscriptionID},
 			{Label: "Resource Group", Value: v.ResourceGroup},
@@ -29,8 +29,8 @@ func (m *Model) inspectFocusedItem() {
 		if !s.Enabled {
 			enabled = "No"
 		}
-		m.inspectTitle = "Secret"
-		m.inspectFields = []ui.InspectField{
+		m.InspectTitle = "Secret"
+		m.InspectFields = []ui.InspectField{
 			{Label: "Name", Value: s.Name},
 			{Label: "Content Type", Value: ui.EmptyToDash(s.ContentType)},
 			{Label: "Enabled", Value: enabled},
@@ -47,8 +47,8 @@ func (m *Model) inspectFocusedItem() {
 		if !v.Enabled {
 			enabled = "No"
 		}
-		m.inspectTitle = "Secret Version"
-		m.inspectFields = []ui.InspectField{
+		m.InspectTitle = "Secret Version"
+		m.InspectFields = []ui.InspectField{
 			{Label: "Version", Value: v.Version},
 			{Label: "Content Type", Value: ui.EmptyToDash(v.ContentType)},
 			{Label: "Enabled", Value: enabled},

@@ -68,7 +68,7 @@ func (p previewState) title(styles ui.Styles) string {
 
 func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	if b.IsPrefix {
-		m.status = "Open a blob file to preview"
+		m.Status = "Open a blob file to preview"
 		return m, nil
 	}
 
@@ -83,13 +83,13 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.preview.windowStart = 0
 	m.preview.windowData = nil
 	m.preview.lineStarts = nil
-	m.preview.rendered = m.styles.Muted.Render("Loading preview...")
+	m.preview.rendered = m.Styles.Muted.Render("Loading preview...")
 	m.preview.requestID++
 	m.pendingPreviewG = false
 	m.focus = previewPane
-	m.setLoading(previewPane)
-	m.lastErr = ""
-	m.status = fmt.Sprintf("Loading preview for %s", b.Name)
+	m.SetLoading(previewPane)
+	m.LastErr = ""
+	m.Status = fmt.Sprintf("Loading preview for %s", b.Name)
 	m.resize()
 
 	cmd := loadPreviewWindowCmd(
@@ -117,14 +117,14 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 		return m, nil
 	}
 
-	m.clearLoading()
+	m.ClearLoading()
 	if msg.err != nil {
-		m.lastErr = msg.err.Error()
-		m.status = fmt.Sprintf("Failed to load preview for %s", msg.blobName)
+		m.LastErr = msg.err.Error()
+		m.Status = fmt.Sprintf("Failed to load preview for %s", msg.blobName)
 		return m, nil
 	}
 
-	m.lastErr = ""
+	m.LastErr = ""
 	m.preview.blobSize = msg.blobSize
 	if strings.TrimSpace(msg.contentType) != "" {
 		m.preview.contentType = msg.contentType
@@ -134,14 +134,14 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 	m.preview.cursor = clampInt64(msg.cursor, 0, maxInt64(0, msg.blobSize-1))
 	m.preview.binary = ui.IsProbablyBinary(msg.data)
 	m.preview.lineStarts = computeLineStarts(msg.data)
-	m.preview.rendered = renderPreviewContent(msg.data, msg.blobName, m.preview.contentType, m.preview.binary, m.styles)
+	m.preview.rendered = renderPreviewContent(msg.data, msg.blobName, m.preview.contentType, m.preview.binary, m.Styles)
 	m.preview.viewport.SetContent(m.preview.rendered)
 	m.preview.viewport.YOffset = m.previewLocalLine()
 
 	if m.preview.binary {
-		m.status = fmt.Sprintf("Binary preview for %s (%s)", msg.blobName, humanSize(msg.blobSize))
+		m.Status = fmt.Sprintf("Binary preview for %s (%s)", msg.blobName, humanSize(msg.blobSize))
 	} else {
-		m.status = fmt.Sprintf("Previewing %s (%s)", msg.blobName, humanSize(msg.blobSize))
+		m.Status = fmt.Sprintf("Previewing %s (%s)", msg.blobName, humanSize(msg.blobSize))
 	}
 
 	return m, nil
@@ -150,44 +150,44 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 	switch {
-	case ui.ShouldQuit(key, m.keymap.Quit, false):
+	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
-	case m.keymap.PreviewBack.Matches(key):
+	case m.Keymap.PreviewBack.Matches(key):
 		m.pendingPreviewG = false
 		m.focus = blobsPane
 		return m, nil
-	case m.keymap.PreviewNextFocus.Matches(key):
+	case m.Keymap.PreviewNextFocus.Matches(key):
 		m.pendingPreviewG = false
 		m.nextFocus()
 		return m, nil
-	case m.keymap.PreviewPreviousFocus.Matches(key):
+	case m.Keymap.PreviewPreviousFocus.Matches(key):
 		m.pendingPreviewG = false
 		m.previousFocus()
 		return m, nil
-	case m.keymap.PreviewDown.Matches(key):
+	case m.Keymap.PreviewDown.Matches(key):
 		m.pendingPreviewG = false
 		return m.movePreviewCursorByLines(1)
-	case m.keymap.PreviewUp.Matches(key):
+	case m.Keymap.PreviewUp.Matches(key):
 		m.pendingPreviewG = false
 		return m.movePreviewCursorByLines(-1)
-	case m.keymap.HalfPageDown.Matches(key):
+	case m.Keymap.HalfPageDown.Matches(key):
 		m.pendingPreviewG = false
 		step := max(1, m.preview.viewport.Height/2)
 		return m.movePreviewCursorByLines(step)
-	case m.keymap.HalfPageUp.Matches(key):
+	case m.Keymap.HalfPageUp.Matches(key):
 		m.pendingPreviewG = false
 		step := max(1, m.preview.viewport.Height/2)
 		return m.movePreviewCursorByLines(-step)
-	case m.keymap.PreviewBottom.Matches(key):
+	case m.Keymap.PreviewBottom.Matches(key):
 		m.pendingPreviewG = false
 		return m.jumpPreviewToBottom()
-	case m.keymap.PreviewTopPrefix.Matches(key):
+	case m.Keymap.PreviewTopPrefix.Matches(key):
 		if m.pendingPreviewG {
 			m.pendingPreviewG = false
 			return m.jumpPreviewToTop()
 		}
 		m.pendingPreviewG = true
-		m.status = "Press g again for top"
+		m.Status = "Press g again for top"
 		return m, nil
 	default:
 		m.pendingPreviewG = false
@@ -254,9 +254,9 @@ func (m Model) ensurePreviewWindowAtCursor() (Model, tea.Cmd) {
 
 	if needLoad {
 		m.preview.requestID++
-		m.setLoading(previewPane)
-		m.lastErr = ""
-		m.status = fmt.Sprintf("Loading preview window for %s", m.preview.blobName)
+		m.SetLoading(previewPane)
+		m.LastErr = ""
+		m.Status = fmt.Sprintf("Loading preview window for %s", m.preview.blobName)
 		cmd := loadPreviewWindowCmd(
 			m.service,
 			m.currentAccount,

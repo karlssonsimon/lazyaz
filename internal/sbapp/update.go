@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"azure-storage/internal/cache"
+	"azure-storage/internal/appshell"
 	"azure-storage/internal/azure/servicebus"
+	"azure-storage/internal/cache"
 	"azure-storage/internal/ui"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -18,66 +19,66 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		m.Width = msg.Width
+		m.Height = msg.Height
 		m.resize()
 		return m, nil
 
 	case spinner.TickMsg:
-		if !m.loading {
+		if !m.Loading {
 			return m, nil
 		}
-		m.spinner, cmd = m.spinner.Update(msg)
+		m.Spinner, cmd = m.Spinner.Update(msg)
 		return m, cmd
 
-	case loadingHoldExpiredMsg:
-		m.clearLoading()
-		m.status = msg.status
+	case appshell.LoadingHoldExpiredMsg:
+		m.ClearLoading()
+		m.Status = msg.Status
 		return m, nil
 
-	case subscriptionsLoadedMsg:
-		if msg.err != nil {
-			m.clearLoading()
-			m.lastErr = msg.err.Error()
-			m.status = "Failed to load subscriptions"
+	case appshell.SubscriptionsLoadedMsg:
+		if msg.Err != nil {
+			m.ClearLoading()
+			m.LastErr = msg.Err.Error()
+			m.Status = "Failed to load subscriptions"
 			return m, nil
 		}
 
-		m.lastErr = ""
-		m.subscriptions = msg.subscriptions
+		m.LastErr = ""
+		m.Subscriptions = msg.Subscriptions
 
-		if msg.done {
-			m.cache.subscriptions.Set("", msg.subscriptions)
-			if !m.hasSubscription {
-				m.subOverlay.Open()
+		if msg.Done {
+			m.cache.subscriptions.Set("", msg.Subscriptions)
+			if !m.HasSubscription {
+				m.SubOverlay.Open()
 			}
-			status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.subscriptions), time.Since(m.loadingStartedAt).Round(time.Millisecond))
-			return m, m.finishLoading(status)
+			status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.Subscriptions), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+			return m, m.FinishLoading(status)
 		}
 
-		return m, msg.next
+		return m, msg.Next
 
 	case namespacesLoadedMsg:
-		if !m.hasSubscription || m.currentSub.ID != msg.subscriptionID {
+		if !m.HasSubscription || m.CurrentSub.ID != msg.subscriptionID {
 			return m, nil
 		}
 
 		if msg.err != nil {
-			m.clearLoading()
-			m.lastErr = msg.err.Error()
-			m.status = fmt.Sprintf("Failed to load namespaces in %s", ui.SubscriptionDisplayName(m.currentSub))
+			m.ClearLoading()
+			m.LastErr = msg.err.Error()
+			m.Status = fmt.Sprintf("Failed to load namespaces in %s", ui.SubscriptionDisplayName(m.CurrentSub))
 			return m, nil
 		}
 
-		m.lastErr = ""
+		m.LastErr = ""
 		m.namespaces = msg.namespaces
 		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(msg.namespaces))
 		ui.SetItemsPreserveIndex(&m.namespacesList, namespacesToItems(msg.namespaces))
 
 		if msg.done {
 			m.cache.namespaces.Set(msg.subscriptionID, msg.namespaces)
-			status := fmt.Sprintf("Loaded %d namespaces from %s in %s", len(msg.namespaces), ui.SubscriptionDisplayName(m.currentSub), time.Since(m.loadingStartedAt).Round(time.Millisecond))
-			return m, m.finishLoading(status)
+			status := fmt.Sprintf("Loaded %d namespaces from %s in %s", len(msg.namespaces), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+			return m, m.FinishLoading(status)
 		}
 
 		return m, msg.next
@@ -88,22 +89,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.clearLoading()
-			m.lastErr = msg.err.Error()
-			m.status = fmt.Sprintf("Failed to load entities in %s", msg.namespace.Name)
+			m.ClearLoading()
+			m.LastErr = msg.err.Error()
+			m.Status = fmt.Sprintf("Failed to load entities in %s", msg.namespace.Name)
 			return m, nil
 		}
 
-		m.lastErr = ""
+		m.LastErr = ""
 		m.entities = msg.entities
 		items := entitiesToFilteredItems(m.entities, m.dlqFilter)
 		ui.SetItemsPreserveIndex(&m.entitiesList, items)
 		m.entitiesList.Title = m.entitiesPaneTitle()
 
 		if msg.done {
-			m.cache.entities.Set(cache.Key(m.currentSub.ID, msg.namespace.Name), msg.entities)
-			status := fmt.Sprintf("Loaded %d entities from %s in %s", len(msg.entities), msg.namespace.Name, time.Since(m.loadingStartedAt).Round(time.Millisecond))
-			return m, m.finishLoading(status)
+			m.cache.entities.Set(cache.Key(m.CurrentSub.ID, msg.namespace.Name), msg.entities)
+			status := fmt.Sprintf("Loaded %d entities from %s in %s", len(msg.entities), msg.namespace.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+			return m, m.FinishLoading(status)
 		}
 
 		return m, msg.next
@@ -117,36 +118,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
-			m.clearLoading()
-			m.lastErr = msg.err.Error()
-			m.status = fmt.Sprintf("Failed to load subscriptions for topic %s", msg.topicName)
+			m.ClearLoading()
+			m.LastErr = msg.err.Error()
+			m.Status = fmt.Sprintf("Failed to load subscriptions for topic %s", msg.topicName)
 			return m, nil
 		}
 
-		m.lastErr = ""
+		m.LastErr = ""
 		m.topicSubs = msg.subs
 		m.detailMode = detailTopicSubscriptions
 		m.detailList.Title = fmt.Sprintf("Topic Subscriptions (%d)", len(msg.subs))
 		ui.SetItemsPreserveIndex(&m.detailList, topicSubsToItems(msg.subs))
 
 		if msg.done {
-			m.cache.topicSubs.Set(cache.Key(m.currentSub.ID, msg.namespace.Name, msg.topicName), msg.subs)
-			status := fmt.Sprintf("Loaded %d subscriptions for topic %s in %s", len(msg.subs), msg.topicName, time.Since(m.loadingStartedAt).Round(time.Millisecond))
-			return m, m.finishLoading(status)
+			m.cache.topicSubs.Set(cache.Key(m.CurrentSub.ID, msg.namespace.Name, msg.topicName), msg.subs)
+			status := fmt.Sprintf("Loaded %d subscriptions for topic %s in %s", len(msg.subs), msg.topicName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+			return m, m.FinishLoading(status)
 		}
 
 		return m, msg.next
 
 	case messagesLoadedMsg:
 		// Messages are ephemeral peek results — not cached.
-		m.clearLoading()
+		m.ClearLoading()
 		if msg.err != nil {
-			m.lastErr = msg.err.Error()
-			m.status = fmt.Sprintf("Failed to peek messages from %s", msg.source)
+			m.LastErr = msg.err.Error()
+			m.Status = fmt.Sprintf("Failed to peek messages from %s", msg.source)
 			return m, nil
 		}
 
-		m.lastErr = ""
+		m.LastErr = ""
 		m.peekedMessages = msg.messages
 		m.detailMode = detailMessages
 		m.viewingMessage = false
@@ -158,42 +159,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.detailList.Select(0)
 		}
 		m.resize()
-		m.status = fmt.Sprintf("Peeked %d messages from %s", len(msg.messages), msg.source)
+		m.Status = fmt.Sprintf("Peeked %d messages from %s", len(msg.messages), msg.source)
 		return m, nil
 
 	case requeueDoneMsg:
-		m.clearLoading()
+		m.ClearLoading()
 		m.markedMessages = make(map[string]struct{})
 		if msg.err != nil {
 			var dupErr *servicebus.DuplicateError
 			if errors.As(msg.err, &dupErr) {
 				m.duplicateMessages[dupErr.MessageID] = struct{}{}
-				m.lastErr = fmt.Sprintf("message %s sent but not removed from DLQ (possible duplicate)", dupErr.MessageID)
+				m.LastErr = fmt.Sprintf("message %s sent but not removed from DLQ (possible duplicate)", dupErr.MessageID)
 			} else {
-				m.lastErr = msg.err.Error()
+				m.LastErr = msg.err.Error()
 			}
 		} else {
-			m.lastErr = ""
+			m.LastErr = ""
 		}
 		if msg.requeued > 0 {
-			m.status = fmt.Sprintf("%d of %d message(s) requeued", msg.requeued, msg.total)
+			m.Status = fmt.Sprintf("%d of %d message(s) requeued", msg.requeued, msg.total)
 		} else {
-			m.status = "Failed to requeue messages"
+			m.Status = "Failed to requeue messages"
 		}
 		var peekCmd tea.Cmd
 		m, peekCmd = m.rePeekMessages()
 		return m, tea.Batch(peekCmd, refreshEntitiesCmd(m.service, m.currentNS))
 
 	case deleteDuplicateDoneMsg:
-		m.clearLoading()
+		m.ClearLoading()
 		if msg.err != nil {
-			m.lastErr = msg.err.Error()
-			m.status = "Failed to delete duplicate message"
+			m.LastErr = msg.err.Error()
+			m.Status = "Failed to delete duplicate message"
 			return m, nil
 		}
-		m.lastErr = ""
+		m.LastErr = ""
 		delete(m.duplicateMessages, msg.messageID)
-		m.status = "Duplicate message deleted"
+		m.Status = "Duplicate message deleted"
 		var peekCmd tea.Cmd
 		m, peekCmd = m.rePeekMessages()
 		return m, tea.Batch(peekCmd, refreshEntitiesCmd(m.service, m.currentNS))
@@ -216,51 +217,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		key := msg.String()
 
-		if m.subOverlay.Active {
-			if sub, ok := m.subOverlay.HandleKey(key, ui.ThemeKeyBindings{
-				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
-				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
-			}, m.subscriptions); ok {
-				return m.selectSubscription(sub)
+		if result := m.HandleOverlayKeys(key); result.Handled {
+			if result.SelectSub != nil {
+				return m.selectSubscription(*result.SelectSub)
 			}
-			return m, nil
-		}
-
-		if !m.EmbeddedMode && m.helpOverlay.Active {
-			m.helpOverlay.HandleKey(key, ui.HelpKeyBindings{
-				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
-				Close: m.keymap.ToggleHelp,
-			})
-			return m, nil
-		}
-		if !m.EmbeddedMode && m.themeOverlay.Active {
-			if m.themeOverlay.HandleKey(key, ui.ThemeKeyBindings{
-				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
-				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
-			}, m.schemes) {
-				m.applyScheme(m.schemes[m.themeOverlay.ActiveThemeIdx])
-				ui.SaveThemeName(m.schemes[m.themeOverlay.ActiveThemeIdx].Name)
-			}
-			return m, nil
-		}
-
-		// Inspect overlay — dismiss.
-		if m.inspectFields != nil {
-			if m.keymap.Inspect.Matches(key) || key == "esc" || key == "q" {
-				m.inspectFields = nil
+			if result.ThemeSelected {
+				m.applyScheme(m.Schemes[m.ThemeOverlay.ActiveThemeIdx])
+				ui.SaveThemeName(m.Schemes[m.ThemeOverlay.ActiveThemeIdx].Name)
 			}
 			return m, nil
 		}
 
 		if m.viewingMessage {
 			switch {
-			case ui.ShouldQuit(key, m.keymap.Quit, false):
+			case ui.ShouldQuit(key, m.Keymap.Quit, false):
 				return m, tea.Quit
-			case m.keymap.MessageBack.Matches(key):
+			case m.Keymap.MessageBack.Matches(key):
 				m.viewingMessage = false
 				m.selectedMessage = servicebus.PeekedMessage{}
 				m.resize()
-				m.status = "Back to messages"
+				m.Status = "Back to messages"
 				return m, nil
 			default:
 				m.messageViewport, cmd = m.messageViewport.Update(msg)
@@ -271,44 +247,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		focusedFilterActive := m.focusedListSettingFilter()
 
 		switch {
-		case ui.ShouldQuit(key, m.keymap.Quit, focusedFilterActive):
+		case ui.ShouldQuit(key, m.Keymap.Quit, focusedFilterActive):
 			return m, tea.Quit
-		case m.keymap.HalfPageDown.Matches(key):
+		case m.Keymap.HalfPageDown.Matches(key):
 			m.scrollFocusedHalfPage(1)
 			return m, nil
-		case m.keymap.HalfPageUp.Matches(key):
+		case m.Keymap.HalfPageUp.Matches(key):
 			m.scrollFocusedHalfPage(-1)
 			return m, nil
-		case m.keymap.NextFocus.Matches(key):
+		case m.Keymap.NextFocus.Matches(key):
 			if !focusedFilterActive {
 				m.nextFocus()
 				return m, nil
 			}
-		case m.keymap.PreviousFocus.Matches(key):
+		case m.Keymap.PreviousFocus.Matches(key):
 			if !focusedFilterActive {
 				m.previousFocus()
 				return m, nil
 			}
-		case m.keymap.RefreshScope.Matches(key):
+		case m.Keymap.RefreshScope.Matches(key):
 			if !focusedFilterActive {
 				return m.refresh()
 			}
-		case m.keymap.OpenFocused.Matches(key):
+		case m.Keymap.OpenFocused.Matches(key):
 			if focusedFilterActive {
 				m.commitFocusedFilter()
-				m.status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
+				m.Status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
 				return m, nil
 			}
 			return m.handleEnter()
-		case m.keymap.OpenFocusedAlt.Matches(key):
+		case m.Keymap.OpenFocusedAlt.Matches(key):
 			if !focusedFilterActive {
 				return m.handleEnter()
 			}
-		case m.keymap.NavigateLeft.Matches(key):
+		case m.Keymap.NavigateLeft.Matches(key):
 			if !focusedFilterActive {
 				return m.navigateLeft()
 			}
-		case m.keymap.ToggleMark.Matches(key):
+		case m.Keymap.ToggleMark.Matches(key):
 			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages {
 				item, ok := m.detailList.SelectedItem().(messageItem)
 				if !ok {
@@ -320,15 +296,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				id := item.message.MessageID
 				if _, marked := m.markedMessages[id]; marked {
 					delete(m.markedMessages, id)
-					m.status = fmt.Sprintf("Unmarked %s (%d marked)", id, len(m.markedMessages))
+					m.Status = fmt.Sprintf("Unmarked %s (%d marked)", id, len(m.markedMessages))
 				} else {
 					m.markedMessages[id] = struct{}{}
-					m.status = fmt.Sprintf("Marked %s (%d marked)", id, len(m.markedMessages))
+					m.Status = fmt.Sprintf("Marked %s (%d marked)", id, len(m.markedMessages))
 				}
 				m.refreshItems()
 				return m, nil
 			}
-		case m.keymap.ShowActiveQueue.Matches(key):
+		case m.Keymap.ShowActiveQueue.Matches(key):
 			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages {
 				if m.deadLetter {
 					m.deadLetter = false
@@ -337,7 +313,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.rePeekMessages()
 				}
 			}
-		case m.keymap.ShowDeadLetterQueue.Matches(key):
+		case m.Keymap.ShowDeadLetterQueue.Matches(key):
 			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages {
 				if !m.deadLetter {
 					m.deadLetter = true
@@ -346,67 +322,67 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.rePeekMessages()
 				}
 			}
-		case m.keymap.RequeueDLQ.Matches(key):
+		case m.Keymap.RequeueDLQ.Matches(key):
 			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages && m.deadLetter {
 				messageIDs := m.collectRequeueIDs()
 				if len(messageIDs) == 0 {
 					return m, nil
 				}
-				m.setLoading(m.focus)
-				m.lastErr = ""
-				m.status = fmt.Sprintf("Requeuing %d message(s)...", len(messageIDs))
+				m.SetLoading(m.focus)
+				m.LastErr = ""
+				m.Status = fmt.Sprintf("Requeuing %d message(s)...", len(messageIDs))
 				return m, tea.Batch(spinner.Tick, requeueMessagesCmd(m.service, m.currentNS, m.currentEntity, m.viewingTopicSub, m.currentTopicSub, messageIDs))
 			}
-		case m.keymap.DeleteDuplicate.Matches(key):
+		case m.Keymap.DeleteDuplicate.Matches(key):
 			if !focusedFilterActive && m.focus == detailPane && m.detailMode == detailMessages && m.deadLetter {
 				item, ok := m.detailList.SelectedItem().(messageItem)
 				if !ok || !item.duplicate {
 					return m, nil
 				}
-				m.setLoading(m.focus)
-				m.lastErr = ""
-				m.status = "Deleting duplicate message..."
+				m.SetLoading(m.focus)
+				m.LastErr = ""
+				m.Status = "Deleting duplicate message..."
 				return m, tea.Batch(spinner.Tick, deleteDuplicateCmd(m.service, m.currentNS, m.currentEntity, m.viewingTopicSub, m.currentTopicSub, item.message.MessageID))
 			}
-		case m.keymap.ToggleDLQFilter.Matches(key):
+		case m.Keymap.ToggleDLQFilter.Matches(key):
 			if !focusedFilterActive {
 				m.dlqFilter = !m.dlqFilter
 				m.applyEntityFilter()
 				if m.dlqFilter {
-					m.status = "DLQ filter enabled – showing only entities with dead-letter messages"
+					m.Status = "DLQ filter enabled – showing only entities with dead-letter messages"
 				} else {
-					m.status = "DLQ filter disabled – showing all entities"
+					m.Status = "DLQ filter disabled – showing all entities"
 				}
 				return m, nil
 			}
-		case m.keymap.SubscriptionPicker.Matches(key):
+		case m.Keymap.SubscriptionPicker.Matches(key):
 			if !focusedFilterActive {
-				m.subOverlay.Open()
-				m.setLoading(-1)
-				m.lastErr = ""
-				m.status = "Refreshing subscriptions..."
+				m.SubOverlay.Open()
+				m.SetLoading(-1)
+				m.LastErr = ""
+				m.Status = "Refreshing subscriptions..."
 				return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 			}
-		case !m.EmbeddedMode && m.keymap.ToggleThemePicker.Matches(key):
-			if !focusedFilterActive && !m.themeOverlay.Active {
-				m.themeOverlay.Open()
+		case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):
+			if !focusedFilterActive && !m.ThemeOverlay.Active {
+				m.ThemeOverlay.Open()
 				return m, nil
 			}
-		case !m.EmbeddedMode && m.keymap.ToggleHelp.Matches(key):
-			if !focusedFilterActive && !m.themeOverlay.Active {
-				if m.helpOverlay.Active {
-					m.helpOverlay.Close()
+		case !m.EmbeddedMode && m.Keymap.ToggleHelp.Matches(key):
+			if !focusedFilterActive && !m.ThemeOverlay.Active {
+				if m.HelpOverlay.Active {
+					m.HelpOverlay.Close()
 				} else {
-					m.helpOverlay.Open("Azure Service Bus Explorer Help", m.HelpSections())
+					m.HelpOverlay.Open("Azure Service Bus Explorer Help", m.HelpSections())
 				}
 				return m, nil
 			}
-		case m.keymap.Inspect.Matches(key):
+		case m.Keymap.Inspect.Matches(key):
 			if !focusedFilterActive {
 				m.inspectFocusedItem()
 				return m, nil
 			}
-		case m.keymap.BackspaceUp.Matches(key):
+		case m.Keymap.BackspaceUp.Matches(key):
 			if !focusedFilterActive {
 				return m.handleBackspace()
 			}

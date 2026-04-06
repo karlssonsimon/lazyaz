@@ -3,16 +3,16 @@ package sbapp
 import "azure-storage/internal/ui"
 
 func (m *Model) resize() {
-	if m.width <= 0 || m.height <= 0 {
+	if m.Width <= 0 || m.Height <= 0 {
 		return
 	}
 
-	pane := m.styles.Chrome.Pane
+	pane := m.Styles.Chrome.Pane
 	numPanes := 3
 	if m.viewingMessage {
 		numPanes = 4
 	}
-	widths := ui.PaneLayout(pane, m.width, numPanes)
+	widths := ui.PaneLayout(pane, m.Width, numPanes)
 
 	m.paneWidths = [4]int{widths[0], widths[1], widths[2], 0}
 	if m.viewingMessage {
@@ -20,7 +20,7 @@ func (m *Model) resize() {
 	}
 
 	paneFrame := 2 // rounded border top + bottom
-	height := m.height - paneFrame - ui.StatusBarHeight - ui.SubscriptionBarHeight
+	height := m.Height - paneFrame - ui.StatusBarHeight - ui.SubscriptionBarHeight
 	if height < 8 {
 		height = 8
 	}

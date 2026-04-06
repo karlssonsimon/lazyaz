@@ -21,8 +21,8 @@ func paneName(pane int) string {
 
 func (m Model) vaultsPaneTitle() string {
 	title := "Vaults"
-	if m.hasSubscription {
-		title = fmt.Sprintf("Vaults · %s", ui.SubscriptionDisplayName(m.currentSub))
+	if m.HasSubscription {
+		title = fmt.Sprintf("Vaults · %s", ui.SubscriptionDisplayName(m.CurrentSub))
 	}
 	if len(m.vaults) > 0 {
 		title = fmt.Sprintf("%s (%d)", title, len(m.vaults))

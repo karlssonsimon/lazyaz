@@ -5,7 +5,7 @@ import (
 )
 
 func (m *Model) resize() {
-	if m.width <= 0 || m.height <= 0 {
+	if m.Width <= 0 || m.Height <= 0 {
 		return
 	}
 
@@ -13,15 +13,15 @@ func (m *Model) resize() {
 	if m.preview.open {
 		numPanes = 4
 	}
-	widths := ui.PaneLayout(m.styles.Chrome.Pane, m.width, numPanes)
-	pane := m.styles.Chrome.Pane
+	widths := ui.PaneLayout(m.Styles.Chrome.Pane, m.Width, numPanes)
+	pane := m.Styles.Chrome.Pane
 	m.paneWidths = [4]int{widths[0], widths[1], widths[2], 0}
 	if m.preview.open {
 		m.paneWidths[3] = widths[3]
 	}
 
 	paneFrame := 2 // rounded border top + bottom
-	height := m.height - paneFrame - ui.StatusBarHeight - ui.SubscriptionBarHeight
+	height := m.Height - paneFrame - ui.StatusBarHeight - ui.SubscriptionBarHeight
 	if height < 8 {
 		height = 8
 	}

@@ -15,8 +15,8 @@ func (m *Model) inspectFocusedItem() {
 			return
 		}
 		ns := item.namespace
-		m.inspectTitle = "Namespace"
-		m.inspectFields = []ui.InspectField{
+		m.InspectTitle = "Namespace"
+		m.InspectFields = []ui.InspectField{
 			{Label: "Name", Value: ns.Name},
 			{Label: "Subscription", Value: ns.SubscriptionID},
 			{Label: "Resource Group", Value: ns.ResourceGroup},
@@ -32,8 +32,8 @@ func (m *Model) inspectFocusedItem() {
 		if e.Kind == servicebus.EntityTopic {
 			kind = "Topic"
 		}
-		m.inspectTitle = kind
-		m.inspectFields = []ui.InspectField{
+		m.InspectTitle = kind
+		m.InspectFields = []ui.InspectField{
 			{Label: "Name", Value: e.Name},
 			{Label: "Kind", Value: kind},
 			{Label: "Active Messages", Value: fmt.Sprintf("%d", e.ActiveMsgCount)},
@@ -43,16 +43,16 @@ func (m *Model) inspectFocusedItem() {
 		// Could be topic sub or message.
 		if item, ok := m.detailList.SelectedItem().(topicSubItem); ok {
 			s := item.sub
-			m.inspectTitle = "Topic Subscription"
-			m.inspectFields = []ui.InspectField{
+			m.InspectTitle = "Topic Subscription"
+			m.InspectFields = []ui.InspectField{
 				{Label: "Name", Value: s.Name},
 				{Label: "Active Messages", Value: fmt.Sprintf("%d", s.ActiveMsgCount)},
 				{Label: "Dead Letter", Value: fmt.Sprintf("%d", s.DeadLetterCount)},
 			}
 		} else if item, ok := m.detailList.SelectedItem().(messageItem); ok {
 			msg := item.message
-			m.inspectTitle = "Message"
-			m.inspectFields = []ui.InspectField{
+			m.InspectTitle = "Message"
+			m.InspectFields = []ui.InspectField{
 				{Label: "Message ID", Value: ui.EmptyToDash(msg.MessageID)},
 				{Label: "Enqueued At", Value: ui.FormatTime(msg.EnqueuedAt)},
 				{Label: "Body Preview", Value: compactPreview(msg.BodyPreview, 80)},
