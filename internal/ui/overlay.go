@@ -24,9 +24,10 @@ type OverlayItem struct {
 type OverlayListConfig struct {
 	Title      string
 	Query      string
-	InnerWidth int  // content width; 0 = default (60)
-	MaxVisible int  // max visible items; 0 = default (20)
-	Center     bool // center vertically instead of 1/5 from top
+	CloseHint  string // label shown right-aligned in the header (e.g. "esc"); blank to omit
+	InnerWidth int    // content width; 0 = default (60)
+	MaxVisible int    // max visible items; 0 = default (20)
+	Center     bool   // center vertically instead of 1/5 from top
 }
 
 // RenderOverlayList renders a configurable overlay with a title bar, search
@@ -60,16 +61,21 @@ func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, s
 
 	var rows []string
 
-	// Header: title left, "esc" right.
+	// Header: title left, close hint right (caller-supplied so the
+	// label honors the keymap's actual cancel binding).
 	titleText := styles.Title.Render(cfg.Title)
-	escText := styles.Hint.Render("esc")
+	closeLabel := cfg.CloseHint
+	if closeLabel == "" {
+		closeLabel = "esc" // sensible default if the caller didn't pass one
+	}
+	closeText := styles.Hint.Render(closeLabel)
 	titleW := lipgloss.Width(titleText)
-	escW := lipgloss.Width(escText)
-	gap := innerW - titleW - escW
+	closeW := lipgloss.Width(closeText)
+	gap := innerW - titleW - closeW
 	if gap < 1 {
 		gap = 1
 	}
-	rows = append(rows, titleText+strings.Repeat(" ", gap)+escText)
+	rows = append(rows, titleText+strings.Repeat(" ", gap)+closeText)
 
 	// Search input.
 	if cfg.Query == "" {

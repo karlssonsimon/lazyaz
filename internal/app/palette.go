@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -59,25 +60,25 @@ func (p *commandPalette) selectedCommand() (command, bool) {
 	return p.commands[p.filtered[p.cursor]], true
 }
 
-func (p *commandPalette) handleKey(key string) (cmd command, executed bool, closed bool) {
-	switch key {
-	case "esc", "ctrl+c", "ctrl+p":
+func (p *commandPalette) handleKey(key string, km keymap.Keymap) (cmd command, executed bool, closed bool) {
+	switch {
+	case km.Cancel.Matches(key), km.CommandPalette.Matches(key):
 		p.close()
 		return command{}, false, true
-	case "up", "ctrl+k":
+	case km.ThemeUp.Matches(key):
 		if p.cursor > 0 {
 			p.cursor--
 		}
-	case "down", "ctrl+j":
+	case km.ThemeDown.Matches(key):
 		if p.cursor < len(p.filtered)-1 {
 			p.cursor++
 		}
-	case "enter":
+	case km.OpenFocused.Matches(key):
 		if c, ok := p.selectedCommand(); ok {
 			p.close()
 			return c, true, false
 		}
-	case "backspace":
+	case km.BackspaceUp.Matches(key):
 		if len(p.query) > 0 {
 			p.query = p.query[:len(p.query)-1]
 			p.refilter()
@@ -92,7 +93,7 @@ func (p *commandPalette) handleKey(key string) (cmd command, executed bool, clos
 	return command{}, false, false
 }
 
-func renderCommandPalette(p *commandPalette, overlay ui.OverlayStyles, width, height int, base string) string {
+func renderCommandPalette(p *commandPalette, closeHint string, overlay ui.OverlayStyles, width, height int, base string) string {
 	items := make([]ui.OverlayItem, len(p.filtered))
 	for ci, idx := range p.filtered {
 		items[ci] = ui.OverlayItem{
@@ -101,5 +102,5 @@ func renderCommandPalette(p *commandPalette, overlay ui.OverlayStyles, width, he
 		}
 	}
 
-	return ui.RenderOverlayList(ui.OverlayListConfig{Title: "Commands", Query: p.query}, items, p.cursor, overlay, width, height, base)
+	return ui.RenderOverlayList(ui.OverlayListConfig{Title: "Commands", Query: p.query, CloseHint: closeHint}, items, p.cursor, overlay, width, height, base)
 }

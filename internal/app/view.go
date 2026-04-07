@@ -34,20 +34,21 @@ func (m Model) View() string {
 		view = ui.RenderToasts(notifierToToasts(active), m.styles, m.width, m.height, view)
 	}
 
+	closeHint := m.keymap.Cancel.Short()
 	if m.cmdPalette.active {
-		view = renderCommandPalette(&m.cmdPalette, m.styles.Overlay, m.width, m.height, view)
+		view = renderCommandPalette(&m.cmdPalette, closeHint, m.styles.Overlay, m.width, m.height, view)
 	}
 	if m.tabPicker.active {
-		view = renderTabPickerOverlay(&m.tabPicker, m.styles.Overlay, m.width, m.height, view)
+		view = renderTabPickerOverlay(&m.tabPicker, closeHint, m.styles.Overlay, m.width, m.height, view)
 	}
 	if m.themeOverlay.Active {
-		view = ui.RenderThemeOverlay(m.themeOverlay, m.schemes, m.styles, m.width, m.height, view)
+		view = ui.RenderThemeOverlay(m.themeOverlay, closeHint, m.schemes, m.styles, m.width, m.height, view)
 	}
 	if m.helpOverlay.Active {
-		view = ui.RenderHelpOverlay(m.helpOverlay, m.styles, m.width, m.height, view)
+		view = ui.RenderHelpOverlay(m.helpOverlay, closeHint, m.styles, m.width, m.height, view)
 	}
 	if m.notificationsOverlay.Active {
-		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, notifierToEntries(m.notifier.Snapshot()), m.styles, m.width, m.height, view)
+		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, closeHint, notifierToEntries(m.notifier.Snapshot()), m.styles, m.width, m.height, view)
 	}
 
 	return ui.RenderCanvas(view, m.width, m.height, m.styles.Bg)

@@ -74,9 +74,9 @@ func (m Model) View() string {
 	var blobsHintSet []ui.PaneHint
 	if m.search.active {
 		blobsHintSet = []ui.PaneHint{
-			{Key: "enter", Desc: "submit"},
-			{Key: "esc", Desc: "cancel"},
-			{Key: "backspace", Desc: "back"},
+			{Key: km.OpenFocused.Short(), Desc: "submit"},
+			{Key: km.Cancel.Short(), Desc: "cancel"},
+			{Key: km.BackspaceUp.Short(), Desc: "back"},
 		}
 	} else {
 		blobsHintSet = []ui.PaneHint{

@@ -412,7 +412,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tabPicker.active {
 			if kind, ok := m.tabPicker.handleKey(key, ui.ThemeKeyBindings{
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
-				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
+				Apply:  m.keymap.ThemeApply,
+				Cancel: m.keymap.Cancel,
+				Erase:  m.keymap.BackspaceUp,
 			}); ok {
 				return m.Update(tabPickerMsg{kind: kind})
 			}
@@ -423,7 +425,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.helpOverlay.Active {
 			m.helpOverlay.HandleKey(key, ui.HelpKeyBindings{
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
-				Close: m.keymap.ToggleHelp,
+				Close:  m.keymap.ToggleHelp,
+				Cancel: m.keymap.Cancel,
+				Erase:  m.keymap.BackspaceUp,
 			})
 			return m, nil
 		}
@@ -432,7 +436,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.notificationsOverlay.Active {
 			m.notificationsOverlay.HandleKey(key, ui.HelpKeyBindings{
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
-				Close: m.keymap.ToggleNotifications,
+				Close:  m.keymap.ToggleNotifications,
+				Cancel: m.keymap.Cancel,
 			}, m.notifier.Len())
 			return m, nil
 		}
@@ -441,7 +446,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.themeOverlay.Active {
 			if m.themeOverlay.HandleKey(key, ui.ThemeKeyBindings{
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
-				Apply: m.keymap.ThemeApply, Cancel: m.keymap.ThemeCancel,
+				Apply:  m.keymap.ThemeApply,
+				Cancel: m.keymap.Cancel,
+				Erase:  m.keymap.BackspaceUp,
 			}, m.schemes) {
 				m.applySchemeToAll(m.schemes[m.themeOverlay.ActiveThemeIdx])
 				ui.SaveThemeName(m.schemes[m.themeOverlay.ActiveThemeIdx].Name)
@@ -607,7 +614,7 @@ func (m *Model) buildCommands() []command {
 }
 
 func (m Model) handleCommandPalette(key string) (tea.Model, tea.Cmd) {
-	cmd, executed, _ := m.cmdPalette.handleKey(key)
+	cmd, executed, _ := m.cmdPalette.handleKey(key, m.keymap)
 	if executed {
 		action := cmd.action()
 		if action.quit {

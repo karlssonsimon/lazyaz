@@ -2,6 +2,7 @@
   "name": "Default (Vim)",
   "bindings": {
     "quit": ["ctrl+c", "q"],
+    "cancel": ["esc", "ctrl+c"],
     "half_page_down": ["ctrl+d", "pgdown"],
     "half_page_up": ["ctrl+u", "pgup"],
     "next_focus": ["tab"],

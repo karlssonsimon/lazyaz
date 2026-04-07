@@ -274,9 +274,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.handleSearchKey(msg)
 	}
 
-	// Esc on the blob pane clears a committed filter (the search input
+	// Cancel on the blob pane clears a committed filter (the search input
 	// is already gone at this point — search.active is false).
-	if key == "esc" && m.focus == blobsPane && m.committedFilter.active {
+	if m.Keymap.Cancel.Matches(key) && m.focus == blobsPane && m.committedFilter.active {
 		m.clearCommittedFilter()
 		m.Status = "Filter cleared"
 		return m, nil

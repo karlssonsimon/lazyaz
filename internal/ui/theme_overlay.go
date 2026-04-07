@@ -9,7 +9,7 @@ type KeyMatcher interface {
 }
 
 type ThemeKeyBindings struct {
-	Up, Down, Apply, Cancel KeyMatcher
+	Up, Down, Apply, Cancel, Erase KeyMatcher
 }
 
 type ThemeOverlayState struct {
@@ -68,7 +68,7 @@ func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, sch
 		}
 	case bindings.Cancel.Matches(key):
 		s.Active = false
-	case key == "backspace":
+	case bindings.Erase != nil && bindings.Erase.Matches(key):
 		if len(s.Query) > 0 {
 			s.Query = s.Query[:len(s.Query)-1]
 			s.refilter(schemes)
@@ -82,7 +82,7 @@ func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, sch
 	return false
 }
 
-func RenderThemeOverlay(state ThemeOverlayState, schemes []Scheme, styles Styles, width, height int, base string) string {
+func RenderThemeOverlay(state ThemeOverlayState, closeHint string, schemes []Scheme, styles Styles, width, height int, base string) string {
 	filtered := state.filtered
 	if filtered == nil {
 		filtered = make([]int, len(schemes))
@@ -99,5 +99,5 @@ func RenderThemeOverlay(state ThemeOverlayState, schemes []Scheme, styles Styles
 		}
 	}
 
-	return RenderOverlayList(OverlayListConfig{Title: "Themes", Query: state.Query}, items, state.CursorIdx, styles.Overlay, width, height, base)
+	return RenderOverlayList(OverlayListConfig{Title: "Themes", Query: state.Query, CloseHint: closeHint}, items, state.CursorIdx, styles.Overlay, width, height, base)
 }

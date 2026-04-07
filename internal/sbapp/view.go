@@ -60,7 +60,7 @@ func (m Model) View() string {
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
-			{Key: "[/]", Desc: "type"},
+			{Key: km.ShowActiveQueue.Short() + "/" + km.ShowDeadLetterQueue.Short(), Desc: "type"},
 			{Key: km.ToggleDLQFilter.Short(), Desc: "DLQ-first"},
 		},
 		Header: m.renderEntityTabs(entitiesContentWidth),

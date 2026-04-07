@@ -27,10 +27,10 @@ func (s *NotificationsOverlayState) Close() {
 }
 
 // HandleKey processes key presses for the overlay. Up/Down move the
-// cursor; close/esc dismiss it.
+// cursor; close or cancel dismiss it.
 func (s *NotificationsOverlayState) HandleKey(key string, bindings HelpKeyBindings, total int) {
 	switch {
-	case bindings.Close.Matches(key), key == "esc":
+	case bindings.Close.Matches(key), bindings.Cancel != nil && bindings.Cancel.Matches(key):
 		s.Close()
 	case bindings.Up.Matches(key):
 		if s.CursorIdx > 0 {
@@ -55,7 +55,7 @@ type NotificationEntry struct {
 // RenderNotificationsOverlay paints the scrollable history list
 // (newest first) on top of the given base view. Use the passed
 // styles to color level pills consistent with toasts.
-func RenderNotificationsOverlay(state NotificationsOverlayState, entries []NotificationEntry, styles Styles, width, height int, base string) string {
+func RenderNotificationsOverlay(state NotificationsOverlayState, closeHint string, entries []NotificationEntry, styles Styles, width, height int, base string) string {
 	// Reverse: newest first.
 	reversed := make([]NotificationEntry, len(entries))
 	for i, e := range entries {
@@ -88,6 +88,7 @@ func RenderNotificationsOverlay(state NotificationsOverlayState, entries []Notif
 
 	cfg := OverlayListConfig{
 		Title:      fmt.Sprintf("Notifications (%d)", len(entries)),
+		CloseHint:  closeHint,
 		InnerWidth: 100,
 		MaxVisible: 20,
 		Center:     true,

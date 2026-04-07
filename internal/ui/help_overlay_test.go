@@ -24,7 +24,7 @@ func TestRenderHelpOverlayIncludesContent(t *testing.T) {
 	state := HelpOverlayState{}
 	state.Open("Help", []HelpSection{{Title: "General", Items: []string{"tab  next focus", "?  toggle help"}}})
 
-	view := RenderHelpOverlay(state, styles, 100, 40, "base")
+	view := RenderHelpOverlay(state, "esc", styles, 100, 40, "base")
 
 	for _, want := range []string{"Help", "General", "toggle help", "esc"} {
 		if !strings.Contains(view, want) {
@@ -41,7 +41,12 @@ func TestHelpOverlaySearch(t *testing.T) {
 	})
 
 	// Type "down" to filter.
-	bindings := HelpKeyBindings{Up: noopMatcher{}, Down: noopMatcher{}, Close: noopMatcher{}}
+	bindings := HelpKeyBindings{
+		Up:    noopMatcher{},
+		Down:  noopMatcher{},
+		Close: noopMatcher{},
+		Erase: keyMatcher{"backspace"},
+	}
 	state.HandleKey("d", bindings)
 	state.HandleKey("o", bindings)
 	state.HandleKey("w", bindings)
@@ -86,3 +91,8 @@ func TestHelpOverlaySearchBySection(t *testing.T) {
 type noopMatcher struct{}
 
 func (noopMatcher) Matches(string) bool { return false }
+
+// keyMatcher matches a specific literal key (for tests).
+type keyMatcher struct{ key string }
+
+func (k keyMatcher) Matches(s string) bool { return s == k.key }
