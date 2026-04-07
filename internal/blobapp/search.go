@@ -43,14 +43,14 @@ func (m Model) handleSearchKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
 	switch {
-	case key == "esc":
+	case m.Keymap.Cancel.Matches(key):
 		m.deactivateSearch()
 		return m, nil
 
-	case key == "enter":
+	case m.Keymap.OpenFocused.Matches(key):
 		return m.handleSearchEnter()
 
-	case key == "backspace":
+	case m.Keymap.BackspaceUp.Matches(key):
 		return m.handleSearchBackspace()
 
 	case key == "up", key == "down", key == "pgup", key == "pgdown",

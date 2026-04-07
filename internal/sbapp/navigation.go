@@ -220,7 +220,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.resize()
 		m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))
 		m.messageViewport.GotoTop()
-		m.Status = fmt.Sprintf("Viewing message %s (shift+tab to navigate, esc to close)", ui.EmptyToDash(item.message.MessageID))
+		m.Status = fmt.Sprintf("Viewing message %s (%s to back to list)", ui.EmptyToDash(item.message.MessageID), m.Keymap.PreviousFocus.Short())
 		return m, nil
 	}
 

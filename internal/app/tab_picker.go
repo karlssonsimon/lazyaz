@@ -60,7 +60,7 @@ func (s *tabPickerState) handleKey(key string, bindings ui.ThemeKeyBindings) (Ta
 		}
 	case bindings.Cancel.Matches(key):
 		s.active = false
-	case key == "backspace":
+	case bindings.Erase != nil && bindings.Erase.Matches(key):
 		if len(s.query) > 0 {
 			s.query = s.query[:len(s.query)-1]
 			s.refilter()
@@ -74,7 +74,7 @@ func (s *tabPickerState) handleKey(key string, bindings ui.ThemeKeyBindings) (Ta
 	return 0, false
 }
 
-func renderTabPickerOverlay(s *tabPickerState, styles ui.OverlayStyles, width, height int, base string) string {
+func renderTabPickerOverlay(s *tabPickerState, closeHint string, styles ui.OverlayStyles, width, height int, base string) string {
 	items := make([]ui.OverlayItem, len(s.filtered))
 	for ci, ti := range s.filtered {
 		items[ci] = ui.OverlayItem{Label: tabKinds[ti].name}
@@ -83,6 +83,7 @@ func renderTabPickerOverlay(s *tabPickerState, styles ui.OverlayStyles, width, h
 	cfg := ui.OverlayListConfig{
 		Title:      "New Tab",
 		Query:      s.query,
+		CloseHint:  closeHint,
 		MaxVisible: len(tabKinds),
 	}
 	return ui.RenderOverlayList(cfg, items, s.cursorIdx, styles, width, height, base)

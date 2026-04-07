@@ -36,7 +36,8 @@ func (m *Model) HandleOverlayKeys(key string) OverlayResult {
 			Up:     m.Keymap.ThemeUp,
 			Down:   m.Keymap.ThemeDown,
 			Apply:  m.Keymap.ThemeApply,
-			Cancel: m.Keymap.ThemeCancel,
+			Cancel: m.Keymap.Cancel,
+			Erase:  m.Keymap.BackspaceUp,
 		}, m.Subscriptions); ok {
 			return OverlayResult{Handled: true, SelectSub: &sub}
 		}
@@ -45,9 +46,11 @@ func (m *Model) HandleOverlayKeys(key string) OverlayResult {
 
 	if !m.EmbeddedMode && m.HelpOverlay.Active {
 		m.HelpOverlay.HandleKey(key, ui.HelpKeyBindings{
-			Up:    m.Keymap.ThemeUp,
-			Down:  m.Keymap.ThemeDown,
-			Close: m.Keymap.ToggleHelp,
+			Up:     m.Keymap.ThemeUp,
+			Down:   m.Keymap.ThemeDown,
+			Close:  m.Keymap.ToggleHelp,
+			Cancel: m.Keymap.Cancel,
+			Erase:  m.Keymap.BackspaceUp,
 		})
 		return OverlayResult{Handled: true}
 	}
@@ -57,7 +60,8 @@ func (m *Model) HandleOverlayKeys(key string) OverlayResult {
 			Up:     m.Keymap.ThemeUp,
 			Down:   m.Keymap.ThemeDown,
 			Apply:  m.Keymap.ThemeApply,
-			Cancel: m.Keymap.ThemeCancel,
+			Cancel: m.Keymap.Cancel,
+			Erase:  m.Keymap.BackspaceUp,
 		}, m.Schemes) {
 			return OverlayResult{Handled: true, ThemeSelected: true}
 		}
@@ -71,14 +75,15 @@ func (m *Model) HandleOverlayKeys(key string) OverlayResult {
 // view, in the correct stacking order (subscription → theme → help).
 // Apps should call this at the very end of their View() method.
 func (m Model) RenderOverlays(view string) string {
+	closeHint := m.Keymap.Cancel.Short()
 	if m.SubOverlay.Active {
-		view = ui.RenderSubscriptionOverlay(m.SubOverlay, m.Subscriptions, m.CurrentSub, m.Loading, m.LoadingStartedAt, m.Styles, m.Width, m.Height, view)
+		view = ui.RenderSubscriptionOverlay(m.SubOverlay, closeHint, m.Subscriptions, m.CurrentSub, m.Loading, m.LoadingStartedAt, m.Styles, m.Width, m.Height, view)
 	}
 	if !m.EmbeddedMode && m.ThemeOverlay.Active {
-		view = ui.RenderThemeOverlay(m.ThemeOverlay, m.Schemes, m.Styles, m.Width, m.Height, view)
+		view = ui.RenderThemeOverlay(m.ThemeOverlay, closeHint, m.Schemes, m.Styles, m.Width, m.Height, view)
 	}
 	if !m.EmbeddedMode && m.HelpOverlay.Active {
-		view = ui.RenderHelpOverlay(m.HelpOverlay, m.Styles, m.Width, m.Height, view)
+		view = ui.RenderHelpOverlay(m.HelpOverlay, closeHint, m.Styles, m.Width, m.Height, view)
 	}
 	return view
 }

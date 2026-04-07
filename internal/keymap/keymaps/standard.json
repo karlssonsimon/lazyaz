@@ -2,6 +2,7 @@
   "name": "Standard",
   "bindings": {
     "quit": ["ctrl+c", "ctrl+q"],
+    "cancel": ["esc"],
     "half_page_down": ["pgdown"],
     "half_page_up": ["pgup"],
     "next_focus": ["tab"],

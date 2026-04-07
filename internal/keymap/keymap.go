@@ -6,6 +6,7 @@ package keymap
 type Keymap struct {
 	// Shared — used by all apps.
 	Quit                Binding `json:"quit"`
+	Cancel              Binding `json:"cancel"`
 	HalfPageDown        Binding `json:"half_page_down"`
 	HalfPageUp          Binding `json:"half_page_up"`
 	NextFocus           Binding `json:"next_focus"`

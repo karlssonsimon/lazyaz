@@ -7,7 +7,7 @@ import (
 )
 
 type HelpKeyBindings struct {
-	Up, Down, Close KeyMatcher
+	Up, Down, Close, Cancel, Erase KeyMatcher
 }
 
 type HelpOverlayState struct {
@@ -49,7 +49,7 @@ func (s *HelpOverlayState) HandleKey(key string, bindings HelpKeyBindings) {
 	}
 
 	switch {
-	case bindings.Close.Matches(key), key == "esc":
+	case bindings.Close.Matches(key), bindings.Cancel != nil && bindings.Cancel.Matches(key):
 		s.Active = false
 	case bindings.Up.Matches(key):
 		if s.CursorIdx > 0 {
@@ -59,7 +59,7 @@ func (s *HelpOverlayState) HandleKey(key string, bindings HelpKeyBindings) {
 		if s.CursorIdx < len(s.filtered)-1 {
 			s.CursorIdx++
 		}
-	case key == "backspace":
+	case bindings.Erase != nil && bindings.Erase.Matches(key):
 		if len(s.Query) > 0 {
 			s.Query = s.Query[:len(s.Query)-1]
 			s.refilter()
@@ -103,7 +103,7 @@ func parseHelpEntry(s string) (keys, desc string) {
 	return s, ""
 }
 
-func RenderHelpOverlay(state HelpOverlayState, styles Styles, width, height int, base string) string {
+func RenderHelpOverlay(state HelpOverlayState, closeHint string, styles Styles, width, height int, base string) string {
 	filtered := state.filtered
 	if filtered == nil {
 		filtered = make([]int, len(state.items))
@@ -159,6 +159,7 @@ func RenderHelpOverlay(state HelpOverlayState, styles Styles, width, height int,
 	cfg := OverlayListConfig{
 		Title:      state.Title,
 		Query:      state.Query,
+		CloseHint:  closeHint,
 		InnerWidth: innerW,
 		MaxVisible: maxVis,
 		Center:     true,

@@ -7,6 +7,7 @@ func Default() Keymap {
 	return Keymap{
 		// Shared.
 		Quit:                New("ctrl+c", "q"),
+		Cancel:              New("esc", "ctrl+c"),
 		HalfPageDown:        New("ctrl+d", "pgdown"),
 		HalfPageUp:          New("ctrl+u", "pgup"),
 		NextFocus:           New("tab"),
