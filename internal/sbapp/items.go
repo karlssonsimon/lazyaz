@@ -226,7 +226,7 @@ func messagesToItems(messages []servicebus.PeekedMessage, marked, duplicates map
 	return items
 }
 
-// Identity functions used by cache.FetchSession and
+// Identity functions used by cache.Loader's internal merge and
 // ui.SetItemsPreserveKey. Messages have a key too — used by re-peek
 // after requeue/delete to keep the cursor on the same message instead
 // of jumping back to the top.

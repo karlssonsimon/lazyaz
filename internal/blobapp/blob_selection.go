@@ -7,7 +7,6 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
-	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -63,11 +62,9 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 			m.refreshItems()
 		}
 
-		m.fetchGen++
-		m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
 		m.SetLoading(blobsPane)
 		m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-		return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 	}
 
 	m.blobLoadAll = true
@@ -78,11 +75,9 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		m.refreshItems()
 	}
 
-	m.fetchGen++
-	m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
 	m.SetLoading(blobsPane)
 	m.Status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
-	return m, tea.Batch(m.Spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, false, m.fetchGen))
+	return m, tea.Batch(m.Spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.blobs))
 }
 
 func (m *Model) toggleVisualLineMode() {

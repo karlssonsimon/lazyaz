@@ -17,6 +17,10 @@ type Subscription struct {
 	State string
 }
 
+// SubscriptionKey returns the stable identity used by cache.Loader to
+// dedupe streamed subscriptions.
+func SubscriptionKey(s Subscription) string { return s.ID }
+
 func NewDefaultCredential() (azcore.TokenCredential, error) {
 	return azidentity.NewDefaultAzureCredential(nil)
 }

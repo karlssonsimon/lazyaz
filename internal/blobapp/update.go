@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
-	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/spinner"
@@ -111,29 +110,19 @@ func (m Model) handleAccountsLoaded(msg accountsLoadedMsg) (Model, tea.Cmd) {
 	if !m.HasSubscription || m.CurrentSub.ID != msg.subscriptionID {
 		return m, nil
 	}
-	if m.accountsSession == nil || m.accountsSession.Gen() != msg.gen {
-		return m, nil
-	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load storage accounts in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
-		m.accountsSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.accountsSession.Apply(msg.accounts)
-	m.accounts = m.accountsSession.Items()
+	m.accounts = msg.accounts
 	m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(m.accounts))
 	ui.SetItemsPreserveKey(&m.accountsList, accountsToItems(m.accounts), accountItemKey)
 
 	if msg.done {
-		m.accounts = m.accountsSession.Finalize()
-		m.accountsSession = nil
-		m.cache.accounts.Set(msg.subscriptionID, m.accounts)
-		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(m.accounts))
-		ui.SetItemsPreserveKey(&m.accountsList, accountsToItems(m.accounts), accountItemKey)
 		status := fmt.Sprintf("Loaded %d storage accounts from %s in %s", len(m.accounts), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
@@ -145,29 +134,19 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (Model, tea.Cmd) 
 	if !m.hasAccount || !sameAccount(m.currentAccount, msg.account) {
 		return m, nil
 	}
-	if m.containersSession == nil || m.containersSession.Gen() != msg.gen {
-		return m, nil
-	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load containers for %s: %s", msg.account.Name, msg.err.Error()))
-		m.containersSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.containersSession.Apply(msg.containers)
-	m.containers = m.containersSession.Items()
+	m.containers = msg.containers
 	m.containersList.Title = fmt.Sprintf("Containers (%d)", len(m.containers))
 	ui.SetItemsPreserveKey(&m.containersList, containersToItems(m.containers), containerItemKey)
 
 	if msg.done {
-		m.containers = m.containersSession.Finalize()
-		m.containersSession = nil
-		m.cache.containers.Set(cache.Key(msg.account.SubscriptionID, msg.account.Name), m.containers)
-		m.containersList.Title = fmt.Sprintf("Containers (%d)", len(m.containers))
-		ui.SetItemsPreserveKey(&m.containersList, containersToItems(m.containers), containerItemKey)
 		status := fmt.Sprintf("Loaded %d containers from %s in %s", len(m.containers), msg.account.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
@@ -176,8 +155,8 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (Model, tea.Cmd) 
 }
 
 func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
-	// Search results use a separate code path with its own state and don't
-	// go through the FetchSession merge system.
+	// Search results use a separate code path that bypasses the loader's
+	// merge — they go through handleSearchBlobsLoaded.
 	if m.search.active && m.search.fetching && msg.query != "" {
 		return m.handleSearchBlobsLoaded(msg)
 	}
@@ -198,29 +177,19 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	if msg.query != "" && !m.search.active {
 		return m, nil
 	}
-	if m.blobsSession == nil || m.blobsSession.Gen() != msg.gen {
-		return m, nil
-	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load blobs in %s/%s: %s", msg.account.Name, msg.container, msg.err.Error()))
-		m.blobsSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.blobsSession.Apply(msg.blobs)
-	m.blobs = m.blobsSession.Items()
+	m.blobs = msg.blobs
 	m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(m.blobs))
 	m.refreshItems()
 
 	if msg.done {
-		m.blobs = m.blobsSession.Finalize()
-		m.blobsSession = nil
-		m.cache.blobs.Set(blobsCacheKey(msg.account.SubscriptionID, msg.account.Name, msg.container, msg.prefix, msg.loadAll), m.blobs)
-		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(m.blobs))
-		m.refreshItems()
 		elapsed := time.Since(m.LoadingStartedAt).Round(time.Millisecond)
 		var status string
 		if msg.loadAll {
@@ -400,7 +369,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.SetLoading(-1)
 			m.LastErr = ""
 			m.Status = "Refreshing subscriptions..."
-			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
 	case m.Keymap.FilterInput.Matches(key):
 		if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
@@ -431,11 +400,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				}
 				ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
-				m.fetchGen++
-				m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
 				m.SetLoading(blobsPane)
 				m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-				return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
+				return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 			}
 		}
 	}

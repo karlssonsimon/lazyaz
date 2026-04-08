@@ -16,26 +16,22 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.SetLoading(-1)
 		m.LastErr = ""
 		m.Status = "Refreshing subscriptions..."
-		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 	}
 
 	if !m.hasNamespace || m.focus == namespacesPane {
-		m.fetchGen++
-		m.namespacesSession = cache.NewFetchSession(m.namespaces, m.fetchGen, namespaceKey)
 		m.SetLoading(m.focus)
 		m.LastErr = ""
 		m.Status = fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(m.CurrentSub))
-		return m, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID, m.namespaces))
 	}
 
 	if m.focus == entitiesPane || !m.hasPeekTarget {
-		m.fetchGen++
-		m.entitiesSession = cache.NewFetchSession(m.entities, m.fetchGen, entityKey)
 		m.SetLoading(m.focus)
 		m.LastErr = ""
 		m.Status = fmt.Sprintf("Loading entities in %s", m.currentNS.Name)
 		entityCacheKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name)
-		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, m.currentNS, entityCacheKey, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, m.currentNS, entityCacheKey, m.entities))
 	}
 
 	return m.rePeekMessages(true)

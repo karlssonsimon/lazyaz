@@ -7,7 +7,6 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
-	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/spinner"
@@ -116,29 +115,19 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 	if !m.HasSubscription || m.CurrentSub.ID != msg.subscriptionID {
 		return m, nil
 	}
-	if m.namespacesSession == nil || m.namespacesSession.Gen() != msg.gen {
-		return m, nil
-	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load namespaces in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
-		m.namespacesSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.namespacesSession.Apply(msg.namespaces)
-	m.namespaces = m.namespacesSession.Items()
+	m.namespaces = msg.namespaces
 	m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(m.namespaces))
 	ui.SetItemsPreserveKey(&m.namespacesList, namespacesToItems(m.namespaces), namespaceItemKey)
 
 	if msg.done {
-		m.namespaces = m.namespacesSession.Finalize()
-		m.namespacesSession = nil
-		m.cache.namespaces.Set(msg.subscriptionID, m.namespaces)
-		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(m.namespaces))
-		ui.SetItemsPreserveKey(&m.namespacesList, namespacesToItems(m.namespaces), namespaceItemKey)
 		status := fmt.Sprintf("Loaded %d namespaces from %s in %s", len(m.namespaces), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
@@ -150,29 +139,19 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 	if !m.hasNamespace || m.currentNS.Name != msg.namespace.Name {
 		return m, nil
 	}
-	if m.entitiesSession == nil || m.entitiesSession.Gen() != msg.gen {
-		return m, nil
-	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load entities in %s: %s", msg.namespace.Name, msg.err.Error()))
-		m.entitiesSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.entitiesSession.Apply(msg.entities)
-	m.entities = m.entitiesSession.Items()
+	m.entities = msg.entities
 	m.rebuildEntitiesItems()
 	m.entitiesList.Title = m.entitiesPaneTitle()
 
 	if msg.done {
-		m.entities = m.entitiesSession.Finalize()
-		m.entitiesSession = nil
-		m.cache.entities.Set(cache.Key(m.CurrentSub.ID, msg.namespace.Name), m.entities)
-		m.rebuildEntitiesItems()
-		m.entitiesList.Title = m.entitiesPaneTitle()
 		status := fmt.Sprintf("Loaded %d entities from %s in %s", len(m.entities), msg.namespace.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
@@ -181,12 +160,11 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 }
 
 func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (Model, tea.Cmd) {
-	// Drop pages for stale fetches: scope changed, topic changed, or
-	// session was abandoned (e.g. user expanded a different topic).
+	// Drop pages for stale fetches: scope changed or topic changed.
 	if !m.hasNamespace || m.currentNS.Name != msg.namespace.Name {
 		return m, nil
 	}
-	if m.topicSubsSession == nil || m.topicSubsSession.Gen() != msg.gen || m.topicSubsFetching != msg.topicName {
+	if m.topicSubsFetching != msg.topicName {
 		return m, nil
 	}
 	if !m.expandedTopics[msg.topicName] {
@@ -197,21 +175,16 @@ func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (
 	if msg.err != nil {
 		m.ClearLoading()
 		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load subscriptions for topic %s: %s", msg.topicName, msg.err.Error()))
-		m.topicSubsSession = nil
 		m.topicSubsFetching = ""
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.topicSubsSession.Apply(msg.subs)
-	m.topicSubsByTopic[msg.topicName] = m.topicSubsSession.Items()
+	m.topicSubsByTopic[msg.topicName] = msg.subs
 	m.rebuildEntitiesItems()
 
 	if msg.done {
-		m.topicSubsByTopic[msg.topicName] = m.topicSubsSession.Finalize()
-		m.topicSubsSession = nil
 		m.topicSubsFetching = ""
-		m.cache.topicSubs.Set(cache.Key(m.CurrentSub.ID, msg.namespace.Name, msg.topicName), m.topicSubsByTopic[msg.topicName])
 		m.rebuildEntitiesItems()
 		status := fmt.Sprintf("Loaded %d subscriptions for topic %s in %s", len(m.topicSubsByTopic[msg.topicName]), msg.topicName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
@@ -458,7 +431,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.SetLoading(-1)
 			m.LastErr = ""
 			m.Status = "Refreshing subscriptions..."
-			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
 	case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):
 		if !focusedFilterActive && !m.ThemeOverlay.Active {
