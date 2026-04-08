@@ -19,17 +19,17 @@ type blobCache struct {
 func newCache(db *cache.DB) blobCache {
 	if db != nil {
 		return blobCache{
-			subscriptions: cache.NewLoader[azure.Subscription](cache.NewStore[azure.Subscription](db, "subscriptions")),
-			accounts:      cache.NewLoader[blob.Account](cache.NewStore[blob.Account](db, "blob_accounts")),
-			containers:    cache.NewLoader[blob.ContainerInfo](cache.NewStore[blob.ContainerInfo](db, "blob_containers")),
-			blobs:         cache.NewLoader[blob.BlobEntry](cache.NewStore[blob.BlobEntry](db, "blobs")),
+			subscriptions: cache.NewLoader(cache.NewStore[azure.Subscription](db, "subscriptions"), azure.SubscriptionKey),
+			accounts:      cache.NewLoader(cache.NewStore[blob.Account](db, "blob_accounts"), accountKey),
+			containers:    cache.NewLoader(cache.NewStore[blob.ContainerInfo](db, "blob_containers"), containerKey),
+			blobs:         cache.NewLoader(cache.NewStore[blob.BlobEntry](db, "blobs"), blobEntryKey),
 		}
 	}
 	return blobCache{
-		subscriptions: cache.NewLoader(cache.NewMap[azure.Subscription]()),
-		accounts:      cache.NewLoader(cache.NewMap[blob.Account]()),
-		containers:    cache.NewLoader(cache.NewMap[blob.ContainerInfo]()),
-		blobs:         cache.NewLoader(cache.NewMap[blob.BlobEntry]()),
+		subscriptions: cache.NewLoader(cache.NewMap[azure.Subscription](), azure.SubscriptionKey),
+		accounts:      cache.NewLoader(cache.NewMap[blob.Account](), accountKey),
+		containers:    cache.NewLoader(cache.NewMap[blob.ContainerInfo](), containerKey),
+		blobs:         cache.NewLoader(cache.NewMap[blob.BlobEntry](), blobEntryKey),
 	}
 }
 
@@ -47,10 +47,10 @@ type BlobStores struct {
 // fetch lifecycle) but shares the underlying data.
 func NewCacheWithStores(s BlobStores) blobCache {
 	return blobCache{
-		subscriptions: cache.NewLoader(s.Subscriptions),
-		accounts:      cache.NewLoader(s.Accounts),
-		containers:    cache.NewLoader(s.Containers),
-		blobs:         cache.NewLoader(s.Blobs),
+		subscriptions: cache.NewLoader(s.Subscriptions, azure.SubscriptionKey),
+		accounts:      cache.NewLoader(s.Accounts, accountKey),
+		containers:    cache.NewLoader(s.Containers, containerKey),
+		blobs:         cache.NewLoader(s.Blobs, blobEntryKey),
 	}
 }
 

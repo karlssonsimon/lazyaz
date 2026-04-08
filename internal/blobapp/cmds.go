@@ -14,16 +14,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// fetch picks Fetch or FetchFresh based on the fresh flag.
-func loaderFetch[T any](l *cache.Loader[T], fresh bool, key string, fn func(context.Context, func([]T)) error, wrap func(cache.Page[T]) tea.Msg) tea.Cmd {
-	if fresh {
-		return l.FetchFresh(key, fn, wrap)
-	}
-	return l.Fetch(key, fn, wrap)
-}
-
-func fetchSubscriptionsCmd(svc *blob.Service, loader *cache.Loader[azure.Subscription], fresh bool) tea.Cmd {
-	return loaderFetch(loader, fresh, "", func(ctx context.Context, send func([]azure.Subscription)) error {
+func fetchSubscriptionsCmd(svc *blob.Service, loader *cache.Loader[azure.Subscription], seed []azure.Subscription) tea.Cmd {
+	return loader.Fetch("", seed, func(ctx context.Context, send func([]azure.Subscription)) error {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		return svc.ListSubscriptions(ctx, send)
@@ -32,56 +24,55 @@ func fetchSubscriptionsCmd(svc *blob.Service, loader *cache.Loader[azure.Subscri
 	})
 }
 
-func fetchAccountsCmd(svc *blob.Service, loader *cache.Loader[blob.Account], subscriptionID string, fresh bool, gen int) tea.Cmd {
-	return loaderFetch(loader, fresh, subscriptionID, func(ctx context.Context, send func([]blob.Account)) error {
+func fetchAccountsCmd(svc *blob.Service, loader *cache.Loader[blob.Account], subscriptionID string, seed []blob.Account) tea.Cmd {
+	return loader.Fetch(subscriptionID, seed, func(ctx context.Context, send func([]blob.Account)) error {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		return svc.DiscoverAccountsForSubscription(ctx, subscriptionID, send)
 	}, func(p cache.Page[blob.Account]) tea.Msg {
-		return accountsLoadedMsg{gen: gen, subscriptionID: subscriptionID, accounts: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return accountsLoadedMsg{subscriptionID: subscriptionID, accounts: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
-func fetchContainersCmd(svc *blob.Service, loader *cache.Loader[blob.ContainerInfo], account blob.Account, fresh bool, gen int) tea.Cmd {
-	return loaderFetch(loader, fresh, cache.Key(account.SubscriptionID, account.Name), func(ctx context.Context, send func([]blob.ContainerInfo)) error {
+func fetchContainersCmd(svc *blob.Service, loader *cache.Loader[blob.ContainerInfo], account blob.Account, seed []blob.ContainerInfo) tea.Cmd {
+	return loader.Fetch(cache.Key(account.SubscriptionID, account.Name), seed, func(ctx context.Context, send func([]blob.ContainerInfo)) error {
 		ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 		defer cancel()
 		return svc.ListContainers(ctx, account, send)
 	}, func(p cache.Page[blob.ContainerInfo]) tea.Msg {
-		return containersLoadedMsg{gen: gen, account: account, containers: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return containersLoadedMsg{account: account, containers: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
-func fetchHierarchyBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEntry], account blob.Account, containerName, prefix string, limit int, fresh bool, gen int) tea.Cmd {
+func fetchHierarchyBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEntry], account blob.Account, containerName, prefix string, limit int, seed []blob.BlobEntry) tea.Cmd {
 	key := blobsCacheKey(account.SubscriptionID, account.Name, containerName, prefix, false)
-	return loaderFetch(loader, fresh, key, func(ctx context.Context, send func([]blob.BlobEntry)) error {
+	return loader.Fetch(key, seed, func(ctx context.Context, send func([]blob.BlobEntry)) error {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 		return svc.ListBlobsLimited(ctx, account, containerName, prefix, limit, send)
 	}, func(p cache.Page[blob.BlobEntry]) tea.Msg {
-		return blobsLoadedMsg{gen: gen, account: account, container: containerName, prefix: prefix, loadAll: false, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return blobsLoadedMsg{account: account, container: containerName, prefix: prefix, loadAll: false, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
-func fetchAllBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEntry], account blob.Account, containerName, prefix string, fresh bool, gen int) tea.Cmd {
+func fetchAllBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEntry], account blob.Account, containerName, prefix string, seed []blob.BlobEntry) tea.Cmd {
 	key := blobsCacheKey(account.SubscriptionID, account.Name, containerName, prefix, true)
-	return loaderFetch(loader, fresh, key, func(ctx context.Context, send func([]blob.BlobEntry)) error {
+	return loader.Fetch(key, seed, func(ctx context.Context, send func([]blob.BlobEntry)) error {
 		ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 		defer cancel()
 		return svc.ListAllBlobs(ctx, account, containerName, send)
 	}, func(p cache.Page[blob.BlobEntry]) tea.Msg {
-		return blobsLoadedMsg{gen: gen, account: account, container: containerName, prefix: prefix, loadAll: true, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return blobsLoadedMsg{account: account, container: containerName, prefix: prefix, loadAll: true, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 }
 
-// fetchSearchBlobsCmd does NOT take a gen — search results bypass the
-// FetchSession merge system and go through handleSearchBlobsLoaded,
-// which manages its own state in m.search.
-func fetchSearchBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEntry], account blob.Account, containerName, currentPrefix, query string, limit int, fresh bool) tea.Cmd {
+// fetchSearchBlobsCmd uses the loader's merge for consistency, but
+// search results are scoped under a unique cache key so they don't
+// pollute the hierarchy/load-all caches.
+func fetchSearchBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEntry], account blob.Account, containerName, currentPrefix, query string, limit int) tea.Cmd {
 	effectivePrefix := blobSearchPrefix(currentPrefix, query)
-	// Search results use a unique key that won't collide with hierarchy/all caches.
 	key := cache.Key("search", account.SubscriptionID, account.Name, containerName, effectivePrefix)
-	return loaderFetch(loader, fresh, key, func(ctx context.Context, send func([]blob.BlobEntry)) error {
+	return loader.Fetch(key, nil, func(ctx context.Context, send func([]blob.BlobEntry)) error {
 		ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 		defer cancel()
 		return svc.SearchBlobsByPrefix(ctx, account, containerName, effectivePrefix, limit, send)

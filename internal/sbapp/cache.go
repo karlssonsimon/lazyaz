@@ -21,17 +21,17 @@ type sbCache struct {
 func newCache(db *cache.DB) sbCache {
 	if db != nil {
 		return sbCache{
-			subscriptions: cache.NewLoader[azure.Subscription](cache.NewStore[azure.Subscription](db, "subscriptions")),
-			namespaces:    cache.NewLoader[servicebus.Namespace](cache.NewStore[servicebus.Namespace](db, "sb_namespaces")),
-			entities:      cache.NewLoader[servicebus.Entity](cache.NewStore[servicebus.Entity](db, "sb_entities")),
-			topicSubs:     cache.NewLoader[servicebus.TopicSubscription](cache.NewStore[servicebus.TopicSubscription](db, "sb_topic_subs")),
+			subscriptions: cache.NewLoader(cache.NewStore[azure.Subscription](db, "subscriptions"), azure.SubscriptionKey),
+			namespaces:    cache.NewLoader(cache.NewStore[servicebus.Namespace](db, "sb_namespaces"), namespaceKey),
+			entities:      cache.NewLoader(cache.NewStore[servicebus.Entity](db, "sb_entities"), entityKey),
+			topicSubs:     cache.NewLoader(cache.NewStore[servicebus.TopicSubscription](db, "sb_topic_subs"), topicSubKey),
 		}
 	}
 	return sbCache{
-		subscriptions: cache.NewLoader(cache.NewMap[azure.Subscription]()),
-		namespaces:    cache.NewLoader(cache.NewMap[servicebus.Namespace]()),
-		entities:      cache.NewLoader(cache.NewMap[servicebus.Entity]()),
-		topicSubs:     cache.NewLoader(cache.NewMap[servicebus.TopicSubscription]()),
+		subscriptions: cache.NewLoader(cache.NewMap[azure.Subscription](), azure.SubscriptionKey),
+		namespaces:    cache.NewLoader(cache.NewMap[servicebus.Namespace](), namespaceKey),
+		entities:      cache.NewLoader(cache.NewMap[servicebus.Entity](), entityKey),
+		topicSubs:     cache.NewLoader(cache.NewMap[servicebus.TopicSubscription](), topicSubKey),
 	}
 }
 
@@ -47,9 +47,9 @@ type SBStores struct {
 // provided shared stores.
 func NewCacheWithStores(s SBStores) sbCache {
 	return sbCache{
-		subscriptions: cache.NewLoader(s.Subscriptions),
-		namespaces:    cache.NewLoader(s.Namespaces),
-		entities:      cache.NewLoader(s.Entities),
-		topicSubs:     cache.NewLoader(s.TopicSubs),
+		subscriptions: cache.NewLoader(s.Subscriptions, azure.SubscriptionKey),
+		namespaces:    cache.NewLoader(s.Namespaces, namespaceKey),
+		entities:      cache.NewLoader(s.Entities, entityKey),
+		topicSubs:     cache.NewLoader(s.TopicSubs, topicSubKey),
 	}
 }

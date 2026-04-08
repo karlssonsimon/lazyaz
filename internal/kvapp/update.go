@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
-	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/spinner"
@@ -103,33 +102,22 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 }
 
 func (m Model) handleVaultsLoaded(msg vaultsLoadedMsg) (Model, tea.Cmd) {
-	// Scope + generation check. Drop stale pages silently.
 	if !m.HasSubscription || m.CurrentSub.ID != msg.subscriptionID {
-		return m, nil
-	}
-	if m.vaultsSession == nil || m.vaultsSession.Gen() != msg.gen {
 		return m, nil
 	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load key vaults in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
-		m.vaultsSession = nil // abandon session, keep accumulated items visible
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.vaultsSession.Apply(msg.vaults)
-	m.vaults = m.vaultsSession.Items()
+	m.vaults = msg.vaults
 	m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(m.vaults))
 	ui.SetItemsPreserveKey(&m.vaultsList, vaultsToItems(m.vaults), vaultItemKey)
 
 	if msg.done {
-		m.vaults = m.vaultsSession.Finalize()
-		m.vaultsSession = nil
-		m.cache.vaults.Set(msg.subscriptionID, m.vaults)
-		m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(m.vaults))
-		ui.SetItemsPreserveKey(&m.vaultsList, vaultsToItems(m.vaults), vaultItemKey)
 		status := fmt.Sprintf("Loaded %d vaults in %s", len(m.vaults), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
@@ -141,29 +129,19 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 	if !m.hasVault || m.currentVault.Name != msg.vault.Name {
 		return m, nil
 	}
-	if m.secretsSession == nil || m.secretsSession.Gen() != msg.gen {
-		return m, nil
-	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load secrets in %s: %s", msg.vault.Name, msg.err.Error()))
-		m.secretsSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.secretsSession.Apply(msg.secrets)
-	m.secrets = m.secretsSession.Items()
+	m.secrets = msg.secrets
 	m.secretsList.Title = fmt.Sprintf("Secrets (%d)", len(m.secrets))
 	ui.SetItemsPreserveKey(&m.secretsList, secretsToItems(m.secrets), secretItemKey)
 
 	if msg.done {
-		m.secrets = m.secretsSession.Finalize()
-		m.secretsSession = nil
-		m.cache.secrets.Set(cache.Key(m.CurrentSub.ID, msg.vault.Name), m.secrets)
-		m.secretsList.Title = fmt.Sprintf("Secrets (%d)", len(m.secrets))
-		ui.SetItemsPreserveKey(&m.secretsList, secretsToItems(m.secrets), secretItemKey)
 		status := fmt.Sprintf("Loaded %d secrets from %s in %s", len(m.secrets), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
@@ -178,29 +156,19 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 	if m.currentVault.Name != msg.vault.Name {
 		return m, nil
 	}
-	if m.versionsSession == nil || m.versionsSession.Gen() != msg.gen {
-		return m, nil
-	}
 
 	if msg.err != nil {
 		m.ClearLoading()
 		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.secretName, msg.err.Error()))
-		m.versionsSession = nil
 		return m, nil
 	}
 
 	m.LastErr = ""
-	m.versionsSession.Apply(msg.versions)
-	m.versions = m.versionsSession.Items()
+	m.versions = msg.versions
 	m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(m.versions))
 	ui.SetItemsPreserveKey(&m.versionsList, versionsToItems(m.versions), versionItemKey)
 
 	if msg.done {
-		m.versions = m.versionsSession.Finalize()
-		m.versionsSession = nil
-		m.cache.versions.Set(cache.Key(m.CurrentSub.ID, msg.vault.Name, msg.secretName), m.versions)
-		m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(m.versions))
-		ui.SetItemsPreserveKey(&m.versionsList, versionsToItems(m.versions), versionItemKey)
 		status := fmt.Sprintf("Loaded %d versions for %s in %s", len(m.versions), msg.secretName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		return m, m.FinishLoading(status)
 	}
@@ -305,7 +273,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.SetLoading(-1)
 			m.LastErr = ""
 			m.Status = "Refreshing subscriptions..."
-			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
 	case m.Keymap.Inspect.Matches(key):
 		if !focusedFilterActive {

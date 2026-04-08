@@ -35,13 +35,6 @@ type Model struct {
 	secrets  []keyvault.Secret
 	versions []keyvault.SecretVersion
 
-	// Active streaming-refresh sessions. Non-nil while a fetch is in
-	// flight for the corresponding list; pages are merged into the session
-	// and the list is rebuilt as each page arrives. See cache.FetchSession.
-	vaultsSession   *cache.FetchSession[keyvault.Vault]
-	secretsSession  *cache.FetchSession[keyvault.Secret]
-	versionsSession *cache.FetchSession[keyvault.SecretVersion]
-
 	// Per-scope list state history. When the user navigates between
 	// scopes (different subscription, different vault, etc.) the cursor
 	// and filter of the previous scope are snapshotted here so that
@@ -50,12 +43,6 @@ type Model struct {
 	vaultsHistory   map[string]ui.ListState // keyed by subscription ID
 	secretsHistory  map[string]ui.ListState // keyed by sub+vault
 	versionsHistory map[string]ui.ListState // keyed by sub+vault+secret
-
-	// fetchGen is a monotonic token bumped on every new fetch across any
-	// list. It's copied into each fetch command and checked on arriving
-	// pages so that stale pages from a superseded or cancelled refresh
-	// get dropped.
-	fetchGen int
 
 	hasVault      bool
 	currentVault  keyvault.Vault
@@ -75,7 +62,6 @@ type Model struct {
 }
 
 type vaultsLoadedMsg struct {
-	gen            int
 	subscriptionID string
 	vaults         []keyvault.Vault
 	done           bool
@@ -84,7 +70,6 @@ type vaultsLoadedMsg struct {
 }
 
 type secretsLoadedMsg struct {
-	gen     int
 	vault   keyvault.Vault
 	secrets []keyvault.Secret
 	done    bool
@@ -93,7 +78,6 @@ type secretsLoadedMsg struct {
 }
 
 type versionsLoadedMsg struct {
-	gen        int
 	vault      keyvault.Vault
 	secretName string
 	versions   []keyvault.SecretVersion
@@ -225,10 +209,9 @@ func (m Model) HelpSections() []ui.HelpSection {
 }
 
 // SetSubscription overrides the embedded appshell.Model method to also
-// hydrate vaults from cache and prime the initial vault fetch session.
-// Tabapp calls this after constructing the model and before Init() issues
-// the first fetch, so the user sees cached vaults instantly while the
-// network call runs in the background.
+// hydrate vaults from cache. Tabapp calls this after constructing the
+// model and before Init() issues the first fetch, so the user sees
+// cached vaults instantly while the network call runs in the background.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
 	if cached, ok := m.cache.vaults.Get(sub.ID); ok {
@@ -236,17 +219,15 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 		m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(cached))
 		ui.SetItemsPreserveKey(&m.vaultsList, vaultsToItems(cached), vaultItemKey)
 	}
-	m.fetchGen++
-	m.vaultsSession = cache.NewFetchSession(m.vaults, m.fetchGen, vaultKey)
 }
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.Spinner.Tick}
 	if m.SubOverlay.Active {
-		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 	}
 	if m.HasSubscription {
-		cmds = append(cmds, fetchVaultsCmd(m.service, m.cache.vaults, m.CurrentSub.ID, m.fetchGen))
+		cmds = append(cmds, fetchVaultsCmd(m.service, m.cache.vaults, m.CurrentSub.ID, m.vaults))
 	}
 	return tea.Batch(cmds...)
 }

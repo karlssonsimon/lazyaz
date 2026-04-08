@@ -135,11 +135,9 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.detailList.Title = "Detail"
 	m.resize() // peek state cleared → reclaim DLQ tab strip space
 
-	m.fetchGen++
-	m.namespacesSession = cache.NewFetchSession(m.namespaces, m.fetchGen, namespaceKey)
 	m.SetLoading(m.focus)
 	m.Status = fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub))
-	return m, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID, m.fetchGen))
+	return m, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID, m.namespaces))
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
@@ -186,11 +184,9 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.detailList.Title = "Detail"
 		m.resize() // peek state cleared → reclaim DLQ tab strip space
 
-		m.fetchGen++
-		m.entitiesSession = cache.NewFetchSession(m.entities, m.fetchGen, entityKey)
 		m.SetLoading(m.focus)
 		m.Status = fmt.Sprintf("Loading entities in %s", item.namespace.Name)
-		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityCacheKey, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityCacheKey, m.entities))
 	}
 
 	if m.focus == entitiesPane {
@@ -319,11 +315,9 @@ func (m Model) toggleTopicExpansion(topic servicebus.Entity) (Model, tea.Cmd) {
 	m.rebuildEntitiesItems()
 
 	// Fire a fetch (always — to refresh).
-	m.fetchGen++
 	m.topicSubsFetching = topic.Name
-	m.topicSubsSession = cache.NewFetchSession(m.topicSubsByTopic[topic.Name], m.fetchGen, topicSubKey)
 	m.SetLoading(m.focus)
 	m.Status = fmt.Sprintf("Loading subscriptions for topic %s", topic.Name)
-	return m, tea.Batch(m.Spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, topic.Name, cacheKey, m.fetchGen))
+	return m, tea.Batch(m.Spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, topic.Name, cacheKey, m.topicSubsByTopic[topic.Name]))
 }
 

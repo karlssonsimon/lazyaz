@@ -17,9 +17,15 @@ package cache
 // cancelled or superseded fetch — see [FetchSession.Gen].
 //
 // FetchSession is single-use. Create a fresh one for each refresh.
+//
+// The session keeps a key→position index alongside items so that
+// [FetchSession.Apply] is O(1) per item (and therefore O(M) per page,
+// O(N) per full stream). Without the index, Apply is O(N) per item and
+// streaming a 100k-item resource locks the UI for minutes.
 type FetchSession[T any] struct {
 	gen   int
 	items []T
+	index map[string]int // key → position in items (first occurrence)
 	seen  map[string]struct{}
 	keyOf func(T) string
 }
@@ -31,9 +37,20 @@ type FetchSession[T any] struct {
 func NewFetchSession[T any](current []T, gen int, keyOf func(T) string) *FetchSession[T] {
 	items := make([]T, len(current))
 	copy(items, current)
+	index := make(map[string]int, len(current))
+	for i, item := range items {
+		k := keyOf(item)
+		if _, exists := index[k]; !exists {
+			// Match the linear-scan semantics of the original Apply: when
+			// the seed contains duplicate keys, updates land on the first
+			// occurrence.
+			index[k] = i
+		}
+	}
 	return &FetchSession[T]{
 		gen:   gen,
 		items: items,
+		index: index,
 		seen:  make(map[string]struct{}, len(current)),
 		keyOf: keyOf,
 	}
@@ -58,21 +75,18 @@ func (s *FetchSession[T]) Items() []T { return s.items }
 // Every key in the page is recorded as "seen" so that [FetchSession.Finalize]
 // can distinguish items that still exist from items that have been
 // deleted server-side.
+//
+// O(len(page)) amortised, thanks to the key→position index.
 func (s *FetchSession[T]) Apply(page []T) {
 	for _, item := range page {
 		k := s.keyOf(item)
 		s.seen[k] = struct{}{}
-		replaced := false
-		for i := range s.items {
-			if s.keyOf(s.items[i]) == k {
-				s.items[i] = item
-				replaced = true
-				break
-			}
+		if i, ok := s.index[k]; ok {
+			s.items[i] = item
+			continue
 		}
-		if !replaced {
-			s.items = append(s.items, item)
-		}
+		s.index[k] = len(s.items)
+		s.items = append(s.items, item)
 	}
 }
 

@@ -70,13 +70,6 @@ type Model struct {
 	visualLineMode bool
 	visualAnchor   string
 
-	// Streaming-refresh sessions. See cache.FetchSession. Search results
-	// are not session-merged — they're a separate code path through
-	// search.go that replaces entirely.
-	accountsSession   *cache.FetchSession[blob.Account]
-	containersSession *cache.FetchSession[blob.ContainerInfo]
-	blobsSession      *cache.FetchSession[blob.BlobEntry]
-
 	// Per-scope list state history. The blobs list has its scope change
 	// not just on account/container switches but also every time the
 	// user enters or leaves a prefix ("folder"), so blobsHistory keys
@@ -85,10 +78,6 @@ type Model struct {
 	accountsHistory   map[string]ui.ListState // keyed by subscription ID
 	containersHistory map[string]ui.ListState // keyed by sub+account
 	blobsHistory      map[string]ui.ListState // keyed by sub+account+container+prefix+loadAll
-
-	// fetchGen is the monotonic generation token copied into each fetch
-	// so pages from superseded or cancelled fetches can be dropped.
-	fetchGen int
 
 	hasAccount     bool
 	currentAccount blob.Account
@@ -122,7 +111,6 @@ type Model struct {
 }
 
 type accountsLoadedMsg struct {
-	gen            int
 	subscriptionID string
 	accounts       []blob.Account
 	done           bool
@@ -131,7 +119,6 @@ type accountsLoadedMsg struct {
 }
 
 type containersLoadedMsg struct {
-	gen        int
 	account    blob.Account
 	containers []blob.ContainerInfo
 	done       bool
@@ -140,7 +127,6 @@ type containersLoadedMsg struct {
 }
 
 type blobsLoadedMsg struct {
-	gen       int
 	account   blob.Account
 	container string
 	prefix    string
@@ -317,9 +303,8 @@ func (m Model) HelpSections() []ui.HelpSection {
 }
 
 // SetSubscription overrides the embedded appshell.Model method to also
-// hydrate accounts from cache and prime the initial accounts fetch
-// session. Tabapp calls this after constructing the model and before
-// Init() issues the first fetch.
+// hydrate accounts from cache. Tabapp calls this after constructing the
+// model and before Init() issues the first fetch.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
 	if cached, ok := m.cache.accounts.Get(sub.ID); ok {
@@ -327,18 +312,16 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(cached))
 		ui.SetItemsPreserveKey(&m.accountsList, accountsToItems(cached), accountItemKey)
 	}
-	m.fetchGen++
-	m.accountsSession = cache.NewFetchSession(m.accounts, m.fetchGen, accountKey)
 }
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.Spinner.Tick}
 	// Only fetch subscriptions from Azure if the picker is open.
 	if m.SubOverlay.Active {
-		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 	}
 	if m.HasSubscription {
-		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.CurrentSub.ID, false, m.fetchGen))
+		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.CurrentSub.ID, m.accounts))
 	}
 	return tea.Batch(cmds...)
 }

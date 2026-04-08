@@ -64,14 +64,6 @@ type Model struct {
 	// change.
 	expandedTopics map[string]bool
 
-	// Streaming-refresh sessions. See cache.FetchSession. Peeked messages
-	// are deliberately excluded — they're ephemeral and use plain replace.
-	namespacesSession *cache.FetchSession[servicebus.Namespace]
-	entitiesSession   *cache.FetchSession[servicebus.Entity]
-	// topicSubsSession is the session for whichever topic is currently
-	// being fetched (when the user just expanded a topic). Only one runs
-	// at a time; expanding a different topic abandons the previous session.
-	topicSubsSession *cache.FetchSession[servicebus.TopicSubscription]
 	// topicSubsFetching is the topic name whose subscriptions are
 	// currently being fetched, used to validate incoming pages.
 	topicSubsFetching string
@@ -82,10 +74,6 @@ type Model struct {
 	// scope identifier the cache uses.
 	namespacesHistory map[string]ui.ListState // keyed by subscription ID
 	entitiesHistory   map[string]ui.ListState // keyed by sub+namespace
-
-	// fetchGen is the monotonic generation token copied into each fetch
-	// so pages from superseded or cancelled fetches can be dropped.
-	fetchGen int
 
 	hasNamespace bool
 	currentNS    servicebus.Namespace
@@ -138,7 +126,6 @@ type Model struct {
 }
 
 type namespacesLoadedMsg struct {
-	gen            int
 	subscriptionID string
 	namespaces     []servicebus.Namespace
 	done           bool
@@ -147,7 +134,6 @@ type namespacesLoadedMsg struct {
 }
 
 type entitiesLoadedMsg struct {
-	gen       int
 	namespace servicebus.Namespace
 	entities  []servicebus.Entity
 	done      bool
@@ -156,7 +142,6 @@ type entitiesLoadedMsg struct {
 }
 
 type topicSubscriptionsLoadedMsg struct {
-	gen       int
 	namespace servicebus.Namespace
 	topicName string
 	subs      []servicebus.TopicSubscription
@@ -318,9 +303,8 @@ func (m Model) HelpSections() []ui.HelpSection {
 }
 
 // SetSubscription overrides the embedded appshell.Model method to also
-// hydrate namespaces from cache and prime the initial namespaces fetch
-// session. Tabapp calls this after constructing the model and before
-// Init() issues the first fetch.
+// hydrate namespaces from cache. Tabapp calls this after constructing
+// the model and before Init() issues the first fetch.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
 	if cached, ok := m.cache.namespaces.Get(sub.ID); ok {
@@ -328,17 +312,15 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(cached))
 		ui.SetItemsPreserveKey(&m.namespacesList, namespacesToItems(cached), namespaceItemKey)
 	}
-	m.fetchGen++
-	m.namespacesSession = cache.NewFetchSession(m.namespaces, m.fetchGen, namespaceKey)
 }
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.Spinner.Tick}
 	if m.SubOverlay.Active {
-		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 	}
 	if m.HasSubscription {
-		cmds = append(cmds, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID, m.fetchGen))
+		cmds = append(cmds, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID, m.namespaces))
 	}
 	return tea.Batch(cmds...)
 }

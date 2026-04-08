@@ -2,7 +2,9 @@ package cache
 
 import (
 	"reflect"
+	"strconv"
 	"testing"
+	"time"
 )
 
 type item struct {
@@ -170,5 +172,45 @@ func TestFetchSession_EmptyCurrent(t *testing.T) {
 	if final := s.Finalize(); len(final) != 0 {
 		t.Fatalf("Finalize() = %v, want empty", final)
 	}
+}
+
+// TestFetchSession_LargeStreamCompletesQuickly is a perf regression test
+// for the bug that froze the UI when load-all was run on a 100k+ blob
+// container. The original linear-scan Apply was O(N²) per stream and
+// would take minutes; the indexed implementation should finish in well
+// under a second.
+//
+// This test does NOT use testing.B because we want it to fail loudly in
+// CI rather than show up as a benchmark regression nobody runs.
+func TestFetchSession_LargeStreamCompletesQuickly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("perf regression; use go test -short to skip")
+	}
+
+	const totalItems = 100_000
+	const pageSize = 5_000
+
+	s := NewFetchSession[item](nil, 1, itemKey)
+
+	start := time.Now()
+	for offset := 0; offset < totalItems; offset += pageSize {
+		page := make([]item, pageSize)
+		for i := range page {
+			page[i] = item{ID: strconv.Itoa(offset + i), Value: offset + i}
+		}
+		s.Apply(page)
+	}
+	elapsed := time.Since(start)
+
+	if got := len(s.Items()); got != totalItems {
+		t.Fatalf("got %d items, want %d", got, totalItems)
+	}
+	// Generous bound. With the O(N²) bug this takes minutes; with the
+	// indexed implementation it's typically <100ms.
+	if elapsed > 2*time.Second {
+		t.Errorf("Apply too slow: streaming %d items took %s (regression of O(N²) bug?)",
+			totalItems, elapsed)
+	}
+	t.Logf("streamed %d items in %d pages in %s", totalItems, totalItems/pageSize, elapsed)
 }
 

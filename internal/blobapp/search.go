@@ -82,7 +82,7 @@ func (m Model) handleSearchEnter() (Model, tea.Cmd) {
 		effectivePrefix := blobSearchPrefix(m.prefix, m.search.prefixQuery)
 		m.Status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
 		return m, tea.Batch(m.Spinner.Tick,
-			fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.search.prefixQuery, defaultBlobPrefixSearchLimit, false))
+			fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.search.prefixQuery, defaultBlobPrefixSearchLimit))
 	}
 
 	// In fuzzy stage — commit the filter: snapshot the current m.blobs
