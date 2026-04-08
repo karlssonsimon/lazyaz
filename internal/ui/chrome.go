@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // ChromeStyles contains the application chrome styles (header, panes, status, etc.).

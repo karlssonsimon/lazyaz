@@ -10,8 +10,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m *Model) clearBlobSelectionState() {
@@ -68,7 +67,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
 		m.SetLoading(blobsPane)
 		m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-		return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
 	}
 
 	m.blobLoadAll = true
@@ -83,7 +82,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 	m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
 	m.SetLoading(blobsPane)
 	m.Status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
-	return m, tea.Batch(spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, false, m.fetchGen))
+	return m, tea.Batch(m.Spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, false, m.fetchGen))
 }
 
 func (m *Model) toggleVisualLineMode() {
@@ -316,7 +315,7 @@ func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 	m.SetLoading(blobsPane)
 	m.LastErr = ""
 	m.Status = fmt.Sprintf("Downloading %d blob(s) to %s", len(blobNames), destinationRoot)
-	return m, tea.Batch(spinner.Tick, downloadBlobsCmd(m.service, m.currentAccount, m.containerName, blobNames, destinationRoot))
+	return m, tea.Batch(m.Spinner.Tick, downloadBlobsCmd(m.service, m.currentAccount, m.containerName, blobNames, destinationRoot))
 }
 
 func (m Model) sortedMarkedBlobNames() []string {

@@ -7,8 +7,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 )
 
 var testConfig = ui.Config{
@@ -106,7 +106,7 @@ func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
 	m.focus = namespacesPane
 	m.namespacesList.SetFilterState(list.Filtering)
 
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	model, ok := updated.(Model)
 	if !ok {
 		t.Fatalf("expected updated model type %T, got %T", Model{}, updated)
@@ -125,13 +125,13 @@ func TestHelpToggleOpensAndCloses(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
 	m.SubOverlay.Close()
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	model := updated.(Model)
 	if !model.HelpOverlay.Active {
 		t.Fatal("expected ? to open help overlay")
 	}
 
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated, _ = model.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	model = updated.(Model)
 	if model.HelpOverlay.Active {
 		t.Fatal("expected ? to close help overlay")
@@ -145,7 +145,7 @@ func TestViewShowsStatusBar(t *testing.T) {
 	m.resize()
 
 	view := m.View()
-	if !strings.Contains(view, "Loading") {
+	if !strings.Contains(view.Content, "Loading") {
 		t.Fatal("expected status bar to show loading message")
 	}
 }

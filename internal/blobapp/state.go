@@ -10,9 +10,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 )
 
 const defaultBlobPrefixSearchLimit = 500
@@ -333,7 +332,7 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{spinner.Tick}
+	cmds := []tea.Cmd{m.Spinner.Tick}
 	// Only fetch subscriptions from Azure if the picker is open.
 	if m.SubOverlay.Active {
 		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))

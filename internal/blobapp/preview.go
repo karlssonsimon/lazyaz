@@ -11,9 +11,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 )
 
 const (
@@ -39,7 +38,9 @@ type previewState struct {
 }
 
 func newPreviewState() previewState {
-	vp := viewport.New(40, 10)
+	vp := viewport.New()
+	vp.SetWidth(40)
+	vp.SetHeight(10)
 	vp.SetContent("")
 	return previewState{viewport: vp}
 }
@@ -101,10 +102,10 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 		0,
 		b.Size,
 		b.ContentType,
-		max(1, m.preview.viewport.Height),
+		max(1, m.preview.viewport.Height()),
 		m.preview.requestID,
 	)
-	return m, tea.Batch(spinner.Tick, cmd)
+	return m, tea.Batch(m.Spinner.Tick, cmd)
 }
 
 func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea.Cmd) {
@@ -136,7 +137,7 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 	m.preview.lineStarts = computeLineStarts(msg.data)
 	m.preview.rendered = renderPreviewContent(msg.data, msg.blobName, m.preview.contentType, m.preview.binary, m.Styles)
 	m.preview.viewport.SetContent(m.preview.rendered)
-	m.preview.viewport.YOffset = m.previewLocalLine()
+	m.preview.viewport.SetYOffset(m.previewLocalLine())
 
 	if m.preview.binary {
 		m.Status = fmt.Sprintf("Binary preview for %s (%s)", msg.blobName, humanSize(msg.blobSize))
@@ -172,11 +173,11 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.movePreviewCursorByLines(-1)
 	case m.Keymap.HalfPageDown.Matches(key):
 		m.pendingPreviewG = false
-		step := max(1, m.preview.viewport.Height/2)
+		step := max(1, m.preview.viewport.Height()/2)
 		return m.movePreviewCursorByLines(step)
 	case m.Keymap.HalfPageUp.Matches(key):
 		m.pendingPreviewG = false
-		step := max(1, m.preview.viewport.Height/2)
+		step := max(1, m.preview.viewport.Height()/2)
 		return m.movePreviewCursorByLines(-step)
 	case m.Keymap.PreviewBottom.Matches(key):
 		m.pendingPreviewG = false
@@ -242,7 +243,7 @@ func (m Model) ensurePreviewWindowAtCursor() (Model, tea.Cmd) {
 	}
 
 	if !needLoad && len(m.preview.lineStarts) > 0 {
-		visible := max(1, m.preview.viewport.Height)
+		visible := max(1, m.preview.viewport.Height())
 		local := m.previewLocalLine()
 		if m.preview.windowStart > 0 && local < visible*previewBufferViewports {
 			needLoad = true
@@ -265,13 +266,13 @@ func (m Model) ensurePreviewWindowAtCursor() (Model, tea.Cmd) {
 			m.preview.cursor,
 			m.preview.blobSize,
 			m.preview.contentType,
-			max(1, m.preview.viewport.Height),
+			max(1, m.preview.viewport.Height()),
 			m.preview.requestID,
 		)
-		return m, tea.Batch(spinner.Tick, cmd)
+		return m, tea.Batch(m.Spinner.Tick, cmd)
 	}
 
-	m.preview.viewport.YOffset = m.previewLocalLine()
+	m.preview.viewport.SetYOffset(m.previewLocalLine())
 	return m, nil
 }
 

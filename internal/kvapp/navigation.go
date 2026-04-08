@@ -8,8 +8,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m Model) navigateLeft() (Model, tea.Cmd) {
@@ -78,7 +77,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.vaultsSession = cache.NewFetchSession(m.vaults, m.fetchGen, vaultKey)
 	m.SetLoading(m.focus)
 	m.Status = fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(sub))
-	return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID, m.fetchGen))
+	return m, tea.Batch(m.Spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID, m.fetchGen))
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
@@ -129,7 +128,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.secretsSession = cache.NewFetchSession(m.secrets, m.fetchGen, secretKey)
 		m.SetLoading(m.focus)
 		m.Status = fmt.Sprintf("Loading secrets in %s", item.vault.Name)
-		return m, tea.Batch(spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, item.vault, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, item.vault, m.fetchGen))
 	}
 
 	if m.focus == secretsPane {
@@ -170,7 +169,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.versionsSession = cache.NewFetchSession(m.versions, m.fetchGen, versionKey)
 		m.SetLoading(m.focus)
 		m.Status = fmt.Sprintf("Loading versions for %s", item.secret.Name)
-		return m, tea.Batch(spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, item.secret.Name, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, item.secret.Name, m.fetchGen))
 	}
 
 	return m, nil

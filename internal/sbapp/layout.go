@@ -19,14 +19,20 @@ func (m *Model) resize() {
 		m.paneWidths[3] = widths[3]
 	}
 
-	paneFrame := 2 // rounded border top + bottom
-	height := m.Height - paneFrame - ui.StatusBarHeight - ui.SubscriptionBarHeight
-	if height < 8 {
-		height = 8
+	// paneHeight is the total block height of each pane (border + content),
+	// i.e. the number of terminal rows the pane occupies. The view stacks
+	// subscription bar + pane row + status bar to fill the window.
+	height := m.Height - ui.StatusBarHeight - ui.SubscriptionBarHeight
+	if height < 10 {
+		height = 10
 	}
 	m.paneHeight = height
 
-	baseListHeight := height - ui.PaneTitleHeight - ui.PaneHintHeight
+	innerH := ui.PaneInnerHeight(pane, height)
+	baseListHeight := innerH - ui.PaneTitleHeight - ui.PaneHintHeight
+	if baseListHeight < 1 {
+		baseListHeight = 1
+	}
 
 	detailListHeight := baseListHeight - m.inspectFooterHeight(detailPane)
 	if m.hasPeekTarget {
@@ -35,12 +41,12 @@ func (m *Model) resize() {
 
 	if m.viewingMessage {
 		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), detailListHeight)
-		m.messageViewport.Width = ui.PaneContentWidth(pane, widths[3])
-		m.messageViewport.Height = baseListHeight - 2
+		m.messageViewport.SetWidth(ui.PaneContentWidth(pane, widths[3]))
+		m.messageViewport.SetHeight(baseListHeight - 2)
 	} else {
 		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), detailListHeight)
-		m.messageViewport.Width = 0
-		m.messageViewport.Height = 0
+		m.messageViewport.SetWidth(0)
+		m.messageViewport.SetHeight(0)
 	}
 
 	m.namespacesList.SetSize(ui.PaneContentWidth(pane, widths[0]), baseListHeight-m.inspectFooterHeight(namespacesPane))

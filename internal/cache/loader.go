@@ -3,7 +3,7 @@ package cache
 import (
 	"context"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // Page represents a batch of results from a progressive load.

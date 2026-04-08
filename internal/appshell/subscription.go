@@ -4,7 +4,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // SubscriptionsLoadedMsg is the shared result of fetchSubscriptionsCmd.

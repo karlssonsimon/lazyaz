@@ -8,8 +8,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
@@ -59,7 +58,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.accountsSession = cache.NewFetchSession(m.accounts, m.fetchGen, accountKey)
 	m.SetLoading(accountsPane)
 	m.Status = fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(sub))
-	return m, tea.Batch(spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, sub.ID, false, m.fetchGen))
+	return m, tea.Batch(m.Spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, sub.ID, false, m.fetchGen))
 }
 
 func (m Model) navigateLeft() (Model, tea.Cmd) {
@@ -89,7 +88,7 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 			m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
 			m.SetLoading(blobsPane)
 			m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-			return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
+			return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
 		}
 		if m.visualLineMode {
 			m.visualLineMode = false
@@ -158,7 +157,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.containersSession = cache.NewFetchSession(m.containers, m.fetchGen, containerKey)
 		m.SetLoading(containersPane)
 		m.Status = fmt.Sprintf("Loading containers in %s", item.account.Name)
-		return m, tea.Batch(spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, item.account, false, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, item.account, false, m.fetchGen))
 	}
 
 	if m.focus == containersPane {
@@ -204,7 +203,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
 		m.SetLoading(blobsPane)
 		m.Status = fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName)
-		return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
 	}
 
 	if m.focus == blobsPane {
@@ -238,7 +237,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
 			m.SetLoading(blobsPane)
 			m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-			return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
+			return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
 		}
 
 		return m.openPreview(item.blob)

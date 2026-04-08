@@ -10,8 +10,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -428,7 +428,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.SetLoading(m.focus)
 			m.LastErr = ""
 			m.Status = fmt.Sprintf("Requeuing %d message(s)...", len(messageIDs))
-			return m, tea.Batch(spinner.Tick, requeueMessagesCmd(m.service, m.currentNS, m.currentEntity, m.currentSubName, messageIDs))
+			return m, tea.Batch(m.Spinner.Tick, requeueMessagesCmd(m.service, m.currentNS, m.currentEntity, m.currentSubName, messageIDs))
 		}
 	case m.Keymap.DeleteDuplicate.Matches(key):
 		if !focusedFilterActive && m.focus == detailPane && m.hasPeekTarget && m.deadLetter {
@@ -439,7 +439,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.SetLoading(m.focus)
 			m.LastErr = ""
 			m.Status = "Deleting duplicate message..."
-			return m, tea.Batch(spinner.Tick, deleteDuplicateCmd(m.service, m.currentNS, m.currentEntity, m.currentSubName, item.message.MessageID))
+			return m, tea.Batch(m.Spinner.Tick, deleteDuplicateCmd(m.service, m.currentNS, m.currentEntity, m.currentSubName, item.message.MessageID))
 		}
 	case m.Keymap.ToggleDLQFilter.Matches(key):
 		if !focusedFilterActive {
@@ -458,7 +458,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.SetLoading(-1)
 			m.LastErr = ""
 			m.Status = "Refreshing subscriptions..."
-			return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 		}
 	case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):
 		if !focusedFilterActive && !m.ThemeOverlay.Active {

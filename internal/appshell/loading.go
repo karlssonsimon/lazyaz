@@ -5,7 +5,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // LoadingHoldExpiredMsg is sent after the min-visible spinner hold elapses.

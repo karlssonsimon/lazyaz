@@ -8,8 +8,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m Model) navigateLeft() (Model, tea.Cmd) {
@@ -140,7 +139,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.namespacesSession = cache.NewFetchSession(m.namespaces, m.fetchGen, namespaceKey)
 	m.SetLoading(m.focus)
 	m.Status = fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub))
-	return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID, m.fetchGen))
+	return m, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID, m.fetchGen))
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
@@ -191,7 +190,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.entitiesSession = cache.NewFetchSession(m.entities, m.fetchGen, entityKey)
 		m.SetLoading(m.focus)
 		m.Status = fmt.Sprintf("Loading entities in %s", item.namespace.Name)
-		return m, tea.Batch(spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityCacheKey, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityCacheKey, m.fetchGen))
 	}
 
 	if m.focus == entitiesPane {
@@ -258,7 +257,7 @@ func (m Model) peekQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 
 	m.SetLoading(m.focus)
 	m.Status = fmt.Sprintf("Peeking messages from queue %s", entity.Name)
-	return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, entity.Name, m.deadLetter, false))
+	return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, entity.Name, m.deadLetter, false))
 }
 
 // peekTopicSub starts a fresh peek of a topic subscription's messages,
@@ -295,7 +294,7 @@ func (m Model) peekTopicSub(topicName string, sub servicebus.TopicSubscription) 
 
 	m.SetLoading(m.focus)
 	m.Status = fmt.Sprintf("Peeking messages from %s/%s", topicName, sub.Name)
-	return m, tea.Batch(spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, topicName, sub.Name, m.deadLetter, false))
+	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, topicName, sub.Name, m.deadLetter, false))
 }
 
 // toggleTopicExpansion expands or collapses a topic in the entities
@@ -325,6 +324,6 @@ func (m Model) toggleTopicExpansion(topic servicebus.Entity) (Model, tea.Cmd) {
 	m.topicSubsSession = cache.NewFetchSession(m.topicSubsByTopic[topic.Name], m.fetchGen, topicSubKey)
 	m.SetLoading(m.focus)
 	m.Status = fmt.Sprintf("Loading subscriptions for topic %s", topic.Name)
-	return m, tea.Batch(spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, topic.Name, cacheKey, m.fetchGen))
+	return m, tea.Batch(m.Spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, topic.Name, cacheKey, m.fetchGen))
 }
 

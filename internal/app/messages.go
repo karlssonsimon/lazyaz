@@ -1,6 +1,6 @@
 package app
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // tabMsg wraps a message with the tab ID it belongs to, so the parent
 // can route it to the correct child even when multiple tabs of the

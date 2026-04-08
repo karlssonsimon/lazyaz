@@ -3,7 +3,7 @@ package ui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // StatusBarHeight is the total height of the status bar: 3 content lines + 2 padding (Padding(1,1)).

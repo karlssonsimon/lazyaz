@@ -6,7 +6,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 var testConfig = ui.Config{
@@ -39,7 +39,7 @@ func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
 	m.focus = vaultsPane
 	m.vaultsList.SetFilterState(1) // list.Filtering
 
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if _, ok := updated.(Model); !ok {
 		t.Fatalf("expected updated model type %T, got %T", Model{}, updated)
 	}
@@ -53,13 +53,13 @@ func TestHelpToggleOpensAndCloses(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
 	m.SubOverlay.Close()
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	model := updated.(Model)
 	if !model.HelpOverlay.Active {
 		t.Fatal("expected ? to open help overlay")
 	}
 
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated, _ = model.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	model = updated.(Model)
 	if model.HelpOverlay.Active {
 		t.Fatal("expected ? to close help overlay")
@@ -73,7 +73,7 @@ func TestViewShowsStatusBar(t *testing.T) {
 	m.resize()
 
 	view := m.View()
-	if !strings.Contains(view, "Loading") {
+	if !strings.Contains(view.Content, "Loading") {
 		t.Fatal("expected status bar to show loading message")
 	}
 }

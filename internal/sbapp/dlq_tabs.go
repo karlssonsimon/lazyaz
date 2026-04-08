@@ -3,7 +3,7 @@ package sbapp
 import (
 	"fmt"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // dlqTabsHeight is the rendered height of the active/DLQ tab strip

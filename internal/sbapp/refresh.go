@@ -6,8 +6,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m Model) refresh() (Model, tea.Cmd) {
@@ -17,7 +16,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.SetLoading(-1)
 		m.LastErr = ""
 		m.Status = "Refreshing subscriptions..."
-		return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 	}
 
 	if !m.hasNamespace || m.focus == namespacesPane {
@@ -26,7 +25,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.SetLoading(m.focus)
 		m.LastErr = ""
 		m.Status = fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(m.CurrentSub))
-		return m, tea.Batch(spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID, m.fetchGen))
 	}
 
 	if m.focus == entitiesPane || !m.hasPeekTarget {
@@ -36,7 +35,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.LastErr = ""
 		m.Status = fmt.Sprintf("Loading entities in %s", m.currentNS.Name)
 		entityCacheKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name)
-		return m, tea.Batch(spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, m.currentNS, entityCacheKey, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, m.currentNS, entityCacheKey, m.fetchGen))
 	}
 
 	return m.rePeekMessages(true)
@@ -60,9 +59,9 @@ func (m Model) rePeekMessages(preserveCursor bool) (Model, tea.Cmd) {
 
 	if m.currentSubName == "" {
 		m.Status = fmt.Sprintf("Peeking %s messages from queue %s", dlqLabel, m.currentEntity.Name)
-		return m, tea.Batch(spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, preserveCursor))
+		return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, preserveCursor))
 	}
 
 	m.Status = fmt.Sprintf("Peeking %s messages from %s/%s", dlqLabel, m.currentEntity.Name, m.currentSubName)
-	return m, tea.Batch(spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, preserveCursor))
+	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, preserveCursor))
 }
