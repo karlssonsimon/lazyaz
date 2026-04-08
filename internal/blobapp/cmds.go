@@ -11,7 +11,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // fetch picks Fetch or FetchFresh based on the fresh flag.

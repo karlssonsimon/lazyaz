@@ -10,19 +10,22 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/sbapp"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	if m.width == 0 || m.height == 0 {
-		return "loading..."
+		v := tea.NewView("loading...")
+		v.AltScreen = true
+		return v
 	}
 
 	tabBar := renderTabBar(m.tabs, m.activeIdx, m.styles.TabBar, m.width)
 
 	childView := ""
 	if len(m.tabs) > 0 {
-		childView = m.tabs[m.activeIdx].Model.View()
+		childView = m.tabs[m.activeIdx].Model.View().Content
 	}
 
 	view := lipgloss.JoinVertical(lipgloss.Left, tabBar, childView)
@@ -51,7 +54,10 @@ func (m Model) View() string {
 		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, closeHint, notifierToEntries(m.notifier.Snapshot()), m.styles, m.width, m.height, view)
 	}
 
-	return ui.RenderCanvas(view, m.width, m.height, m.styles.Bg)
+	out := tea.NewView(ui.RenderCanvas(view, m.width, m.height, m.styles.Bg))
+	out.AltScreen = true
+	out.MouseMode = tea.MouseModeCellMotion
+	return out
 }
 
 // notifierToToasts converts the notifier's domain types to the

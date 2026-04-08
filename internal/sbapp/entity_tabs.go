@@ -5,7 +5,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // entityTabsHeight is the rendered height of the All/Queues/Topics

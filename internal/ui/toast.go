@@ -1,9 +1,10 @@
 package ui
 
 import (
+	icolor "image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // ToastLevel mirrors appshell.NotificationLevel without importing it
@@ -131,7 +132,7 @@ func toastStyles(level ToastLevel, styles Styles) (lipgloss.Style, lipgloss.Styl
 	body := lipgloss.NewStyle().
 		Background(styles.Chrome.Status.GetBackground())
 
-	var borderColor lipgloss.TerminalColor
+	var borderColor icolor.Color
 	switch level {
 	case ToastError:
 		borderColor = styles.Danger.GetForeground()

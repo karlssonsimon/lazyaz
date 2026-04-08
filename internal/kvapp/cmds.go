@@ -10,7 +10,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 
 	"github.com/atotto/clipboard"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func fetchSubscriptionsCmd(svc *keyvault.Service, loader *cache.Loader[azure.Subscription], fresh bool) tea.Cmd {

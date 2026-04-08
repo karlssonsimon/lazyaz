@@ -6,12 +6,15 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	if m.Width == 0 || m.Height == 0 {
-		return "loading..."
+		v := tea.NewView("loading...")
+		v.AltScreen = true
+		return v
 	}
 
 	var sbItems []ui.StatusBarItem
@@ -120,5 +123,8 @@ func (m Model) View() string {
 	statusBar := ui.RenderStatusBar(m.Styles, sbItems, sbStatus, sbErr, m.Width)
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)
-	return m.RenderOverlays(view)
+	out := tea.NewView(m.RenderOverlays(view))
+	out.AltScreen = true
+	out.MouseMode = tea.MouseModeCellMotion
+	return out
 }

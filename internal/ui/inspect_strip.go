@@ -3,7 +3,7 @@ package ui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // InspectField is a label/value pair shown in an inspect strip.

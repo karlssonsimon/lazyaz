@@ -6,7 +6,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 
-	"github.com/charmbracelet/bubbles/list"
+	"charm.land/bubbles/v2/list"
 )
 
 type namespaceItem struct {

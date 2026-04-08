@@ -6,8 +6,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m Model) refresh() (Model, tea.Cmd) {
@@ -17,7 +16,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.SetLoading(-1)
 		m.LastErr = ""
 		m.Status = "Refreshing subscriptions..."
-		return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 	}
 
 	if !m.hasVault || m.focus == vaultsPane {
@@ -26,7 +25,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.SetLoading(m.focus)
 		m.LastErr = ""
 		m.Status = fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(m.CurrentSub))
-		return m, tea.Batch(spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, m.CurrentSub.ID, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, m.CurrentSub.ID, m.fetchGen))
 	}
 
 	if !m.hasSecret || m.focus == secretsPane {
@@ -35,7 +34,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.SetLoading(m.focus)
 		m.LastErr = ""
 		m.Status = fmt.Sprintf("Loading secrets in %s", m.currentVault.Name)
-		return m, tea.Batch(spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, m.currentVault, m.fetchGen))
+		return m, tea.Batch(m.Spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, m.currentVault, m.fetchGen))
 	}
 
 	m.fetchGen++
@@ -43,5 +42,5 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	m.SetLoading(m.focus)
 	m.LastErr = ""
 	m.Status = fmt.Sprintf("Loading versions for %s", m.currentSecret.Name)
-	return m, tea.Batch(spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, m.currentSecret.Name, m.fetchGen))
+	return m, tea.Batch(m.Spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, m.currentSecret.Name, m.fetchGen))
 }

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // SpinnerMinVisible is the minimum duration the spinner stays visible once

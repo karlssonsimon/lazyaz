@@ -9,8 +9,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -400,7 +400,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.SetLoading(-1)
 			m.LastErr = ""
 			m.Status = "Refreshing subscriptions..."
-			return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 		}
 	case m.Keymap.FilterInput.Matches(key):
 		if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
@@ -435,7 +435,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.blobsSession = cache.NewFetchSession(m.blobs, m.fetchGen, blobEntryKey)
 				m.SetLoading(blobsPane)
 				m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
-				return m, tea.Batch(spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
+				return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, false, m.fetchGen))
 			}
 		}
 	}

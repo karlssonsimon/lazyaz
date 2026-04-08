@@ -9,9 +9,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 const searchInputHeight = 2 // input line + count line
@@ -82,7 +81,7 @@ func (m Model) handleSearchEnter() (Model, tea.Cmd) {
 		m.SetLoading(blobsPane)
 		effectivePrefix := blobSearchPrefix(m.prefix, m.search.prefixQuery)
 		m.Status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
-		return m, tea.Batch(spinner.Tick,
+		return m, tea.Batch(m.Spinner.Tick,
 			fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.search.prefixQuery, defaultBlobPrefixSearchLimit, false))
 	}
 

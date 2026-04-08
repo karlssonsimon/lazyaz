@@ -17,8 +17,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/sbapp"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 )
 
 // toastTickInterval is how often the parent re-renders while toasts
@@ -555,7 +555,7 @@ func (m *Model) resizeAndTickActive() tea.Cmd {
 		Height: m.childHeight(),
 	})
 	// Send a spinner tick so the active tab picks up spinner animation.
-	tickCmd := m.forwardToActive(spinner.Tick())
+	tickCmd := m.forwardToActive(spinner.TickMsg{})
 	return tea.Batch(resizeCmd, tickCmd)
 }
 

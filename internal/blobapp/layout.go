@@ -20,14 +20,20 @@ func (m *Model) resize() {
 		m.paneWidths[3] = widths[3]
 	}
 
-	paneFrame := 2 // rounded border top + bottom
-	height := m.Height - paneFrame - ui.StatusBarHeight - ui.SubscriptionBarHeight
-	if height < 8 {
-		height = 8
+	// paneHeight is the total block height of each pane (border + content),
+	// i.e. the number of terminal rows the pane occupies. The view stacks
+	// subscription bar + pane row + status bar to fill the window.
+	height := m.Height - ui.StatusBarHeight - ui.SubscriptionBarHeight
+	if height < 10 {
+		height = 10
 	}
 	m.paneHeight = height
 
-	baseListHeight := height - ui.PaneTitleHeight - ui.PaneHintHeight
+	innerH := ui.PaneInnerHeight(pane, height)
+	baseListHeight := innerH - ui.PaneTitleHeight - ui.PaneHintHeight
+	if baseListHeight < 1 {
+		baseListHeight = 1
+	}
 	m.accountsList.SetSize(ui.PaneContentWidth(pane, widths[0]), baseListHeight-m.inspectFooterHeight(accountsPane))
 	m.containersList.SetSize(ui.PaneContentWidth(pane, widths[1]), baseListHeight-m.inspectFooterHeight(containersPane))
 	blobListHeight := baseListHeight - m.inspectFooterHeight(blobsPane)
@@ -36,7 +42,7 @@ func (m *Model) resize() {
 	}
 	m.blobsList.SetSize(ui.PaneContentWidth(pane, widths[2]), blobListHeight)
 	if m.preview.open {
-		m.preview.viewport.Width = ui.PaneContentWidth(pane, widths[3])
-		m.preview.viewport.Height = baseListHeight
+		m.preview.viewport.SetWidth(ui.PaneContentWidth(pane, widths[3]))
+		m.preview.viewport.SetHeight(baseListHeight)
 	}
 }

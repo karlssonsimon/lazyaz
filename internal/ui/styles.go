@@ -3,10 +3,9 @@ package ui
 import (
 	icolor "image/color"
 
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/lipgloss"
-	lg2 "charm.land/lipgloss/v2"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/lipgloss/v2"
 )
 
 // Scheme represents a Base16 color scheme. The 16 colors follow the
@@ -68,8 +67,6 @@ type ListStyles struct {
 	TitleBar                    lipgloss.Style
 	Title                       lipgloss.Style
 	Spinner                     lipgloss.Style
-	FilterPrompt                lipgloss.Style
-	FilterCursor                lipgloss.Style
 	DefaultFilterCharacterMatch lipgloss.Style
 	StatusBar                   lipgloss.Style
 	StatusEmpty                 lipgloss.Style
@@ -96,7 +93,7 @@ type OverlayStyles struct {
 	NoMatch      lipgloss.Style
 	Hint         lipgloss.Style
 	HintFull     lipgloss.Style // hint with full width
-	BoxBg        lipgloss.Color // background color for custom box construction
+	BoxBg        icolor.Color // background color for custom box construction
 	Box          lipgloss.Style
 }
 
@@ -108,8 +105,8 @@ type TabBarStyles struct {
 	Bar      lipgloss.Style // full-width bar wrapper
 }
 
-// color converts a Base16 hex string to a lipgloss.Color, prepending "#".
-func color(hex string) lipgloss.Color {
+// color converts a Base16 hex string to a color.Color, prepending "#".
+func color(hex string) icolor.Color {
 	if hex == "" {
 		return lipgloss.Color("")
 	}
@@ -125,9 +122,9 @@ func colorRGB(hex string) icolor.Color {
 		return nil
 	}
 	if hex[0] != '#' {
-		return lg2.Color("#" + hex)
+		return lipgloss.Color("#" + hex)
 	}
-	return lg2.Color(hex)
+	return lipgloss.Color(hex)
 }
 
 // NewStyles resolves a Scheme into a complete Styles struct.
@@ -241,10 +238,6 @@ func NewStyles(s Scheme) Styles {
 			Foreground(blue).
 			Padding(0, 1),
 		Spinner: lipgloss.NewStyle().
-			Foreground(cyan),
-		FilterPrompt: lipgloss.NewStyle().
-			Foreground(blue),
-		FilterCursor: lipgloss.NewStyle().
 			Foreground(cyan),
 		DefaultFilterCharacterMatch: lipgloss.NewStyle().
 			Foreground(warning).
@@ -410,8 +403,6 @@ func (st Styles) ApplyToList(l *list.Model) {
 	l.Styles.TitleBar = st.List.TitleBar
 	l.Styles.Title = st.List.Title
 	l.Styles.Spinner = st.List.Spinner
-	l.Styles.FilterPrompt = st.List.FilterPrompt
-	l.Styles.FilterCursor = st.List.FilterCursor
 	l.Styles.DefaultFilterCharacterMatch = st.List.DefaultFilterCharacterMatch
 	l.Styles.StatusBar = st.List.StatusBar
 	l.Styles.StatusEmpty = st.List.StatusEmpty

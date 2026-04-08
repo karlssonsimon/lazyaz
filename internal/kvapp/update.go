@@ -8,8 +8,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -305,7 +305,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.SetLoading(-1)
 			m.LastErr = ""
 			m.Status = "Refreshing subscriptions..."
-			return m, tea.Batch(spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
+			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, true))
 		}
 	case m.Keymap.Inspect.Matches(key):
 		if !focusedFilterActive {
@@ -341,7 +341,7 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 		m.SetLoading(m.focus)
 		m.LastErr = ""
 		m.Status = fmt.Sprintf("Fetching secret value for %s...", item.secret.Name)
-		return m, tea.Batch(spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, item.secret.Name, ""))
+		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, item.secret.Name, ""))
 	}
 
 	if m.focus == versionsPane {
@@ -352,7 +352,7 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 		m.SetLoading(m.focus)
 		m.LastErr = ""
 		m.Status = fmt.Sprintf("Fetching secret value for %s@%s...", m.currentSecret.Name, item.version.Version)
-		return m, tea.Batch(spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))
+		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))
 	}
 
 	return m, nil

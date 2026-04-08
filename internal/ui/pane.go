@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // PaneTitleHeight is the vertical space the externally-rendered pane
@@ -14,6 +16,10 @@ import (
 const PaneTitleHeight = 1
 
 // PaneFrame describes the outer dimensions and focus state of a pane.
+// Frame.Height is the **total block height** including the pane's
+// border and padding — i.e. the number of terminal rows the rendered
+// pane occupies. Likewise Frame.Width is the total block width.
+//
 // The pane style itself (border, padding, focus color) is pulled from
 // Styles.Chrome — PaneFrame only carries per-pane values that vary each
 // frame.
@@ -23,17 +29,78 @@ type PaneFrame struct {
 	Focused bool
 }
 
+// PaneInnerHeight returns the number of content rows available inside
+// a pane of the given total block height, after subtracting the pane
+// style's border and vertical padding. Use this when sizing list bodies
+// or viewports that live inside a pane.
+func PaneInnerHeight(paneStyle lipgloss.Style, totalHeight int) int {
+	inner := totalHeight - paneStyle.GetVerticalFrameSize()
+	if inner < 0 {
+		return 0
+	}
+	return inner
+}
+
+// fitContent clips and pads content to exactly innerH rows of innerW
+// columns each. We do this **before** handing content to lipgloss so
+// the border is preserved and the resulting block size is deterministic.
+//
+// Why not just use lipgloss Style.MaxWidth/MaxHeight? Because for a
+// bordered block, MaxHeight clips from the bottom of the rendered
+// output — which removes the bottom border when inner content
+// overflows. The visible result is a frameless pane with content
+// spilling past where the border should sit. Pre-clipping the content
+// keeps the border intact.
+//
+// Wide lines are truncated horizontally with [ansi.Truncate] so they
+// don't get wrapped by lipgloss into extra rows.
+func fitContent(content string, innerW, innerH int) string {
+	if innerH <= 0 || innerW <= 0 {
+		return ""
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) > innerH {
+		lines = lines[:innerH]
+	}
+	for i, line := range lines {
+		if ansi.StringWidth(line) > innerW {
+			lines[i] = ansi.Truncate(line, innerW, "")
+		}
+	}
+	for len(lines) < innerH {
+		lines = append(lines, "")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// paneInnerSize returns the (innerWidth, innerHeight) that fits inside
+// a pane of the given total block size.
+func paneInnerSize(style lipgloss.Style, frame PaneFrame) (int, int) {
+	w := frame.Width - style.GetHorizontalFrameSize()
+	h := frame.Height - style.GetVerticalFrameSize()
+	if w < 0 {
+		w = 0
+	}
+	if h < 0 {
+		h = 0
+	}
+	return w, h
+}
+
 // RenderPane wraps pre-composed content in the pane chrome (border,
-// focus-aware color, fixed dimensions). Use this directly for panes
-// whose content doesn't fit the standard list+hints layout — for
-// example blobapp's preview pane, which composes a title line over a
-// viewport.
+// focus-aware color, fixed dimensions). The rendered block is exactly
+// frame.Height rows tall and frame.Width columns wide regardless of
+// content shape — overflow is clipped, underflow is padded. Use this
+// directly for panes whose content doesn't fit the standard list+hints
+// layout — for example blobapp's preview pane, which composes a title
+// line over a viewport.
 func RenderPane(content string, frame PaneFrame, styles Styles) string {
 	style := styles.Chrome.Pane
 	if frame.Focused {
 		style = styles.Chrome.FocusedPane
 	}
-	return style.Copy().Width(frame.Width).Height(frame.Height).Render(content)
+	innerW, innerH := paneInnerSize(style, frame)
+	return style.Width(frame.Width).Render(fitContent(content, innerW, innerH))
 }
 
 // ListPane describes a standard list-backed pane: a title row (with an
@@ -84,8 +151,19 @@ type ListPane struct {
 }
 
 // RenderListPane composes and renders a standard list-backed pane.
+// The rendered block is exactly p.Frame.Height rows tall regardless
+// of how many items the list has — content is clipped/padded as needed.
 func RenderListPane(p ListPane, styles Styles) string {
+	paneStyle := styles.Chrome.Pane
+	if p.Frame.Focused {
+		paneStyle = styles.Chrome.FocusedPane
+	}
+	if p.FrameStyle != nil {
+		paneStyle = *p.FrameStyle
+	}
+
 	contentWidth := PaneContentWidth(styles.Chrome.Pane, p.Frame.Width)
+	innerW, innerH := paneInnerSize(paneStyle, p.Frame)
 
 	titleText := RenderPaneSpinner(p.Title, p.Loading, p.LoadedAt, styles, contentWidth)
 	titleStyle := styles.List.Title
@@ -93,7 +171,6 @@ func RenderListPane(p ListPane, styles Styles) string {
 		titleStyle = *p.TitleStyle
 	}
 	title := titleStyle.Render(titleText)
-
 	hints := RenderPaneHints(p.Hints, styles, contentWidth)
 
 	parts := make([]string, 0, 6)
@@ -111,12 +188,5 @@ func RenderListPane(p ListPane, styles Styles) string {
 	parts = append(parts, hints)
 	content := lipgloss.JoinVertical(lipgloss.Left, parts...)
 
-	paneStyle := styles.Chrome.Pane
-	if p.Frame.Focused {
-		paneStyle = styles.Chrome.FocusedPane
-	}
-	if p.FrameStyle != nil {
-		paneStyle = *p.FrameStyle
-	}
-	return paneStyle.Copy().Width(p.Frame.Width).Height(p.Frame.Height).Render(content)
+	return paneStyle.Width(p.Frame.Width).Render(fitContent(content, innerW, innerH))
 }

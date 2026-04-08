@@ -3,7 +3,7 @@ package ui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/list"
+	"charm.land/bubbles/v2/list"
 )
 
 func ApplyFilterState(l *list.Model) {

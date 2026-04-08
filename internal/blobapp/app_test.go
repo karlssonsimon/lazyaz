@@ -1,11 +1,13 @@
 package blobapp
 
 import (
-	"github.com/karlssonsimon/lazyaz/internal/ui"
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 var testConfig = ui.Config{
@@ -114,7 +116,7 @@ func TestTypingQWhileSearchActiveDoesNotQuit(t *testing.T) {
 	m.search.active = true
 	m.search.stage = searchStagePrefix
 
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if _, ok := updated.(Model); !ok {
 		t.Fatalf("expected updated model type %T, got %T", Model{}, updated)
 	}
@@ -128,13 +130,13 @@ func TestHelpToggleOpensAndCloses(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
 	m.SubOverlay.Close() // close auto-opened picker so keys reach help handler
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated, _ := m.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	model := updated.(Model)
 	if !model.HelpOverlay.Active {
 		t.Fatal("expected ? to open help overlay")
 	}
 
-	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	updated, _ = model.Update(tea.KeyPressMsg{Code: '?', Text: "?"})
 	model = updated.(Model)
 	if model.HelpOverlay.Active {
 		t.Fatal("expected ? to close help overlay")
@@ -148,7 +150,7 @@ func TestViewShowsStatusBar(t *testing.T) {
 	m.resize()
 
 	view := m.View()
-	if !strings.Contains(view, "Loading") {
+	if !strings.Contains(view.Content, "Loading") {
 		t.Fatal("expected status bar to show loading message")
 	}
 }
@@ -159,4 +161,60 @@ func isQuitCmd(cmd tea.Cmd) bool {
 	}
 	_, ok := cmd().(tea.QuitMsg)
 	return ok
+}
+
+// TestPreviewPaneOverflowDoesNotEatStatusBar verifies that even with a
+// pathologically wide and long preview (a long blob name that wraps the
+// title, very wide content lines that would force lipgloss to wrap, and
+// far more content rows than fit in the viewport), the preview pane
+// stays inside its frame and the status bar stays visible. Regression
+// test for the v1→v2 lipgloss MaxHeight-clips-the-border bug.
+func TestPreviewPaneOverflowDoesNotEatStatusBar(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.Width = 200
+	m.Height = 60
+	m.hasAccount = true
+	m.currentAccount.Name = "test-account"
+	m.hasContainer = true
+	m.containerName = "test-container"
+	m.preview.open = true
+	m.preview.blobName = "verylongblobnamethatwillforcetitletowrapacrossseverallinesinthepreviewtitle.xml"
+	m.preview.blobSize = 1024
+	m.preview.contentType = "text/plain"
+	wide := strings.Repeat("X", 500)
+	m.preview.viewport.SetContent(strings.Repeat(wide+"\n", 200))
+	m.preview.rendered = strings.Repeat(wide+"\n", 200)
+	m.resize()
+
+	view := m.View()
+	if got := strings.Count(view.Content, "\n") + 1; got != m.Height {
+		t.Errorf("rendered view: %d lines, want %d", got, m.Height)
+	}
+	stripped := ansi.Strip(view.Content)
+	if !strings.Contains(stripped, "Account:") {
+		t.Errorf("status bar 'Account:' missing from view (preview likely ate it)")
+	}
+	if !strings.Contains(stripped, "test-account") {
+		t.Errorf("status bar account value missing from view")
+	}
+	// Sanity: the rounded bottom-border character should appear in every
+	// pane's bottom row. If the preview pane's bottom border is missing
+	// (because we let lipgloss MaxHeight clip from below), this fails.
+	lines := strings.Split(stripped, "\n")
+	// Find the last line containing rounded-corner border characters.
+	var lastBorderLine string
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.Contains(lines[i], "╯") {
+			lastBorderLine = lines[i]
+			break
+		}
+	}
+	if lastBorderLine == "" {
+		t.Fatal("no pane bottom-border row found")
+	}
+	if got := strings.Count(lastBorderLine, "╯"); got != 4 {
+		t.Errorf("expected 4 bottom-border corners on the pane row (one per pane), got %d in %q",
+			got, lastBorderLine)
+	}
 }

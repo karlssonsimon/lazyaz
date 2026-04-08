@@ -6,7 +6,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // SubscriptionBarHeight is the vertical space reserved for the subscription context bar.

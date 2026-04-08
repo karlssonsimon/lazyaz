@@ -9,7 +9,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func fetchSubscriptionsCmd(svc *servicebus.Service, loader *cache.Loader[azure.Subscription], fresh bool) tea.Cmd {

@@ -3,7 +3,7 @@ package kvapp
 import (
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/charmbracelet/bubbles/list"
+	"charm.land/bubbles/v2/list"
 )
 
 func (m *Model) nextFocus() {

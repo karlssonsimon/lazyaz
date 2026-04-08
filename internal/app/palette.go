@@ -5,7 +5,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // command represents a single entry in the command palette.

@@ -11,7 +11,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/sbapp"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 
 	cfg := ui.LoadConfig()
 	km := keymap.Load(ui.ConfigDir())
-	program := tea.NewProgram(sbapp.NewModelWithKeyMap(servicebus.NewService(cred), cfg, km, db), tea.WithAltScreen())
+	program := tea.NewProgram(sbapp.NewModelWithKeyMap(servicebus.NewService(cred), cfg, km, db))
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "application error: %v\n", err)
 		os.Exit(1)
