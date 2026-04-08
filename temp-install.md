@@ -21,7 +21,7 @@ Verify with `ssh -T git@github.com`.
 ## Install
 
 ```bash
-go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@v0.1.0
+go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@v0.3.0
 ```
 
 The binary lands in `$GOBIN` (or `$HOME/go/bin` if `GOBIN` is unset). Make
