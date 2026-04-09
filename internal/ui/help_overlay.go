@@ -50,7 +50,12 @@ func (s *HelpOverlayState) HandleKey(key string, bindings HelpKeyBindings) {
 
 	switch {
 	case bindings.Close.Matches(key), bindings.Cancel != nil && bindings.Cancel.Matches(key):
-		s.Active = false
+		if s.Query != "" {
+			s.Query = ""
+			s.refilter()
+		} else {
+			s.Active = false
+		}
 	case bindings.Up.Matches(key):
 		if s.CursorIdx > 0 {
 			s.CursorIdx--

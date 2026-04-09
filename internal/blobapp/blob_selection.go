@@ -120,7 +120,13 @@ func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) (applied bool
 			return true, opt.field, opt.desc
 		}
 	case km.ThemeCancel.Matches(key):
-		s.active = false
+		if s.query != "" {
+			s.query = ""
+			s.filtered = nil
+			s.cursorIdx = 0
+		} else {
+			s.active = false
+		}
 	case km.BackspaceUp.Matches(key):
 		if len(s.query) > 0 {
 			s.query = s.query[:len(s.query)-1]
