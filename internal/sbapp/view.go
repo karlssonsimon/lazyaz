@@ -106,10 +106,18 @@ func (m Model) View() tea.View {
 
 	// Render preview pane if it has a width assigned.
 	if pw[messagePreviewPane] > 0 && m.viewingMessage {
-		previewTitleStyle := m.Styles.Accent.Copy().Padding(0, 1)
+		contentWidth := ui.PaneContentWidth(paneStyle, pw[messagePreviewPane])
 		msgID := ui.EmptyToDash(m.selectedMessage.MessageID)
-		previewTitle := previewTitleStyle.Render(fmt.Sprintf("Message: %s", msgID))
-		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, m.messageViewport.View())
+		titleText := fmt.Sprintf("Message: %s", msgID)
+		previewTitle := m.Styles.Accent.Copy().
+			Width(contentWidth).
+			MaxWidth(contentWidth).
+			Render(titleText)
+		vpView := m.messageViewport.View()
+		if m.textSelection.Active {
+			vpView = m.textSelection.HighlightContent(m.messageViewport, m.Styles.SelectionHighlight)
+		}
+		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, vpView)
 		paneMap[messagePreviewPane] = ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[messagePreviewPane], Height: h, Focused: m.focus == messagePreviewPane}, m.Styles)
 	}
 

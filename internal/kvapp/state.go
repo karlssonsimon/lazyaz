@@ -32,9 +32,12 @@ type Model struct {
 
 	focus int
 
-	vaults   []keyvault.Vault
-	secrets  []keyvault.Secret
-	versions []keyvault.SecretVersion
+	vaults        []keyvault.Vault
+	secrets       []keyvault.Secret
+	versions      []keyvault.SecretVersion
+	markedSecrets map[string]keyvault.Secret
+	visualLineMode bool
+	visualAnchor   string
 
 	// Per-scope list state history. When the user navigates between
 	// scopes (different subscription, different vault, etc.) the cursor
@@ -50,7 +53,8 @@ type Model struct {
 	hasSecret     bool
 	currentSecret keyvault.Secret
 
-	cache kvCache
+	actionMenu actionMenuState
+	cache      kvCache
 
 	loadingSpinnerID int
 
@@ -135,6 +139,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 		vaultsList:      vaults,
 		secretsList:     secrets,
 		versionsList:    versionsList,
+		markedSecrets:   make(map[string]keyvault.Secret),
 		focus:           vaultsPane,
 		cache:           newCache(db),
 		vaultsHistory:   make(map[string]ui.ListState),
@@ -167,6 +172,7 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.Styles.ApplyToLists([]*list.Model{
 		&m.vaultsList, &m.secretsList, &m.versionsList,
 	}, &m.Spinner)
+	m.secretsList.SetDelegate(newSecretDelegate(m.Styles.Delegate, m.Styles))
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.
@@ -193,7 +199,11 @@ func (m Model) HelpSections() []ui.HelpSection {
 		{
 			Title: "Secrets",
 			Items: []string{
+				keymap.HelpEntry(km.ActionMenu, "action menu"),
 				keymap.HelpEntry(km.YankSecret, "yank secret value to clipboard"),
+				keymap.HelpEntry(km.ToggleMark, "toggle mark on current secret"),
+				keymap.HelpEntry(km.ToggleVisualLine, "start/end visual-line selection"),
+				keymap.HelpEntry(km.ExitVisualLine, "exit visual mode / clear marks"),
 			},
 		},
 		{

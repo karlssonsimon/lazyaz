@@ -117,12 +117,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.Notify(appshell.LevelError, fmt.Sprintf("Clipboard: %s", msg.err.Error()))
 		} else {
-			m.Notify(appshell.LevelSuccess, fmt.Sprintf("Copied to clipboard: %s", msg.text))
+			m.Notify(appshell.LevelSuccess, fmt.Sprintf("Copied to clipboard: %s", ui.TrimToWidth(msg.text, 60)))
 		}
 		return m, nil
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+
+	case tea.MouseClickMsg:
+		if m.preview.open {
+			region := m.previewViewportRegion()
+			if m.textSelection.HandleMouseClick(msg, region) {
+				return m, nil
+			}
+		}
+
+	case tea.MouseMotionMsg:
+		if m.textSelection.Active {
+			region := m.previewViewportRegion()
+			m.textSelection.HandleMouseMotion(msg, region)
+			return m, nil
+		}
+
+	case tea.MouseReleaseMsg:
+		if m.textSelection.Active {
+			region := m.previewViewportRegion()
+			text, ok := m.textSelection.HandleMouseRelease(msg, m.preview.viewport, region)
+			if ok {
+				return m, func() tea.Msg {
+					if err := ui.WriteClipboard(text); err != nil {
+						return clipboardMsg{err: err}
+					}
+					return clipboardMsg{text: text}
+				}
+			}
+			return m, nil
+		}
 	}
 
 	// Fallthrough: propagate to focused list.

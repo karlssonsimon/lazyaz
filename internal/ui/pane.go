@@ -170,7 +170,7 @@ func RenderListPane(p ListPane, styles Styles) string {
 	if p.TitleStyle != nil {
 		titleStyle = *p.TitleStyle
 	}
-	title := titleStyle.Render(titleText)
+	title := titleStyle.MaxWidth(innerW).Render(titleText)
 	hints := RenderPaneHints(p.Hints, styles, contentWidth)
 
 	parts := make([]string, 0, 6)
