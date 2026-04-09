@@ -183,13 +183,12 @@ func blobSortIndicator(field blobSortField, desc bool) string {
 
 func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 	if !m.hasContainer {
-		m.Status = "Open a container before loading blobs"
+		m.Notify(appshell.LevelInfo, "Open a container before loading blobs")
 		return m, nil
 	}
 
 	savedPrefix := m.filter.prefixQuery
 	m.clearFilter()
-	m.LastErr = ""
 
 	if m.blobLoadAll {
 		// Switching back to hierarchy mode.
@@ -202,7 +201,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		}
 
 		m.SetLoading(blobsPane)
-		m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix))
 		return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 	}
 
@@ -214,7 +213,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		// Keep showing current data while the fetch runs.
 		m.SetLoading(blobsPane)
 		effectivePrefix := blobSearchPrefix(m.prefix, savedPrefix)
-		m.Status = fmt.Sprintf("Loading all blobs under %q", effectivePrefix)
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading all blobs under %q", effectivePrefix))
 		return m, tea.Batch(m.Spinner.Tick,
 			fetchAllBlobsWithPrefixCmd(m.service, m.currentAccount, m.containerName, m.prefix, savedPrefix))
 	}
@@ -226,13 +225,13 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 	}
 
 	m.SetLoading(blobsPane)
-	m.Status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
+	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName))
 	return m, tea.Batch(m.Spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.blobs))
 }
 
 func (m *Model) toggleVisualLineMode() {
 	if !m.hasContainer {
-		m.Status = "Open a container before visual selection"
+		m.Notify(appshell.LevelInfo, "Open a container before visual selection")
 		return
 	}
 
@@ -241,7 +240,7 @@ func (m *Model) toggleVisualLineMode() {
 		m.visualLineMode = false
 		m.visualAnchor = ""
 		m.refreshItems()
-		m.Status = fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs)))
 		return
 	}
 
@@ -249,11 +248,11 @@ func (m *Model) toggleVisualLineMode() {
 	m.visualAnchor = m.currentBlobName()
 	m.refreshItems()
 	if m.visualAnchor == "" {
-		m.Status = "Visual mode on. Move up/down to select a range."
+		m.Notify(appshell.LevelInfo, "Visual mode on. Move up/down to select a range.")
 		return
 	}
 	selectionCount := len(m.visualSelectionBlobNames())
-	m.Status = fmt.Sprintf("Visual mode on. %d in range.", selectionCount)
+	m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", selectionCount))
 }
 
 // commitVisualSelection merges the current visual range into markedBlobs.
@@ -293,30 +292,30 @@ func (m *Model) swapVisualAnchor() {
 
 func (m *Model) toggleCurrentBlobMark() {
 	if !m.hasContainer {
-		m.Status = "Open a container before marking blobs"
+		m.Notify(appshell.LevelInfo, "Open a container before marking blobs")
 		return
 	}
 
 	item, ok := m.blobsList.SelectedItem().(blobItem)
 	if !ok {
-		m.Status = "No blob selected"
+		m.Notify(appshell.LevelInfo, "No blob selected")
 		return
 	}
 	if item.blob.IsPrefix {
-		m.Status = "Folder selection is not supported yet"
+		m.Notify(appshell.LevelInfo, "Folder selection is not supported yet")
 		return
 	}
 
 	if _, exists := m.markedBlobs[item.blob.Name]; exists {
 		delete(m.markedBlobs, item.blob.Name)
 		m.refreshItems()
-		m.Status = fmt.Sprintf("Unmarked %s (%d marked)", item.displayName, len(m.markedBlobs))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", item.displayName, len(m.markedBlobs)))
 		return
 	}
 
 	m.markedBlobs[item.blob.Name] = item.blob
 	m.refreshItems()
-	m.Status = fmt.Sprintf("Marked %s (%d marked)", item.displayName, len(m.markedBlobs))
+	m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", item.displayName, len(m.markedBlobs)))
 }
 
 func (m Model) currentBlobName() string {
@@ -424,14 +423,14 @@ func (m Model) startMarkedAction(action string) (Model, tea.Cmd) {
 	case "download":
 		return m.startDownloadMarkedBlobs()
 	default:
-		m.Status = fmt.Sprintf("Unknown marked action: %s", action)
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Unknown marked action: %s", action))
 		return m, nil
 	}
 }
 
 func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 	if !m.hasAccount || !m.hasContainer {
-		m.Status = "Open a container before downloading"
+		m.Notify(appshell.LevelInfo, "Open a container before downloading")
 		return m, nil
 	}
 
@@ -446,7 +445,7 @@ func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 	if len(blobNames) == 0 {
 		item, ok := m.blobsList.SelectedItem().(blobItem)
 		if !ok || item.blob.IsPrefix {
-			m.Status = "Select blobs with space or visual mode before downloading"
+			m.Notify(appshell.LevelInfo, "Select blobs with space or visual mode before downloading")
 			return m, nil
 		}
 		blobNames = []string{item.blob.Name}
@@ -458,8 +457,7 @@ func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 	}
 	destinationRoot := filepath.Join(m.downloadDir, m.currentAccount.Name, m.containerName)
 	m.SetLoading(blobsPane)
-	m.LastErr = ""
-	m.Status = fmt.Sprintf("Downloading %d blob(s) to %s", len(blobNames), destinationRoot)
+	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Downloading %d blob(s) to %s", len(blobNames), destinationRoot))
 	return m, tea.Batch(m.Spinner.Tick, downloadBlobsCmd(m.service, m.currentAccount, m.containerName, blobNames, destinationRoot))
 }
 

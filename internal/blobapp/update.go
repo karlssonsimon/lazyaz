@@ -45,11 +45,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Spinner, cmd = m.Spinner.Update(msg)
 		return m, cmd
 
-	case appshell.LoadingHoldExpiredMsg:
-		m.ClearLoading()
-		m.Status = msg.Status
-		return m, nil
-
 	case appshell.SubscriptionsLoadedMsg:
 		return m.handleSubscriptionsLoaded(msg)
 
@@ -90,11 +85,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
 		return m, nil
 	}
 
-	m.LastErr = ""
+
 	m.Subscriptions = msg.Subscriptions
 	// Keep the overlay's filtered view in sync with streaming results
 	// so new subscriptions matching the user's query appear immediately.
@@ -113,11 +108,15 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 				// it here so the data loading behind it actually shows.
 				m.SubOverlay.Close()
 				next, selectCmd := m.selectSubscription(matched)
-				return next, tea.Batch(selectCmd, next.FinishLoading(status))
+				next.ClearLoading()
+				next.ResolveSpinner(next.loadingSpinnerID, appshell.LevelSuccess, status)
+				return next, selectCmd
 			}
 			m.SubOverlay.Open()
 		}
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.Next
@@ -130,18 +129,20 @@ func (m Model) handleAccountsLoaded(msg accountsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load storage accounts in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load storage accounts in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
 		return m, nil
 	}
 
-	m.LastErr = ""
+
 	m.accounts = msg.accounts
 	m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(m.accounts))
 	ui.SetItemsPreserveKey(&m.accountsList, accountsToItems(m.accounts), accountItemKey)
 
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d storage accounts from %s in %s", len(m.accounts), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.next
@@ -154,18 +155,20 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (Model, tea.Cmd) 
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load containers for %s: %s", msg.account.Name, msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load containers for %s: %s", msg.account.Name, msg.err.Error()))
 		return m, nil
 	}
 
-	m.LastErr = ""
+
 	m.containers = msg.containers
 	m.containersList.Title = fmt.Sprintf("Containers (%d)", len(m.containers))
 	ui.SetItemsPreserveKey(&m.containersList, containersToItems(m.containers), containerItemKey)
 
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d containers from %s in %s", len(m.containers), msg.account.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.next
@@ -197,11 +200,11 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load blobs in %s/%s: %s", msg.account.Name, msg.container, msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load blobs in %s/%s: %s", msg.account.Name, msg.container, msg.err.Error()))
 		return m, nil
 	}
 
-	m.LastErr = ""
+
 	m.blobs = msg.blobs
 	m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(m.blobs))
 	m.refreshItems()
@@ -214,7 +217,9 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 		} else {
 			status = fmt.Sprintf("Loaded %d entries in %s/%s under %q in %s", len(m.blobs), msg.account.Name, msg.container, msg.prefix, elapsed)
 		}
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.next
@@ -223,17 +228,17 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 func (m Model) handleBlobsDownloaded(msg blobsDownloadedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to download blobs: %s", msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to download blobs: %s", msg.err.Error()))
 		return m, nil
 	}
 
 	if msg.failed > 0 {
-		m.Notify(appshell.LevelWarn, fmt.Sprintf("Downloaded %d/%d blobs to %s — failures: %s",
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelWarn, fmt.Sprintf("Downloaded %d/%d blobs to %s — failures: %s",
 			msg.downloaded, msg.total, msg.destinationRoot, strings.Join(msg.failures, " | ")))
 		return m, nil
 	}
 
-	m.Notify(appshell.LevelSuccess, fmt.Sprintf("Downloaded %d blob(s) to %s", msg.downloaded, msg.destinationRoot))
+	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Downloaded %d blob(s) to %s", msg.downloaded, msg.destinationRoot))
 	return m, nil
 }
 
@@ -256,7 +261,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.blobSortField = field
 			m.blobSortDesc = desc
 			m.refreshItems()
-			m.Status = "Sort: " + blobSortLabel(field, desc)
+			m.Notify(appshell.LevelInfo, "Sort: "+blobSortLabel(field, desc))
 		}
 		return m, nil
 	}
@@ -273,7 +278,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	// Esc on the blob pane clears an active filter when input is closed.
 	if m.Keymap.Cancel.Matches(key) && m.focus == blobsPane && m.hasActiveFilter() {
 		m.clearFilter()
-		m.Status = "Filter cleared"
+		m.Notify(appshell.LevelInfo, "Filter cleared")
 		return m, nil
 	}
 
@@ -285,7 +290,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.visualLineMode = false
 		m.visualAnchor = ""
 		m.refreshItems()
-		m.Status = "Visual mode off"
+		m.Notify(appshell.LevelInfo, "Visual mode off")
 	}
 
 	// If this is a visual-range move key, remember to refresh the visual
@@ -338,7 +343,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.visualLineMode = false
 				m.visualAnchor = ""
 				m.refreshItems()
-				m.Status = fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs))
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs)))
 				return m, nil
 			}
 			if len(m.markedBlobs) > 0 {
@@ -348,7 +353,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 					delete(m.markedBlobs, name)
 				}
 				m.refreshItems()
-				m.Status = fmt.Sprintf("Cleared %d marks", count)
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
 				return m, nil
 			}
 		}
@@ -398,8 +403,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if !focusedFilterActive {
 			m.SubOverlay.Open()
 			m.SetLoading(-1)
-			m.LastErr = ""
-			m.Status = "Refreshing subscriptions..."
+		
+			m.loadingSpinnerID = m.NotifySpinner("Refreshing subscriptions...")
 			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
 	case m.Keymap.FilterInput.Matches(key):
@@ -431,7 +436,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
 				m.SetLoading(blobsPane)
-				m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+				m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix))
 				return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 			}
 		}
@@ -453,7 +458,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	if markVisualAfterListUpdate && m.focus == blobsPane && m.visualLineMode {
 		m.refreshItems()
-		m.Status = fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames()))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames())))
 	}
 
 	return m, cmd

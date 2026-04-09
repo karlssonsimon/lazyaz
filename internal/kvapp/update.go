@@ -41,11 +41,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Spinner, cmd = m.Spinner.Update(msg)
 		return m, cmd
 
-	case appshell.LoadingHoldExpiredMsg:
-		m.ClearLoading()
-		m.Status = msg.Status
-		return m, nil
-
 	case appshell.SubscriptionsLoadedMsg:
 		return m.handleSubscriptionsLoaded(msg)
 
@@ -82,7 +77,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
 		return m, nil
 	}
 
@@ -105,11 +100,15 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 				// it here so the data loading behind it actually shows.
 				m.SubOverlay.Close()
 				next, selectCmd := m.selectSubscription(matched)
-				return next, tea.Batch(selectCmd, next.FinishLoading(status))
+				next.ClearLoading()
+				next.ResolveSpinner(next.loadingSpinnerID, appshell.LevelSuccess, status)
+				return next, selectCmd
 			}
 			m.SubOverlay.Open()
 		}
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.Next
@@ -122,7 +121,7 @@ func (m Model) handleVaultsLoaded(msg vaultsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load key vaults in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load key vaults in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
 		return m, nil
 	}
 
@@ -133,7 +132,9 @@ func (m Model) handleVaultsLoaded(msg vaultsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d vaults in %s", len(m.vaults), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.next
@@ -146,7 +147,7 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load secrets in %s: %s", msg.vault.Name, msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load secrets in %s: %s", msg.vault.Name, msg.err.Error()))
 		return m, nil
 	}
 
@@ -157,7 +158,9 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d secrets from %s in %s", len(m.secrets), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.next
@@ -173,7 +176,7 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.secretName, msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.secretName, msg.err.Error()))
 		return m, nil
 	}
 
@@ -184,7 +187,9 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d versions for %s in %s", len(m.versions), msg.secretName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.next
@@ -193,7 +198,7 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 func (m Model) handleSecretValueYanked(msg secretValueYankedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to yank secret value: %s", msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to yank secret value: %s", msg.err.Error()))
 		return m, nil
 	}
 
@@ -205,7 +210,7 @@ func (m Model) handleSecretValueYanked(msg secretValueYankedMsg) (Model, tea.Cmd
 		}
 		label = fmt.Sprintf("%s@%s", msg.secretName, v)
 	}
-	m.Notify(appshell.LevelSuccess, fmt.Sprintf("Yanked %s to clipboard", label))
+	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Yanked %s to clipboard", label))
 	return m, nil
 }
 
@@ -286,7 +291,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.SubOverlay.Open()
 			m.SetLoading(-1)
 			m.LastErr = ""
-			m.Status = "Refreshing subscriptions..."
+			m.loadingSpinnerID = m.NotifySpinner("Refreshing subscriptions...")
 			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
 	case m.Keymap.Inspect.Matches(key):
@@ -322,7 +327,7 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 		}
 		m.SetLoading(m.focus)
 		m.LastErr = ""
-		m.Status = fmt.Sprintf("Fetching secret value for %s...", item.secret.Name)
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Fetching secret value for %s...", item.secret.Name))
 		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, item.secret.Name, ""))
 	}
 
@@ -333,7 +338,7 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 		}
 		m.SetLoading(m.focus)
 		m.LastErr = ""
-		m.Status = fmt.Sprintf("Fetching secret value for %s@%s...", m.currentSecret.Name, item.version.Version)
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Fetching secret value for %s@%s...", m.currentSecret.Name, item.version.Version))
 		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))
 	}
 

@@ -52,7 +52,7 @@ type Model struct {
 	// interception so a parent tabapp can own those concerns.
 	EmbeddedMode bool
 
-	// Loading state. Set via SetLoading / ClearLoading / FinishLoading.
+	// Loading state. Set via SetLoading / ClearLoading.
 	Loading          bool
 	LoadingPane      int
 	LoadingStartedAt time.Time

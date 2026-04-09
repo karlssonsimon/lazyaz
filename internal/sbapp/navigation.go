@@ -136,7 +136,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.resize() // peek state cleared → reclaim DLQ tab strip space
 
 	m.SetLoading(m.focus)
-	m.Status = fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub))
+	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub)))
 	return m, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID, m.namespaces))
 }
 
@@ -185,7 +185,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.resize() // peek state cleared → reclaim DLQ tab strip space
 
 		m.SetLoading(m.focus)
-		m.Status = fmt.Sprintf("Loading entities in %s", item.namespace.Name)
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading entities in %s", item.namespace.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityCacheKey, m.entities))
 	}
 
@@ -252,7 +252,7 @@ func (m Model) peekQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 	m.resize() // make room for the DLQ tab strip
 
 	m.SetLoading(m.focus)
-	m.Status = fmt.Sprintf("Peeking messages from queue %s", entity.Name)
+	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Peeking messages from queue %s", entity.Name))
 	return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, entity.Name, m.deadLetter, false))
 }
 
@@ -289,7 +289,7 @@ func (m Model) peekTopicSub(topicName string, sub servicebus.TopicSubscription) 
 	m.resize() // make room for the DLQ tab strip
 
 	m.SetLoading(m.focus)
-	m.Status = fmt.Sprintf("Peeking messages from %s/%s", topicName, sub.Name)
+	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Peeking messages from %s/%s", topicName, sub.Name))
 	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, topicName, sub.Name, m.deadLetter, false))
 }
 
@@ -317,7 +317,7 @@ func (m Model) toggleTopicExpansion(topic servicebus.Entity) (Model, tea.Cmd) {
 	// Fire a fetch (always — to refresh).
 	m.topicSubsFetching = topic.Name
 	m.SetLoading(m.focus)
-	m.Status = fmt.Sprintf("Loading subscriptions for topic %s", topic.Name)
+	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading subscriptions for topic %s", topic.Name))
 	return m, tea.Batch(m.Spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, topic.Name, cacheKey, m.topicSubsByTopic[topic.Name]))
 }
 

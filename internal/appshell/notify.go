@@ -21,3 +21,28 @@ func (m *Model) Notify(level NotificationLevel, message string) {
 		m.LastErr = ""
 	}
 }
+
+// NotifySpinner publishes a persistent spinner notification that stays
+// visible until resolved. Returns the spinner ID for later resolution.
+func (m *Model) NotifySpinner(message string) int {
+	if m == nil {
+		return 0
+	}
+	id := m.Notifier.PushSpinner(message)
+	m.Status = message
+	return id
+}
+
+// ResolveSpinner replaces a spinner notification with a regular one.
+func (m *Model) ResolveSpinner(id int, level NotificationLevel, message string) {
+	if m == nil {
+		return
+	}
+	m.Notifier.ResolveSpinner(id, level, message)
+	m.Status = message
+	if level == LevelError {
+		m.LastErr = message
+	} else {
+		m.LastErr = ""
+	}
+}

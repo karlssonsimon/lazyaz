@@ -1,8 +1,6 @@
 package kvapp
 
 import (
-	"time"
-
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -80,8 +78,6 @@ func (m Model) View() tea.View {
 	sbErr := m.LastErr != ""
 	if sbErr {
 		sbStatus = m.LastErr
-	} else if m.Loading {
-		sbStatus = ui.SpinnerFrameAt(time.Since(m.LoadingStartedAt)) + " " + m.Status
 	}
 	statusBar := ui.RenderStatusBar(m.Styles, sbItems, sbStatus, sbErr, m.Width)
 

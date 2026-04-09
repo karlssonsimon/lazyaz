@@ -43,11 +43,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Spinner, cmd = m.Spinner.Update(msg)
 		return m, cmd
 
-	case appshell.LoadingHoldExpiredMsg:
-		m.ClearLoading()
-		m.Status = msg.Status
-		return m, nil
-
 	case appshell.SubscriptionsLoadedMsg:
 		return m.handleSubscriptionsLoaded(msg)
 
@@ -92,7 +87,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
 		return m, nil
 	}
 
@@ -115,11 +110,15 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 				// it here so the data loading behind it actually shows.
 				m.SubOverlay.Close()
 				next, selectCmd := m.selectSubscription(matched)
-				return next, tea.Batch(selectCmd, next.FinishLoading(status))
+				next.ClearLoading()
+				next.ResolveSpinner(next.loadingSpinnerID, appshell.LevelSuccess, status)
+				return next, selectCmd
 			}
 			m.SubOverlay.Open()
 		}
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.Next
@@ -132,7 +131,7 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load namespaces in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load namespaces in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
 		return m, nil
 	}
 
@@ -143,7 +142,9 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d namespaces from %s in %s", len(m.namespaces), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.next
@@ -156,7 +157,7 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load entities in %s: %s", msg.namespace.Name, msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load entities in %s: %s", msg.namespace.Name, msg.err.Error()))
 		return m, nil
 	}
 
@@ -167,7 +168,9 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d entities from %s in %s", len(m.entities), msg.namespace.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.next
@@ -188,7 +191,7 @@ func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load subscriptions for topic %s: %s", msg.topicName, msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load subscriptions for topic %s: %s", msg.topicName, msg.err.Error()))
 		m.topicSubsFetching = ""
 		return m, nil
 	}
@@ -201,7 +204,9 @@ func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (
 		m.topicSubsFetching = ""
 		m.rebuildEntitiesItems()
 		status := fmt.Sprintf("Loaded %d subscriptions for topic %s in %s", len(m.topicSubsByTopic[msg.topicName]), msg.topicName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
-		return m, m.FinishLoading(status)
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
 	}
 
 	return m, msg.next
@@ -211,7 +216,7 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	// Messages are ephemeral peek results — not cached.
 	m.ClearLoading()
 	if msg.err != nil {
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to peek messages from %s: %s", msg.source, msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to peek messages from %s: %s", msg.source, msg.err.Error()))
 		return m, nil
 	}
 
@@ -245,7 +250,7 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	}
 	m.detailList.Title = fmt.Sprintf("Messages (%d)", len(msg.messages))
 	m.resize()
-	m.Status = fmt.Sprintf("Peeked %d messages from %s", len(msg.messages), msg.source)
+	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Peeked %d messages from %s", len(msg.messages), msg.source))
 	return m, nil
 }
 
@@ -258,14 +263,14 @@ func (m Model) handleRequeueDone(msg requeueDoneMsg) (Model, tea.Cmd) {
 		var dupErr *servicebus.DuplicateError
 		if errors.As(msg.err, &dupErr) {
 			m.ensureDuplicates()[dupErr.MessageID] = struct{}{}
-			m.Notify(appshell.LevelWarn, fmt.Sprintf("Message %s sent but not removed from DLQ (possible duplicate)", dupErr.MessageID))
+			m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelWarn, fmt.Sprintf("Message %s sent but not removed from DLQ (possible duplicate)", dupErr.MessageID))
 		} else {
-			m.Notify(appshell.LevelError, fmt.Sprintf("Failed to requeue messages: %s", msg.err.Error()))
+			m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to requeue messages: %s", msg.err.Error()))
 		}
 	case msg.requeued > 0:
-		m.Notify(appshell.LevelSuccess, fmt.Sprintf("%d of %d message(s) requeued", msg.requeued, msg.total))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("%d of %d message(s) requeued", msg.requeued, msg.total))
 	default:
-		m.Notify(appshell.LevelError, "Failed to requeue messages")
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, "Failed to requeue messages")
 	}
 	var peekCmd tea.Cmd
 	m, peekCmd = m.rePeekMessages(true)
@@ -275,13 +280,13 @@ func (m Model) handleRequeueDone(msg requeueDoneMsg) (Model, tea.Cmd) {
 func (m Model) handleDeleteDuplicateDone(msg deleteDuplicateDoneMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to delete duplicate message: %s", msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to delete duplicate message: %s", msg.err.Error()))
 		return m, nil
 	}
 	if dups := m.currentDuplicates(); dups != nil {
 		delete(dups, msg.messageID)
 	}
-	m.Notify(appshell.LevelSuccess, "Duplicate message deleted")
+	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, "Duplicate message deleted")
 	var peekCmd tea.Cmd
 	m, peekCmd = m.rePeekMessages(true)
 	return m, tea.Batch(peekCmd, refreshEntitiesCmd(m.service, m.currentNS))
@@ -414,7 +419,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			m.SetLoading(m.focus)
 			m.LastErr = ""
-			m.Status = fmt.Sprintf("Requeuing %d message(s)...", len(messageIDs))
+			m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Requeuing %d message(s)...", len(messageIDs)))
 			return m, tea.Batch(m.Spinner.Tick, requeueMessagesCmd(m.service, m.currentNS, m.currentEntity, m.currentSubName, messageIDs))
 		}
 	case m.Keymap.DeleteDuplicate.Matches(key):
@@ -425,7 +430,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			m.SetLoading(m.focus)
 			m.LastErr = ""
-			m.Status = "Deleting duplicate message..."
+			m.loadingSpinnerID = m.NotifySpinner("Deleting duplicate message...")
 			return m, tea.Batch(m.Spinner.Tick, deleteDuplicateCmd(m.service, m.currentNS, m.currentEntity, m.currentSubName, item.message.MessageID))
 		}
 	case m.Keymap.ToggleDLQFilter.Matches(key):
@@ -444,7 +449,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.SubOverlay.Open()
 			m.SetLoading(-1)
 			m.LastErr = ""
-			m.Status = "Refreshing subscriptions..."
+			m.loadingSpinnerID = m.NotifySpinner("Refreshing subscriptions...")
 			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
 	case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):

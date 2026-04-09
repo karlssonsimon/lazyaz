@@ -3,8 +3,10 @@ package ui
 import (
 	icolor "image/color"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ToastLevel mirrors appshell.NotificationLevel without importing it
@@ -26,8 +28,9 @@ const (
 	toastRightMargin  = 2  // columns from the right edge
 	toastVerticalGap  = 1  // blank rows between stacked toasts
 	toastMaxOnScreen  = 5  // never render more than this many at once
-	toastBorderChar   = "▎"
-	toastInnerPadding = 1 // spaces between left border and message text
+	toastBorderCharL  = "▎"
+	toastBorderCharR  = "▕"
+	toastInnerPadding = 1 // spaces between border and message text
 )
 
 // Toast is a single notification rendered as a top-right popup.
@@ -35,6 +38,8 @@ const (
 type Toast struct {
 	Level   ToastLevel
 	Message string
+	Spinner bool      // when true, prepend animated spinner frame
+	Time    time.Time // used for spinner frame computation
 }
 
 // RenderToasts paints the active toast stack on top of the given base
@@ -66,11 +71,8 @@ func RenderToasts(toasts []Toast, styles Styles, termWidth, termHeight int, base
 	// through the vertical gap. Without this the gap row shows
 	// whatever was below — usually a pane border or footer hint —
 	// which looks like the next toast lost its body.
-	gapRow := buildGapRow(styles)
-
 	for ti, t := range toasts {
 		boxLines := renderToastBox(t, styles)
-		// Stop early if the next toast would overflow the screen.
 		if cursorY+len(boxLines) > termHeight {
 			break
 		}
@@ -80,17 +82,10 @@ func RenderToasts(toasts []Toast, styles Styles, termWidth, termHeight int, base
 		}
 		cursorY += len(boxLines)
 
-		// Paint opaque gap rows after this toast (unless it's the last
-		// one, where the gap would be wasted screen real estate).
-		if ti == len(toasts)-1 {
-			continue
-		}
-		for g := 0; g < toastVerticalGap; g++ {
-			if cursorY >= termHeight {
-				break
-			}
-			baseLines[cursorY] = overlayInto(baseLines[cursorY], gapRow, startX, toastWidth)
-			cursorY++
+		// Skip gap rows between toasts — the top/bottom padding inside
+		// each toast box already provides visual separation.
+		if ti < len(toasts)-1 {
+			cursorY += toastVerticalGap
 		}
 	}
 
@@ -103,7 +98,7 @@ func RenderToasts(toasts []Toast, styles Styles, termWidth, termHeight int, base
 // gap visually belongs to the toast stack.
 func buildGapRow(styles Styles) string {
 	body := lipgloss.NewStyle().Background(styles.Chrome.Status.GetBackground())
-	return body.Render(strings.Repeat(" ", toastWidth))
+	return body.Render(strings.Repeat(" ", toastWidth)) + ansiReset
 }
 
 // renderToastBox returns the rendered lines of a single toast box.
@@ -112,18 +107,37 @@ func buildGapRow(styles Styles) string {
 func renderToastBox(t Toast, styles Styles) []string {
 	border, body := toastStyles(t.Level, styles)
 
-	bodyW := toastWidth - lipgloss.Width(toastBorderChar) - toastInnerPadding
+	borderLW := lipgloss.Width(toastBorderCharL)
+	borderRW := lipgloss.Width(toastBorderCharR)
+	bodyW := toastWidth - borderLW - borderRW - toastInnerPadding*2
 	if bodyW < 10 {
 		bodyW = 10
 	}
 
-	wrapped := wrapAndClamp(t.Message, bodyW, toastMaxLines)
-	rendered := make([]string, len(wrapped))
-	pad := strings.Repeat(" ", toastInnerPadding)
-	for i, line := range wrapped {
-		padded := padRight(line, bodyW)
-		rendered[i] = border.Render(toastBorderChar) + body.Render(pad+padded)
+	msg := t.Message
+	if t.Spinner {
+		msg = SpinnerFrameAt(time.Since(t.Time)) + " " + msg
 	}
+	wrapped := wrapAndClamp(msg, bodyW, toastMaxLines)
+	pad := strings.Repeat(" ", toastInnerPadding)
+	left := border.Render(toastBorderCharL)
+	right := border.Render(toastBorderCharR)
+
+	// Build each line by hand: left border + styled body + right border + reset.
+	// We avoid lipgloss Width() which can miscount columns with special chars.
+	renderLine := func(text string) string {
+		// Ensure the body content is exactly the right width.
+		inner := pad + padRight(text, bodyW) + pad
+		return left + body.Render(inner) + ansiReset + right + ansiReset
+	}
+
+	emptyLine := renderLine("")
+	rendered := make([]string, 0, len(wrapped)+2)
+	rendered = append(rendered, emptyLine)
+	for _, line := range wrapped {
+		rendered = append(rendered, renderLine(line))
+	}
+	rendered = append(rendered, emptyLine)
 	return rendered
 }
 
@@ -226,26 +240,33 @@ const ansiReset = "\x1b[0m"
 // columns it covers. The overlay is treated as opaque (any cells
 // underneath at columns [startX, startX+width) are dropped). Cells
 // outside that range survive untouched.
+//
+// Uses ansi.Cut to correctly preserve ANSI styling state on both sides
+// of the splice so colors don't bleed across the overlay boundaries.
 func overlayInto(baseLine, overlayCol string, startX, width int) string {
 	lineW := lipgloss.Width(baseLine)
 
 	var out strings.Builder
+
+	// Left portion of the base line: columns [0, startX).
 	if startX > 0 {
 		if lineW >= startX {
-			out.WriteString(truncateAnsi(baseLine, startX))
+			out.WriteString(ansi.Cut(baseLine, 0, startX))
 		} else {
 			out.WriteString(baseLine)
 			out.WriteString(strings.Repeat(" ", startX-lineW))
 		}
 	}
-	// Reset before the overlay so it can't inherit unclosed SGR from
-	// the truncated base. The overlay's own lipgloss output already
-	// terminates with a reset, which protects the trailing slice.
+
 	out.WriteString(ansiReset)
 	out.WriteString(overlayCol)
+	out.WriteString(ansiReset)
+
+	// Right portion of the base line: columns [startX+width, ...).
 	rightCol := startX + width
 	if lineW > rightCol {
-		out.WriteString(skipAnsi(baseLine, rightCol))
+		out.WriteString(ansi.Cut(baseLine, rightCol, lineW))
 	}
+
 	return out.String()
 }

@@ -70,7 +70,7 @@ func (m Model) View() tea.View {
 func notifierToToasts(ns []appshell.Notification) []ui.Toast {
 	out := make([]ui.Toast, len(ns))
 	for i, n := range ns {
-		out[i] = ui.Toast{Level: notifierLevelToToast(n.Level), Message: n.Message}
+		out[i] = ui.Toast{Level: notifierLevelToToast(n.Level), Message: n.Message, Spinner: n.Spinner, Time: n.Time}
 	}
 	return out
 }
