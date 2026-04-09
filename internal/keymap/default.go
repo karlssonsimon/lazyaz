@@ -57,6 +57,7 @@ func Default() Keymap {
 		DownloadSelection: New("D"),
 		SortBlobs:         New("s"),
 		BlobVisualMove:    New("up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G"),
+		YankBlobContent:   New("y"),
 
 		// Blob preview.
 		PreviewBack:          New("h", "left", "esc"),

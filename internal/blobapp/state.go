@@ -135,6 +135,12 @@ type blobsLoadedMsg struct {
 	next      tea.Cmd
 }
 
+type blobContentClipboardMsg struct {
+	blobName string
+	content  string
+	err      error
+}
+
 type blobsDownloadedMsg struct {
 	destinationRoot string
 	total           int
@@ -281,6 +287,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(km.ToggleVisualLine, "start/end visual-line selection"),
 				keymap.HelpEntry(km.ExitVisualLine, "exit visual mode"),
 				keymap.HelpEntry(km.DownloadSelection, "download marked/visual selection"),
+				keymap.HelpEntry(km.YankBlobContent, "yank blob content to clipboard"),
 			},
 		},
 		{

@@ -88,8 +88,12 @@ func (p *commandPalette) handleKey(key string, km keymap.Keymap) (cmd command, e
 			p.query = p.query[:len(p.query)-1]
 			p.refilter()
 		}
+	case key == "ctrl+v":
+		if text := ui.ReadClipboard(); text != "" {
+			p.query += text
+			p.refilter()
+		}
 	default:
-		// Only accept printable single characters for the filter.
 		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 			p.query += key
 			p.refilter()

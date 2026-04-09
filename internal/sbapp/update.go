@@ -14,6 +14,34 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle paste before cursor update (which can swallow PasteMsg).
+	if paste, ok := msg.(tea.PasteMsg); ok {
+		text := paste.String()
+		switch {
+		case m.SubOverlay.Active:
+			m.SubOverlay.Query += text
+			m.SubOverlay.Refilter(m.Subscriptions)
+			return m, nil
+		case m.ThemeOverlay.Active:
+			m.ThemeOverlay.PasteText(text, m.Schemes)
+			return m, nil
+		case m.HelpOverlay.Active:
+			m.HelpOverlay.PasteText(text)
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			switch m.focus {
+			case namespacesPane:
+				m.namespacesList, cmd = m.namespacesList.Update(msg)
+			case entitiesPane:
+				m.entitiesList, cmd = m.entitiesList.Update(msg)
+			case detailPane:
+				m.detailList, cmd = m.detailList.Update(msg)
+			}
+			return m, cmd
+		}
+	}
+
 	if cursorModel, cursorCmd := m.Cursor.Update(msg); cursorCmd != nil {
 		m.Cursor = cursorModel
 		var listCmd tea.Cmd
@@ -91,7 +119,6 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 		return m, nil
 	}
 
-	m.LastErr = ""
 	m.Subscriptions = msg.Subscriptions
 	// Keep the overlay's filtered view in sync with streaming results
 	// so new subscriptions matching the user's query appear immediately.
@@ -135,7 +162,6 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 		return m, nil
 	}
 
-	m.LastErr = ""
 	m.namespaces = msg.namespaces
 	m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(m.namespaces))
 	ui.SetItemsPreserveKey(&m.namespacesList, namespacesToItems(m.namespaces), namespaceItemKey)
@@ -161,7 +187,6 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.LastErr = ""
 	m.entities = msg.entities
 	m.rebuildEntitiesItems()
 	m.entitiesList.Title = m.entitiesPaneTitle()
@@ -196,7 +221,6 @@ func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (
 		return m, nil
 	}
 
-	m.LastErr = ""
 	m.topicSubsByTopic[msg.topicName] = msg.subs
 	m.rebuildEntitiesItems()
 
@@ -220,7 +244,6 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.LastErr = ""
 	m.peekedMessages = msg.messages
 	items := messagesToItems(msg.messages, m.currentMarks(), m.currentDuplicates())
 	if msg.repeek {
@@ -351,7 +374,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.OpenFocused.Matches(key):
 		if focusedFilterActive {
 			m.commitFocusedFilter()
-			m.Status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
+			m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
 			return m, nil
 		}
 		return m.handleEnter()
@@ -376,10 +399,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			id := item.message.MessageID
 			if _, marked := marks[id]; marked {
 				delete(marks, id)
-				m.Status = fmt.Sprintf("Unmarked %s (%d marked)", id, len(marks))
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", id, len(marks)))
 			} else {
 				marks[id] = struct{}{}
-				m.Status = fmt.Sprintf("Marked %s (%d marked)", id, len(marks))
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", id, len(marks)))
 			}
 			m.refreshItems()
 			return m, nil
@@ -418,7 +441,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			m.SetLoading(m.focus)
-			m.LastErr = ""
 			m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Requeuing %d message(s)...", len(messageIDs)))
 			return m, tea.Batch(m.Spinner.Tick, requeueMessagesCmd(m.service, m.currentNS, m.currentEntity, m.currentSubName, messageIDs))
 		}
@@ -429,7 +451,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			m.SetLoading(m.focus)
-			m.LastErr = ""
 			m.loadingSpinnerID = m.NotifySpinner("Deleting duplicate message...")
 			return m, tea.Batch(m.Spinner.Tick, deleteDuplicateCmd(m.service, m.currentNS, m.currentEntity, m.currentSubName, item.message.MessageID))
 		}
@@ -438,9 +459,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.dlqSort = !m.dlqSort
 			m.applyDLQSort()
 			if m.dlqSort {
-				m.Status = "DLQ-first sort enabled – entities with dead-letter messages on top"
+				m.Notify(appshell.LevelInfo, "DLQ-first sort enabled – entities with dead-letter messages on top")
 			} else {
-				m.Status = "DLQ-first sort disabled – entities in default order"
+				m.Notify(appshell.LevelInfo, "DLQ-first sort disabled – entities in default order")
 			}
 			return m, nil
 		}
@@ -448,7 +469,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if !focusedFilterActive {
 			m.SubOverlay.Open()
 			m.SetLoading(-1)
-			m.LastErr = ""
 			m.loadingSpinnerID = m.NotifySpinner("Refreshing subscriptions...")
 			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
@@ -546,7 +566,7 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 		return m, nil
 	case m.Keymap.MessageBack.Matches(key):
 		m.setFocus(detailPane)
-		m.Status = "Back to message list"
+		m.Notify(appshell.LevelInfo, "Back to message list")
 		return m, nil
 	}
 	var cmd tea.Cmd

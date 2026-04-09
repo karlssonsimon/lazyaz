@@ -46,6 +46,7 @@
     "download_selection": ["ctrl+d"],
     "sort_blobs": ["ctrl+o"],
     "blob_visual_move": ["up", "down", "pgup", "pgdown", "home", "end"],
+    "yank_blob_content": ["ctrl+c"],
     "preview_back": ["left", "esc"],
     "preview_next_focus": ["tab"],
     "preview_previous_focus": ["shift+tab"],

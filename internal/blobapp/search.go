@@ -66,6 +66,11 @@ func (m Model) handlePrefixSearchKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.filter.prefixQuery = m.filter.prefixQuery[:len(m.filter.prefixQuery)-1]
 		return m, nil
 
+	case key == "ctrl+v":
+		if text := ui.ReadClipboard(); text != "" {
+			m.filter.prefixQuery += text
+		}
+		return m, nil
 	default:
 		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 			m.filter.prefixQuery += key
@@ -101,7 +106,6 @@ func (m Model) handleFilterBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.LastErr = ""
 	m.filter.apiResults = msg.blobs
 	m.filter.apiCount = len(msg.blobs)
 	m.refreshItems()
