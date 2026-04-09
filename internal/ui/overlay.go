@@ -54,16 +54,15 @@ func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, s
 		maxVis = overlayMaxVisible
 	}
 
-	// Normal style uses left padding; cursor style uses a left border +
-	// padding to show a focus indicator. Both must produce the same
-	// total rendered width so columns stay aligned.
-	normalBorderH := styles.Normal.GetHorizontalBorderSize()
-	cursorBorderH := styles.Cursor.GetHorizontalBorderSize()
-	padH := styles.Normal.GetHorizontalPadding()
-	contentW := innerW - padH - normalBorderH
+	// Both Normal and Cursor styles must produce the same rendered width.
+	// Normal uses Padding(0,0,0,2) = 2 left pad; Cursor uses a 1-char
+	// left border + Padding(0,0,0,1) = 2 total. lipgloss Width includes
+	// both padding and border, so the same Width value works for both.
+	padH := styles.Normal.GetHorizontalPadding() + styles.Normal.GetHorizontalBorderSize()
+	contentW := innerW - padH
 
 	normalStyle := styles.Normal.Width(innerW)
-	cursorStyle := styles.Cursor.Width(innerW - cursorBorderH + normalBorderH)
+	cursorStyle := styles.Cursor.Width(innerW)
 
 	var rows []string
 
@@ -127,9 +126,9 @@ func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, s
 		itemRows := 0
 		for ci := start; ci < end; ci++ {
 			item := items[ci]
-			marker := "  "
+			marker := " "
 			if item.IsActive {
-				marker = "• "
+				marker = "•"
 			}
 
 			label := marker + item.Label
