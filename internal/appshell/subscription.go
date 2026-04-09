@@ -62,13 +62,13 @@ func (m *Model) TryApplyPreferredSubscription() (azure.Subscription, bool) {
 	return azure.Subscription{}, false
 }
 
-// HydrateSubscriptionsFromCache populates Subscriptions from the given loader
+// HydrateSubscriptionsFromCache populates Subscriptions from the given broker
 // without hitting Azure. Safe to call from an app constructor.
-func (m *Model) HydrateSubscriptionsFromCache(loader *cache.Loader[azure.Subscription]) {
-	if loader == nil {
+func (m *Model) HydrateSubscriptionsFromCache(broker *cache.Broker[azure.Subscription]) {
+	if broker == nil {
 		return
 	}
-	if cached, ok := loader.Get(""); ok {
+	if cached, ok := broker.Get(""); ok {
 		m.Subscriptions = cached
 	}
 }

@@ -7,6 +7,8 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
+	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -35,27 +37,102 @@ func (m *Model) refreshItems() {
 	ui.ClampListSelection(&m.blobsList)
 }
 
-// cycleBlobSort advances through sort modes:
-// None -> Name↑ -> Name↓ -> Size↑ -> Size↓ -> Date↑ -> Date↓ -> None
-func (m *Model) cycleBlobSort() {
-	if m.blobSortDesc {
-		// Move to next field (or back to none).
-		m.blobSortDesc = false
-		m.blobSortField++
-		if m.blobSortField > blobSortDate {
-			m.blobSortField = blobSortNone
-		}
-	} else if m.blobSortField == blobSortNone {
-		m.blobSortField = blobSortName
-	} else {
-		m.blobSortDesc = true
-	}
+// sortOverlayState manages the sort picker popup.
+type sortOverlayState struct {
+	active    bool
+	cursorIdx int
+	query     string
+	filtered  []int // indices into sortOptions
+}
 
-	m.refreshItems()
-	if len(m.blobsList.Items()) > 0 {
-		m.blobsList.Select(0)
+type sortOption struct {
+	label string
+	field blobSortField
+	desc  bool
+}
+
+var sortOptions = []sortOption{
+	{"1  Default", blobSortNone, false},
+	{"2  Name ascending", blobSortName, false},
+	{"3  Name descending", blobSortName, true},
+	{"4  Size ascending", blobSortSize, false},
+	{"5  Size descending", blobSortSize, true},
+	{"6  Date ascending", blobSortDate, false},
+	{"7  Date descending", blobSortDate, true},
+}
+
+func (s *sortOverlayState) open(currentField blobSortField, currentDesc bool) {
+	s.active = true
+	s.query = ""
+	s.filtered = nil
+	s.cursorIdx = 0
+	for i, opt := range sortOptions {
+		if opt.field == currentField && opt.desc == currentDesc {
+			s.cursorIdx = i
+			break
+		}
 	}
-	m.Status = "Sort: " + blobSortLabel(m.blobSortField, m.blobSortDesc)
+}
+
+func (s *sortOverlayState) refilter() {
+	if s.query == "" {
+		s.filtered = nil
+		return
+	}
+	s.filtered = fuzzy.Filter(s.query, sortOptions, func(o sortOption) string { return o.label })
+	if s.cursorIdx >= len(s.filtered) {
+		s.cursorIdx = max(0, len(s.filtered)-1)
+	}
+}
+
+func (s *sortOverlayState) selectedOption() (sortOption, bool) {
+	if s.filtered != nil {
+		if s.cursorIdx >= len(s.filtered) {
+			return sortOption{}, false
+		}
+		return sortOptions[s.filtered[s.cursorIdx]], true
+	}
+	if s.cursorIdx >= len(sortOptions) {
+		return sortOption{}, false
+	}
+	return sortOptions[s.cursorIdx], true
+}
+
+// handleKey processes a key press in the sort overlay. Returns true if
+// a sort was applied (the caller should update the sort fields).
+func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) (applied bool, field blobSortField, desc bool) {
+	switch {
+	case km.ThemeUp.Matches(key):
+		if s.cursorIdx > 0 {
+			s.cursorIdx--
+		}
+	case km.ThemeDown.Matches(key):
+		n := len(sortOptions)
+		if s.filtered != nil {
+			n = len(s.filtered)
+		}
+		if s.cursorIdx < n-1 {
+			s.cursorIdx++
+		}
+	case km.ThemeApply.Matches(key):
+		if opt, ok := s.selectedOption(); ok {
+			s.active = false
+			return true, opt.field, opt.desc
+		}
+	case km.ThemeCancel.Matches(key):
+		s.active = false
+	case km.BackspaceUp.Matches(key):
+		if len(s.query) > 0 {
+			s.query = s.query[:len(s.query)-1]
+			s.refilter()
+		}
+	default:
+		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
+			s.query += key
+			s.refilter()
+		}
+	}
+	return false, blobSortNone, false
 }
 
 func blobSortLabel(field blobSortField, desc bool) string {

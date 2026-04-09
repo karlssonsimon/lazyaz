@@ -29,6 +29,7 @@ type OverlayListConfig struct {
 	InnerWidth int    // content width; 0 = default (60)
 	MaxVisible int    // max visible items; 0 = default (20)
 	Center     bool   // center vertically instead of 1/5 from top
+	HideSearch bool   // suppress the search input row; enables j/k navigation
 }
 
 // RenderOverlayList renders a configurable overlay with a title bar, search
@@ -53,12 +54,16 @@ func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, s
 		maxVis = overlayMaxVisible
 	}
 
-	// The Normal/Cursor styles include Padding(0,1) = 2 chars horizontal.
+	// Normal style uses left padding; cursor style uses a left border +
+	// padding to show a focus indicator. Both must produce the same
+	// total rendered width so columns stay aligned.
+	normalBorderH := styles.Normal.GetHorizontalBorderSize()
+	cursorBorderH := styles.Cursor.GetHorizontalBorderSize()
 	padH := styles.Normal.GetHorizontalPadding()
-	contentW := innerW - padH
+	contentW := innerW - padH - normalBorderH
 
 	normalStyle := styles.Normal.Width(innerW)
-	cursorStyle := styles.Cursor.Width(innerW)
+	cursorStyle := styles.Cursor.Width(innerW - cursorBorderH + normalBorderH)
 
 	var rows []string
 
@@ -79,16 +84,18 @@ func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, s
 	rows = append(rows, titleText+strings.Repeat(" ", gap)+closeText)
 
 	// Search input.
-	cursorStr := cfg.CursorView
-	if cursorStr == "" {
-		cursorStr = "█"
+	if !cfg.HideSearch {
+		cursorStr := cfg.CursorView
+		if cursorStr == "" {
+			cursorStr = "█"
+		}
+		if cfg.Query == "" {
+			rows = append(rows, cursorStr)
+		} else {
+			rows = append(rows, styles.Input.Render(cfg.Query)+cursorStr)
+		}
+		rows = append(rows, "")
 	}
-	if cfg.Query == "" {
-		rows = append(rows, cursorStr)
-	} else {
-		rows = append(rows, styles.Input.Render(cfg.Query)+cursorStr)
-	}
-	rows = append(rows, "")
 
 	// Pre-render a single empty row for padding (avoids repeated lipgloss work).
 	emptyRow := normalStyle.Render("")

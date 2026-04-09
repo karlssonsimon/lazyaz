@@ -12,44 +12,40 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-func fetchSubscriptionsCmd(svc *servicebus.Service, loader *cache.Loader[azure.Subscription], seed []azure.Subscription) tea.Cmd {
-	return loader.Fetch("", seed, func(ctx context.Context, send func([]azure.Subscription)) error {
-		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
+func fetchSubscriptionsCmd(svc *servicebus.Service, broker *cache.Broker[azure.Subscription], seed []azure.Subscription) tea.Cmd {
+	cmd, _ := broker.Subscribe("", seed, func(ctx context.Context, send func([]azure.Subscription)) error {
 		return svc.ListSubscriptions(ctx, send)
 	}, func(p cache.Page[azure.Subscription]) tea.Msg {
 		return appshell.SubscriptionsLoadedMsg{Subscriptions: p.Items, Done: p.Done, Err: p.Err, Next: p.Next}
 	})
+	return cmd
 }
 
-func fetchNamespacesCmd(svc *servicebus.Service, loader *cache.Loader[servicebus.Namespace], subscriptionID string, seed []servicebus.Namespace) tea.Cmd {
-	return loader.Fetch(subscriptionID, seed, func(ctx context.Context, send func([]servicebus.Namespace)) error {
-		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
+func fetchNamespacesCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.Namespace], subscriptionID string, seed []servicebus.Namespace) tea.Cmd {
+	cmd, _ := broker.Subscribe(subscriptionID, seed, func(ctx context.Context, send func([]servicebus.Namespace)) error {
 		return svc.ListNamespaces(ctx, subscriptionID, send)
 	}, func(p cache.Page[servicebus.Namespace]) tea.Msg {
 		return namespacesLoadedMsg{subscriptionID: subscriptionID, namespaces: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
+	return cmd
 }
 
-func fetchEntitiesCmd(svc *servicebus.Service, loader *cache.Loader[servicebus.Entity], ns servicebus.Namespace, cacheKey string, seed []servicebus.Entity) tea.Cmd {
-	return loader.Fetch(cacheKey, seed, func(ctx context.Context, send func([]servicebus.Entity)) error {
-		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
+func fetchEntitiesCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.Entity], ns servicebus.Namespace, cacheKey string, seed []servicebus.Entity) tea.Cmd {
+	cmd, _ := broker.Subscribe(cacheKey, seed, func(ctx context.Context, send func([]servicebus.Entity)) error {
 		return svc.ListEntities(ctx, ns, send)
 	}, func(p cache.Page[servicebus.Entity]) tea.Msg {
 		return entitiesLoadedMsg{namespace: ns, entities: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
+	return cmd
 }
 
-func fetchTopicSubscriptionsCmd(svc *servicebus.Service, loader *cache.Loader[servicebus.TopicSubscription], ns servicebus.Namespace, topicName string, cacheKey string, seed []servicebus.TopicSubscription) tea.Cmd {
-	return loader.Fetch(cacheKey, seed, func(ctx context.Context, send func([]servicebus.TopicSubscription)) error {
-		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
+func fetchTopicSubscriptionsCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.TopicSubscription], ns servicebus.Namespace, topicName string, cacheKey string, seed []servicebus.TopicSubscription) tea.Cmd {
+	cmd, _ := broker.Subscribe(cacheKey, seed, func(ctx context.Context, send func([]servicebus.TopicSubscription)) error {
 		return svc.ListTopicSubscriptions(ctx, ns, topicName, send)
 	}, func(p cache.Page[servicebus.TopicSubscription]) tea.Msg {
 		return topicSubscriptionsLoadedMsg{namespace: ns, topicName: topicName, subs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
+	return cmd
 }
 
 func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queueName string, deadLetter, repeek bool) tea.Cmd {

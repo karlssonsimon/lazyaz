@@ -86,7 +86,8 @@ type Model struct {
 	blobLoadAll     bool
 	blobSortField  blobSortField
 	blobSortDesc   bool
-	filter blobFilter
+	filter      blobFilter
+	sortOverlay sortOverlayState
 	preview         previewState
 	pendingPreviewG bool
 
@@ -191,7 +192,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	blobs.SetShowPagination(false)
 	blobs.SetShowStatusBar(true)
 	blobs.SetStatusBarItemName("entry", "entries")
-	blobs.SetFilteringEnabled(true)
+	blobs.SetFilteringEnabled(false)
 	blobs.DisableQuitKeybindings()
 
 	m := Model{

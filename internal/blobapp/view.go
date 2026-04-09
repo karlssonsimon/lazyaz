@@ -151,6 +151,9 @@ func (m Model) View() tea.View {
 	statusBar := ui.RenderStatusBar(m.Styles, sbItems, sbStatus, sbErr, m.Width)
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)
+	if m.sortOverlay.active {
+		view = m.renderSortOverlay(view)
+	}
 	out := tea.NewView(m.RenderOverlays(view))
 	out.AltScreen = true
 	out.MouseMode = tea.MouseModeCellMotion
@@ -206,6 +209,33 @@ func (m Model) blobsPaneTitle() string {
 		title = fmt.Sprintf("%s | VISUAL:%d", title, len(m.visualSelectionBlobNames()))
 	}
 	return title
+}
+
+func (m Model) renderSortOverlay(base string) string {
+	indices := m.sortOverlay.filtered
+	if indices == nil {
+		indices = make([]int, len(sortOptions))
+		for i := range sortOptions {
+			indices[i] = i
+		}
+	}
+	items := make([]ui.OverlayItem, len(indices))
+	for ci, si := range indices {
+		opt := sortOptions[si]
+		items[ci] = ui.OverlayItem{
+			Label:    opt.label,
+			IsActive: opt.field == m.blobSortField && opt.desc == m.blobSortDesc,
+		}
+	}
+	cfg := ui.OverlayListConfig{
+		Title:      "Sort Blobs",
+		Query:      m.sortOverlay.query,
+		CursorView: m.Cursor.View(),
+		CloseHint:  m.Keymap.Cancel.Short(),
+		MaxVisible: len(sortOptions),
+		Center:     true,
+	}
+	return ui.RenderOverlayList(cfg, items, m.sortOverlay.cursorIdx, m.Styles.Overlay, m.Width, m.Height, base)
 }
 
 func humanSize(bytes int64) string {

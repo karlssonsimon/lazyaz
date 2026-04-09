@@ -14,56 +14,51 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-func fetchSubscriptionsCmd(svc *blob.Service, loader *cache.Loader[azure.Subscription], seed []azure.Subscription) tea.Cmd {
-	return loader.Fetch("", seed, func(ctx context.Context, send func([]azure.Subscription)) error {
-		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
+func fetchSubscriptionsCmd(svc *blob.Service, broker *cache.Broker[azure.Subscription], seed []azure.Subscription) tea.Cmd {
+	cmd, _ := broker.Subscribe("", seed, func(ctx context.Context, send func([]azure.Subscription)) error {
 		return svc.ListSubscriptions(ctx, send)
 	}, func(p cache.Page[azure.Subscription]) tea.Msg {
 		return appshell.SubscriptionsLoadedMsg{Subscriptions: p.Items, Done: p.Done, Err: p.Err, Next: p.Next}
 	})
+	return cmd
 }
 
-func fetchAccountsCmd(svc *blob.Service, loader *cache.Loader[blob.Account], subscriptionID string, seed []blob.Account) tea.Cmd {
-	return loader.Fetch(subscriptionID, seed, func(ctx context.Context, send func([]blob.Account)) error {
-		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
+func fetchAccountsCmd(svc *blob.Service, broker *cache.Broker[blob.Account], subscriptionID string, seed []blob.Account) tea.Cmd {
+	cmd, _ := broker.Subscribe(subscriptionID, seed, func(ctx context.Context, send func([]blob.Account)) error {
 		return svc.DiscoverAccountsForSubscription(ctx, subscriptionID, send)
 	}, func(p cache.Page[blob.Account]) tea.Msg {
 		return accountsLoadedMsg{subscriptionID: subscriptionID, accounts: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
+	return cmd
 }
 
-func fetchContainersCmd(svc *blob.Service, loader *cache.Loader[blob.ContainerInfo], account blob.Account, seed []blob.ContainerInfo) tea.Cmd {
-	return loader.Fetch(cache.Key(account.SubscriptionID, account.Name), seed, func(ctx context.Context, send func([]blob.ContainerInfo)) error {
-		ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
-		defer cancel()
+func fetchContainersCmd(svc *blob.Service, broker *cache.Broker[blob.ContainerInfo], account blob.Account, seed []blob.ContainerInfo) tea.Cmd {
+	cmd, _ := broker.Subscribe(cache.Key(account.SubscriptionID, account.Name), seed, func(ctx context.Context, send func([]blob.ContainerInfo)) error {
 		return svc.ListContainers(ctx, account, send)
 	}, func(p cache.Page[blob.ContainerInfo]) tea.Msg {
 		return containersLoadedMsg{account: account, containers: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
+	return cmd
 }
 
-func fetchHierarchyBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEntry], account blob.Account, containerName, prefix string, limit int, seed []blob.BlobEntry) tea.Cmd {
+func fetchHierarchyBlobsCmd(svc *blob.Service, broker *cache.Broker[blob.BlobEntry], account blob.Account, containerName, prefix string, limit int, seed []blob.BlobEntry) tea.Cmd {
 	key := blobsCacheKey(account.SubscriptionID, account.Name, containerName, prefix, false)
-	return loader.Fetch(key, seed, func(ctx context.Context, send func([]blob.BlobEntry)) error {
-		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-		defer cancel()
+	cmd, _ := broker.Subscribe(key, seed, func(ctx context.Context, send func([]blob.BlobEntry)) error {
 		return svc.ListBlobsLimited(ctx, account, containerName, prefix, limit, send)
 	}, func(p cache.Page[blob.BlobEntry]) tea.Msg {
 		return blobsLoadedMsg{account: account, container: containerName, prefix: prefix, loadAll: false, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
+	return cmd
 }
 
-func fetchAllBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEntry], account blob.Account, containerName, prefix string, seed []blob.BlobEntry) tea.Cmd {
+func fetchAllBlobsCmd(svc *blob.Service, broker *cache.Broker[blob.BlobEntry], account blob.Account, containerName, prefix string, seed []blob.BlobEntry) tea.Cmd {
 	key := blobsCacheKey(account.SubscriptionID, account.Name, containerName, prefix, true)
-	return loader.Fetch(key, seed, func(ctx context.Context, send func([]blob.BlobEntry)) error {
-		ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
-		defer cancel()
+	cmd, _ := broker.Subscribe(key, seed, func(ctx context.Context, send func([]blob.BlobEntry)) error {
 		return svc.ListAllBlobs(ctx, account, containerName, send)
 	}, func(p cache.Page[blob.BlobEntry]) tea.Msg {
 		return blobsLoadedMsg{account: account, container: containerName, prefix: prefix, loadAll: true, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
+	return cmd
 }
 
 func fetchAllBlobsWithPrefixCmd(svc *blob.Service, account blob.Account, containerName, currentPrefix, query string) tea.Cmd {
