@@ -104,3 +104,10 @@ func (m Model) focusedListSettingFilter() bool {
 		return false
 	}
 }
+
+// IsTextInputActive reports whether the model is currently accepting
+// free-form text input (list filter, search bar, overlay search, etc.).
+// The parent tabapp uses this to suppress single-key shortcuts like quit.
+func (m Model) IsTextInputActive() bool {
+	return m.focusedListSettingFilter() || (m.focus == blobsPane && m.filter.inputOpen) || m.SubOverlay.Active || m.sortOverlay.active
+}

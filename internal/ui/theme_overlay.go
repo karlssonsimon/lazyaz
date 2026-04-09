@@ -67,7 +67,12 @@ func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, sch
 			return true
 		}
 	case bindings.Cancel.Matches(key):
-		s.Active = false
+		if s.Query != "" {
+			s.Query = ""
+			s.refilter(schemes)
+		} else {
+			s.Active = false
+		}
 	case bindings.Erase != nil && bindings.Erase.Matches(key):
 		if len(s.Query) > 0 {
 			s.Query = s.Query[:len(s.Query)-1]

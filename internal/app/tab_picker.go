@@ -59,7 +59,12 @@ func (s *tabPickerState) handleKey(key string, bindings ui.ThemeKeyBindings) (Ta
 			return kind, true
 		}
 	case bindings.Cancel.Matches(key):
-		s.active = false
+		if s.query != "" {
+			s.query = ""
+			s.refilter()
+		} else {
+			s.active = false
+		}
 	case bindings.Erase != nil && bindings.Erase.Matches(key):
 		if len(s.query) > 0 {
 			s.query = s.query[:len(s.query)-1]

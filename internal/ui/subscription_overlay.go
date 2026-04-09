@@ -79,7 +79,12 @@ func (s *SubscriptionOverlayState) HandleKey(key string, bindings ThemeKeyBindin
 			return sub, true
 		}
 	case bindings.Cancel.Matches(key):
-		s.Active = false
+		if s.Query != "" {
+			s.Query = ""
+			s.Refilter(subs)
+		} else {
+			s.Active = false
+		}
 	case bindings.Erase != nil && bindings.Erase.Matches(key):
 		if len(s.Query) > 0 {
 			s.Query = s.Query[:len(s.Query)-1]

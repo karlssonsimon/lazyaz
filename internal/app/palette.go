@@ -63,6 +63,11 @@ func (p *commandPalette) selectedCommand() (command, bool) {
 func (p *commandPalette) handleKey(key string, km keymap.Keymap) (cmd command, executed bool, closed bool) {
 	switch {
 	case km.Cancel.Matches(key), km.CommandPalette.Matches(key):
+		if p.query != "" && !km.CommandPalette.Matches(key) {
+			p.query = ""
+			p.refilter()
+			return command{}, false, false
+		}
 		p.close()
 		return command{}, false, true
 	case km.ThemeUp.Matches(key):

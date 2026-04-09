@@ -229,6 +229,25 @@ func (m *Model) activeSubscription() (azure.Subscription, bool) {
 	return azure.Subscription{}, false
 }
 
+// activeChildTextInput returns true when the active tab's child model
+// is accepting free-form text input (e.g. list filter). The parent
+// uses this to suppress single-key shortcuts so they don't fire while
+// the user is typing.
+func (m *Model) activeChildTextInput() bool {
+	if len(m.tabs) == 0 {
+		return false
+	}
+	switch child := m.tabs[m.activeIdx].Model.(type) {
+	case blobapp.Model:
+		return child.IsTextInputActive()
+	case sbapp.Model:
+		return child.IsTextInputActive()
+	case kvapp.Model:
+		return child.IsTextInputActive()
+	}
+	return false
+}
+
 func (m *Model) closeTab(idx int) {
 	if idx < 0 || idx >= len(m.tabs) {
 		return
@@ -498,6 +517,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				ui.SaveThemeName(m.schemes[m.themeOverlay.ActiveThemeIdx].Name)
 			}
 			return m, nil
+		}
+
+		// If the active child is accepting text input (list filter,
+		// search bar, etc.), skip all single-key shortcuts and forward
+		// the key directly so the user can type freely. Only ctrl+c
+		// is still allowed to quit.
+		if m.activeChildTextInput() {
+			if key == "ctrl+c" {
+				return m, tea.Quit
+			}
+			return m, m.forwardToActive(msg)
 		}
 
 		// Global tab keys.
