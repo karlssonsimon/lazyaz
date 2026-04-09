@@ -90,6 +90,11 @@ func (s *SubscriptionOverlayState) HandleKey(key string, bindings ThemeKeyBindin
 			s.Query = s.Query[:len(s.Query)-1]
 			s.Refilter(subs)
 		}
+	case key == "ctrl+v":
+		if text := ReadClipboard(); text != "" {
+			s.Query += text
+			s.Refilter(subs)
+		}
 	default:
 		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 			s.Query += key

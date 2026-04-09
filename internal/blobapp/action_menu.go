@@ -24,7 +24,8 @@ const (
 	actionDownloadMarked
 	actionClearMarks
 	actionDownloadCurrent
-	actionCopyBlobName
+	actionYankBlobName
+	actionYankBlobContent
 )
 
 // action describes one entry in the action menu.
@@ -118,6 +119,11 @@ func (s *actionMenuState) handleKey(key string, km keymap.Keymap) (selected bool
 			s.query = s.query[:len(s.query)-1]
 			s.refilter()
 		}
+	case key == "ctrl+v":
+		if text := ui.ReadClipboard(); text != "" {
+			s.query += text
+			s.refilter()
+		}
 	default:
 		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 			s.query += key
@@ -160,7 +166,10 @@ func (m Model) buildActions() []action {
 		// Current-blob actions.
 		if item, ok := m.blobsList.SelectedItem().(blobItem); ok && !item.blob.IsPrefix {
 			actions = append(actions, action{id: actionDownloadCurrent, label: "Download current blob"})
-			actions = append(actions, action{id: actionCopyBlobName, label: "Copy blob name to clipboard"})
+			actions = append(actions, action{id: actionYankBlobName, label: "Yank blob name to clipboard"})
+			if item.blob.Size > 0 && item.blob.Size < 5*1024*1024 {
+				actions = append(actions, action{id: actionYankBlobContent, label: "Yank blob content to clipboard"})
+			}
 		}
 	}
 
@@ -203,12 +212,20 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		m.refreshItems()
 		return m.startMarkedAction("download")
 
-	case actionCopyBlobName:
+	case actionYankBlobName:
 		item, ok := m.blobsList.SelectedItem().(blobItem)
 		if !ok {
 			return m, nil
 		}
 		return m.copyToClipboard(item.blob.Name)
+
+	case actionYankBlobContent:
+		item, ok := m.blobsList.SelectedItem().(blobItem)
+		if !ok || item.blob.IsPrefix || item.blob.Size == 0 || item.blob.Size >= 5*1024*1024 {
+			return m, nil
+		}
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Downloading %s...", item.blob.Name))
+		return m, downloadBlobToClipboardCmd(m.service, m.currentAccount, m.containerName, item.blob.Name, item.blob.Size)
 	}
 
 	return m, nil

@@ -69,12 +69,23 @@ func (s *HelpOverlayState) HandleKey(key string, bindings HelpKeyBindings) {
 			s.Query = s.Query[:len(s.Query)-1]
 			s.refilter()
 		}
+	case key == "ctrl+v":
+		if text := ReadClipboard(); text != "" {
+			s.Query += text
+			s.refilter()
+		}
 	default:
 		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 			s.Query += key
 			s.refilter()
 		}
 	}
+}
+
+// PasteText appends pasted text to the query and refilters.
+func (s *HelpOverlayState) PasteText(text string) {
+	s.Query += text
+	s.refilter()
 }
 
 func (s *HelpOverlayState) refilter() {

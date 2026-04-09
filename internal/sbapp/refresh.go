@@ -14,21 +14,18 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		// Can't refresh anything without a subscription; open the picker instead.
 		m.SubOverlay.Open()
 		m.SetLoading(-1)
-		m.LastErr = ""
 		m.loadingSpinnerID = m.NotifySpinner("Refreshing subscriptions...")
 		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 	}
 
 	if !m.hasNamespace || m.focus == namespacesPane {
 		m.SetLoading(m.focus)
-		m.LastErr = ""
 		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(m.CurrentSub)))
 		return m, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID, m.namespaces))
 	}
 
 	if m.focus == entitiesPane || !m.hasPeekTarget {
 		m.SetLoading(m.focus)
-		m.LastErr = ""
 		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading entities in %s", m.currentNS.Name))
 		entityCacheKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name)
 		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, m.currentNS, entityCacheKey, m.entities))
@@ -47,7 +44,6 @@ func (m Model) rePeekMessages(preserveCursor bool) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.SetLoading(m.focus)
-	m.LastErr = ""
 	dlqLabel := "active"
 	if m.deadLetter {
 		dlqLabel = "DLQ"

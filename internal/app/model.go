@@ -124,13 +124,13 @@ func (m *Model) setTabStatus(idx int, status string) {
 	}
 	switch child := m.tabs[idx].Model.(type) {
 	case blobapp.Model:
-		child.Status = status
+		child.Notify(appshell.LevelWarn, status)
 		m.tabs[idx].Model = child
 	case sbapp.Model:
-		child.Status = status
+		child.Notify(appshell.LevelWarn, status)
 		m.tabs[idx].Model = child
 	case kvapp.Model:
-		child.Status = status
+		child.Notify(appshell.LevelWarn, status)
 		m.tabs[idx].Model = child
 	}
 }
@@ -317,6 +317,33 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle paste before cursor update (which can swallow PasteMsg).
+	// Route to whichever overlay or child is active.
+	if paste, ok := msg.(tea.PasteMsg); ok {
+		text := paste.String()
+		switch {
+		case m.cmdPalette.active:
+			m.cmdPalette.query += text
+			m.cmdPalette.refilter()
+			return m, nil
+		case m.tabPicker.active:
+			m.tabPicker.query += text
+			m.tabPicker.refilter()
+			return m, nil
+		case m.themeOverlay.Active:
+			m.themeOverlay.PasteText(text, m.schemes)
+			return m, nil
+		case m.helpOverlay.Active:
+			m.helpOverlay.PasteText(text)
+			return m, nil
+		default:
+			if len(m.tabs) > 0 {
+				return m, m.forwardToActive(msg)
+			}
+			return m, nil
+		}
+	}
+
 	// Route all messages to the cursor so both initialBlinkMsg and BlinkMsg work.
 	if cursorModel, cursorCmd := m.cursor.Update(msg); cursorCmd != nil {
 		m.cursor = cursorModel

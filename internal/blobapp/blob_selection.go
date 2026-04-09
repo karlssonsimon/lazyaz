@@ -132,6 +132,11 @@ func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) (applied bool
 			s.query = s.query[:len(s.query)-1]
 			s.refilter()
 		}
+	case key == "ctrl+v":
+		if text := ui.ReadClipboard(); text != "" {
+			s.query += text
+			s.refilter()
+		}
 	default:
 		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 			s.query += key

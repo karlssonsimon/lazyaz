@@ -14,6 +14,48 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle paste before anything else so it reaches the right input.
+	// The cursor update below can swallow PasteMsg before the main
+	// switch sees it, which is why ctrl+v works in the bubbles list
+	// filter (textinput handles it) but not in our custom overlays.
+	if paste, ok := msg.(tea.PasteMsg); ok {
+		text := paste.String()
+		switch {
+		case m.SubOverlay.Active:
+			m.SubOverlay.Query += text
+			m.SubOverlay.Refilter(m.Subscriptions)
+			return m, nil
+		case m.ThemeOverlay.Active:
+			m.ThemeOverlay.PasteText(text, m.Schemes)
+			return m, nil
+		case m.HelpOverlay.Active:
+			m.HelpOverlay.PasteText(text)
+			return m, nil
+		case m.filter.inputOpen && m.focus == blobsPane:
+			m.filter.prefixQuery += text
+			return m, nil
+		case m.actionMenu.active:
+			m.actionMenu.query += text
+			m.actionMenu.refilter()
+			return m, nil
+		case m.sortOverlay.active:
+			m.sortOverlay.query += text
+			m.sortOverlay.refilter()
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			switch m.focus {
+			case accountsPane:
+				m.accountsList, cmd = m.accountsList.Update(msg)
+			case containersPane:
+				m.containersList, cmd = m.containersList.Update(msg)
+			case blobsPane:
+				m.blobsList, cmd = m.blobsList.Update(msg)
+			}
+			return m, cmd
+		}
+	}
+
 	// Route all messages to the cursor so both initialBlinkMsg and
 	// BlinkMsg are handled. For non-cursor messages this is a no-op.
 	if cursorModel, cursorCmd := m.Cursor.Update(msg); cursorCmd != nil {
@@ -64,6 +106,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case previewWindowLoadedMsg:
 		return m.handlePreviewWindowLoaded(msg)
 
+	case blobContentClipboardMsg:
+		if msg.err != nil {
+			m.Notify(appshell.LevelError, fmt.Sprintf("Failed to download %s: %s", msg.blobName, msg.err.Error()))
+			return m, nil
+		}
+		return m.copyToClipboard(msg.content)
+
 	case clipboardMsg:
 		if msg.err != nil {
 			m.Notify(appshell.LevelError, fmt.Sprintf("Clipboard: %s", msg.err.Error()))
@@ -71,24 +120,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Notify(appshell.LevelSuccess, fmt.Sprintf("Copied to clipboard: %s", msg.text))
 		}
 		return m, nil
-
-	case tea.PasteMsg:
-		// Route paste to the prefix search overlay if open, otherwise
-		// let it fall through to the focused list (for the built-in filter).
-		if m.filter.inputOpen && m.focus == blobsPane {
-			m.filter.prefixQuery += msg.String()
-			return m, nil
-		}
-		var cmd tea.Cmd
-		switch m.focus {
-		case accountsPane:
-			m.accountsList, cmd = m.accountsList.Update(msg)
-		case containersPane:
-			m.containersList, cmd = m.containersList.Update(msg)
-		case blobsPane:
-			m.blobsList, cmd = m.blobsList.Update(msg)
-		}
-		return m, cmd
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -352,6 +383,17 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.DownloadSelection.Matches(key):
 		if m.focus == blobsPane && !focusedFilterActive {
 			return m.startMarkedAction("download")
+		}
+	case m.Keymap.YankBlobContent.Matches(key):
+		if m.focus == blobsPane && !focusedFilterActive {
+			if item, ok := m.blobsList.SelectedItem().(blobItem); ok && !item.blob.IsPrefix {
+				if item.blob.Size == 0 || item.blob.Size >= 5*1024*1024 {
+					m.Notify(appshell.LevelError, "Blob too large to yank (must be < 5 MB)")
+					return m, nil
+				}
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Downloading %s...", item.blob.Name))
+				return m, downloadBlobToClipboardCmd(m.service, m.currentAccount, m.containerName, item.blob.Name, item.blob.Size)
+			}
 		}
 	case m.Keymap.ActionMenu.Matches(key):
 		if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {

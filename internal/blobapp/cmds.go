@@ -108,6 +108,19 @@ func fetchSearchBlobsCmd(svc *blob.Service, account blob.Account, containerName,
 	}
 }
 
+func downloadBlobToClipboardCmd(svc *blob.Service, account blob.Account, containerName, blobName string, size int64) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		data, err := svc.ReadBlobRange(ctx, account, containerName, blobName, 0, size)
+		if err != nil {
+			return blobContentClipboardMsg{blobName: blobName, err: err}
+		}
+		return blobContentClipboardMsg{blobName: blobName, content: string(data)}
+	}
+}
+
 func downloadBlobsCmd(svc *blob.Service, account blob.Account, containerName string, blobNames []string, destinationRoot string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)

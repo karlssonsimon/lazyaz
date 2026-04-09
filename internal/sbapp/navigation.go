@@ -3,6 +3,7 @@ package sbapp
 import (
 	"fmt"
 
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
@@ -214,7 +215,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.setFocus(messagePreviewPane)
 		m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))
 		m.messageViewport.GotoTop()
-		m.Status = fmt.Sprintf("Viewing message %s (%s to back to list)", ui.EmptyToDash(item.message.MessageID), m.Keymap.PreviousFocus.Short())
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Viewing message %s (%s to back to list)", ui.EmptyToDash(item.message.MessageID), m.Keymap.PreviousFocus.Short()))
 		return m, nil
 	}
 

@@ -12,6 +12,34 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle paste before cursor update (which can swallow PasteMsg).
+	if paste, ok := msg.(tea.PasteMsg); ok {
+		text := paste.String()
+		switch {
+		case m.SubOverlay.Active:
+			m.SubOverlay.Query += text
+			m.SubOverlay.Refilter(m.Subscriptions)
+			return m, nil
+		case m.ThemeOverlay.Active:
+			m.ThemeOverlay.PasteText(text, m.Schemes)
+			return m, nil
+		case m.HelpOverlay.Active:
+			m.HelpOverlay.PasteText(text)
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			switch m.focus {
+			case vaultsPane:
+				m.vaultsList, cmd = m.vaultsList.Update(msg)
+			case secretsPane:
+				m.secretsList, cmd = m.secretsList.Update(msg)
+			case versionsPane:
+				m.versionsList, cmd = m.versionsList.Update(msg)
+			}
+			return m, cmd
+		}
+	}
+
 	if cursorModel, cursorCmd := m.Cursor.Update(msg); cursorCmd != nil {
 		m.Cursor = cursorModel
 		var listCmd tea.Cmd
@@ -81,7 +109,6 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 		return m, nil
 	}
 
-	m.LastErr = ""
 	m.Subscriptions = msg.Subscriptions
 	// Keep the overlay's filtered view in sync with the streaming results
 	// so new subscriptions matching the user's query appear immediately.
@@ -125,7 +152,6 @@ func (m Model) handleVaultsLoaded(msg vaultsLoadedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.LastErr = ""
 	m.vaults = msg.vaults
 	m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(m.vaults))
 	ui.SetItemsPreserveKey(&m.vaultsList, vaultsToItems(m.vaults), vaultItemKey)
@@ -151,7 +177,6 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.LastErr = ""
 	m.secrets = msg.secrets
 	m.secretsList.Title = fmt.Sprintf("Secrets (%d)", len(m.secrets))
 	ui.SetItemsPreserveKey(&m.secretsList, secretsToItems(m.secrets), secretItemKey)
@@ -180,7 +205,6 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.LastErr = ""
 	m.versions = msg.versions
 	m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(m.versions))
 	ui.SetItemsPreserveKey(&m.versionsList, versionsToItems(m.versions), versionItemKey)
@@ -256,7 +280,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.OpenFocused.Matches(key):
 		if focusedFilterActive {
 			m.commitFocusedFilter()
-			m.Status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
+			m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
 			return m, nil
 		}
 		return m.handleEnter()
@@ -290,7 +314,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if !focusedFilterActive {
 			m.SubOverlay.Open()
 			m.SetLoading(-1)
-			m.LastErr = ""
 			m.loadingSpinnerID = m.NotifySpinner("Refreshing subscriptions...")
 			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
@@ -326,7 +349,6 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.SetLoading(m.focus)
-		m.LastErr = ""
 		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Fetching secret value for %s...", item.secret.Name))
 		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, item.secret.Name, ""))
 	}
@@ -337,7 +359,6 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.SetLoading(m.focus)
-		m.LastErr = ""
 		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Fetching secret value for %s@%s...", m.currentSecret.Name, item.version.Version))
 		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))
 	}

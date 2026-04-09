@@ -27,6 +27,12 @@ func (s *ThemeOverlayState) Open() {
 	s.CursorIdx = s.ActiveThemeIdx
 }
 
+// PasteText appends pasted text to the query and refilters.
+func (s *ThemeOverlayState) PasteText(text string, schemes []Scheme) {
+	s.Query += text
+	s.refilter(schemes)
+}
+
 func (s *ThemeOverlayState) refilter(schemes []Scheme) {
 	s.filtered = fuzzy.Filter(s.Query, schemes, func(sc Scheme) string { return sc.Name })
 	if s.CursorIdx >= len(s.filtered) {
@@ -76,6 +82,11 @@ func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, sch
 	case bindings.Erase != nil && bindings.Erase.Matches(key):
 		if len(s.Query) > 0 {
 			s.Query = s.Query[:len(s.Query)-1]
+			s.refilter(schemes)
+		}
+	case key == "ctrl+v":
+		if text := ReadClipboard(); text != "" {
+			s.Query += text
 			s.refilter(schemes)
 		}
 	default:

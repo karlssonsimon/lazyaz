@@ -57,6 +57,8 @@ type Keymap struct {
 	SortBlobs         Binding `json:"sort_blobs"`
 	BlobVisualMove    Binding `json:"blob_visual_move"`
 
+	YankBlobContent Binding `json:"yank_blob_content"`
+
 	// Blob preview.
 	PreviewBack          Binding `json:"preview_back"`
 	PreviewNextFocus     Binding `json:"preview_next_focus"`
