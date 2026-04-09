@@ -25,31 +25,29 @@ const (
 )
 
 const (
-	searchStagePrefix = 0
-	searchStageFuzzy  = 1
+	searchInputPrefix = 0
+	searchInputFuzzy  = 1
 )
 
-// committedFilter records a search whose input box has been dismissed
-// (via Enter in fuzzy stage). The filtered subset replaces m.blobs while
-// the filter is active; savedBlobs holds the unfiltered listing so esc
-// can restore it. Active reports whether a filter is currently committed.
-type committedFilter struct {
-	active      bool
-	prefixQuery string
-	fuzzyQuery  string
-	savedBlobs  []blob.BlobEntry
-}
+type blobSortField int
 
-type blobSearch struct {
-	active       bool
-	stage        int              // searchStagePrefix or searchStageFuzzy
-	prefixQuery  string           // user-typed prefix for API search
-	prefixLocked bool             // prefix submitted via Enter
-	fuzzyQuery   string           // user-typed fuzzy filter text
-	fetching     bool             // API fetch in progress
-	results      []blob.BlobEntry // API results (separate from m.blobs)
-	filtered     []int            // fuzzy.Filter indices into results
-	totalResults int              // count before fzf filtering
+const (
+	blobSortNone blobSortField = iota // Azure default order
+	blobSortName
+	blobSortSize
+	blobSortDate
+)
+
+type blobFilter struct {
+	inputOpen     bool             // filter input UI is showing
+	focusedInput  int              // searchInputPrefix or searchInputFuzzy
+	prefixQuery   string           // API prefix query
+	fuzzyQuery    string           // local fuzzy query
+	fetching      bool             // API fetch in progress
+	prefixFetched bool             // API fetch completed for current prefix
+	apiResults    []blob.BlobEntry // results from API prefix search
+	apiCount      int              // total API result count
+	filtered      []int            // fuzzy indices into the effective source
 }
 
 type Model struct {
@@ -85,8 +83,9 @@ type Model struct {
 	containerName  string
 	prefix         string
 	blobLoadAll     bool
-	search          blobSearch
-	committedFilter committedFilter
+	blobSortField  blobSortField
+	blobSortDesc   bool
+	filter blobFilter
 	preview         previewState
 	pendingPreviewG bool
 
@@ -191,7 +190,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	blobs.SetShowPagination(false)
 	blobs.SetShowStatusBar(true)
 	blobs.SetStatusBarItemName("entry", "entries")
-	blobs.SetFilteringEnabled(false)
+	blobs.SetFilteringEnabled(true)
 	blobs.DisableQuitKeybindings()
 
 	m := Model{
@@ -268,6 +267,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 		{
 			Title: "Blob Actions",
 			Items: []string{
+				keymap.HelpEntry(km.SortBlobs, "cycle sort mode"),
 				keymap.HelpEntry(km.ToggleLoadAll, "toggle load-all blobs"),
 				keymap.HelpEntry(km.ToggleMark, "toggle mark on current blob"),
 				keymap.HelpEntry(km.ToggleVisualLine, "start/end visual-line selection"),

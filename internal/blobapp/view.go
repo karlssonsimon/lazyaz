@@ -75,15 +75,16 @@ func (m Model) View() tea.View {
 	}, m.Styles)
 
 	var blobsHintSet []ui.PaneHint
-	if m.search.active {
+	if m.filter.inputOpen {
 		blobsHintSet = []ui.PaneHint{
+			{Key: km.NextFocus.Short(), Desc: "switch input"},
 			{Key: km.OpenFocused.Short(), Desc: "submit"},
-			{Key: km.Cancel.Short(), Desc: "cancel"},
-			{Key: km.BackspaceUp.Short(), Desc: "back"},
+			{Key: km.Cancel.Short(), Desc: "close"},
 		}
 	} else {
 		blobsHintSet = []ui.PaneHint{
 			{Key: km.FilterInput.Short(), Desc: "search"},
+			{Key: km.SortBlobs.Short(), Desc: "sort"},
 			{Key: km.ToggleMark.Short(), Desc: "mark"},
 			{Key: km.DownloadSelection.Short(), Desc: "download"},
 			{Key: km.OpenFocusedAlt.Short(), Desc: "preview"},
@@ -99,10 +100,21 @@ func (m Model) View() tea.View {
 		Footer:   m.inspectFooter(blobsPane, ui.PaneContentWidth(paneStyle, pw[2])),
 		Frame:    ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == blobsPane},
 	}
-	if m.search.active {
-		blobsPaneParams.Prefix = m.renderSearchInput(ui.PaneContentWidth(m.Styles.Chrome.Pane, pw[2]))
-	} else if m.committedFilter.active {
-		blobsPaneParams.Prefix = m.renderCommittedFilterBanner()
+	if m.filter.inputOpen || m.hasActiveFilter() {
+		contentWidth := ui.PaneContentWidth(m.Styles.Chrome.Pane, pw[2])
+		var filterPrefix string
+		if m.filter.inputOpen {
+			filterPrefix = m.renderFilterInput(contentWidth)
+		} else {
+			filterPrefix = m.renderFilterBanner()
+		}
+		// Append the entry count so hiding the status bar loses no info.
+		n := len(m.blobsList.Items())
+		countText := m.Styles.List.StatusBar.Padding(0, 0, 0, 2).Render(fmt.Sprintf("%d entries", n))
+		blobsPaneParams.Prefix = filterPrefix + "\n" + countText
+		m.blobsList.SetShowStatusBar(false)
+	} else {
+		m.blobsList.SetShowStatusBar(true)
 	}
 	blobsPane := ui.RenderListPane(blobsPaneParams, m.Styles)
 
@@ -181,14 +193,11 @@ func (m Model) blobsPaneTitle() string {
 	if m.hasContainer && m.blobs != nil {
 		title = fmt.Sprintf("%s (%d)", title, len(m.blobs))
 	}
-	if m.hasContainer {
-		if m.blobLoadAll {
-			title = fmt.Sprintf("%s | ALL", title)
-		} else if m.search.active {
-			title = fmt.Sprintf("%s | SEARCH", title)
-		} else if m.committedFilter.active {
-			title = fmt.Sprintf("%s | FILTER", title)
-		}
+	if m.hasContainer && m.blobLoadAll {
+		title = fmt.Sprintf("%s | ALL", title)
+	}
+	if ind := blobSortIndicator(m.blobSortField, m.blobSortDesc); ind != "" {
+		title = fmt.Sprintf("%s | %s", title, ind)
 	}
 	if len(m.markedBlobs) > 0 {
 		title = fmt.Sprintf("%s | marked:%d", title, len(m.markedBlobs))

@@ -155,10 +155,9 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (Model, tea.Cmd) 
 }
 
 func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
-	// Search results use a separate code path that bypasses the loader's
-	// merge — they go through handleSearchBlobsLoaded.
-	if m.search.active && m.search.fetching && msg.query != "" {
-		return m.handleSearchBlobsLoaded(msg)
+	// Filter prefix-search results go through handleFilterBlobsLoaded.
+	if m.filter.fetching && msg.query != "" {
+		return m.handleFilterBlobsLoaded(msg)
 	}
 
 	if !m.hasAccount || !m.hasContainer {
@@ -173,8 +172,9 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	if m.blobLoadAll != msg.loadAll {
 		return m, nil
 	}
-	// Non-search results should only apply when search is not active.
-	if msg.query != "" && !m.search.active {
+	// Results with a query set are filter results — if they weren't
+	// handled above, they're stale and should be dropped.
+	if msg.query != "" {
 		return m, nil
 	}
 
@@ -238,20 +238,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.handlePreviewKey(msg)
 	}
 
-	// Blob search pipeline.
-	if m.search.active && m.focus == blobsPane {
-		return m.handleSearchKey(msg)
+	// Filter input pipeline.
+	if m.filter.inputOpen && m.focus == blobsPane {
+		return m.handleFilterKey(msg)
 	}
 
-	// Cancel on the blob pane clears a committed filter (the search input
-	// is already gone at this point — search.active is false).
-	if m.Keymap.Cancel.Matches(key) && m.focus == blobsPane && m.committedFilter.active {
-		m.clearCommittedFilter()
+	// Esc on the blob pane clears an active filter when input is closed.
+	if m.Keymap.Cancel.Matches(key) && m.focus == blobsPane && m.hasActiveFilter() {
+		m.clearFilter()
 		m.Status = "Filter cleared"
 		return m, nil
 	}
 
-	focusedFilterActive := m.focusedListSettingFilter() || (m.focus == blobsPane && m.search.active)
+	focusedFilterActive := m.focusedListSettingFilter() || (m.focus == blobsPane && m.filter.inputOpen)
 
 	// Pressing the filter-input key in visual mode on the blobs pane exits
 	// visual mode. (The search pipeline above catches the active case.)
@@ -282,6 +281,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.ToggleLoadAll.Matches(key):
 		if m.focus == blobsPane && !focusedFilterActive {
 			return m.toggleBlobLoadAllMode()
+		}
+	case m.Keymap.SortBlobs.Matches(key):
+		if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
+			m.cycleBlobSort()
+			return m, nil
 		}
 	case m.Keymap.ToggleVisualLine.Matches(key):
 		if m.focus == blobsPane && !focusedFilterActive {
@@ -373,8 +377,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	case m.Keymap.FilterInput.Matches(key):
 		if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
-			m.activateSearch()
-			return m, nil
+			cmd := m.openFilterInput()
+			return m, cmd
 		}
 	case m.Keymap.Inspect.Matches(key):
 		if !focusedFilterActive && m.focus != previewPane {
@@ -388,8 +392,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
 				m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
 
-				m.deactivateSearch()
-				m.discardCommittedFilter()
+				m.clearFilter()
 				m.prefix = parentPrefix(m.prefix)
 
 				blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)

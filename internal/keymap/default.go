@@ -53,6 +53,7 @@ func Default() Keymap {
 		ExitVisualLine:    New("esc"),
 		VisualSwapAnchor:  New("o"),
 		DownloadSelection: New("D"),
+		SortBlobs:         New("s"),
 		BlobVisualMove:    New("up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G"),
 
 		// Blob preview.

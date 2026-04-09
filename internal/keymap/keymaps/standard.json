@@ -42,6 +42,7 @@
     "exit_visual_line": ["esc"],
     "visual_swap_anchor": ["o"],
     "download_selection": ["ctrl+d"],
+    "sort_blobs": ["ctrl+o"],
     "blob_visual_move": ["up", "down", "pgup", "pgdown", "home", "end"],
     "preview_back": ["left", "esc"],
     "preview_next_focus": ["tab"],

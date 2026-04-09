@@ -10,7 +10,6 @@ import (
 
 func (m Model) refresh() (Model, tea.Cmd) {
 	if !m.HasSubscription {
-		// Can't refresh anything without a subscription; open the picker instead.
 		m.SubOverlay.Open()
 		m.SetLoading(-1)
 		m.LastErr = ""
@@ -37,17 +36,15 @@ func (m Model) refresh() (Model, tea.Cmd) {
 
 	m.SetLoading(blobsPane)
 	m.LastErr = ""
-	// Refresh refetches m.blobs, so any committed filter snapshot would
-	// be stale — drop it.
-	m.discardCommittedFilter()
 	if m.blobLoadAll {
 		m.Status = fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName)
 		return m, tea.Batch(m.Spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.blobs))
 	}
-	if m.search.prefixLocked && m.search.prefixQuery != "" {
-		effectivePrefix := blobSearchPrefix(m.prefix, m.search.prefixQuery)
+	// Re-run the API prefix search if a filter is active.
+	if m.filter.prefixFetched && m.filter.prefixQuery != "" {
+		effectivePrefix := blobSearchPrefix(m.prefix, m.filter.prefixQuery)
 		m.Status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
-		return m, tea.Batch(m.Spinner.Tick, fetchSearchBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.search.prefixQuery, defaultBlobPrefixSearchLimit))
+		return m, tea.Batch(m.Spinner.Tick, fetchSearchBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, m.filter.prefixQuery, defaultBlobPrefixSearchLimit))
 	}
 	m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
 	return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))

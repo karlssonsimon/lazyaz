@@ -26,21 +26,76 @@ func (m *Model) clearBlobSelectionState() {
 
 func (m *Model) resetBlobLoadState() {
 	m.blobLoadAll = false
-	m.deactivateSearch()
-	m.discardCommittedFilter()
+	m.clearFilter()
 }
 
 func (m *Model) refreshItems() {
-	if m.search.active && m.search.fuzzyQuery != "" && m.search.filtered != nil {
-		m.searchRebuildItems()
-		return
-	}
-	if m.search.active && len(m.search.results) > 0 {
-		m.searchRebuildItems()
-		return
-	}
-	m.blobsList.SetItems(blobsToItems(m.blobs, m.prefix, m.markedBlobs, m.visualSelectionNames()))
+	entries := m.displayBlobs()
+	m.blobsList.SetItems(blobsToItems(entries, m.prefix, m.markedBlobs, m.visualSelectionNames()))
 	ui.ClampListSelection(&m.blobsList)
+}
+
+// cycleBlobSort advances through sort modes:
+// None -> Name↑ -> Name↓ -> Size↑ -> Size↓ -> Date↑ -> Date↓ -> None
+func (m *Model) cycleBlobSort() {
+	if m.blobSortDesc {
+		// Move to next field (or back to none).
+		m.blobSortDesc = false
+		m.blobSortField++
+		if m.blobSortField > blobSortDate {
+			m.blobSortField = blobSortNone
+		}
+	} else if m.blobSortField == blobSortNone {
+		m.blobSortField = blobSortName
+	} else {
+		m.blobSortDesc = true
+	}
+
+	m.refreshItems()
+	if len(m.blobsList.Items()) > 0 {
+		m.blobsList.Select(0)
+	}
+	m.Status = "Sort: " + blobSortLabel(m.blobSortField, m.blobSortDesc)
+}
+
+func blobSortLabel(field blobSortField, desc bool) string {
+	if field == blobSortNone {
+		return "default"
+	}
+	dir := "ascending"
+	if desc {
+		dir = "descending"
+	}
+	switch field {
+	case blobSortName:
+		return "Name " + dir
+	case blobSortSize:
+		return "Size " + dir
+	case blobSortDate:
+		return "Date " + dir
+	default:
+		return "default"
+	}
+}
+
+func blobSortIndicator(field blobSortField, desc bool) string {
+	if field == blobSortNone {
+		return ""
+	}
+	arrow := "\u2191" // ↑
+	if desc {
+		arrow = "\u2193" // ↓
+	}
+	switch field {
+	case blobSortName:
+		return "Name" + arrow
+	case blobSortSize:
+		return "Size" + arrow
+	case blobSortDate:
+		return "Date" + arrow
+	default:
+		return ""
+	}
 }
 
 func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
@@ -49,11 +104,12 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.deactivateSearch()
-	m.discardCommittedFilter()
+	savedPrefix := m.filter.prefixQuery
+	m.clearFilter()
 	m.LastErr = ""
 
 	if m.blobLoadAll {
+		// Switching back to hierarchy mode.
 		m.blobLoadAll = false
 
 		if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)); ok {
@@ -67,7 +123,18 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 	}
 
+	// Switching to load-all mode.
 	m.blobLoadAll = true
+
+	if savedPrefix != "" {
+		// Prefix was active — load all blobs under that prefix.
+		// Keep showing current data while the fetch runs.
+		m.SetLoading(blobsPane)
+		effectivePrefix := blobSearchPrefix(m.prefix, savedPrefix)
+		m.Status = fmt.Sprintf("Loading all blobs under %q", effectivePrefix)
+		return m, tea.Batch(m.Spinner.Tick,
+			fetchAllBlobsWithPrefixCmd(m.service, m.currentAccount, m.containerName, m.prefix, savedPrefix))
+	}
 
 	if cached, ok := m.cache.blobs.Get(blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, true)); ok {
 		m.blobs = cached

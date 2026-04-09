@@ -1,7 +1,9 @@
 package blobapp
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
@@ -85,6 +87,39 @@ func containersToItems(containers []blob.ContainerInfo) []list.Item {
 		items = append(items, containerItem{container: containerInfo})
 	}
 	return items
+}
+
+// sortBlobs returns a sorted copy of entries. Prefixes (dirs) always appear
+// before regular blobs. Within each group the chosen field and direction apply.
+func sortBlobs(entries []blob.BlobEntry, field blobSortField, desc bool) []blob.BlobEntry {
+	if field == blobSortNone {
+		return entries
+	}
+	out := make([]blob.BlobEntry, len(entries))
+	copy(out, entries)
+	slices.SortStableFunc(out, func(a, b blob.BlobEntry) int {
+		// Dirs before files, always.
+		if a.IsPrefix != b.IsPrefix {
+			if a.IsPrefix {
+				return -1
+			}
+			return 1
+		}
+		var c int
+		switch field {
+		case blobSortName:
+			c = cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		case blobSortSize:
+			c = cmp.Compare(a.Size, b.Size)
+		case blobSortDate:
+			c = a.LastModified.Compare(b.LastModified)
+		}
+		if desc {
+			c = -c
+		}
+		return c
+	})
+	return out
 }
 
 func blobsToItems(entries []blob.BlobEntry, prefix string, marked map[string]blob.BlobEntry, visual map[string]struct{}) []list.Item {
