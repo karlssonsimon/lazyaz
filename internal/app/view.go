@@ -38,17 +38,18 @@ func (m Model) View() tea.View {
 	}
 
 	closeHint := m.keymap.Cancel.Short()
+	cursorView := m.cursor.View()
 	if m.cmdPalette.active {
-		view = renderCommandPalette(&m.cmdPalette, closeHint, m.styles.Overlay, m.width, m.height, view)
+		view = renderCommandPalette(&m.cmdPalette, closeHint, cursorView, m.styles.Overlay, m.width, m.height, view)
 	}
 	if m.tabPicker.active {
-		view = renderTabPickerOverlay(&m.tabPicker, closeHint, m.styles.Overlay, m.width, m.height, view)
+		view = renderTabPickerOverlay(&m.tabPicker, closeHint, cursorView, m.styles.Overlay, m.width, m.height, view)
 	}
 	if m.themeOverlay.Active {
-		view = ui.RenderThemeOverlay(m.themeOverlay, closeHint, m.schemes, m.styles, m.width, m.height, view)
+		view = ui.RenderThemeOverlay(m.themeOverlay, closeHint, cursorView, m.schemes, m.styles, m.width, m.height, view)
 	}
 	if m.helpOverlay.Active {
-		view = ui.RenderHelpOverlay(m.helpOverlay, closeHint, m.styles, m.width, m.height, view)
+		view = ui.RenderHelpOverlay(m.helpOverlay, closeHint, cursorView, m.styles, m.width, m.height, view)
 	}
 	if m.notificationsOverlay.Active {
 		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, closeHint, notifierToEntries(m.notifier.Snapshot()), m.styles, m.width, m.height, view)

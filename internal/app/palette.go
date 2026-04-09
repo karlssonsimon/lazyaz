@@ -93,7 +93,7 @@ func (p *commandPalette) handleKey(key string, km keymap.Keymap) (cmd command, e
 	return command{}, false, false
 }
 
-func renderCommandPalette(p *commandPalette, closeHint string, overlay ui.OverlayStyles, width, height int, base string) string {
+func renderCommandPalette(p *commandPalette, closeHint, cursorView string, overlay ui.OverlayStyles, width, height int, base string) string {
 	items := make([]ui.OverlayItem, len(p.filtered))
 	for ci, idx := range p.filtered {
 		items[ci] = ui.OverlayItem{
@@ -102,5 +102,5 @@ func renderCommandPalette(p *commandPalette, closeHint string, overlay ui.Overla
 		}
 	}
 
-	return ui.RenderOverlayList(ui.OverlayListConfig{Title: "Commands", Query: p.query, CloseHint: closeHint}, items, p.cursor, overlay, width, height, base)
+	return ui.RenderOverlayList(ui.OverlayListConfig{Title: "Commands", Query: p.query, CursorView: cursorView, CloseHint: closeHint}, items, p.cursor, overlay, width, height, base)
 }

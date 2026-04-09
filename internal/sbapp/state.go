@@ -10,6 +10,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
+	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -315,7 +316,7 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.Spinner.Tick}
+	cmds := []tea.Cmd{m.Spinner.Tick, cursor.Blink}
 	if m.SubOverlay.Active {
 		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 	}

@@ -13,6 +13,23 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Route all messages to the cursor so both initialBlinkMsg and
+	// BlinkMsg are handled. For non-cursor messages this is a no-op.
+	if cursorModel, cursorCmd := m.Cursor.Update(msg); cursorCmd != nil {
+		m.Cursor = cursorModel
+		// Also forward to focused list so its built-in filter cursor blinks.
+		var listCmd tea.Cmd
+		switch m.focus {
+		case accountsPane:
+			m.accountsList, listCmd = m.accountsList.Update(msg)
+		case containersPane:
+			m.containersList, listCmd = m.containersList.Update(msg)
+		case blobsPane:
+			m.blobsList, listCmd = m.blobsList.Update(msg)
+		}
+		return m, tea.Batch(cursorCmd, listCmd)
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width

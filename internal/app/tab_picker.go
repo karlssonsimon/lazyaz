@@ -74,7 +74,7 @@ func (s *tabPickerState) handleKey(key string, bindings ui.ThemeKeyBindings) (Ta
 	return 0, false
 }
 
-func renderTabPickerOverlay(s *tabPickerState, closeHint string, styles ui.OverlayStyles, width, height int, base string) string {
+func renderTabPickerOverlay(s *tabPickerState, closeHint, cursorView string, styles ui.OverlayStyles, width, height int, base string) string {
 	items := make([]ui.OverlayItem, len(s.filtered))
 	for ci, ti := range s.filtered {
 		items[ci] = ui.OverlayItem{Label: tabKinds[ti].name}
@@ -83,6 +83,7 @@ func renderTabPickerOverlay(s *tabPickerState, closeHint string, styles ui.Overl
 	cfg := ui.OverlayListConfig{
 		Title:      "New Tab",
 		Query:      s.query,
+		CursorView: cursorView,
 		CloseHint:  closeHint,
 		MaxVisible: len(tabKinds),
 	}
