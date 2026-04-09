@@ -56,9 +56,10 @@ type Model struct {
 
 	service *blob.Service
 
-	accountsList   list.Model
-	containersList list.Model
-	blobsList      list.Model
+	accountsList    list.Model
+	containersList  list.Model
+	blobsList       list.Model
+	parentBlobsList list.Model // parent folder view (display-only, never focused)
 
 	focus int
 
@@ -196,12 +197,21 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	blobs.SetFilteringEnabled(false)
 	blobs.DisableQuitKeybindings()
 
+	parentBlobs := list.New([]list.Item{}, delegate, 20, 10)
+	parentBlobs.SetShowTitle(false)
+	parentBlobs.SetShowHelp(false)
+	parentBlobs.SetShowPagination(false)
+	parentBlobs.SetShowStatusBar(false)
+	parentBlobs.SetFilteringEnabled(false)
+	parentBlobs.DisableQuitKeybindings()
+
 	m := Model{
 		Model:             appshell.New(cfg, km),
 		service:           svc,
 		accountsList:      accounts,
 		containersList:    containers,
 		blobsList:         blobs,
+		parentBlobsList:   parentBlobs,
 		markedBlobs:       make(map[string]blob.BlobEntry),
 		preview:           newPreviewState(),
 		cache:             newCache(db),
@@ -240,10 +250,10 @@ func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores, km k
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.SetScheme(scheme)
 	m.Styles.ApplyToLists([]*list.Model{
-		&m.accountsList, &m.containersList, &m.blobsList,
+		&m.accountsList, &m.containersList, &m.blobsList, &m.parentBlobsList,
 	}, &m.Spinner)
-	// Blobs list uses a custom delegate: two rows + mark/visual borders.
-	m.blobsList.SetDelegate(newBlobDelegate(m.Styles.DelegateTwoRow, m.Styles))
+	// Blobs list uses a custom delegate for mark/visual borders.
+	m.blobsList.SetDelegate(newBlobDelegate(m.Styles.Delegate, m.Styles))
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.

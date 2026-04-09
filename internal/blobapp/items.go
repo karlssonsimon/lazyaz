@@ -53,20 +53,20 @@ type blobItem struct {
 
 func (i blobItem) Title() string {
 	if i.blob.IsPrefix {
-		return "[DIR] " + i.displayName
+		return "📁 " + i.displayName
 	}
-	return i.displayName
+	// Fixed-width columns: size(10) tier(8) date(16) — right-aligned so
+	// they stay lined up across rows. The delegate truncates the name
+	// from the right if the pane is too narrow.
+	icon := fileIcon(i.displayName)
+	size := fmt.Sprintf("%10s", humanSize(i.blob.Size))
+	tier := fmt.Sprintf("%-8s", ui.EmptyToDash(i.blob.AccessTier))
+	date := ui.FormatTime(i.blob.LastModified)
+	return fmt.Sprintf("%s %s  %s %s %s", icon, i.displayName, size, tier, date)
 }
 
 func (i blobItem) Description() string {
-	if i.blob.IsPrefix {
-		return ""
-	}
-	return fmt.Sprintf("%s  %s  %s",
-		humanSize(i.blob.Size),
-		ui.EmptyToDash(i.blob.AccessTier),
-		ui.FormatTime(i.blob.LastModified),
-	)
+	return ""
 }
 
 func (i blobItem) FilterValue() string {
@@ -199,6 +199,35 @@ func blobItemKey(it list.Item) string {
 		return bi.blob.Name
 	}
 	return ""
+}
+
+func fileIcon(name string) string {
+	ext := strings.ToLower(name)
+	if i := strings.LastIndex(ext, "."); i >= 0 {
+		ext = ext[i:]
+	} else {
+		ext = ""
+	}
+	switch ext {
+	case ".json", ".yaml", ".yml", ".toml", ".xml", ".ini", ".cfg", ".conf":
+		return "⚙"
+	case ".go", ".py", ".js", ".ts", ".rs", ".java", ".c", ".cpp", ".cs", ".rb", ".sh", ".bash":
+		return "◇"
+	case ".md", ".txt", ".csv", ".log", ".rst":
+		return "☰"
+	case ".jpg", ".jpeg", ".png", ".gif", ".svg", ".bmp", ".webp", ".ico", ".tiff":
+		return "▣"
+	case ".zip", ".gz", ".tar", ".bz2", ".7z", ".rar", ".zst", ".xz":
+		return "▤"
+	case ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx":
+		return "▧"
+	case ".mp3", ".wav", ".flac", ".ogg", ".aac", ".mp4", ".avi", ".mkv", ".mov", ".webm":
+		return "▶"
+	case ".parquet", ".avro", ".orc", ".db", ".sqlite":
+		return "◫"
+	default:
+		return "◻"
+	}
 }
 
 func blobSearchPrefix(currentPrefix, query string) string {

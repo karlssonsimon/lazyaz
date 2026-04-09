@@ -17,12 +17,12 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 		// Move focus to the message list. The preview pane stays
 		// mounted and follows the cursor — it's only torn down when
 		// the user actually leaves the entity (one more 'left').
-		m.focus = detailPane
+		m.setFocus(detailPane)
 		return m, nil
 	case detailPane:
 		// Leaving the entity entirely → close the preview pane.
 		m.closePreview()
-		m.focus = entitiesPane
+		m.setFocus(entitiesPane)
 		return m, nil
 	case entitiesPane:
 		// If the cursor is on a topic-sub child, collapse the parent
@@ -32,7 +32,7 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 		if collapsed, ok := m.collapseFocusedTopic(); ok {
 			return collapsed, nil
 		}
-		m.focus = namespacesPane
+		m.setFocus(namespacesPane)
 		return m, nil
 	case namespacesPane:
 		return m, nil
@@ -43,12 +43,12 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 
 func (m Model) handleBackspace() (Model, tea.Cmd) {
 	if m.focus == messagePreviewPane {
-		m.focus = detailPane
+		m.setFocus(detailPane)
 		return m, nil
 	}
 	if m.focus == detailPane {
 		m.closePreview()
-		m.focus = entitiesPane
+		m.setFocus(entitiesPane)
 		return m, nil
 	}
 	if m.focus == entitiesPane {
@@ -113,7 +113,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.topicSubsByTopic = make(map[string][]servicebus.TopicSubscription)
 	m.clearPeekState()
 	m.clearAllMarks()
-	m.focus = namespacesPane
+	m.setFocus(namespacesPane)
 
 	if cached, ok := m.cache.namespaces.Get(sub.ID); ok {
 		m.namespaces = cached
@@ -149,7 +149,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		// Re-selecting the same namespace: just move focus.
 		if m.hasNamespace && m.currentNS.Name == item.namespace.Name {
-			m.focus = entitiesPane
+			m.setFocus(entitiesPane)
 			return m, nil
 		}
 
@@ -165,7 +165,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.topicSubsByTopic = make(map[string][]servicebus.TopicSubscription)
 		m.clearPeekState()
 		m.clearAllMarks()
-		m.focus = entitiesPane
+		m.setFocus(entitiesPane)
 
 		entityCacheKey := cache.Key(m.CurrentSub.ID, item.namespace.Name)
 		if cached, ok := m.cache.entities.Get(entityCacheKey); ok {
@@ -211,8 +211,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		}
 		m.selectedMessage = item.message
 		m.viewingMessage = true
-		m.focus = messagePreviewPane
-		m.resize()
+		m.setFocus(messagePreviewPane)
 		m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))
 		m.messageViewport.GotoTop()
 		m.Status = fmt.Sprintf("Viewing message %s (%s to back to list)", ui.EmptyToDash(item.message.MessageID), m.Keymap.PreviousFocus.Short())
@@ -234,7 +233,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 func (m Model) peekQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 	// Re-selecting the same queue: just move focus.
 	if m.hasPeekTarget && m.currentSubName == "" && m.currentEntity.Name == entity.Name {
-		m.focus = detailPane
+		m.setFocus(detailPane)
 		return m, nil
 	}
 
@@ -244,12 +243,11 @@ func (m Model) peekQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 	m.hasPeekTarget = true
 	m.peekedMessages = nil
 	m.deadLetter = false
-	m.focus = detailPane
+	m.setFocus(detailPane)
 
 	m.detailList.ResetFilter()
 	m.detailList.SetItems(nil)
 	m.detailList.Title = "Detail"
-	m.resize() // make room for the DLQ tab strip
 
 	m.SetLoading(m.focus)
 	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Peeking messages from queue %s", entity.Name))
@@ -261,7 +259,7 @@ func (m Model) peekQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 func (m Model) peekTopicSub(topicName string, sub servicebus.TopicSubscription) (Model, tea.Cmd) {
 	// Re-selecting the same sub: just move focus.
 	if m.hasPeekTarget && m.currentSubName == sub.Name && m.currentEntity.Name == topicName {
-		m.focus = detailPane
+		m.setFocus(detailPane)
 		return m, nil
 	}
 
@@ -281,12 +279,11 @@ func (m Model) peekTopicSub(topicName string, sub servicebus.TopicSubscription) 
 	m.hasPeekTarget = true
 	m.peekedMessages = nil
 	m.deadLetter = false
-	m.focus = detailPane
+	m.setFocus(detailPane)
 
 	m.detailList.ResetFilter()
 	m.detailList.SetItems(nil)
 	m.detailList.Title = "Detail"
-	m.resize() // make room for the DLQ tab strip
 
 	m.SetLoading(m.focus)
 	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Peeking messages from %s/%s", topicName, sub.Name))

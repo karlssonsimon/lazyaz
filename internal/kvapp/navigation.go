@@ -14,10 +14,10 @@ import (
 func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case versionsPane:
-		m.focus = secretsPane
+		m.setFocus(secretsPane)
 		return m, nil
 	case secretsPane:
-		m.focus = vaultsPane
+		m.setFocus(vaultsPane)
 		return m, nil
 	case vaultsPane:
 		return m, nil
@@ -28,7 +28,7 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 
 func (m Model) handleBackspace() (Model, tea.Cmd) {
 	if m.focus == versionsPane {
-		m.focus = secretsPane
+		m.setFocus(secretsPane)
 	}
 	return m, nil
 }
@@ -51,7 +51,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.hasSecret = false
 	m.currentVault = keyvault.Vault{}
 	m.currentSecret = keyvault.Secret{}
-	m.focus = vaultsPane
+	m.setFocus(vaultsPane)
 
 	if cached, ok := m.cache.vaults.Get(sub.ID); ok {
 		m.vaults = cached
@@ -87,7 +87,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		// Re-selecting the same vault: just move focus.
 		if m.hasVault && m.currentVault.Name == item.vault.Name {
-			m.focus = secretsPane
+			m.setFocus(secretsPane)
 			return m, nil
 		}
 
@@ -103,7 +103,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.hasVault = true
 		m.hasSecret = false
 		m.currentSecret = keyvault.Secret{}
-		m.focus = secretsPane
+		m.setFocus(secretsPane)
 
 		secretsScope := cache.Key(m.CurrentSub.ID, item.vault.Name)
 		if cached, ok := m.cache.secrets.Get(secretsScope); ok {
@@ -135,7 +135,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		// Re-selecting the same secret: just move focus.
 		if m.hasSecret && m.currentSecret.Name == item.secret.Name {
-			m.focus = versionsPane
+			m.setFocus(versionsPane)
 			return m, nil
 		}
 
@@ -147,7 +147,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		m.currentSecret = item.secret
 		m.hasSecret = true
-		m.focus = versionsPane
+		m.setFocus(versionsPane)
 
 		versionScope := cache.Key(m.CurrentSub.ID, m.currentVault.Name, item.secret.Name)
 		if cached, ok := m.cache.versions.Get(versionScope); ok {

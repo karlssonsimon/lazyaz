@@ -70,7 +70,32 @@ func (m Model) View() tea.View {
 		Frame:  ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == versionsPane},
 	}, m.Styles)
 
-	panes := lipgloss.JoinHorizontal(lipgloss.Top, vaults, secrets, versions)
+	// Build pane map for lookup by index.
+	paneMap := map[int]string{
+		vaultsPane:   vaults,
+		secretsPane:  secrets,
+		versionsPane: versions,
+	}
+
+	// Assemble panes in visual order: parent (left), focused (center), child (right).
+	// When there's no parent pane, add an empty spacer to keep the focused pane centered.
+	parentWidth := m.Width * 20 / 100
+	paneParts := make([]string, 0, 3)
+	if m.focus > vaultsPane && pw[m.focus-1] > 0 {
+		paneParts = append(paneParts, paneMap[m.focus-1])
+	} else if m.focus == vaultsPane {
+		spacer := lipgloss.NewStyle().Width(parentWidth).Height(h).Render("")
+		paneParts = append(paneParts, spacer)
+	}
+	paneParts = append(paneParts, paneMap[m.focus])
+
+	// Child column (right side).
+	childIdx := m.focus + 1
+	if childIdx <= versionsPane && pw[childIdx] > 0 {
+		paneParts = append(paneParts, paneMap[childIdx])
+	}
+
+	panes := lipgloss.JoinHorizontal(lipgloss.Top, paneParts...)
 
 	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
 

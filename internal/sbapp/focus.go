@@ -6,6 +6,11 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
+func (m *Model) setFocus(pane int) {
+	m.focus = pane
+	m.resize()
+}
+
 func (m *Model) nextFocus() {
 	m.blurAllFilters()
 	max := 2 // detailPane
@@ -13,6 +18,7 @@ func (m *Model) nextFocus() {
 		max = 3 // include messagePreviewPane
 	}
 	m.focus = (m.focus + 1) % (max + 1)
+	m.resize()
 }
 
 func (m *Model) previousFocus() {
@@ -25,6 +31,7 @@ func (m *Model) previousFocus() {
 	if m.focus < 0 {
 		m.focus = max
 	}
+	m.resize()
 }
 
 func (m *Model) blurAllFilters() {
