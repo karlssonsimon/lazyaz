@@ -37,6 +37,7 @@
     "jump_7": ["alt+7"],
     "jump_8": ["alt+8"],
     "jump_9": ["alt+9"],
+    "action_menu": ["a"],
     "toggle_load_all": ["ctrl+a"],
     "toggle_mark": [" "],
     "toggle_visual_line": ["shift+down", "shift+up"],

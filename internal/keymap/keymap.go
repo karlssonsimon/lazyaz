@@ -47,6 +47,7 @@ type Keymap struct {
 	Jump9          Binding `json:"jump_9"`
 
 	// Blob app.
+	ActionMenu        Binding `json:"action_menu"`
 	ToggleLoadAll     Binding `json:"toggle_load_all"`
 	ToggleMark        Binding `json:"toggle_mark"`
 	ToggleVisualLine  Binding `json:"toggle_visual_line"`

@@ -60,11 +60,12 @@ func (m *Model) commitFocusedFilter() tea.Cmd {
 	case accountsPane:
 		ui.ApplyFilterState(&m.accountsList)
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
-		return nil
 	case containersPane:
 		ui.ApplyFilterState(&m.containersList)
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
-		return nil
+	case blobsPane:
+		ui.ApplyFilterState(&m.blobsList)
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
 	}
 
 	return nil
@@ -108,6 +109,8 @@ func (m Model) focusedListSettingFilter() bool {
 		return m.accountsList.SettingFilter()
 	case containersPane:
 		return m.containersList.SettingFilter()
+	case blobsPane:
+		return m.blobsList.SettingFilter()
 	default:
 		return false
 	}

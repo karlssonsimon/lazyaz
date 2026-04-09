@@ -69,9 +69,9 @@ func (m *Model) resize() {
 	}
 	if w := m.paneWidths[blobsPane]; w > 0 {
 		blobListHeight := baseListHeight - m.inspectFooterHeight(blobsPane)
-		if m.filter.inputOpen {
-			blobListHeight -= m.filterInputHeight()
-		} else if m.hasActiveFilter() {
+		// When a filter is active (but overlay closed), a one-line banner
+		// is shown as a pane prefix — subtract its height.
+		if !m.filter.inputOpen && m.hasActiveFilter() {
 			blobListHeight -= 2
 		}
 		m.blobsList.SetSize(ui.PaneContentWidth(pane, w), blobListHeight)

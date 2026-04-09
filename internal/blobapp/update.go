@@ -8,6 +8,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 )
@@ -62,6 +63,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case previewWindowLoadedMsg:
 		return m.handlePreviewWindowLoaded(msg)
+
+	case clipboardMsg:
+		if msg.err != nil {
+			m.Notify(appshell.LevelError, fmt.Sprintf("Clipboard: %s", msg.err.Error()))
+		} else {
+			m.Notify(appshell.LevelSuccess, fmt.Sprintf("Copied to clipboard: %s", msg.text))
+		}
+		return m, nil
+
+	case tea.PasteMsg:
+		// Route paste to the prefix search overlay if open, otherwise
+		// let it fall through to the focused list (for the built-in filter).
+		if m.filter.inputOpen && m.focus == blobsPane {
+			m.filter.prefixQuery += msg.String()
+			return m, nil
+		}
+		var cmd tea.Cmd
+		switch m.focus {
+		case accountsPane:
+			m.accountsList, cmd = m.accountsList.Update(msg)
+		case containersPane:
+			m.containersList, cmd = m.containersList.Update(msg)
+		case blobsPane:
+			m.blobsList, cmd = m.blobsList.Update(msg)
+		}
+		return m, cmd
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -256,6 +283,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.actionMenu.active {
+		if selected, act := m.actionMenu.handleKey(key, m.Keymap); selected {
+			return m.executeAction(act)
+		}
+		return m, nil
+	}
+
 	if m.sortOverlay.active {
 		if applied, field, desc := m.sortOverlay.handleKey(key, m.Keymap); applied {
 			m.blobSortField = field
@@ -270,16 +304,25 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.handlePreviewKey(msg)
 	}
 
-	// Filter input pipeline.
+	// Server prefix search overlay.
 	if m.filter.inputOpen && m.focus == blobsPane {
-		return m.handleFilterKey(msg)
+		return m.handlePrefixSearchKey(msg)
 	}
 
-	// Esc on the blob pane clears an active filter when input is closed.
-	if m.Keymap.Cancel.Matches(key) && m.focus == blobsPane && m.hasActiveFilter() {
-		m.clearFilter()
-		m.Notify(appshell.LevelInfo, "Filter cleared")
-		return m, nil
+	// Esc peels filters like a stack:
+	//  1. If the bubbles list has an applied filter → clear it and return.
+	//  2. If no list filter but a prefix search is active → clear it here.
+	//  3. Otherwise fall through to normal esc handlers (visual mode, etc).
+	if m.Keymap.Cancel.Matches(key) && m.focus == blobsPane {
+		if m.blobsList.FilterState() != list.Unfiltered {
+			m.blobsList.ResetFilter()
+			return m, nil
+		}
+		if m.hasActiveFilter() {
+			m.clearFilter()
+			m.Notify(appshell.LevelInfo, "Prefix filter cleared")
+			return m, nil
+		}
 	}
 
 	focusedFilterActive := m.focusedListSettingFilter() || (m.focus == blobsPane && m.filter.inputOpen)
@@ -309,6 +352,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.DownloadSelection.Matches(key):
 		if m.focus == blobsPane && !focusedFilterActive {
 			return m.startMarkedAction("download")
+		}
+	case m.Keymap.ActionMenu.Matches(key):
+		if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
+			m.actionMenu.open(m.buildActions())
+			return m, nil
 		}
 	case m.Keymap.ToggleLoadAll.Matches(key):
 		if m.focus == blobsPane && !focusedFilterActive {
@@ -407,11 +455,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.loadingSpinnerID = m.NotifySpinner("Refreshing subscriptions...")
 			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
-	case m.Keymap.FilterInput.Matches(key):
-		if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
-			cmd := m.openFilterInput()
-			return m, cmd
-		}
+	// FilterInput for the blobs pane is handled by the bubbles list's
+	// built-in filter (SetFilteringEnabled=true). No explicit handler
+	// needed — the keypress falls through to the list's Update below.
 	case m.Keymap.Inspect.Matches(key):
 		if !focusedFilterActive && m.focus != previewPane {
 			m.toggleInspect()

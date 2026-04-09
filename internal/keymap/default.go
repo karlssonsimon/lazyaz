@@ -48,7 +48,8 @@ func Default() Keymap {
 		Jump9:          New("alt+9"),
 
 		// Blob.
-		ToggleLoadAll:     New("a", "A"),
+		ActionMenu:        New("a"),
+		ToggleLoadAll:     New("A"),
 		ToggleMark:        New(" "),
 		ToggleVisualLine:  New("v", "V"),
 		ExitVisualLine:    New("esc"),
