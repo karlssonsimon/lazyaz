@@ -307,7 +307,7 @@ func NewStyles(s Scheme) Styles {
 		Normal: lipgloss.NewStyle().
 			Foreground(text).
 			Background(bg).
-			Padding(0, 1),
+			Padding(0, 0, 0, 2),
 		NormalFull: lipgloss.NewStyle().
 			Foreground(text).
 			Background(bg),
@@ -315,7 +315,10 @@ func NewStyles(s Scheme) Styles {
 			Foreground(selText).
 			Background(selBg).
 			Bold(true).
-			Padding(0, 1),
+			Border(lipgloss.ThickBorder(), false, false, false, true).
+			BorderForeground(green).
+			BorderBackground(selBg).
+			Padding(0, 0, 0, 1),
 		NoMatch: lipgloss.NewStyle().
 			Foreground(muted).
 			Background(bg).

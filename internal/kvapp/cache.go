@@ -6,48 +6,47 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 )
 
-// kvCache provides an in-memory, stale-while-revalidate cache for:
+// kvCache provides a stale-while-revalidate cache for:
 //
 //	subscriptions → vaults → secrets → versions
 type kvCache struct {
-	subscriptions *cache.Loader[azure.Subscription]
-	vaults        *cache.Loader[keyvault.Vault]
-	secrets       *cache.Loader[keyvault.Secret]
-	versions      *cache.Loader[keyvault.SecretVersion]
+	subscriptions *cache.Broker[azure.Subscription]
+	vaults        *cache.Broker[keyvault.Vault]
+	secrets       *cache.Broker[keyvault.Secret]
+	versions      *cache.Broker[keyvault.SecretVersion]
 }
 
 func newCache(db *cache.DB) kvCache {
 	if db != nil {
 		return kvCache{
-			subscriptions: cache.NewLoader(cache.NewStore[azure.Subscription](db, "subscriptions"), azure.SubscriptionKey),
-			vaults:        cache.NewLoader(cache.NewStore[keyvault.Vault](db, "kv_vaults"), vaultKey),
-			secrets:       cache.NewLoader(cache.NewStore[keyvault.Secret](db, "kv_secrets"), secretKey),
-			versions:      cache.NewLoader(cache.NewStore[keyvault.SecretVersion](db, "kv_secret_versions"), versionKey),
+			subscriptions: cache.NewBroker(cache.NewStore[azure.Subscription](db, "subscriptions"), azure.SubscriptionKey),
+			vaults:        cache.NewBroker(cache.NewStore[keyvault.Vault](db, "kv_vaults"), vaultKey),
+			secrets:       cache.NewBroker(cache.NewStore[keyvault.Secret](db, "kv_secrets"), secretKey),
+			versions:      cache.NewBroker(cache.NewStore[keyvault.SecretVersion](db, "kv_secret_versions"), versionKey),
 		}
 	}
 	return kvCache{
-		subscriptions: cache.NewLoader(cache.NewMap[azure.Subscription](), azure.SubscriptionKey),
-		vaults:        cache.NewLoader(cache.NewMap[keyvault.Vault](), vaultKey),
-		secrets:       cache.NewLoader(cache.NewMap[keyvault.Secret](), secretKey),
-		versions:      cache.NewLoader(cache.NewMap[keyvault.SecretVersion](), versionKey),
+		subscriptions: cache.NewBroker(cache.NewMap[azure.Subscription](), azure.SubscriptionKey),
+		vaults:        cache.NewBroker(cache.NewMap[keyvault.Vault](), vaultKey),
+		secrets:       cache.NewBroker(cache.NewMap[keyvault.Secret](), secretKey),
+		versions:      cache.NewBroker(cache.NewMap[keyvault.SecretVersion](), versionKey),
 	}
 }
 
-// KVStores holds the shared cache stores for key vault resources.
+// KVStores holds the shared brokers for key vault resources.
 type KVStores struct {
-	Subscriptions cache.Store[azure.Subscription]
-	Vaults        cache.Store[keyvault.Vault]
-	Secrets       cache.Store[keyvault.Secret]
-	Versions      cache.Store[keyvault.SecretVersion]
+	Subscriptions *cache.Broker[azure.Subscription]
+	Vaults        *cache.Broker[keyvault.Vault]
+	Secrets       *cache.Broker[keyvault.Secret]
+	Versions      *cache.Broker[keyvault.SecretVersion]
 }
 
-// NewCacheWithStores creates a kvCache where each Loader wraps the
-// provided shared stores.
+// NewCacheWithStores creates a kvCache using pre-built shared brokers.
 func NewCacheWithStores(s KVStores) kvCache {
 	return kvCache{
-		subscriptions: cache.NewLoader(s.Subscriptions, azure.SubscriptionKey),
-		vaults:        cache.NewLoader(s.Vaults, vaultKey),
-		secrets:       cache.NewLoader(s.Secrets, secretKey),
-		versions:      cache.NewLoader(s.Versions, versionKey),
+		subscriptions: s.Subscriptions,
+		vaults:        s.Vaults,
+		secrets:       s.Secrets,
+		versions:      s.Versions,
 	}
 }

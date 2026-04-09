@@ -39,6 +39,11 @@ type SecretVersion struct {
 	ExpiresOn   time.Time
 }
 
+// Key functions for cache deduplication.
+func VaultKey(v Vault) string           { return v.Name }
+func SecretKey(s Secret) string         { return s.Name }
+func VersionKey(v SecretVersion) string { return v.Version }
+
 type Service struct {
 	cred    azcore.TokenCredential
 	mu      sync.Mutex

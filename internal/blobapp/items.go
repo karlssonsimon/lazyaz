@@ -171,7 +171,7 @@ func parentPrefix(prefix string) string {
 	return prefix[:idx+1]
 }
 
-// Identity functions used by cache.Loader's internal merge and
+// Identity functions used by cache.Broker's internal merge and
 // ui.SetItemsPreserveKey. Blob prefixes (synthetic "folder" entries in
 // hierarchy mode) use the same Name field as real blobs, so a single
 // keyer handles both cases.

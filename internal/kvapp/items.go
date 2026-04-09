@@ -88,7 +88,7 @@ func versionsToItems(versions []keyvault.SecretVersion) []list.Item {
 	return items
 }
 
-// Identity functions used by cache.Loader's internal merge and
+// Identity functions used by cache.Broker's internal merge and
 // ui.SetItemsPreserveKey. Names are unique within a scope (subscription,
 // vault, secret), which is all the merge semantics require.
 

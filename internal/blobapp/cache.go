@@ -6,51 +6,52 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 )
 
-// blobCache provides an in-memory, stale-while-revalidate cache for:
+// blobCache provides a stale-while-revalidate cache for:
 //
 //	subscriptions → storage accounts → containers → blobs
+//
+// Each Broker is shared across tabs — multiple subscribers to the same
+// key share a single in-flight fetch.
 type blobCache struct {
-	subscriptions *cache.Loader[azure.Subscription]
-	accounts      *cache.Loader[blob.Account]      // key: subscriptionID
-	containers    *cache.Loader[blob.ContainerInfo] // key: subscriptionID, accountName
-	blobs         *cache.Loader[blob.BlobEntry]     // key: subscriptionID, accountName, container, prefix, loadAll
+	subscriptions *cache.Broker[azure.Subscription]
+	accounts      *cache.Broker[blob.Account]      // key: subscriptionID
+	containers    *cache.Broker[blob.ContainerInfo] // key: subscriptionID, accountName
+	blobs         *cache.Broker[blob.BlobEntry]     // key: subscriptionID, accountName, container, prefix, loadAll
 }
 
 func newCache(db *cache.DB) blobCache {
 	if db != nil {
 		return blobCache{
-			subscriptions: cache.NewLoader(cache.NewStore[azure.Subscription](db, "subscriptions"), azure.SubscriptionKey),
-			accounts:      cache.NewLoader(cache.NewStore[blob.Account](db, "blob_accounts"), accountKey),
-			containers:    cache.NewLoader(cache.NewStore[blob.ContainerInfo](db, "blob_containers"), containerKey),
-			blobs:         cache.NewLoader(cache.NewStore[blob.BlobEntry](db, "blobs"), blobEntryKey),
+			subscriptions: cache.NewBroker(cache.NewStore[azure.Subscription](db, "subscriptions"), azure.SubscriptionKey),
+			accounts:      cache.NewBroker(cache.NewStore[blob.Account](db, "blob_accounts"), accountKey),
+			containers:    cache.NewBroker(cache.NewStore[blob.ContainerInfo](db, "blob_containers"), containerKey),
+			blobs:         cache.NewBroker(cache.NewStore[blob.BlobEntry](db, "blobs"), blobEntryKey),
 		}
 	}
 	return blobCache{
-		subscriptions: cache.NewLoader(cache.NewMap[azure.Subscription](), azure.SubscriptionKey),
-		accounts:      cache.NewLoader(cache.NewMap[blob.Account](), accountKey),
-		containers:    cache.NewLoader(cache.NewMap[blob.ContainerInfo](), containerKey),
-		blobs:         cache.NewLoader(cache.NewMap[blob.BlobEntry](), blobEntryKey),
+		subscriptions: cache.NewBroker(cache.NewMap[azure.Subscription](), azure.SubscriptionKey),
+		accounts:      cache.NewBroker(cache.NewMap[blob.Account](), accountKey),
+		containers:    cache.NewBroker(cache.NewMap[blob.ContainerInfo](), containerKey),
+		blobs:         cache.NewBroker(cache.NewMap[blob.BlobEntry](), blobEntryKey),
 	}
 }
 
-// BlobStores holds the shared cache stores for blob resources.
+// BlobStores holds the shared brokers for blob resources.
 // The parent tabapp owns these and passes them when creating tabs.
 type BlobStores struct {
-	Subscriptions cache.Store[azure.Subscription]
-	Accounts      cache.Store[blob.Account]
-	Containers    cache.Store[blob.ContainerInfo]
-	Blobs         cache.Store[blob.BlobEntry]
+	Subscriptions *cache.Broker[azure.Subscription]
+	Accounts      *cache.Broker[blob.Account]
+	Containers    *cache.Broker[blob.ContainerInfo]
+	Blobs         *cache.Broker[blob.BlobEntry]
 }
 
-// NewCacheWithStores creates a blobCache where each Loader wraps the
-// provided shared stores. Each tab gets its own Loaders (independent
-// fetch lifecycle) but shares the underlying data.
+// NewCacheWithStores creates a blobCache using pre-built shared brokers.
 func NewCacheWithStores(s BlobStores) blobCache {
 	return blobCache{
-		subscriptions: cache.NewLoader(s.Subscriptions, azure.SubscriptionKey),
-		accounts:      cache.NewLoader(s.Accounts, accountKey),
-		containers:    cache.NewLoader(s.Containers, containerKey),
-		blobs:         cache.NewLoader(s.Blobs, blobEntryKey),
+		subscriptions: s.Subscriptions,
+		accounts:      s.Accounts,
+		containers:    s.Containers,
+		blobs:         s.Blobs,
 	}
 }
 

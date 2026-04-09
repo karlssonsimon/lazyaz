@@ -45,6 +45,11 @@ type BlobEntry struct {
 	MetadataCount int
 }
 
+// Key functions for cache deduplication.
+func AccountKey(a Account) string       { return a.Name }
+func ContainerKey(c ContainerInfo) string { return c.Name }
+func BlobEntryKey(b BlobEntry) string   { return b.Name }
+
 type BlobDownloadResult struct {
 	BlobName    string
 	Destination string

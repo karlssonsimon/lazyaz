@@ -23,6 +23,7 @@ func Default() Keymap {
 		ToggleThemePicker:   New("T"),
 		ToggleHelp:          New("?", "f1"),
 		ToggleNotifications: New("N"),
+		ToggleStreams:       New("F"),
 
 		// Overlay navigation.
 		ThemeUp:     New("up", "ctrl+k"),

@@ -17,7 +17,7 @@ type Subscription struct {
 	State string
 }
 
-// SubscriptionKey returns the stable identity used by cache.Loader to
+// SubscriptionKey returns the stable identity used by cache.Broker to
 // dedupe streamed subscriptions.
 func SubscriptionKey(s Subscription) string { return s.ID }
 

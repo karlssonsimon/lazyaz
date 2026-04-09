@@ -54,6 +54,9 @@ func (m Model) View() tea.View {
 	if m.notificationsOverlay.Active {
 		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, closeHint, notifierToEntries(m.notifier.Snapshot()), m.styles, m.width, m.height, view)
 	}
+	if m.streamOverlay.Active {
+		view = ui.RenderStreamOverlay(m.streamOverlay, closeHint, m.collectStreams(), m.styles, m.width, m.height, view)
+	}
 
 	out := tea.NewView(ui.RenderCanvas(view, m.width, m.height, m.styles.Bg))
 	out.AltScreen = true
@@ -120,6 +123,7 @@ func (m Model) activeHelpSections() []ui.HelpSection {
 			keymap.HelpEntry(km.NextTab, "next tab"),
 			"alt+1..9  jump to tab",
 			keymap.HelpEntry(km.ToggleThemePicker, "theme picker"),
+			keymap.HelpEntry(km.ToggleStreams, "stream manager"),
 			keymap.HelpEntry(km.ToggleHelp, "help"),
 			keymap.HelpEntry(km.Quit, "quit"),
 		},

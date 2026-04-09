@@ -251,6 +251,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.sortOverlay.active {
+		if applied, field, desc := m.sortOverlay.handleKey(key, m.Keymap); applied {
+			m.blobSortField = field
+			m.blobSortDesc = desc
+			m.refreshItems()
+			m.Status = "Sort: " + blobSortLabel(field, desc)
+		}
+		return m, nil
+	}
+
 	if m.preview.open && m.focus == previewPane {
 		return m.handlePreviewKey(msg)
 	}
@@ -301,7 +311,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	case m.Keymap.SortBlobs.Matches(key):
 		if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
-			m.cycleBlobSort()
+			m.sortOverlay.open(m.blobSortField, m.blobSortDesc)
 			return m, nil
 		}
 	case m.Keymap.ToggleVisualLine.Matches(key):

@@ -27,6 +27,7 @@ type jumpTabMsg struct{ index int }
 type openThemePickerMsg struct{}
 type toggleHelpMsg struct{}
 type toggleNotificationsMsg struct{}
+type toggleStreamsMsg struct{}
 
 // toastTickMsg drives the periodic re-render that lets toasts expire
 // off-screen. It self-extinguishes once no toasts are active. See

@@ -38,7 +38,7 @@ type Model struct {
 	sbSvc   *servicebus.Service
 	kvSvc   *keyvault.Service
 
-	stores sharedStores
+	brokers sharedBrokers
 	cfg    ui.Config
 	keymap keymap.Keymap
 
@@ -57,6 +57,7 @@ type Model struct {
 	themeOverlay         ui.ThemeOverlayState
 	helpOverlay          ui.HelpOverlayState
 	notificationsOverlay ui.NotificationsOverlayState
+	streamOverlay        ui.StreamOverlayState
 
 	cursor     cursor.Model
 	tabPicker  tabPickerState
@@ -76,7 +77,7 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		blobSvc:  blobSvc,
 		sbSvc:    sbSvc,
 		kvSvc:    kvSvc,
-		stores:   newSharedStores(db),
+		brokers:  newSharedBrokers(db),
 		cfg:      cfg,
 		keymap:   km,
 		cursor:   cur,
@@ -175,10 +176,10 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 	switch kind {
 	case TabBlob:
 		bm := blobapp.NewModelWithCache(m.blobSvc, m.cfg, blobapp.BlobStores{
-			Subscriptions: m.stores.subscriptions,
-			Accounts:      m.stores.blobAccounts,
-			Containers:    m.stores.blobContainers,
-			Blobs:         m.stores.blobs,
+			Subscriptions: m.brokers.subscriptions,
+			Accounts:      m.brokers.blobAccounts,
+			Containers:    m.brokers.blobContainers,
+			Blobs:         m.brokers.blobs,
 		}, m.keymap)
 		bm.EmbeddedMode = true
 		bm.Notifier = m.notifier
@@ -186,10 +187,10 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		child = bm
 	case TabServiceBus:
 		sm := sbapp.NewModelWithCache(m.sbSvc, m.cfg, sbapp.SBStores{
-			Subscriptions: m.stores.subscriptions,
-			Namespaces:    m.stores.sbNamespaces,
-			Entities:      m.stores.sbEntities,
-			TopicSubs:     m.stores.sbTopicSubs,
+			Subscriptions: m.brokers.subscriptions,
+			Namespaces:    m.brokers.sbNamespaces,
+			Entities:      m.brokers.sbEntities,
+			TopicSubs:     m.brokers.sbTopicSubs,
 		}, m.keymap)
 		sm.EmbeddedMode = true
 		sm.Notifier = m.notifier
@@ -197,10 +198,10 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		child = sm
 	case TabKeyVault:
 		kvm := kvapp.NewModelWithCache(m.kvSvc, m.cfg, kvapp.KVStores{
-			Subscriptions: m.stores.subscriptions,
-			Vaults:        m.stores.kvVaults,
-			Secrets:       m.stores.kvSecrets,
-			Versions:      m.stores.kvVersions,
+			Subscriptions: m.brokers.subscriptions,
+			Vaults:        m.brokers.kvVaults,
+			Secrets:       m.brokers.kvSecrets,
+			Versions:      m.brokers.kvVersions,
 		}, m.keymap)
 		kvm.EmbeddedMode = true
 		kvm.Notifier = m.notifier
@@ -396,6 +397,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case toggleStreamsMsg:
+		if m.streamOverlay.Active {
+			m.streamOverlay.Close()
+		} else {
+			m.streamOverlay.Open()
+		}
+		return m, nil
+
 	case toastTickMsg:
 		// Self-extinguishing tick: re-render to drop expired toasts,
 		// reschedule only if any are still active.
@@ -446,6 +455,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Cancel: m.keymap.Cancel,
 				Erase:  m.keymap.BackspaceUp,
 			})
+			return m, nil
+		}
+
+		// Stream management overlay.
+		if m.streamOverlay.Active {
+			streams := m.collectStreams()
+			cancelIdx, didCancel := m.streamOverlay.HandleKey(key, ui.StreamKeyBindings{
+				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
+				Close:        m.keymap.ToggleStreams,
+				Cancel:       m.keymap.Cancel,
+				CancelStream: cancelStreamBinding{},
+			}, len(streams))
+			if didCancel && cancelIdx >= 0 && cancelIdx < len(streams) {
+				entry := streams[cancelIdx]
+				if entry.Status == "active" {
+					m.cancelStream(entry)
+				}
+			}
 			return m, nil
 		}
 
@@ -512,6 +539,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case m.keymap.ToggleNotifications.Matches(key):
 			return m.Update(toggleNotificationsMsg{})
+		case m.keymap.ToggleStreams.Matches(key):
+			return m.Update(toggleStreamsMsg{})
 		}
 
 		if idx, ok := m.keymap.JumpIndex(key); ok {
@@ -618,6 +647,9 @@ func (m *Model) buildCommands() []command {
 		}},
 		command{name: "Notifications History", hint: "N", action: func() commandAction {
 			return commandAction{msg: toggleNotificationsMsg{}}
+		}},
+		command{name: "Stream Manager", hint: "F", action: func() commandAction {
+			return commandAction{msg: toggleStreamsMsg{}}
 		}},
 		command{name: "Help", hint: "?", action: func() commandAction {
 			return commandAction{msg: toggleHelpMsg{}}

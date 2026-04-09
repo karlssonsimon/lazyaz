@@ -44,6 +44,11 @@ type TopicSubscription struct {
 	DeadLetterCount int64
 }
 
+// Key functions for cache deduplication.
+func NamespaceKey(ns Namespace) string          { return ns.Name }
+func EntityKey(e Entity) string                 { return e.Name }
+func TopicSubscriptionKey(s TopicSubscription) string { return s.Name }
+
 type PeekedMessage struct {
 	MessageID   string
 	EnqueuedAt  time.Time
