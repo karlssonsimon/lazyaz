@@ -105,6 +105,7 @@ type Model struct {
 	messageViewport viewport.Model
 	viewingMessage  bool
 	selectedMessage servicebus.PeekedMessage
+	textSelection   ui.TextSelection
 
 	// markedMessages and duplicateMessages are scoped by peek target
 	// (entity + sub + active/DLQ) so switching tabs no longer destroys

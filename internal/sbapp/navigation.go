@@ -66,6 +66,35 @@ func (m Model) handleBackspace() (Model, tea.Cmd) {
 func (m *Model) closePreview() {
 	m.viewingMessage = false
 	m.selectedMessage = servicebus.PeekedMessage{}
+	m.textSelection.Reset()
+}
+
+// messageViewportRegion returns the screen bounds of the message
+// preview viewport so mouse coordinates can be translated to
+// content positions.
+func (m Model) messageViewportRegion() ui.ViewportRegion {
+	pane := m.Styles.Chrome.Pane
+
+	// Compute X: sum of all pane widths before the preview pane.
+	previewX := 0
+	for i := 0; i < messagePreviewPane; i++ {
+		previewX += m.paneWidths[i]
+	}
+
+	hFrame := pane.GetHorizontalFrameSize()
+	innerX := previewX + hFrame/2
+
+	// Y: subscription bar + pane border top + padding top + title line.
+	// The viewport content starts one row after the title inside the pane.
+	vFrameTop := pane.GetBorderTopSize() + pane.GetPaddingTop()
+	innerY := ui.SubscriptionBarHeight + vFrameTop + ui.PaneTitleHeight + 1
+
+	return ui.ViewportRegion{
+		X:      innerX,
+		Y:      innerY,
+		Width:  m.messageViewport.Width(),
+		Height: m.messageViewport.Height(),
+	}
 }
 
 // collapseFocusedTopic handles the "h / backspace" semantics for the

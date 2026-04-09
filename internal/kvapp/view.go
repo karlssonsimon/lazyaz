@@ -51,6 +51,7 @@ func (m Model) View() tea.View {
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "versions"},
 			{Key: km.YankSecret.Short(), Desc: "yank"},
+			{Key: km.ActionMenu.Short(), Desc: "actions"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
 		},
 		Footer: m.inspectFooter(secretsPane, ui.PaneContentWidth(paneStyle, pw[1])),
@@ -102,6 +103,9 @@ func (m Model) View() tea.View {
 	statusBar := ui.RenderStatusBar(m.Styles, sbItems, "", false, m.Width)
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)
+	if m.actionMenu.active {
+		view = m.renderActionMenu(view)
+	}
 	out := tea.NewView(m.RenderOverlays(view))
 	out.AltScreen = true
 	out.MouseMode = tea.MouseModeCellMotion

@@ -56,7 +56,8 @@ type Styles struct {
 	Danger      lipgloss.Style // Danger text (base08)
 	DangerBold  lipgloss.Style // Bold danger (base08)
 	Warning     lipgloss.Style // Warning/filter match (base0A)
-	FocusBorder lipgloss.Style // Focused border color (base0B)
+	FocusBorder        lipgloss.Style // Focused border color (base0B)
+	SelectionHighlight lipgloss.Style // Mouse text selection highlight (base02 bg + base06 fg)
 
 	// StatusBar is the bottom status bar.
 	StatusBar StatusBarStyles
@@ -376,7 +377,8 @@ func NewStyles(s Scheme) Styles {
 		Danger:      lipgloss.NewStyle().Foreground(danger),
 		DangerBold:  lipgloss.NewStyle().Foreground(danger).Bold(true),
 		Warning:     lipgloss.NewStyle().Foreground(warning),
-		FocusBorder: lipgloss.NewStyle().BorderForeground(green),
+		FocusBorder:        lipgloss.NewStyle().BorderForeground(green),
+		SelectionHighlight: lipgloss.NewStyle().Foreground(selText).Background(selBg).Reverse(true),
 
 		StatusBar: StatusBarStyles{
 			Box: lipgloss.NewStyle().

@@ -7,6 +7,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 )
@@ -25,6 +26,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case m.HelpOverlay.Active:
 			m.HelpOverlay.PasteText(text)
+			return m, nil
+		case m.actionMenu.active:
+			m.actionMenu.query += text
+			m.actionMenu.refilter()
 			return m, nil
 		default:
 			var cmd tea.Cmd
@@ -83,6 +88,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case secretValueYankedMsg:
 		return m.handleSecretValueYanked(msg)
+
+	case clipboardMsg:
+		if msg.err != nil {
+			m.Notify(appshell.LevelError, fmt.Sprintf("Clipboard: %s", msg.err.Error()))
+		} else {
+			m.Notify(appshell.LevelSuccess, fmt.Sprintf("Copied to clipboard: %s", msg.text))
+		}
+		return m, nil
+
+	case markedSecretsYankedMsg:
+		m.ClearLoading()
+		if msg.err != nil {
+			m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to yank secrets: %s", msg.err.Error()))
+		} else {
+			m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Yanked %d secrets as JSON to clipboard", msg.count))
+		}
+		return m, nil
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -241,6 +263,13 @@ func (m Model) handleSecretValueYanked(msg secretValueYankedMsg) (Model, tea.Cmd
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
+	if m.actionMenu.active {
+		if selected, act := m.actionMenu.handleKey(key, m.Keymap); selected {
+			return m.executeAction(act)
+		}
+		return m, nil
+	}
+
 	if result := m.HandleOverlayKeys(key); result.Handled {
 		if result.SelectSub != nil {
 			return m.selectSubscription(*result.SelectSub)
@@ -253,6 +282,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 
 	focusedFilterActive := m.focusedListSettingFilter()
+
+	// Esc peels selection state like a stack on the secrets pane:
+	//  1. If the bubbles list has an applied filter → clear it and return.
+	//  2. Otherwise fall through to normal esc handlers (visual mode, etc).
+	if m.Keymap.Cancel.Matches(key) && m.focus == secretsPane {
+		if m.secretsList.FilterState() != list.Unfiltered {
+			m.secretsList.ResetFilter()
+			return m, nil
+		}
+	}
+
+	// Track visual range updates after list cursor moves.
+	markVisualAfterListUpdate := m.focus == secretsPane && m.visualLineMode && !focusedFilterActive && m.Keymap.BlobVisualMove.Matches(key)
 
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, focusedFilterActive):
@@ -291,6 +333,47 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.NavigateLeft.Matches(key):
 		if !focusedFilterActive {
 			return m.navigateLeft()
+		}
+	case m.Keymap.ToggleVisualLine.Matches(key):
+		if m.focus == secretsPane && !focusedFilterActive {
+			m.toggleVisualLineMode()
+			return m, nil
+		}
+	case m.Keymap.ToggleMark.Matches(key):
+		if m.focus == secretsPane && !focusedFilterActive {
+			m.toggleCurrentSecretMark()
+			return m, nil
+		}
+	case m.Keymap.VisualSwapAnchor.Matches(key):
+		if m.focus == secretsPane && m.visualLineMode && !focusedFilterActive {
+			m.swapVisualAnchor()
+			m.refreshSecretItems()
+			return m, nil
+		}
+	case m.Keymap.ExitVisualLine.Matches(key):
+		if m.focus == secretsPane && !focusedFilterActive {
+			if m.visualLineMode {
+				m.commitVisualSelection()
+				m.visualLineMode = false
+				m.visualAnchor = ""
+				m.refreshSecretItems()
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedSecrets)))
+				return m, nil
+			}
+			if len(m.markedSecrets) > 0 {
+				count := len(m.markedSecrets)
+				for name := range m.markedSecrets {
+					delete(m.markedSecrets, name)
+				}
+				m.refreshSecretItems()
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
+				return m, nil
+			}
+		}
+	case m.Keymap.ActionMenu.Matches(key):
+		if m.focus == secretsPane && !focusedFilterActive && m.hasVault {
+			m.actionMenu.open(m.buildActions())
+			return m, nil
 		}
 	case m.Keymap.YankSecret.Matches(key):
 		if !focusedFilterActive {
@@ -338,6 +421,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.secretsList, cmd = m.secretsList.Update(msg)
 	case versionsPane:
 		m.versionsList, cmd = m.versionsList.Update(msg)
+	}
+	if markVisualAfterListUpdate {
+		m.refreshSecretItems()
 	}
 	return m, cmd
 }

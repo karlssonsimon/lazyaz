@@ -33,7 +33,8 @@ func (m *Model) resetBlobLoadState() {
 
 func (m *Model) refreshItems() {
 	entries := m.displayBlobs()
-	m.blobsList.SetItems(blobsToItems(entries, m.prefix, m.markedBlobs, m.visualSelectionNames()))
+	w := ui.PaneContentWidth(m.Styles.Chrome.Pane, m.paneWidths[blobsPane])
+	m.blobsList.SetItems(blobsToItems(entries, m.prefix, m.markedBlobs, m.visualSelectionNames(), w))
 	ui.ClampListSelection(&m.blobsList)
 }
 

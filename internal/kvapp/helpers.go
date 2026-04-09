@@ -38,6 +38,12 @@ func (m Model) secretsPaneTitle() string {
 	if len(m.secrets) > 0 {
 		title = fmt.Sprintf("%s (%d)", title, len(m.secrets))
 	}
+	if len(m.markedSecrets) > 0 {
+		title = fmt.Sprintf("%s | marked:%d", title, len(m.markedSecrets))
+	}
+	if m.visualLineMode {
+		title = fmt.Sprintf("%s | VISUAL:%d", title, len(m.visualSelectionSecretNames()))
+	}
 	return title
 }
 

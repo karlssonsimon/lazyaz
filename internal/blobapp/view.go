@@ -124,9 +124,13 @@ func (m Model) View() tea.View {
 			{Key: km.PreviewBottom.Short(), Desc: "bottom"},
 		}, m.Styles, ui.PaneContentWidth(m.Styles.Chrome.Pane, pw[previewPane]))
 		previewTitle := m.Styles.Accent.Render(m.preview.title(m.Styles))
+		vpView := m.preview.viewport.View()
+		if m.textSelection.Active {
+			vpView = m.textSelection.HighlightContent(m.preview.viewport, m.Styles.SelectionHighlight)
+		}
 		previewContent := lipgloss.JoinVertical(lipgloss.Left,
 			previewTitle,
-			m.preview.viewport.View(),
+			vpView,
 			previewHints,
 		)
 		focused := m.focus == previewPane

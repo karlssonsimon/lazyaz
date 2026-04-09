@@ -388,6 +388,36 @@ func computePreviewWindow(totalSize, cursor int64, visibleLines int) (int64, int
 	return start, windowSize
 }
 
+// previewViewportRegion returns the screen bounds of the preview
+// viewport so mouse coordinates can be translated to content positions.
+func (m Model) previewViewportRegion() ui.ViewportRegion {
+	pane := m.Styles.Chrome.Pane
+
+	// Compute the X position of the preview pane on screen.
+	// The view assembles panes as: [parent, focused, child].
+	// Preview is always the rightmost rendered pane.
+	previewX := 0
+	for i := 0; i < previewPane; i++ {
+		previewX += m.paneWidths[i]
+	}
+
+	// Inside the pane: border left (1) + padding left (1) = horizontal frame / 2.
+	hFrame := pane.GetHorizontalFrameSize()
+	innerX := previewX + hFrame/2
+
+	// Y: subscription bar + pane border top + padding top + title line.
+	// The viewport content starts one row after the title inside the pane.
+	vFrameTop := pane.GetBorderTopSize() + pane.GetPaddingTop()
+	innerY := ui.SubscriptionBarHeight + vFrameTop + ui.PaneTitleHeight + 1
+
+	return ui.ViewportRegion{
+		X:      innerX,
+		Y:      innerY,
+		Width:  m.preview.viewport.Width(),
+		Height: m.preview.viewport.Height(),
+	}
+}
+
 func renderPreviewContent(data []byte, blobName, contentType string, binary bool, styles ui.Styles) string {
 	if binary {
 		return styles.Warning.Render("Binary content preview is not supported.")

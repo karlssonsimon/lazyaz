@@ -86,6 +86,7 @@ type Model struct {
 	loadingSpinnerID int
 	preview         previewState
 	pendingPreviewG bool
+	textSelection   ui.TextSelection
 
 	// downloadDir is the resolved root directory under which marked
 	// blobs are saved. Set once at construction time from

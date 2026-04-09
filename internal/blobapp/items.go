@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
-	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/list"
 )
@@ -45,24 +45,31 @@ func (i containerItem) FilterValue() string {
 }
 
 type blobItem struct {
-	blob        blob.BlobEntry
-	displayName string
-	marked      bool
-	visual      bool
+	blob         blob.BlobEntry
+	displayName  string
+	marked       bool
+	visual       bool
+	contentWidth int // pane content width for column alignment
 }
 
 func (i blobItem) Title() string {
 	if i.blob.IsPrefix {
-		return "📁 " + i.displayName
+		return "📁 " + truncateMiddle(i.displayName, 85)
 	}
-	// Fixed-width columns: size(10) tier(8) date(16) — right-aligned so
-	// they stay lined up across rows. The delegate truncates the name
-	// from the right if the pane is too narrow.
+
 	icon := fileIcon(i.displayName)
-	size := fmt.Sprintf("%10s", humanSize(i.blob.Size))
-	tier := fmt.Sprintf("%-8s", ui.EmptyToDash(i.blob.AccessTier))
-	date := ui.FormatTime(i.blob.LastModified)
-	return fmt.Sprintf("%s %s  %s %s %s", icon, i.displayName, size, tier, date)
+	name := truncateMiddle(i.displayName, 85)
+	size := humanSize(i.blob.Size)
+	date := formatDate(i.blob.LastModified)
+
+	return fmt.Sprintf("%s %-85s  %7s  %s", icon, name, size, date)
+}
+
+func formatDate(t time.Time) string {
+	if t.IsZero() {
+		return "    -     "
+	}
+	return t.Local().Format("2006-01-02")
 }
 
 func (i blobItem) Description() string {
@@ -122,14 +129,15 @@ func sortBlobs(entries []blob.BlobEntry, field blobSortField, desc bool) []blob.
 	return out
 }
 
-func blobsToItems(entries []blob.BlobEntry, prefix string, marked map[string]blob.BlobEntry, visual map[string]struct{}) []list.Item {
+func blobsToItems(entries []blob.BlobEntry, prefix string, marked map[string]blob.BlobEntry, visual map[string]struct{}, contentWidth int) []list.Item {
 	items := make([]list.Item, 0, len(entries))
 	for _, entry := range entries {
 		items = append(items, blobItem{
-			blob:        entry,
-			displayName: trimPrefixForDisplay(entry.Name, prefix),
-			marked:      isBlobMarked(marked, entry.Name),
-			visual:      isBlobVisualSelected(visual, entry.Name),
+			blob:         entry,
+			displayName:  trimPrefixForDisplay(entry.Name, prefix),
+			marked:       isBlobMarked(marked, entry.Name),
+			visual:       isBlobVisualSelected(visual, entry.Name),
+			contentWidth: contentWidth,
 		})
 	}
 	return items
@@ -149,6 +157,29 @@ func isBlobVisualSelected(visual map[string]struct{}, blobName string) bool {
 	}
 	_, ok := visual[blobName]
 	return ok
+}
+
+// truncateMiddle truncates a string from the middle, preserving the
+// start and end so both the name pattern and the extension stay visible.
+// e.g. "065592282239F001.CAMT054.CRIN.250930182458.XML" → "065592282…82458.XML"
+func truncateMiddle(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen < 5 {
+		return s[:maxLen]
+	}
+	// Keep more of the end (extension + suffix is usually more distinctive).
+	endLen := maxLen * 2 / 5
+	if endLen < 4 {
+		endLen = 4
+	}
+	startLen := maxLen - endLen - 1 // -1 for the ellipsis
+	if startLen < 2 {
+		startLen = 2
+		endLen = maxLen - startLen - 1
+	}
+	return s[:startLen] + "…" + s[len(s)-endLen:]
 }
 
 func trimPrefixForDisplay(name, prefix string) string {

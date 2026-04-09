@@ -24,6 +24,8 @@ func (i vaultItem) FilterValue() string {
 
 type secretItem struct {
 	secret keyvault.Secret
+	marked bool
+	visual bool
 }
 
 func (i secretItem) Title() string {
@@ -76,6 +78,16 @@ func secretsToItems(secrets []keyvault.Secret) []list.Item {
 	items := make([]list.Item, 0, len(secrets))
 	for _, s := range secrets {
 		items = append(items, secretItem{secret: s})
+	}
+	return items
+}
+
+func secretsToItemsWithState(secrets []keyvault.Secret, marked map[string]keyvault.Secret, visual map[string]struct{}) []list.Item {
+	items := make([]list.Item, 0, len(secrets))
+	for _, s := range secrets {
+		_, m := marked[s.Name]
+		_, v := visual[s.Name]
+		items = append(items, secretItem{secret: s, marked: m, visual: v})
 	}
 	return items
 }

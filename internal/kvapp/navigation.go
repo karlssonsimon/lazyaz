@@ -51,6 +51,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.hasSecret = false
 	m.currentVault = keyvault.Vault{}
 	m.currentSecret = keyvault.Secret{}
+	m.clearSecretSelectionState()
 	m.setFocus(vaultsPane)
 
 	if cached, ok := m.cache.vaults.Get(sub.ID); ok {
@@ -103,6 +104,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.hasVault = true
 		m.hasSecret = false
 		m.currentSecret = keyvault.Secret{}
+		m.clearSecretSelectionState()
 		m.setFocus(secretsPane)
 
 		secretsScope := cache.Key(m.CurrentSub.ID, item.vault.Name)
