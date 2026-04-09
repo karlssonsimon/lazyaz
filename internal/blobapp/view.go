@@ -141,6 +141,20 @@ func (m Model) View() tea.View {
 		paneMap[previewPane] = ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[previewPane], Height: h, Focused: focused}, m.Styles)
 	}
 
+	// When blobs are focused and inside a folder, render the parent folder's
+	// blobs in the left column instead of containers.
+	if m.focus == blobsPane && m.prefix != "" && pw[containersPane] > 0 {
+		parentTitle := "/" + strings.TrimSuffix(parentPrefix(m.prefix), "/")
+		if parentTitle == "/" {
+			parentTitle = "/"
+		}
+		paneMap[containersPane] = ui.RenderListPane(ui.ListPane{
+			List:  &m.parentBlobsList,
+			Title: parentTitle,
+			Frame: ui.PaneFrame{Width: pw[containersPane], Height: h, Focused: false},
+		}, m.Styles)
+	}
+
 	// Assemble panes in visual order: parent (left), focused (center), child (right).
 	// When there's no parent pane, add an empty spacer to keep the focused pane centered.
 	parentWidth := m.Width * 20 / 100

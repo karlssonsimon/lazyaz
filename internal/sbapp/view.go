@@ -97,18 +97,46 @@ func (m Model) View() tea.View {
 	}
 	detail := ui.RenderListPane(detailPaneListPane, m.Styles)
 
-	panesList := []string{namespaces, entities, detail}
+	// Build pane map for lookup by index.
+	paneMap := map[int]string{
+		namespacesPane: namespaces,
+		entitiesPane:   entities,
+		detailPane:     detail,
+	}
 
-	if m.viewingMessage {
+	// Render preview pane if it has a width assigned.
+	if pw[messagePreviewPane] > 0 && m.viewingMessage {
 		previewTitleStyle := m.Styles.Accent.Copy().Padding(0, 1)
 		msgID := ui.EmptyToDash(m.selectedMessage.MessageID)
 		previewTitle := previewTitleStyle.Render(fmt.Sprintf("Message: %s", msgID))
 		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, m.messageViewport.View())
-		preview := ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[3], Height: h, Focused: m.focus == messagePreviewPane}, m.Styles)
-		panesList = append(panesList, preview)
+		paneMap[messagePreviewPane] = ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[messagePreviewPane], Height: h, Focused: m.focus == messagePreviewPane}, m.Styles)
 	}
 
-	panes := lipgloss.JoinHorizontal(lipgloss.Top, panesList...)
+	// Assemble panes in visual order: parent (left), focused (center), child (right).
+	// When there's no parent pane, add an empty spacer to keep the focused pane centered.
+	parentWidth := m.Width * 20 / 100
+	paneParts := make([]string, 0, 3)
+	if m.focus > namespacesPane && pw[m.focus-1] > 0 {
+		paneParts = append(paneParts, paneMap[m.focus-1])
+	} else if m.focus == namespacesPane {
+		spacer := lipgloss.NewStyle().Width(parentWidth).Height(h).Render("")
+		paneParts = append(paneParts, spacer)
+	}
+	paneParts = append(paneParts, paneMap[m.focus])
+
+	// Child column (right side).
+	childIdx := m.focus + 1
+	if m.focus == detailPane {
+		childIdx = messagePreviewPane
+	}
+	if childIdx <= messagePreviewPane && pw[childIdx] > 0 {
+		if rendered, ok := paneMap[childIdx]; ok {
+			paneParts = append(paneParts, rendered)
+		}
+	}
+
+	panes := lipgloss.JoinHorizontal(lipgloss.Top, paneParts...)
 
 	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
 

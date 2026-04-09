@@ -8,15 +8,36 @@ func (m *Model) resize() {
 	}
 
 	pane := m.Styles.Chrome.Pane
-	numPanes := 3
-	if m.viewingMessage {
-		numPanes = 4
-	}
-	widths := ui.PaneLayout(pane, m.Width, numPanes)
 
-	m.paneWidths = [4]int{widths[0], widths[1], widths[2], 0}
-	if m.viewingMessage {
-		m.paneWidths[3] = widths[3]
+	// Determine parent/child visibility based on focus.
+	// Always reserve parent space — when namespaces is focused, a spacer
+	// fills the left column to keep the focused pane centered.
+	hasParent := true
+	hasChild := false
+	switch m.focus {
+	case namespacesPane:
+		hasChild = m.hasNamespace // show entities preview
+	case entitiesPane:
+		hasChild = m.hasPeekTarget // show detail preview
+	case detailPane:
+		hasChild = m.viewingMessage // show message preview
+	}
+
+	cols := ui.MillerLayout(pane, m.Width, hasParent, hasChild)
+
+	// Map roles → pane indices. The focused pane is always center.
+	// Parent is the pane before focus, child is the pane after.
+	m.paneWidths = [4]int{} // reset all to 0
+	m.paneWidths[m.focus] = cols.Focused
+	if m.focus > namespacesPane {
+		m.paneWidths[m.focus-1] = cols.Parent
+	}
+	if hasChild {
+		childIdx := m.focus + 1
+		if m.focus == detailPane {
+			childIdx = messagePreviewPane
+		}
+		m.paneWidths[childIdx] = cols.Child
 	}
 
 	// paneHeight is the total block height of each pane (border + content),
@@ -34,25 +55,29 @@ func (m *Model) resize() {
 		baseListHeight = 1
 	}
 
-	detailListHeight := baseListHeight - m.inspectFooterHeight(detailPane)
-	if m.hasPeekTarget {
-		detailListHeight -= dlqTabsHeight
+	// Size each visible list to its pane width.
+	if w := m.paneWidths[namespacesPane]; w > 0 {
+		m.namespacesList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight-m.inspectFooterHeight(namespacesPane))
 	}
-
-	if m.viewingMessage {
-		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), detailListHeight)
-		m.messageViewport.SetWidth(ui.PaneContentWidth(pane, widths[3]))
+	if w := m.paneWidths[entitiesPane]; w > 0 {
+		entitiesListHeight := baseListHeight - m.inspectFooterHeight(entitiesPane)
+		if m.hasNamespace {
+			entitiesListHeight -= entityTabsHeight
+		}
+		m.entitiesList.SetSize(ui.PaneContentWidth(pane, w), entitiesListHeight)
+	}
+	if w := m.paneWidths[detailPane]; w > 0 {
+		detailListHeight := baseListHeight - m.inspectFooterHeight(detailPane)
+		if m.hasPeekTarget {
+			detailListHeight -= dlqTabsHeight
+		}
+		m.detailList.SetSize(ui.PaneContentWidth(pane, w), detailListHeight)
+	}
+	if w := m.paneWidths[messagePreviewPane]; w > 0 {
+		m.messageViewport.SetWidth(ui.PaneContentWidth(pane, w))
 		m.messageViewport.SetHeight(baseListHeight - 2)
 	} else {
-		m.detailList.SetSize(ui.PaneContentWidth(pane, widths[2]), detailListHeight)
 		m.messageViewport.SetWidth(0)
 		m.messageViewport.SetHeight(0)
 	}
-
-	m.namespacesList.SetSize(ui.PaneContentWidth(pane, widths[0]), baseListHeight-m.inspectFooterHeight(namespacesPane))
-	entitiesListHeight := baseListHeight - m.inspectFooterHeight(entitiesPane)
-	if m.hasNamespace {
-		entitiesListHeight -= entityTabsHeight
-	}
-	m.entitiesList.SetSize(ui.PaneContentWidth(pane, widths[1]), entitiesListHeight)
 }

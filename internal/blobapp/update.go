@@ -435,6 +435,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				}
 				ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
+				m.rebuildParentBlobsList()
+
 				m.SetLoading(blobsPane)
 				m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix))
 				return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))

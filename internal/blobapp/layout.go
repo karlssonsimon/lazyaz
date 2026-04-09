@@ -61,6 +61,11 @@ func (m *Model) resize() {
 	}
 	if w := m.paneWidths[containersPane]; w > 0 {
 		m.containersList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight-m.inspectFooterHeight(containersPane))
+		// Also size the parent blobs list to the same width (used when
+		// inside a folder — the left column shows parent folder contents).
+		if m.focus == blobsPane && m.prefix != "" {
+			m.parentBlobsList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight)
+		}
 	}
 	if w := m.paneWidths[blobsPane]; w > 0 {
 		blobListHeight := baseListHeight - m.inspectFooterHeight(blobsPane)

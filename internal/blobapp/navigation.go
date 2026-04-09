@@ -82,6 +82,9 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 			}
 			ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
+			// Update parent blobs list for the new parent prefix.
+			m.rebuildParentBlobsList()
+
 			m.SetLoading(blobsPane)
 			m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix))
 			return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
@@ -213,6 +216,10 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, m.blobLoadAll)
 			m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
 
+			// Populate parent blobs list with current folder's contents
+			// so the left column shows where we came from.
+			m.updateParentBlobsList()
+
 			m.clearFilter()
 			m.prefix = item.blob.Name
 
@@ -233,6 +240,47 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// updateParentBlobsList copies the current blobs list contents into the
+// parent blobs list. Called before descending into a subfolder so the
+// left column shows the folder we came from.
+func (m *Model) updateParentBlobsList() {
+	parentPrefix := m.prefix
+	items := blobsToItems(m.blobs, parentPrefix, nil, nil)
+	m.parentBlobsList.SetItems(items)
+	// Position cursor on the folder we're about to enter.
+	if sel, ok := m.blobsList.SelectedItem().(blobItem); ok {
+		for i, it := range m.parentBlobsList.VisibleItems() {
+			if bi, ok := it.(blobItem); ok && bi.blob.Name == sel.blob.Name {
+				m.parentBlobsList.Select(i)
+				break
+			}
+		}
+	}
+}
+
+// rebuildParentBlobsList rebuilds the parent blobs list from cache for
+// the parent of the current prefix. Called after going up a folder.
+func (m *Model) rebuildParentBlobsList() {
+	if m.prefix == "" {
+		// At container root — parent is containers, not blobs.
+		m.parentBlobsList.SetItems(nil)
+		return
+	}
+	pp := parentPrefix(m.prefix)
+	scope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, pp, false)
+	if cached, ok := m.cache.blobs.Get(scope); ok {
+		items := blobsToItems(cached, pp, nil, nil)
+		m.parentBlobsList.SetItems(items)
+		// Position cursor on the current prefix folder.
+		for i, it := range m.parentBlobsList.VisibleItems() {
+			if bi, ok := it.(blobItem); ok && bi.blob.Name == m.prefix {
+				m.parentBlobsList.Select(i)
+				break
+			}
+		}
+	}
 }
 
 func paneName(pane int) string {
