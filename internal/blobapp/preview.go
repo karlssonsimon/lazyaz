@@ -49,7 +49,7 @@ func (m *Model) resetPreviewState() {
 	m.preview = newPreviewState()
 	m.pendingPreviewG = false
 	if m.focus == previewPane {
-		m.focus = blobsPane
+		m.setFocus(blobsPane)
 	}
 }
 
@@ -88,7 +88,7 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.preview.rendered = m.Styles.Muted.Render("Loading preview...")
 	m.preview.requestID++
 	m.pendingPreviewG = false
-	m.focus = previewPane
+	m.setFocus(previewPane)
 	m.SetLoading(previewPane)
 
 	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading preview for %s", b.Name))
@@ -155,7 +155,7 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 	case m.Keymap.PreviewBack.Matches(key):
 		m.pendingPreviewG = false
-		m.focus = blobsPane
+		m.setFocus(blobsPane)
 		return m, nil
 	case m.Keymap.PreviewNextFocus.Matches(key):
 		m.pendingPreviewG = false
