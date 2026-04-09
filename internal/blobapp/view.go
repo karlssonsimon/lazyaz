@@ -82,10 +82,9 @@ func (m Model) View() tea.View {
 		}
 	} else {
 		blobsHintSet = []ui.PaneHint{
-			{Key: km.FilterInput.Short(), Desc: "search"},
-			{Key: km.SortBlobs.Short(), Desc: "sort"},
+			{Key: km.FilterInput.Short(), Desc: "filter"},
+			{Key: km.ActionMenu.Short(), Desc: "actions"},
 			{Key: km.ToggleMark.Short(), Desc: "mark"},
-			{Key: km.DownloadSelection.Short(), Desc: "download"},
 			{Key: km.OpenFocusedAlt.Short(), Desc: "preview"},
 		}
 	}
@@ -99,18 +98,11 @@ func (m Model) View() tea.View {
 		Footer:   m.inspectFooter(blobsPane, ui.PaneContentWidth(paneStyle, pw[2])),
 		Frame:    ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == blobsPane},
 	}
-	if m.filter.inputOpen || m.hasActiveFilter() {
-		contentWidth := ui.PaneContentWidth(m.Styles.Chrome.Pane, pw[2])
-		var filterPrefix string
-		if m.filter.inputOpen {
-			filterPrefix = m.renderFilterInput(contentWidth)
-		} else {
-			filterPrefix = m.renderFilterBanner()
-		}
-		// Append the entry count so hiding the status bar loses no info.
+	// When a filter is active (but overlay closed), show a banner in the pane.
+	if !m.filter.inputOpen && m.hasActiveFilter() {
 		n := len(m.blobsList.Items())
 		countText := m.Styles.List.StatusBar.Padding(0, 0, 0, 2).Render(fmt.Sprintf("%d entries", n))
-		blobsPaneParams.Prefix = filterPrefix + "\n" + countText
+		blobsPaneParams.Prefix = m.renderFilterBanner() + "\n" + countText
 		m.blobsList.SetShowStatusBar(false)
 	} else {
 		m.blobsList.SetShowStatusBar(true)
@@ -187,6 +179,12 @@ func (m Model) View() tea.View {
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)
 	if m.sortOverlay.active {
 		view = m.renderSortOverlay(view)
+	}
+	if m.actionMenu.active {
+		view = m.renderActionMenu(view)
+	}
+	if m.filter.inputOpen {
+		view = m.renderPrefixSearchOverlay(view)
 	}
 	out := tea.NewView(m.RenderOverlays(view))
 	out.AltScreen = true

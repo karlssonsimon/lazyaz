@@ -114,7 +114,6 @@ func TestTypingQWhileSearchActiveDoesNotQuit(t *testing.T) {
 	m.focus = blobsPane
 	m.hasContainer = true
 	m.filter.inputOpen = true
-	m.filter.focusedInput = searchInputPrefix
 
 	updated, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if _, ok := updated.(Model); !ok {

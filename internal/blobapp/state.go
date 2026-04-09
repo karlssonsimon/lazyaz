@@ -25,10 +25,6 @@ const (
 	previewPane
 )
 
-const (
-	searchInputPrefix = 0
-	searchInputFuzzy  = 1
-)
 
 type blobSortField int
 
@@ -40,15 +36,12 @@ const (
 )
 
 type blobFilter struct {
-	inputOpen     bool             // filter input UI is showing
-	focusedInput  int              // searchInputPrefix or searchInputFuzzy
-	prefixQuery   string           // API prefix query
-	fuzzyQuery    string           // local fuzzy query
+	inputOpen     bool             // prefix search overlay is showing
+	prefixQuery   string           // API prefix query (set via action menu)
 	fetching      bool             // API fetch in progress
 	prefixFetched bool             // API fetch completed for current prefix
 	apiResults    []blob.BlobEntry // results from API prefix search
 	apiCount      int              // total API result count
-	filtered      []int            // fuzzy indices into the effective source
 }
 
 type Model struct {
@@ -89,6 +82,7 @@ type Model struct {
 	blobSortDesc   bool
 	filter           blobFilter
 	sortOverlay      sortOverlayState
+	actionMenu       actionMenuState
 	loadingSpinnerID int
 	preview         previewState
 	pendingPreviewG bool
@@ -194,7 +188,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	blobs.SetShowPagination(false)
 	blobs.SetShowStatusBar(true)
 	blobs.SetStatusBarItemName("entry", "entries")
-	blobs.SetFilteringEnabled(false)
+	blobs.SetFilteringEnabled(true)
 	blobs.DisableQuitKeybindings()
 
 	parentBlobs := list.New([]list.Item{}, delegate, 20, 10)
@@ -280,7 +274,8 @@ func (m Model) HelpSections() []ui.HelpSection {
 		{
 			Title: "Blob Actions",
 			Items: []string{
-				keymap.HelpEntry(km.SortBlobs, "cycle sort mode"),
+				keymap.HelpEntry(km.ActionMenu, "action menu"),
+				keymap.HelpEntry(km.SortBlobs, "sort blobs"),
 				keymap.HelpEntry(km.ToggleLoadAll, "toggle load-all blobs"),
 				keymap.HelpEntry(km.ToggleMark, "toggle mark on current blob"),
 				keymap.HelpEntry(km.ToggleVisualLine, "start/end visual-line selection"),
