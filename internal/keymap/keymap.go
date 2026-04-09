@@ -52,6 +52,7 @@ type Keymap struct {
 	ExitVisualLine    Binding `json:"exit_visual_line"`
 	VisualSwapAnchor  Binding `json:"visual_swap_anchor"`
 	DownloadSelection Binding `json:"download_selection"`
+	SortBlobs         Binding `json:"sort_blobs"`
 	BlobVisualMove    Binding `json:"blob_visual_move"`
 
 	// Blob preview.

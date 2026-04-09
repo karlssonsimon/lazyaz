@@ -70,8 +70,7 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 			oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
 			m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
 
-			m.deactivateSearch()
-			m.discardCommittedFilter()
+			m.clearFilter()
 			m.prefix = parentPrefix(m.prefix)
 
 			blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
@@ -213,8 +212,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, m.blobLoadAll)
 			m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
 
-			m.deactivateSearch()
-			m.discardCommittedFilter()
+			m.clearFilter()
 			m.prefix = item.blob.Name
 
 			blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)

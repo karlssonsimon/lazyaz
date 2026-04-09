@@ -66,19 +66,51 @@ func fetchAllBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEntry], a
 	})
 }
 
-// fetchSearchBlobsCmd uses the loader's merge for consistency, but
-// search results are scoped under a unique cache key so they don't
-// pollute the hierarchy/load-all caches.
-func fetchSearchBlobsCmd(svc *blob.Service, loader *cache.Loader[blob.BlobEntry], account blob.Account, containerName, currentPrefix, query string, limit int) tea.Cmd {
+func fetchAllBlobsWithPrefixCmd(svc *blob.Service, account blob.Account, containerName, currentPrefix, query string) tea.Cmd {
 	effectivePrefix := blobSearchPrefix(currentPrefix, query)
-	key := cache.Key("search", account.SubscriptionID, account.Name, containerName, effectivePrefix)
-	return loader.Fetch(key, nil, func(ctx context.Context, send func([]blob.BlobEntry)) error {
-		ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-		return svc.SearchBlobsByPrefix(ctx, account, containerName, effectivePrefix, limit, send)
-	}, func(p cache.Page[blob.BlobEntry]) tea.Msg {
-		return blobsLoadedMsg{account: account, container: containerName, prefix: currentPrefix, loadAll: false, query: strings.TrimSpace(query), blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
-	})
+
+		var all []blob.BlobEntry
+		err := svc.SearchBlobsByPrefix(ctx, account, containerName, effectivePrefix, 0, func(batch []blob.BlobEntry) {
+			all = append(all, batch...)
+		})
+		return blobsLoadedMsg{
+			account:   account,
+			container: containerName,
+			prefix:    currentPrefix,
+			loadAll:   true,
+			blobs:     all,
+			done:      true,
+			err:       err,
+		}
+	}
+}
+
+// fetchSearchBlobsCmd streams prefix-search results directly without
+// caching. Prefix searches are ephemeral queries — caching them would
+// pollute the store with one-off data that goes stale immediately.
+func fetchSearchBlobsCmd(svc *blob.Service, account blob.Account, containerName, currentPrefix, query string, limit int) tea.Cmd {
+	effectivePrefix := blobSearchPrefix(currentPrefix, query)
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+
+		var all []blob.BlobEntry
+		err := svc.SearchBlobsByPrefix(ctx, account, containerName, effectivePrefix, limit, func(batch []blob.BlobEntry) {
+			all = append(all, batch...)
+		})
+		return blobsLoadedMsg{
+			account:   account,
+			container: containerName,
+			prefix:    currentPrefix,
+			query:     strings.TrimSpace(query),
+			blobs:     all,
+			done:      true,
+			err:       err,
+		}
+	}
 }
 
 func downloadBlobsCmd(svc *blob.Service, account blob.Account, containerName string, blobNames []string, destinationRoot string) tea.Cmd {

@@ -37,8 +37,10 @@ func (m *Model) resize() {
 	m.accountsList.SetSize(ui.PaneContentWidth(pane, widths[0]), baseListHeight-m.inspectFooterHeight(accountsPane))
 	m.containersList.SetSize(ui.PaneContentWidth(pane, widths[1]), baseListHeight-m.inspectFooterHeight(containersPane))
 	blobListHeight := baseListHeight - m.inspectFooterHeight(blobsPane)
-	if m.search.active {
-		blobListHeight -= searchInputHeight
+	if m.filter.inputOpen {
+		blobListHeight -= m.filterInputHeight()
+	} else if m.hasActiveFilter() {
+		blobListHeight -= 2 // filter banner + entry count
 	}
 	m.blobsList.SetSize(ui.PaneContentWidth(pane, widths[2]), blobListHeight)
 	if m.preview.open {
