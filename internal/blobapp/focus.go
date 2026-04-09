@@ -10,6 +10,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+func (m *Model) setFocus(pane int) {
+	m.focus = pane
+	m.resize()
+}
+
 func (m *Model) nextFocus() {
 	if m.focus == blobsPane && m.visualLineMode {
 		m.visualLineMode = false
@@ -22,6 +27,7 @@ func (m *Model) nextFocus() {
 		count = 4
 	}
 	m.focus = (m.focus + 1) % count
+	m.resize()
 }
 
 func (m *Model) previousFocus() {
@@ -38,6 +44,7 @@ func (m *Model) previousFocus() {
 			m.focus = 3
 		}
 	}
+	m.resize()
 }
 
 func (m *Model) blurAllFilters() {

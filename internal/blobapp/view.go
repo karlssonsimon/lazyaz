@@ -115,16 +115,22 @@ func (m Model) View() tea.View {
 	} else {
 		m.blobsList.SetShowStatusBar(true)
 	}
-	blobsPane := ui.RenderListPane(blobsPaneParams, m.Styles)
+	blobsPaneRendered := ui.RenderListPane(blobsPaneParams, m.Styles)
 
-	paneParts := []string{accounts, containers, blobsPane}
+	// Build pane map for lookup by index.
+	paneMap := map[int]string{
+		accountsPane:   accounts,
+		containersPane: containers,
+		blobsPane:      blobsPaneRendered,
+	}
 
-	if m.preview.open {
+	// Render preview pane if it has a width assigned.
+	if pw[previewPane] > 0 && m.preview.open {
 		previewHints := ui.RenderPaneHints([]ui.PaneHint{
 			{Key: km.PreviewBack.Short(), Desc: "back"},
 			{Key: km.PreviewDown.Short() + "/" + km.PreviewUp.Short(), Desc: "scroll"},
 			{Key: km.PreviewBottom.Short(), Desc: "bottom"},
-		}, m.Styles, ui.PaneContentWidth(m.Styles.Chrome.Pane, pw[3]))
+		}, m.Styles, ui.PaneContentWidth(m.Styles.Chrome.Pane, pw[previewPane]))
 		previewTitle := m.Styles.Accent.Render(m.preview.title(m.Styles))
 		previewContent := lipgloss.JoinVertical(lipgloss.Left,
 			previewTitle,
@@ -132,8 +138,30 @@ func (m Model) View() tea.View {
 			previewHints,
 		)
 		focused := m.focus == previewPane
-		preview := ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[3], Height: h, Focused: focused}, m.Styles)
-		paneParts = append(paneParts, preview)
+		paneMap[previewPane] = ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[previewPane], Height: h, Focused: focused}, m.Styles)
+	}
+
+	// Assemble panes in visual order: parent (left), focused (center), child (right).
+	// When there's no parent pane, add an empty spacer to keep the focused pane centered.
+	parentWidth := m.Width * 20 / 100
+	paneParts := make([]string, 0, 3)
+	if m.focus > accountsPane && pw[m.focus-1] > 0 {
+		paneParts = append(paneParts, paneMap[m.focus-1])
+	} else if m.focus == accountsPane {
+		spacer := lipgloss.NewStyle().Width(parentWidth).Height(h).Render("")
+		paneParts = append(paneParts, spacer)
+	}
+	paneParts = append(paneParts, paneMap[m.focus])
+
+	// Child column (right side).
+	childIdx := m.focus + 1
+	if m.focus == blobsPane {
+		childIdx = previewPane
+	}
+	if childIdx <= previewPane && pw[childIdx] > 0 {
+		if rendered, ok := paneMap[childIdx]; ok {
+			paneParts = append(paneParts, rendered)
+		}
 	}
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, paneParts...)

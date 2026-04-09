@@ -42,6 +42,55 @@ func PaneLayout(paneStyle lipgloss.Style, totalWidth, numPanes int) []int {
 	return widths
 }
 
+// MillerColumns holds the width for each role in a miller columns layout.
+type MillerColumns struct {
+	Parent  int // left column (parent pane) — 0 if no parent
+	Focused int // center column (focused pane) — always > 0
+	Child   int // right column (child preview) — 0 if no child
+}
+
+// MillerLayout computes widths for a yazi-style miller columns layout.
+// The focused pane gets ~60% of the width, the parent gets ~20% on
+// the left, and the child preview gets ~20% on the right. When there's
+// no parent or no child, the focused pane absorbs the extra space.
+//
+// hasParent: whether a parent column should be shown (focus > 0).
+// hasChild: whether a child preview column should be shown.
+func MillerLayout(paneStyle lipgloss.Style, totalWidth int, hasParent, hasChild bool) MillerColumns {
+	frame := paneStyle.GetHorizontalFrameSize()
+	minWidth := frame + 4
+
+	var parentW, focusedW, childW int
+	switch {
+	case hasParent && hasChild:
+		parentW = totalWidth * 20 / 100
+		childW = totalWidth * 20 / 100
+		focusedW = totalWidth - parentW - childW
+	case hasParent && !hasChild:
+		parentW = totalWidth * 20 / 100
+		focusedW = totalWidth - parentW
+	case !hasParent && hasChild:
+		childW = totalWidth * 20 / 100
+		focusedW = totalWidth - childW
+	default:
+		focusedW = totalWidth
+	}
+
+	if parentW > 0 && parentW < minWidth {
+		parentW = minWidth
+		focusedW = totalWidth - parentW - childW
+	}
+	if childW > 0 && childW < minWidth {
+		childW = minWidth
+		focusedW = totalWidth - parentW - childW
+	}
+	if focusedW < minWidth {
+		focusedW = minWidth
+	}
+
+	return MillerColumns{Parent: parentW, Focused: focusedW, Child: childW}
+}
+
 // PaneContentWidth returns the inner content width available inside a
 // pane of the given total block width (border + horizontal padding
 // subtracted). Use this to size list bodies, viewports, hint bars, etc.

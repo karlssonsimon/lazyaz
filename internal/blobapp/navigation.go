@@ -33,7 +33,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.clearBlobSelectionState()
 	m.resetBlobLoadState()
 	m.resetPreviewState()
-	m.focus = accountsPane
+	m.setFocus(accountsPane)
 
 	if cached, ok := m.cache.accounts.Get(sub.ID); ok {
 		m.accounts = cached
@@ -63,7 +63,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case previewPane:
-		m.focus = blobsPane
+		m.setFocus(blobsPane)
 		return m, nil
 	case blobsPane:
 		if m.hasContainer && !m.blobLoadAll && m.prefix != "" {
@@ -91,10 +91,10 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 			m.visualAnchor = ""
 			m.refreshItems()
 		}
-		m.focus = containersPane
+		m.setFocus(containersPane)
 		return m, nil
 	case containersPane:
-		m.focus = accountsPane
+		m.setFocus(accountsPane)
 		return m, nil
 	case accountsPane:
 		return m, nil
@@ -112,7 +112,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		// Re-selecting the same account: just move focus.
 		if m.hasAccount && sameAccount(m.currentAccount, item.account) {
-			m.focus = containersPane
+			m.setFocus(containersPane)
 			return m, nil
 		}
 
@@ -130,7 +130,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearBlobSelectionState()
 		m.resetBlobLoadState()
 		m.resetPreviewState()
-		m.focus = containersPane
+		m.setFocus(containersPane)
 
 		containersScope := cache.Key(m.CurrentSub.ID, item.account.Name)
 		if cached, ok := m.cache.containers.Get(containersScope); ok {
@@ -162,7 +162,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		// Re-selecting the same container: just move focus.
 		if m.hasContainer && m.containerName == item.container.Name {
-			m.focus = blobsPane
+			m.setFocus(blobsPane)
 			return m, nil
 		}
 
@@ -179,7 +179,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearBlobSelectionState()
 		m.resetBlobLoadState()
 		m.resetPreviewState()
-		m.focus = blobsPane
+		m.setFocus(blobsPane)
 
 		blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, item.container.Name, "", false)
 		if cached, ok := m.cache.blobs.Get(blobsScope); ok {
