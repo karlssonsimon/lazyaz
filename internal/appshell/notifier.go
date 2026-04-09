@@ -43,7 +43,7 @@ type Notification struct {
 
 // ToastDuration is how long each notification stays visible as a toast
 // in the top-right corner before it's dropped from the active set.
-const ToastDuration = 3 * time.Second
+const ToastDuration = 1500 * time.Millisecond
 
 // Notifier is the global notification store. It's a bounded ring — when
 // the cap is exceeded, the oldest entry is evicted to make room. Safe
