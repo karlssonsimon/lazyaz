@@ -52,6 +52,8 @@ type Model struct {
 
 	cache kvCache
 
+	loadingSpinnerID int
+
 	// Per-pane inspect strip toggle. When inspectPanes[pane] is true, the
 	// pane renders an inline detail strip (via ui.RenderInspectStrip) under
 	// its list. The strip updates live as the cursor moves so the user can
@@ -146,7 +148,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 	if !m.HasSubscription {
 		m.SubOverlay.Open()
 		m.SetLoading(-1)
-		m.Status = "Loading Azure subscriptions..."
+		m.loadingSpinnerID = m.NotifySpinner("Loading Azure subscriptions...")
 	}
 	return m
 }

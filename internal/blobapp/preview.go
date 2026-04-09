@@ -70,7 +70,7 @@ func (p previewState) title(styles ui.Styles) string {
 
 func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	if b.IsPrefix {
-		m.Status = "Open a blob file to preview"
+		m.Notify(appshell.LevelInfo, "Open a blob file to preview")
 		return m, nil
 	}
 
@@ -90,8 +90,8 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.pendingPreviewG = false
 	m.focus = previewPane
 	m.SetLoading(previewPane)
-	m.LastErr = ""
-	m.Status = fmt.Sprintf("Loading preview for %s", b.Name)
+
+	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading preview for %s", b.Name))
 	m.resize()
 
 	cmd := loadPreviewWindowCmd(
@@ -125,7 +125,7 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 		return m, nil
 	}
 
-	m.LastErr = ""
+
 	m.preview.blobSize = msg.blobSize
 	if strings.TrimSpace(msg.contentType) != "" {
 		m.preview.contentType = msg.contentType
@@ -140,9 +140,9 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 	m.preview.viewport.SetYOffset(m.previewLocalLine())
 
 	if m.preview.binary {
-		m.Status = fmt.Sprintf("Binary preview for %s (%s)", msg.blobName, humanSize(msg.blobSize))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Binary preview for %s (%s)", msg.blobName, humanSize(msg.blobSize)))
 	} else {
-		m.Status = fmt.Sprintf("Previewing %s (%s)", msg.blobName, humanSize(msg.blobSize))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Previewing %s (%s)", msg.blobName, humanSize(msg.blobSize)))
 	}
 
 	return m, nil
@@ -188,7 +188,7 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.jumpPreviewToTop()
 		}
 		m.pendingPreviewG = true
-		m.Status = "Press g again for top"
+		m.Notify(appshell.LevelInfo, "Press g again for top")
 		return m, nil
 	default:
 		m.pendingPreviewG = false
@@ -256,8 +256,8 @@ func (m Model) ensurePreviewWindowAtCursor() (Model, tea.Cmd) {
 	if needLoad {
 		m.preview.requestID++
 		m.SetLoading(previewPane)
-		m.LastErr = ""
-		m.Status = fmt.Sprintf("Loading preview window for %s", m.preview.blobName)
+	
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading preview window for %s", m.preview.blobName))
 		cmd := loadPreviewWindowCmd(
 			m.service,
 			m.currentAccount,

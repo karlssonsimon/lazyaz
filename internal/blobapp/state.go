@@ -86,8 +86,9 @@ type Model struct {
 	blobLoadAll     bool
 	blobSortField  blobSortField
 	blobSortDesc   bool
-	filter      blobFilter
-	sortOverlay sortOverlayState
+	filter           blobFilter
+	sortOverlay      sortOverlayState
+	loadingSpinnerID int
 	preview         previewState
 	pendingPreviewG bool
 
@@ -219,7 +220,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	if !m.HasSubscription {
 		m.SubOverlay.Open()
 		m.SetLoading(-1)
-		m.Status = "Loading Azure subscriptions..."
+		m.loadingSpinnerID = m.NotifySpinner("Loading Azure subscriptions...")
 	}
 	return m
 }

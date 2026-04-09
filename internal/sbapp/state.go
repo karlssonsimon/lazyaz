@@ -122,6 +122,8 @@ type Model struct {
 	// keep browsing while details remain visible. Toggled with K.
 	inspectPanes map[int]bool
 
+	loadingSpinnerID int
+
 	paneWidths [4]int // ns, ent, det, preview — set by resize
 	paneHeight int
 }
@@ -235,7 +237,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 	if !m.HasSubscription {
 		m.SubOverlay.Open()
 		m.SetLoading(-1)
-		m.Status = "Loading Azure subscriptions..."
+		m.loadingSpinnerID = m.NotifySpinner("Loading Azure subscriptions...")
 	}
 	return m
 }

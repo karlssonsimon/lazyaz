@@ -34,9 +34,11 @@ func (l NotificationLevel) String() string {
 // Notification is one entry in the global log. Time is set at Push and
 // drives both toast expiry and history sort order.
 type Notification struct {
-	Time    time.Time
-	Level   NotificationLevel
-	Message string
+	Time      time.Time
+	Level     NotificationLevel
+	Message   string
+	Spinner   bool // persistent loading notification — doesn't auto-expire
+	SpinnerID int  // unique ID for resolving a specific spinner
 }
 
 // ToastDuration is how long each notification stays visible as a toast
@@ -48,9 +50,10 @@ const ToastDuration = 3 * time.Second
 // for concurrent use, although in practice bubbletea's single-threaded
 // Update loop means there's no real contention.
 type Notifier struct {
-	mu  sync.Mutex
-	buf []Notification
-	cap int
+	mu            sync.Mutex
+	buf           []Notification
+	cap           int
+	nextSpinnerID int
 }
 
 // NewNotifier creates a Notifier with the given cap. Cap must be > 0.
@@ -72,13 +75,59 @@ func (n *Notifier) Push(level NotificationLevel, message string) {
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	entry := Notification{
+	n.pushLocked(Notification{
 		Time:    time.Now(),
 		Level:   level,
 		Message: message,
+	})
+}
+
+// PushSpinner appends a persistent spinner notification that doesn't
+// auto-expire. Returns a unique ID that can be passed to ResolveSpinner
+// to replace it with a regular notification when the operation completes.
+// Multiple spinners can be active concurrently.
+func (n *Notifier) PushSpinner(message string) int {
+	if n == nil {
+		return 0
 	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.nextSpinnerID++
+	id := n.nextSpinnerID
+	n.pushLocked(Notification{
+		Time:      time.Now(),
+		Message:   message,
+		Spinner:   true,
+		SpinnerID: id,
+	})
+	return id
+}
+
+// ResolveSpinner finds the spinner with the given ID, removes it, and
+// pushes a regular notification in its place. If the spinner is not
+// found (already resolved or evicted), just pushes the notification.
+func (n *Notifier) ResolveSpinner(id int, level NotificationLevel, message string) {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	// Remove the spinner entry.
+	for i, entry := range n.buf {
+		if entry.Spinner && entry.SpinnerID == id {
+			n.buf = append(n.buf[:i], n.buf[i+1:]...)
+			break
+		}
+	}
+	n.pushLocked(Notification{
+		Time:    time.Now(),
+		Level:   level,
+		Message: message,
+	})
+}
+
+func (n *Notifier) pushLocked(entry Notification) {
 	if len(n.buf) >= n.cap {
-		// FIFO eviction: drop the oldest, shift left, append new.
 		copy(n.buf, n.buf[1:])
 		n.buf = n.buf[:len(n.buf)-1]
 	}
@@ -100,7 +149,8 @@ func (n *Notifier) Snapshot() []Notification {
 
 // Active returns the notifications whose toast window has not yet
 // expired, newest first (so the renderer can stack top-down without
-// reversing). The window is now - ToastDuration.
+// reversing). Spinner notifications are always included regardless of
+// their age.
 func (n *Notifier) Active(now time.Time) []Notification {
 	if n == nil {
 		return nil
@@ -109,13 +159,18 @@ func (n *Notifier) Active(now time.Time) []Notification {
 	defer n.mu.Unlock()
 	cutoff := now.Add(-ToastDuration)
 	var active []Notification
-	// Walk backwards (newest first) and stop as soon as we see something
-	// older than the cutoff — entries are time-ordered by Push order.
+	// Walk backwards (newest first). Regular entries stop at cutoff;
+	// spinners are always included.
 	for i := len(n.buf) - 1; i >= 0; i-- {
-		if n.buf[i].Time.Before(cutoff) {
+		entry := n.buf[i]
+		if entry.Spinner {
+			active = append(active, entry)
+			continue
+		}
+		if entry.Time.Before(cutoff) {
 			break
 		}
-		active = append(active, n.buf[i])
+		active = append(active, entry)
 	}
 	return active
 }
@@ -131,7 +186,7 @@ func (n *Notifier) Len() int {
 }
 
 // HasActive reports whether any notification is still within its toast
-// window. Cheaper than Active when you only need a yes/no answer.
+// window, or any spinner is active.
 func (n *Notifier) HasActive(now time.Time) bool {
 	if n == nil {
 		return false
@@ -141,5 +196,15 @@ func (n *Notifier) HasActive(now time.Time) bool {
 	if len(n.buf) == 0 {
 		return false
 	}
-	return !n.buf[len(n.buf)-1].Time.Before(now.Add(-ToastDuration))
+	// Check newest regular entry.
+	if !n.buf[len(n.buf)-1].Time.Before(now.Add(-ToastDuration)) {
+		return true
+	}
+	// Check for any active spinner.
+	for i := len(n.buf) - 1; i >= 0; i-- {
+		if n.buf[i].Spinner {
+			return true
+		}
+	}
+	return false
 }

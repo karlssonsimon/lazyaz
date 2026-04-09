@@ -3,6 +3,7 @@ package blobapp
 import (
 	"fmt"
 
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
@@ -55,7 +56,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.blobsList.Title = "Blobs"
 
 	m.SetLoading(accountsPane)
-	m.Status = fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(sub))
+	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(sub)))
 	return m, tea.Batch(m.Spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, sub.ID, m.accounts))
 }
 
@@ -82,7 +83,7 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 			ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
 			m.SetLoading(blobsPane)
-			m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+			m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix))
 			return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 		}
 		if m.visualLineMode {
@@ -149,7 +150,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.blobsList.Title = "Blobs"
 
 		m.SetLoading(containersPane)
-		m.Status = fmt.Sprintf("Loading containers in %s", item.account.Name)
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading containers in %s", item.account.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, item.account, m.containers))
 	}
 
@@ -193,7 +194,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
 		m.SetLoading(blobsPane)
-		m.Status = fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName)
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName))
 		return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 	}
 
@@ -205,7 +206,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		if item.blob.IsPrefix {
 			if m.blobLoadAll {
-				m.Status = "Directory navigation is unavailable when all blobs are loaded"
+				m.Notify(appshell.LevelInfo, "Directory navigation is unavailable when all blobs are loaded")
 				return m, nil
 			}
 			// Snapshot the current prefix's blobs list before descending.
@@ -224,7 +225,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
 			m.SetLoading(blobsPane)
-			m.Status = fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix)
+			m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix))
 			return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 		}
 

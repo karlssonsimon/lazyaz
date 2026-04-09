@@ -143,7 +143,7 @@ func (m *Model) firePrefixSearch() tea.Cmd {
 	m.refreshItems() // clear the list immediately
 	m.SetLoading(blobsPane)
 	effectivePrefix := blobSearchPrefix(m.prefix, m.filter.prefixQuery)
-	m.Status = fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix)
+	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix))
 	return tea.Batch(m.Spinner.Tick,
 		fetchSearchBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, m.filter.prefixQuery, defaultBlobPrefixSearchLimit))
 }
@@ -222,11 +222,11 @@ func (m Model) handleFilterBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		m.ClearLoading()
 		m.filter.fetching = false
-		m.Notify(appshell.LevelError, fmt.Sprintf("Search failed: %s", msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Search failed: %s", msg.err.Error()))
 		return m, nil
 	}
 
-	m.LastErr = ""
+
 	m.filter.apiResults = msg.blobs
 	m.filter.apiCount = len(msg.blobs)
 	m.resize() // count line may have appeared
@@ -237,7 +237,7 @@ func (m Model) handleFilterBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 		m.filter.fetching = false
 		m.filter.prefixFetched = true
 		effectivePrefix := blobSearchPrefix(m.prefix, m.filter.prefixQuery)
-		m.Status = fmt.Sprintf("Found %d blobs by prefix %q", len(msg.blobs), effectivePrefix)
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Found %d blobs by prefix %q", len(msg.blobs), effectivePrefix))
 	}
 
 	return m, msg.next

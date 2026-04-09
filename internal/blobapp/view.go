@@ -3,7 +3,6 @@ package blobapp
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
@@ -141,14 +140,7 @@ func (m Model) View() tea.View {
 
 	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
 
-	sbStatus := m.Status
-	sbErr := m.LastErr != ""
-	if sbErr {
-		sbStatus = m.LastErr
-	} else if m.Loading {
-		sbStatus = ui.SpinnerFrameAt(time.Since(m.LoadingStartedAt)) + " " + m.Status
-	}
-	statusBar := ui.RenderStatusBar(m.Styles, sbItems, sbStatus, sbErr, m.Width)
+	statusBar := ui.RenderStatusBar(m.Styles, sbItems, "", false, m.Width)
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)
 	if m.sortOverlay.active {

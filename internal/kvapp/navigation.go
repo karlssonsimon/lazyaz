@@ -74,7 +74,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.versionsList.Title = "Versions"
 
 	m.SetLoading(m.focus)
-	m.Status = fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(sub))
+	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(sub)))
 	return m, tea.Batch(m.Spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID, m.vaults))
 }
 
@@ -123,7 +123,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.versionsList.Title = "Versions"
 
 		m.SetLoading(m.focus)
-		m.Status = fmt.Sprintf("Loading secrets in %s", item.vault.Name)
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading secrets in %s", item.vault.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, item.vault, m.secrets))
 	}
 
@@ -162,7 +162,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		ui.RestoreListState(&m.versionsList, m.versionsHistory[versionScope], versionItemKey)
 
 		m.SetLoading(m.focus)
-		m.Status = fmt.Sprintf("Loading versions for %s", item.secret.Name)
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading versions for %s", item.secret.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, item.secret.Name, m.versions))
 	}
 

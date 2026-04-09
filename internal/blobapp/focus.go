@@ -3,6 +3,7 @@ package blobapp
 import (
 	"fmt"
 
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/list"
@@ -51,11 +52,11 @@ func (m *Model) commitFocusedFilter() tea.Cmd {
 	switch m.focus {
 	case accountsPane:
 		ui.ApplyFilterState(&m.accountsList)
-		m.Status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
 		return nil
 	case containersPane:
 		ui.ApplyFilterState(&m.containersList)
-		m.Status = fmt.Sprintf("Filter applied for %s", paneName(m.focus))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
 		return nil
 	}
 
@@ -90,7 +91,7 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 
 	if m.focus == blobsPane && m.visualLineMode {
 		m.refreshItems()
-		m.Status = fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames()))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames())))
 	}
 }
 
