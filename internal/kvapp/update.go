@@ -12,6 +12,20 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cursorModel, cursorCmd := m.Cursor.Update(msg); cursorCmd != nil {
+		m.Cursor = cursorModel
+		var listCmd tea.Cmd
+		switch m.focus {
+		case vaultsPane:
+			m.vaultsList, listCmd = m.vaultsList.Update(msg)
+		case secretsPane:
+			m.secretsList, listCmd = m.secretsList.Update(msg)
+		case versionsPane:
+			m.versionsList, listCmd = m.versionsList.Update(msg)
+		}
+		return m, tea.Batch(cursorCmd, listCmd)
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width

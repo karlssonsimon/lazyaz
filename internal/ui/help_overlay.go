@@ -103,7 +103,7 @@ func parseHelpEntry(s string) (keys, desc string) {
 	return s, ""
 }
 
-func RenderHelpOverlay(state HelpOverlayState, closeHint string, styles Styles, width, height int, base string) string {
+func RenderHelpOverlay(state HelpOverlayState, closeHint, cursorView string, styles Styles, width, height int, base string) string {
 	filtered := state.filtered
 	if filtered == nil {
 		filtered = make([]int, len(state.items))
@@ -159,6 +159,7 @@ func RenderHelpOverlay(state HelpOverlayState, closeHint string, styles Styles, 
 	cfg := OverlayListConfig{
 		Title:      state.Title,
 		Query:      state.Query,
+		CursorView: cursorView,
 		CloseHint:  closeHint,
 		InnerWidth: innerW,
 		MaxVisible: maxVis,

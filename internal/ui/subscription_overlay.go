@@ -96,7 +96,7 @@ func (s *SubscriptionOverlayState) HandleKey(key string, bindings ThemeKeyBindin
 
 // RenderSubscriptionOverlay renders the subscription picker overlay.
 // If loading is true, a spinner frame is appended to the title.
-func RenderSubscriptionOverlay(state SubscriptionOverlayState, closeHint string, subs []azure.Subscription, currentSub azure.Subscription, loading bool, loadingStartedAt time.Time, styles Styles, width, height int, base string) string {
+func RenderSubscriptionOverlay(state SubscriptionOverlayState, closeHint, cursorView string, subs []azure.Subscription, currentSub azure.Subscription, loading bool, loadingStartedAt time.Time, styles Styles, width, height int, base string) string {
 	filtered := state.filtered
 	if filtered == nil {
 		filtered = make([]int, len(subs))
@@ -123,6 +123,7 @@ func RenderSubscriptionOverlay(state SubscriptionOverlayState, closeHint string,
 	cfg := OverlayListConfig{
 		Title:      title,
 		Query:      state.Query,
+		CursorView: cursorView,
 		CloseHint:  closeHint,
 		MaxVisible: 12,
 		Center:     true,

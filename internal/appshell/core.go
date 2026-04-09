@@ -15,6 +15,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
+	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/spinner"
 )
 
@@ -66,6 +67,9 @@ type Model struct {
 	// from appshell.New so calls never hit nil.
 	Notifier *Notifier
 
+	// Cursor is the shared blinking cursor used by all text inputs.
+	Cursor cursor.Model
+
 	// Terminal size.
 	Width  int
 	Height int
@@ -78,8 +82,13 @@ func New(cfg ui.Config, km keymap.Keymap) Model {
 	spin := spinner.New()
 	spin.Spinner = spinner.Dot
 
+	cur := cursor.New()
+	cur.SetChar(" ")
+	cur.Focus() // pre-focus; Init() returns the blink cmd
+
 	m := Model{
 		Spinner:     spin,
+		Cursor:      cur,
 		Keymap:      km,
 		Schemes:     cfg.Schemes,
 		LoadingPane: -1,

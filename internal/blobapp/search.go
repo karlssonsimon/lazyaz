@@ -51,12 +51,13 @@ func (m *Model) openFilterInput() tea.Cmd {
 		m.refreshItems()
 	}
 	m.resize()
-	return nil
+	return m.Cursor.Focus()
 }
 
 // closeFilterInput closes the filter input UI but keeps the filter applied.
 func (m *Model) closeFilterInput() {
 	m.filter.inputOpen = false
+	m.Cursor.Blur()
 	m.resize()
 }
 
@@ -272,16 +273,15 @@ func (m Model) renderFilterInput(width int) string {
 	muted := m.Styles.Muted
 	accent := m.Styles.Accent
 	accent2 := m.Styles.Accent2
-	warning := m.Styles.Warning
 
 	var lines []string
 
 	if m.blobLoadAll {
-		lines = append(lines, m.renderInputField("Local fuzzy", m.filter.fuzzyQuery, true, accent, muted, warning))
+		lines = append(lines, m.renderInputField("Local fuzzy", m.filter.fuzzyQuery, true, accent, muted))
 	} else {
 		prefixActive := m.filter.focusedInput == searchInputPrefix
-		lines = append(lines, m.renderInputField("API prefix", m.filter.prefixQuery, prefixActive, accent2, muted, warning))
-		lines = append(lines, m.renderInputField("Local fuzzy", m.filter.fuzzyQuery, !prefixActive, accent, muted, warning))
+		lines = append(lines, m.renderInputField("API prefix", m.filter.prefixQuery, prefixActive, accent2, muted))
+		lines = append(lines, m.renderInputField("Local fuzzy", m.filter.fuzzyQuery, !prefixActive, accent, muted))
 	}
 
 	// Count line.
@@ -305,10 +305,10 @@ func (m Model) renderFilterInput(width int) string {
 }
 
 // renderInputField renders a single labeled input field.
-func (m Model) renderInputField(label, query string, active bool, labelStyle, muted, cursor lipgloss.Style) string {
+func (m Model) renderInputField(label, query string, active bool, labelStyle, muted lipgloss.Style) string {
 	const pad = " "
 	if active {
-		return pad + labelStyle.Render(label+":") + " " + m.Styles.Overlay.Input.Render(query) + cursor.Render("█")
+		return pad + labelStyle.Render(label+":") + " " + m.Styles.Overlay.Input.Render(query) + m.Cursor.View()
 	}
 	if query == "" {
 		return pad + muted.Render(label+": ─")

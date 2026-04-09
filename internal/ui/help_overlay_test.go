@@ -24,7 +24,7 @@ func TestRenderHelpOverlayIncludesContent(t *testing.T) {
 	state := HelpOverlayState{}
 	state.Open("Help", []HelpSection{{Title: "General", Items: []string{"tab  next focus", "?  toggle help"}}})
 
-	view := RenderHelpOverlay(state, "esc", styles, 100, 40, "base")
+	view := RenderHelpOverlay(state, "esc", "█", styles, 100, 40, "base")
 
 	for _, want := range []string{"Help", "General", "toggle help", "esc"} {
 		if !strings.Contains(view, want) {

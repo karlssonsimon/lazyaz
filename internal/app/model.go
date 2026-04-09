@@ -17,6 +17,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/sbapp"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
+	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 )
@@ -57,6 +58,7 @@ type Model struct {
 	helpOverlay          ui.HelpOverlayState
 	notificationsOverlay ui.NotificationsOverlayState
 
+	cursor     cursor.Model
 	tabPicker  tabPickerState
 	cmdPalette commandPalette
 
@@ -67,6 +69,9 @@ type Model struct {
 // NewModel creates the parent tabbed model.
 // If db is non-nil, a persistent SQLite cache is used; otherwise in-memory.
 func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.Service, cfg ui.Config, db *cache.DB, km keymap.Keymap) Model {
+	cur := cursor.New()
+	cur.SetChar(" ")
+	cur.Focus() // pre-focus; Init() returns the blink cmd
 	m := Model{
 		blobSvc:  blobSvc,
 		sbSvc:    sbSvc,
@@ -74,6 +79,7 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		stores:   newSharedStores(db),
 		cfg:      cfg,
 		keymap:   km,
+		cursor:   cur,
 		schemes:  cfg.Schemes,
 		notifier: appshell.NewNotifier(1000),
 		themeOverlay: ui.ThemeOverlayState{
@@ -275,13 +281,13 @@ func (m *Model) applySchemeToAll(scheme ui.Scheme) {
 
 func (m Model) Init() tea.Cmd {
 	if len(m.tabs) == 0 {
-		return nil
+		return cursor.Blink
 	}
 	// Init every tab so configured startup tabs all kick off their
 	// initial fetches in the background — not just the active one.
 	// Each tab's commands are wrapped so their results route back to
 	// the correct tab via tabMsg.
-	cmds := make([]tea.Cmd, 0, len(m.tabs))
+	cmds := []tea.Cmd{cursor.Blink}
 	for _, tab := range m.tabs {
 		if c := tab.Model.Init(); c != nil {
 			cmds = append(cmds, wrapCmd(tab.ID, c))
@@ -291,6 +297,17 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Route all messages to the cursor so both initialBlinkMsg and BlinkMsg work.
+	if cursorModel, cursorCmd := m.cursor.Update(msg); cursorCmd != nil {
+		m.cursor = cursorModel
+		// Also forward to active tab so its cursor blinks.
+		var tabCmd tea.Cmd
+		if len(m.tabs) > 0 {
+			tabCmd = m.forwardToActive(msg)
+		}
+		return m, tea.Batch(cursorCmd, tabCmd)
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width

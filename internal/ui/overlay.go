@@ -24,6 +24,7 @@ type OverlayItem struct {
 type OverlayListConfig struct {
 	Title      string
 	Query      string
+	CursorView string // rendered cursor; falls back to static "█" if empty
 	CloseHint  string // label shown right-aligned in the header (e.g. "esc"); blank to omit
 	InnerWidth int    // content width; 0 = default (60)
 	MaxVisible int    // max visible items; 0 = default (20)
@@ -78,10 +79,14 @@ func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, s
 	rows = append(rows, titleText+strings.Repeat(" ", gap)+closeText)
 
 	// Search input.
+	cursorStr := cfg.CursorView
+	if cursorStr == "" {
+		cursorStr = "█"
+	}
 	if cfg.Query == "" {
-		rows = append(rows, styles.NoMatch.Render("█"))
+		rows = append(rows, cursorStr)
 	} else {
-		rows = append(rows, styles.Input.Render(cfg.Query+"█"))
+		rows = append(rows, styles.Input.Render(cfg.Query)+cursorStr)
 	}
 	rows = append(rows, "")
 
