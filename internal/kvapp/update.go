@@ -347,7 +347,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.VisualSwapAnchor.Matches(key):
 		if m.focus == secretsPane && m.visualLineMode && !focusedFilterActive {
 			m.swapVisualAnchor()
-			m.refreshSecretItems()
+			m.refreshSecretSelectionDisplay()
 			return m, nil
 		}
 	case m.Keymap.ExitVisualLine.Matches(key):
@@ -356,7 +356,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.commitVisualSelection()
 				m.visualLineMode = false
 				m.visualAnchor = ""
-				m.refreshSecretItems()
+				m.refreshSecretSelectionDisplay()
 				m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedSecrets)))
 				return m, nil
 			}
@@ -365,7 +365,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				for name := range m.markedSecrets {
 					delete(m.markedSecrets, name)
 				}
-				m.refreshSecretItems()
+				m.refreshSecretSelectionDisplay()
 				m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
 				return m, nil
 			}
@@ -423,7 +423,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.versionsList, cmd = m.versionsList.Update(msg)
 	}
 	if markVisualAfterListUpdate {
-		m.refreshSecretItems()
+		m.refreshSecretSelectionDisplay()
 	}
 	return m, cmd
 }

@@ -21,8 +21,17 @@ func (m *Model) clearSecretSelectionState() {
 }
 
 func (m *Model) refreshSecretItems() {
-	m.secretsList.SetItems(secretsToItemsWithState(m.secrets, m.markedSecrets, m.visualSelectionNames()))
+	m.secretsList.ResetFilter()
+	m.secretsList.SetItems(secretsToItems(m.secrets))
 	ui.ClampListSelection(&m.secretsList)
+	m.refreshSecretSelectionDisplay()
+}
+
+func (m *Model) refreshSecretSelectionDisplay() {
+	d := newSecretDelegate(m.Styles.Delegate, m.Styles)
+	d.marked = m.markedSecrets
+	d.visual = m.visualSelectionNames()
+	m.secretsList.SetDelegate(d)
 }
 
 func (m *Model) toggleVisualLineMode() {
@@ -35,14 +44,14 @@ func (m *Model) toggleVisualLineMode() {
 		m.commitVisualSelection()
 		m.visualLineMode = false
 		m.visualAnchor = ""
-		m.refreshSecretItems()
+		m.refreshSecretSelectionDisplay()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedSecrets)))
 		return
 	}
 
 	m.visualLineMode = true
 	m.visualAnchor = m.currentSecretName()
-	m.refreshSecretItems()
+	m.refreshSecretSelectionDisplay()
 	if m.visualAnchor == "" {
 		m.Notify(appshell.LevelInfo, "Visual mode on. Move up/down to select a range.")
 		return
@@ -92,13 +101,13 @@ func (m *Model) toggleCurrentSecretMark() {
 
 	if _, exists := m.markedSecrets[item.secret.Name]; exists {
 		delete(m.markedSecrets, item.secret.Name)
-		m.refreshSecretItems()
+		m.refreshSecretSelectionDisplay()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", item.secret.Name, len(m.markedSecrets)))
 		return
 	}
 
 	m.markedSecrets[item.secret.Name] = item.secret
-	m.refreshSecretItems()
+	m.refreshSecretSelectionDisplay()
 	m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", item.secret.Name, len(m.markedSecrets)))
 }
 
@@ -115,23 +124,6 @@ func (m Model) visualSelectionItems() []secretItem {
 		return nil
 	}
 
-	visibleItems := m.secretsList.VisibleItems()
-	if len(visibleItems) == 0 {
-		return nil
-	}
-
-	items := make([]secretItem, 0, len(visibleItems))
-	for _, item := range visibleItems {
-		si, ok := item.(secretItem)
-		if !ok {
-			continue
-		}
-		items = append(items, si)
-	}
-	if len(items) == 0 {
-		return nil
-	}
-
 	current := m.currentSecretName()
 	if current == "" {
 		return nil
@@ -142,13 +134,18 @@ func (m Model) visualSelectionItems() []secretItem {
 		anchor = current
 	}
 
+	secrets := m.secrets
+	if len(secrets) == 0 {
+		return nil
+	}
+
 	anchorIdx := -1
 	currentIdx := -1
-	for i, item := range items {
-		if anchorIdx < 0 && item.secret.Name == anchor {
+	for i, s := range secrets {
+		if anchorIdx < 0 && s.Name == anchor {
 			anchorIdx = i
 		}
-		if currentIdx < 0 && item.secret.Name == current {
+		if currentIdx < 0 && s.Name == current {
 			currentIdx = i
 		}
 	}
@@ -164,7 +161,11 @@ func (m Model) visualSelectionItems() []secretItem {
 		start, end = end, start
 	}
 
-	return items[start : end+1]
+	items := make([]secretItem, 0, end-start+1)
+	for _, s := range secrets[start : end+1] {
+		items = append(items, secretItem{secret: s})
+	}
+	return items
 }
 
 func (m Model) visualSelectionNames() map[string]struct{} {

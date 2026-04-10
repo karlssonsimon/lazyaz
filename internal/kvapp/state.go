@@ -172,7 +172,10 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.Styles.ApplyToLists([]*list.Model{
 		&m.vaultsList, &m.secretsList, &m.versionsList,
 	}, &m.Spinner)
-	m.secretsList.SetDelegate(newSecretDelegate(m.Styles.Delegate, m.Styles))
+	d := newSecretDelegate(m.Styles.Delegate, m.Styles)
+	d.marked = m.markedSecrets
+	d.visual = m.visualSelectionNames()
+	m.secretsList.SetDelegate(d)
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.
