@@ -207,7 +207,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		}
 
 		m.SetLoading(blobsPane)
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix))
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
 		return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 	}
 
