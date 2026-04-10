@@ -1,0 +1,61 @@
+---
+title: lazyaz
+description: A keyboard-driven TUI for Azure — Blob Storage, Service Bus, and Key Vault.
+template: splash
+hero:
+  tagline: A keyboard-driven TUI for Azure — Blob Storage, Service Bus, and Key Vault — built with Bubble Tea.
+  actions:
+    - text: Get Started
+      link: /lazyaz/getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/karlssonsimon/lazyaz
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What is lazyaz?
+
+`lazyaz` is to `az` what `lazygit` is to `git`: a fast, fully-keyboard terminal explorer that
+turns common Azure browse-and-inspect tasks into a few keystrokes. No more clicking through the
+Azure Portal to peek at a dead-letter queue or download a blob.
+
+It covers three Azure resource types — the ones developers actually touch day-to-day:
+
+- **Blob Storage** — browse containers, navigate virtual folders, preview files with syntax highlighting, multi-select and download
+- **Service Bus** — peek active and dead-letter queues, requeue DLQ messages, inspect topics and subscriptions
+- **Key Vault** — list vaults, browse secrets and their versions, yank values to clipboard
+
+{/* TODO: add a screenshot — place the image in public/ and reference it here */}
+{/* ![lazyaz in action](/lazyaz/screenshot.png) */}
+
+## Who is it for?
+
+Developers and platform engineers who work with Azure regularly and want a fast, keyboard-driven
+alternative to the portal. If you spend time browsing storage accounts, tailing dead-letter queues,
+or pulling secrets during debugging sessions, this is for you.
+
+## Feature highlights
+
+<CardGrid>
+	<Card title="Subscription-first navigation" icon="list-format">
+		Pick a subscription, then drill into its storage accounts, namespaces, or vaults. Switch subscriptions with `S` at any time.
+	</Card>
+	<Card title="Dead-letter queue operations" icon="warning">
+		Peek DLQ messages, requeue them back to the active queue, or delete duplicates — without writing CLI one-liners.
+	</Card>
+	<Card title="Blob preview & download" icon="document">
+		Open blobs inline with syntax highlighting for JSON, XML, and CSV. Multi-select with visual mode and download in bulk.
+	</Card>
+	<Card title="Key Vault inspection" icon="setting">
+		Browse secrets and their version history. Yank a secret value to your clipboard with a single keystroke.
+	</Card>
+	<Card title="Tabbed multi-service UI" icon="open-book">
+		Run Blob, Service Bus, and Key Vault side by side in tabs with per-tab subscription selection.
+	</Card>
+	<Card title="Customizable themes & keybindings" icon="puzzle">
+		Ships with Base16 color schemes (Tokyo Night, Rosé Pine, Bamboo, and more). Keybindings are fully remappable via JSON.
+	</Card>
+</CardGrid>

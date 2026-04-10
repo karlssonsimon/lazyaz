@@ -1,6 +1,5 @@
 # Binaries and build outputs
 bin/
-dist/
 *.exe
 *.exe~
 *.dll
@@ -8,6 +7,12 @@ dist/
 *.dylib
 *.test
 *.out
+main
+
+# Docs
+docs/node_modules/
+docs/dist/
+docs/.astro/
 
 # Coverage and profiling
 *.coverprofile

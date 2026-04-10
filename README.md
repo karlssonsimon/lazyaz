@@ -10,8 +10,6 @@ A keyboard-driven TUI for Azure — Blob Storage, Service Bus, and Key Vault —
 go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest
 ```
 
-Single-resource binaries are also available: `azblob-tui`, `azsb-tui`, `azkv-tui`.
-
 ## Features
 
 - Azure authentication via `DefaultAzureCredential` (works with `az login`)
@@ -60,7 +58,6 @@ go run ./cmd/lazyaz
 
 ## Notes
 
-- This tool is Blob-only for now.
 - Filtering is local to the currently loaded list in each pane.
 - In blobs pane: default mode uses server-side prefix search; full-load mode uses local fuzzy filtering.
 - Preview uses blob range reads with buffered windows to avoid loading full files when scrolling.
