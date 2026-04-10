@@ -11,7 +11,6 @@ import (
 
 func (m Model) refresh() (Model, tea.Cmd) {
 	if !m.HasSubscription {
-		// Can't refresh anything without a subscription; open the picker instead.
 		m.SubOverlay.Open()
 		m.SetLoading(-1)
 		m.loadingSpinnerID = m.NotifySpinner("Refreshing subscriptions...")
@@ -31,14 +30,13 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, m.currentNS, entityCacheKey, m.entities))
 	}
 
-	return m.rePeekMessages(true)
+	if m.focus == messagesPane || m.focus == messagePreviewPane {
+		return m.rePeekMessages(true)
+	}
+
+	return m, nil
 }
 
-// rePeekMessages re-fetches the current message list. preserveCursor
-// should be true when the user is browsing the same scope (after
-// requeue/delete-duplicate, R-key refresh) so we keep their position,
-// and false when the scope itself just changed (active↔DLQ toggle)
-// since the new message IDs won't match the old ones anyway.
 func (m Model) rePeekMessages(preserveCursor bool) (Model, tea.Cmd) {
 	if !m.hasPeekTarget {
 		return m, nil

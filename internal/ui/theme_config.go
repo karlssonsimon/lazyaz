@@ -56,12 +56,6 @@ func loadConfigFromDir(dir string) Config {
 			cfg.DownloadDir = fileCfg.DownloadDir
 			cfg.Tabs = fileCfg.Tabs
 		}
-	} else {
-		// Migrate from old per-app config files if config.yaml doesn't exist.
-		if migrated := migrateOldConfig(dir); migrated != "" {
-			cfg.ThemeName = migrated
-		}
-		saveThemeNameToFile(cfgFile, cfg.ThemeName)
 	}
 
 	// Ensure stock themes are present.
@@ -80,9 +74,6 @@ func loadConfigFromDir(dir string) Config {
 	if len(cfg.Schemes) == 0 {
 		cfg.Schemes = []Scheme{FallbackScheme()}
 	}
-
-	// Migrate old theme names to new Base16 scheme names.
-	cfg.ThemeName = migrateThemeName(cfg.ThemeName)
 
 	return cfg
 }
@@ -162,38 +153,3 @@ func saveThemeNameToFile(path, name string) {
 	os.WriteFile(path, data, 0o644)
 }
 
-// migrateThemeName maps old custom theme names to new Base16 scheme names.
-func migrateThemeName(name string) string {
-	migrations := map[string]string{
-		"default":      "Default Dark",
-		"Default":      "Default Dark",
-		"tokyonight":   "Tokyo Night Dark",
-		"Tokyo Night":  "Tokyo Night Dark",
-		"rosepine":     "Rose Pine",
-		"Rosé Pine":   "Rose Pine",
-		"bamboo":       "Bamboo",
-	}
-	if newName, ok := migrations[name]; ok {
-		return newName
-	}
-	return name
-}
-
-// migrateOldConfig checks for old per-app config files and returns
-// the theme name from the first one found.
-func migrateOldConfig(dir string) string {
-	for _, name := range []string{"aztui", "azblob", "azsb", "azkv"} {
-		path := filepath.Join(dir, name+".yaml")
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		var old struct {
-			ThemeName string `yaml:"theme"`
-		}
-		if yaml.Unmarshal(data, &old) == nil && old.ThemeName != "" {
-			return old.ThemeName
-		}
-	}
-	return ""
-}

@@ -9,40 +9,39 @@ func (m *Model) resize() {
 
 	pane := m.Styles.Chrome.Pane
 
-	// Determine parent/child visibility based on focus.
-	// Always reserve parent space — when namespaces is focused, a spacer
-	// fills the left column to keep the focused pane centered.
 	hasParent := true
 	hasChild := false
 	switch m.focus {
 	case namespacesPane:
-		hasChild = m.hasNamespace // show entities preview
+		hasChild = m.hasNamespace
 	case entitiesPane:
-		hasChild = m.hasPeekTarget // show detail preview
-	case detailPane:
-		hasChild = m.viewingMessage // show message preview
+		hasChild = m.isTopicSelected() || m.hasPeekTarget
+	case subscriptionsPane:
+		hasChild = m.hasPeekTarget
+	case queueTypePane:
+		hasChild = len(m.peekedMessages) > 0
+	case messagesPane:
+		hasChild = m.viewingMessage
 	}
 
 	cols := ui.MillerLayout(pane, m.Width, hasParent, hasChild)
 
-	// Map roles → pane indices. The focused pane is always center.
-	// Parent is the pane before focus, child is the pane after.
-	m.paneWidths = [4]int{} // reset all to 0
+	m.paneWidths = [6]int{}
 	m.paneWidths[m.focus] = cols.Focused
+
 	if m.focus > namespacesPane {
-		m.paneWidths[m.focus-1] = cols.Parent
+		parentIdx := m.parentPane()
+		if parentIdx >= 0 {
+			m.paneWidths[parentIdx] = cols.Parent
+		}
 	}
 	if hasChild {
-		childIdx := m.focus + 1
-		if m.focus == detailPane {
-			childIdx = messagePreviewPane
+		childIdx := m.childPane()
+		if childIdx >= 0 && childIdx <= messagePreviewPane {
+			m.paneWidths[childIdx] = cols.Child
 		}
-		m.paneWidths[childIdx] = cols.Child
 	}
 
-	// paneHeight is the total block height of each pane (border + content),
-	// i.e. the number of terminal rows the pane occupies. The view stacks
-	// subscription bar + pane row + status bar to fill the window.
 	height := m.Height - ui.StatusBarHeight - ui.SubscriptionBarHeight
 	if height < 10 {
 		height = 10
@@ -55,23 +54,20 @@ func (m *Model) resize() {
 		baseListHeight = 1
 	}
 
-	// Size each visible list to its pane width.
 	if w := m.paneWidths[namespacesPane]; w > 0 {
 		m.namespacesList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight-m.inspectFooterHeight(namespacesPane))
 	}
 	if w := m.paneWidths[entitiesPane]; w > 0 {
-		entitiesListHeight := baseListHeight - m.inspectFooterHeight(entitiesPane)
-		if m.hasNamespace {
-			entitiesListHeight -= entityTabsHeight
-		}
-		m.entitiesList.SetSize(ui.PaneContentWidth(pane, w), entitiesListHeight)
+		m.entitiesList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight-m.inspectFooterHeight(entitiesPane))
 	}
-	if w := m.paneWidths[detailPane]; w > 0 {
-		detailListHeight := baseListHeight - m.inspectFooterHeight(detailPane)
-		if m.hasPeekTarget {
-			detailListHeight -= dlqTabsHeight
-		}
-		m.detailList.SetSize(ui.PaneContentWidth(pane, w), detailListHeight)
+	if w := m.paneWidths[subscriptionsPane]; w > 0 {
+		m.subscriptionsList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight-m.inspectFooterHeight(subscriptionsPane))
+	}
+	if w := m.paneWidths[queueTypePane]; w > 0 {
+		m.queueTypeList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight)
+	}
+	if w := m.paneWidths[messagesPane]; w > 0 {
+		m.messageList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight-m.inspectFooterHeight(messagesPane))
 	}
 	if w := m.paneWidths[messagePreviewPane]; w > 0 {
 		m.messageViewport.SetWidth(ui.PaneContentWidth(pane, w))
@@ -80,4 +76,28 @@ func (m *Model) resize() {
 		m.messageViewport.SetWidth(0)
 		m.messageViewport.SetHeight(0)
 	}
+}
+
+// parentPane returns the logical parent pane index for the current
+// focus, skipping panes that aren't active. Returns -1 if none.
+func (m Model) parentPane() int {
+	panes := m.navigablePanes()
+	for i, p := range panes {
+		if p == m.focus && i > 0 {
+			return panes[i-1]
+		}
+	}
+	return -1
+}
+
+// childPane returns the logical child pane index for the current
+// focus, skipping panes that aren't active. Returns -1 if none.
+func (m Model) childPane() int {
+	panes := m.navigablePanes()
+	for i, p := range panes {
+		if p == m.focus && i < len(panes)-1 {
+			return panes[i+1]
+		}
+	}
+	return -1
 }

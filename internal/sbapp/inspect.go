@@ -7,9 +7,6 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
-// inspectFor returns the inspect title and field list for the given pane,
-// based on its currently selected item. Returns ("", nil) if the pane has
-// no inspectable selection.
 func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
 	switch pane {
 	case namespacesPane:
@@ -25,31 +22,35 @@ func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
 			{Label: "FQDN", Value: ns.FQDN},
 		}
 	case entitiesPane:
-		switch sel := m.entitiesList.SelectedItem().(type) {
-		case entityItem:
-			e := sel.entity
-			kind := "Queue"
-			if e.Kind == servicebus.EntityTopic {
-				kind = "Topic"
-			}
-			return kind, []ui.InspectField{
-				{Label: "Name", Value: e.Name},
-				{Label: "Kind", Value: kind},
-				{Label: "Active Messages", Value: fmt.Sprintf("%d", e.ActiveMsgCount)},
-				{Label: "Dead Letter", Value: fmt.Sprintf("%d", e.DeadLetterCount)},
-			}
-		case topicSubChildItem:
-			s := sel.sub
-			return "Topic Subscription", []ui.InspectField{
-				{Label: "Name", Value: s.Name},
-				{Label: "Parent Topic", Value: sel.parentTopic},
-				{Label: "Active Messages", Value: fmt.Sprintf("%d", s.ActiveMsgCount)},
-				{Label: "Dead Letter", Value: fmt.Sprintf("%d", s.DeadLetterCount)},
-			}
+		item, ok := m.entitiesList.SelectedItem().(entityItem)
+		if !ok {
+			return "Entity", nil
 		}
-		return "Entity", nil
-	case detailPane:
-		if item, ok := m.detailList.SelectedItem().(messageItem); ok {
+		e := item.entity
+		kind := "Queue"
+		if e.Kind == servicebus.EntityTopic {
+			kind = "Topic"
+		}
+		return kind, []ui.InspectField{
+			{Label: "Name", Value: e.Name},
+			{Label: "Kind", Value: kind},
+			{Label: "Active Messages", Value: fmt.Sprintf("%d", e.ActiveMsgCount)},
+			{Label: "Dead Letter", Value: fmt.Sprintf("%d", e.DeadLetterCount)},
+		}
+	case subscriptionsPane:
+		item, ok := m.subscriptionsList.SelectedItem().(subscriptionItem)
+		if !ok {
+			return "Subscription", nil
+		}
+		s := item.sub
+		return "Topic Subscription", []ui.InspectField{
+			{Label: "Name", Value: s.Name},
+			{Label: "Parent Topic", Value: m.currentEntity.Name},
+			{Label: "Active Messages", Value: fmt.Sprintf("%d", s.ActiveMsgCount)},
+			{Label: "Dead Letter", Value: fmt.Sprintf("%d", s.DeadLetterCount)},
+		}
+	case messagesPane:
+		if item, ok := m.messageList.SelectedItem().(messageItem); ok {
 			msg := item.message
 			return "Message", []ui.InspectField{
 				{Label: "Message ID", Value: ui.EmptyToDash(msg.MessageID)},
@@ -57,14 +58,11 @@ func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
 				{Label: "Body Preview", Value: compactPreview(msg.BodyPreview, 80)},
 			}
 		}
-		return "Detail", nil
+		return "Message", nil
 	}
 	return "", nil
 }
 
-// inspectFooterHeight returns the rendered row count of the inspect strip
-// for the given pane (when toggled on), or 0 when off. Used by resize() to
-// shrink the list height to make room for the strip.
 func (m Model) inspectFooterHeight(pane int) int {
 	if !m.inspectPanes[pane] {
 		return 0
@@ -73,8 +71,6 @@ func (m Model) inspectFooterHeight(pane int) int {
 	return ui.InspectStripHeight(fields)
 }
 
-// inspectFooter returns the rendered inspect strip for the pane (or "" when
-// the toggle is off). Called from View() to populate ListPane.Footer.
 func (m Model) inspectFooter(pane, contentWidth int) string {
 	if !m.inspectPanes[pane] {
 		return ""
@@ -83,7 +79,6 @@ func (m Model) inspectFooter(pane, contentWidth int) string {
 	return ui.RenderInspectStrip(title, fields, m.Styles, contentWidth)
 }
 
-// toggleInspect flips the inspect strip on/off for the focused pane.
 func (m *Model) toggleInspect() {
 	if m.inspectPanes == nil {
 		m.inspectPanes = make(map[int]bool)
