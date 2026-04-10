@@ -28,10 +28,8 @@ func (m Model) View() tea.View {
 	paneStyle := m.Styles.Chrome.Pane
 
 	vaults := ui.RenderListPane(ui.ListPane{
-		List:     &m.vaultsList,
-		Title:    m.vaultsPaneTitle(),
-		Loading:  m.Loading && m.LoadingPane == vaultsPane,
-		LoadedAt: m.LoadingStartedAt,
+		List:  &m.vaultsList,
+		Title: m.vaultsPaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
 			{Key: km.FilterInput.Short(), Desc: "filter"},
@@ -44,10 +42,8 @@ func (m Model) View() tea.View {
 	}, m.Styles)
 
 	secrets := ui.RenderListPane(ui.ListPane{
-		List:     &m.secretsList,
-		Title:    m.secretsPaneTitle(),
-		Loading:  m.Loading && m.LoadingPane == secretsPane,
-		LoadedAt: m.LoadingStartedAt,
+		List:  &m.secretsList,
+		Title: m.secretsPaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "versions"},
 			{Key: km.YankSecret.Short(), Desc: "yank"},
@@ -59,10 +55,8 @@ func (m Model) View() tea.View {
 	}, m.Styles)
 
 	versions := ui.RenderListPane(ui.ListPane{
-		List:     &m.versionsList,
-		Title:    m.versionsPaneTitle(),
-		Loading:  m.Loading && m.LoadingPane == versionsPane,
-		LoadedAt: m.LoadingStartedAt,
+		List:  &m.versionsList,
+		Title: m.versionsPaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.YankSecret.Short(), Desc: "yank version"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
