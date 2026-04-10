@@ -44,10 +44,8 @@ func (m Model) View() tea.View {
 	paneStyle := m.Styles.Chrome.Pane
 
 	accounts := ui.RenderListPane(ui.ListPane{
-		List:     &m.accountsList,
-		Title:    m.accountsPaneTitle(),
-		Loading:  m.Loading && m.LoadingPane == accountsPane,
-		LoadedAt: m.LoadingStartedAt,
+		List:  &m.accountsList,
+		Title: m.accountsPaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
 			{Key: km.FilterInput.Short(), Desc: "filter"},
@@ -60,10 +58,8 @@ func (m Model) View() tea.View {
 	}, m.Styles)
 
 	containers := ui.RenderListPane(ui.ListPane{
-		List:     &m.containersList,
-		Title:    m.containersPaneTitle(),
-		Loading:  m.Loading && m.LoadingPane == containersPane,
-		LoadedAt: m.LoadingStartedAt,
+		List:  &m.containersList,
+		Title: m.containersPaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
@@ -90,10 +86,8 @@ func (m Model) View() tea.View {
 	}
 
 	blobsPaneParams := ui.ListPane{
-		List:     &m.blobsList,
-		Title:    m.blobsPaneTitle(),
-		Loading:  m.Loading && m.LoadingPane == blobsPane,
-		LoadedAt: m.LoadingStartedAt,
+		List:  &m.blobsList,
+		Title: m.blobsPaneTitle(),
 		Hints:    blobsHintSet,
 		Footer:   m.inspectFooter(blobsPane, ui.PaneContentWidth(paneStyle, pw[2])),
 		Frame:    ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == blobsPane},

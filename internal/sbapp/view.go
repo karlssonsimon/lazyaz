@@ -38,10 +38,8 @@ func (m Model) View() tea.View {
 	paneStyle := m.Styles.Chrome.Pane
 
 	namespaces := ui.RenderListPane(ui.ListPane{
-		List:     &m.namespacesList,
-		Title:    m.namespacesPaneTitle(),
-		Loading:  m.Loading && m.LoadingPane == namespacesPane,
-		LoadedAt: m.LoadingStartedAt,
+		List:  &m.namespacesList,
+		Title: m.namespacesPaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
 			{Key: km.FilterInput.Short(), Desc: "filter"},
@@ -55,10 +53,8 @@ func (m Model) View() tea.View {
 
 	entitiesContentWidth := ui.PaneContentWidth(paneStyle, pw[1])
 	entities := ui.RenderListPane(ui.ListPane{
-		List:     &m.entitiesList,
-		Title:    m.entitiesPaneTitle(),
-		Loading:  m.Loading && m.LoadingPane == entitiesPane,
-		LoadedAt: m.LoadingStartedAt,
+		List:  &m.entitiesList,
+		Title: m.entitiesPaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
@@ -74,10 +70,8 @@ func (m Model) View() tea.View {
 	// with the danger color regardless of focus, so the user has a loud
 	// visual reminder they're operating on dead-lettered data.
 	detailPaneListPane := ui.ListPane{
-		List:     &m.detailList,
-		Title:    m.detailPaneTitle(),
-		Loading:  m.Loading && m.LoadingPane == detailPane,
-		LoadedAt: m.LoadingStartedAt,
+		List:  &m.detailList,
+		Title: m.detailPaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.ToggleMark.Short(), Desc: "mark"},
 			{Key: km.ShowActiveQueue.Short() + "/" + km.ShowDeadLetterQueue.Short(), Desc: "active/DLQ"},
