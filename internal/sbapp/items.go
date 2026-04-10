@@ -75,7 +75,6 @@ func (i queueTypeItem) FilterValue() string { return i.label }
 
 type messageItem struct {
 	message   servicebus.PeekedMessage
-	marked    bool
 	duplicate bool
 }
 
@@ -84,13 +83,17 @@ func (i messageItem) Title() string {
 	if id == "" {
 		id = "(no id)"
 	}
+	prefix := ""
 	if i.duplicate {
-		return "[DUP] " + id
+		prefix = "[DUP] "
 	}
-	if i.marked {
-		return "* " + id
+
+	ts := "    -     "
+	if !i.message.EnqueuedAt.IsZero() {
+		ts = i.message.EnqueuedAt.Local().Format("2006-01-02 15:04")
 	}
-	return id
+
+	return fmt.Sprintf("%s%-40s  %s", prefix, id, ts)
 }
 
 func (i messageItem) Description() string {
@@ -174,12 +177,11 @@ func sortEntitiesByDLQDesc(entities []servicebus.Entity) []servicebus.Entity {
 	return append(withDLQ, withoutDLQ...)
 }
 
-func messagesToItems(messages []servicebus.PeekedMessage, marked, duplicates map[string]struct{}) []list.Item {
+func messagesToItems(messages []servicebus.PeekedMessage, duplicates map[string]struct{}) []list.Item {
 	items := make([]list.Item, 0, len(messages))
 	for _, msg := range messages {
-		_, isMarked := marked[msg.MessageID]
 		_, isDup := duplicates[msg.MessageID]
-		items = append(items, messageItem{message: msg, marked: isMarked, duplicate: isDup})
+		items = append(items, messageItem{message: msg, duplicate: isDup})
 	}
 	return items
 }

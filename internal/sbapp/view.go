@@ -85,6 +85,7 @@ func (m Model) View() tea.View {
 		Title: m.queueTypePaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
+			{Key: km.ActionMenu.Short(), Desc: "actions"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
 		},
 		Frame: ui.PaneFrame{Width: pw[queueTypePane], Height: h, Focused: m.focus == queueTypePane},
@@ -97,6 +98,7 @@ func (m Model) View() tea.View {
 		Title: m.messagesPaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.ActionMenu.Short(), Desc: "actions"},
+			{Key: km.ToggleMark.Short(), Desc: "mark"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
 		},
 		Footer: m.inspectFooter(messagesPane, ui.PaneContentWidth(paneStyle, pw[messagesPane])),

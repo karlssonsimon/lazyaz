@@ -64,6 +64,15 @@ type Model struct {
 	// type picker.
 	deadLetter bool
 
+	visualLineMode bool
+	visualAnchor   string // message ID of the anchor
+
+	// lockedMessages holds the result of a receive-with-lock operation.
+	// Non-nil means the user has received DLQ messages with locks held.
+	// The receiver must be closed (abandonAll + close) when navigating
+	// away or when the user explicitly abandons.
+	lockedMessages *servicebus.ReceivedMessages
+
 	// dlqSort, when true, pulls entities with DLQ messages to the top.
 	dlqSort bool
 
@@ -129,6 +138,30 @@ type requeueDoneMsg struct {
 type deleteDuplicateDoneMsg struct {
 	messageID string
 	err       error
+}
+
+type dlqReceivedMsg struct {
+	result *servicebus.ReceivedMessages
+	err    error
+}
+
+type dlqCompleteMsg struct {
+	completed []string
+	err       error
+}
+
+type dlqRequeueMsg struct {
+	requeued []string
+	err      error
+}
+
+type dlqAbandonMsg struct {
+	err error
+}
+
+type dlqRequeueAllMsg struct {
+	requeued int
+	err      error
 }
 
 type entitiesRefreshedMsg struct {
@@ -204,6 +237,10 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 		&m.namespacesList, &m.entitiesList, &m.subscriptionsList,
 		&m.queueTypeList, &m.messageList,
 	}, &m.Spinner)
+	d := newMessageDelegate(m.Styles.Delegate, m.Styles)
+	d.marked = m.currentMarks()
+	d.visual = m.visualSelectionSet()
+	m.messageList.SetDelegate(d)
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.

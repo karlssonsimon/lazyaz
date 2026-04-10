@@ -72,6 +72,109 @@ func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespac
 	}
 }
 
+func receiveDLQCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName, subName string, maxCount int) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		var result *servicebus.ReceivedMessages
+		var err error
+		if subName == "" {
+			result, err = svc.ReceiveFromDLQ(ctx, ns, entityName, maxCount)
+		} else {
+			result, err = svc.ReceiveFromSubscriptionDLQ(ctx, ns, entityName, subName, maxCount)
+		}
+		return dlqReceivedMsg{result: result, err: err}
+	}
+}
+
+func completeDLQMarkedCmd(locked *servicebus.ReceivedMessages, markedIDs map[string]struct{}) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		var completed []string
+		for _, msg := range locked.Messages {
+			if _, ok := markedIDs[msg.MessageID]; !ok {
+				continue
+			}
+			if err := locked.Complete(ctx, msg); err != nil {
+				return dlqCompleteMsg{completed: completed, err: err}
+			}
+			completed = append(completed, msg.MessageID)
+		}
+		return dlqCompleteMsg{completed: completed}
+	}
+}
+
+func requeueDLQMarkedCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName string, locked *servicebus.ReceivedMessages, markedIDs map[string]struct{}) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		var requeued []string
+		for _, msg := range locked.Messages {
+			if _, ok := markedIDs[msg.MessageID]; !ok {
+				continue
+			}
+			if err := svc.SendToQueue(ctx, ns, entityName, msg.Body); err != nil {
+				return dlqRequeueMsg{requeued: requeued, err: err}
+			}
+			if err := locked.Complete(ctx, msg); err != nil {
+				return dlqRequeueMsg{requeued: requeued, err: err}
+			}
+			requeued = append(requeued, msg.MessageID)
+		}
+		return dlqRequeueMsg{requeued: requeued}
+	}
+}
+
+func abandonDLQCmd(locked *servicebus.ReceivedMessages) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		locked.Close(ctx)
+		return dlqAbandonMsg{}
+	}
+}
+
+func requeueAllDLQCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName, subName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		total := 0
+		for {
+			var result *servicebus.ReceivedMessages
+			var err error
+			if subName == "" {
+				result, err = svc.ReceiveFromDLQ(ctx, ns, entityName, 50)
+			} else {
+				result, err = svc.ReceiveFromSubscriptionDLQ(ctx, ns, entityName, subName, 50)
+			}
+			if err != nil {
+				return dlqRequeueAllMsg{requeued: total, err: err}
+			}
+			if len(result.Messages) == 0 {
+				result.Receiver.Close(ctx)
+				break
+			}
+
+			for _, msg := range result.Messages {
+				if err := svc.SendToQueue(ctx, ns, entityName, msg.Body); err != nil {
+					result.Close(ctx)
+					return dlqRequeueAllMsg{requeued: total, err: err}
+				}
+				if err := result.Complete(ctx, msg); err != nil {
+					result.Receiver.Close(ctx)
+					return dlqRequeueAllMsg{requeued: total, err: err}
+				}
+				total++
+			}
+			result.Receiver.Close(ctx)
+		}
+
+		return dlqRequeueAllMsg{requeued: total}
+	}
+}
+
 func refreshEntitiesCmd(svc *servicebus.Service, ns servicebus.Namespace) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
