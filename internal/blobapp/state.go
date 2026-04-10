@@ -15,8 +15,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-const defaultBlobPrefixSearchLimit = 500
-const defaultHierarchyBlobLoadLimit = 500
+const defaultBlobPrefixSearchLimit = 5000
+const defaultHierarchyBlobLoadLimit = 5000
 
 const (
 	accountsPane = iota
@@ -219,6 +219,8 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 		cache:             newCache(db),
 		downloadDir:       cfg.ResolvedDownloadDir(),
 		focus:             accountsPane,
+		blobSortField:     blobSortDate,
+		blobSortDesc:      true,
 		accountsHistory:   make(map[string]ui.ListState),
 		containersHistory: make(map[string]ui.ListState),
 		blobsHistory:      make(map[string]ui.ListState),

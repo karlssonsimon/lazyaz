@@ -46,6 +46,6 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix))
 		return m, tea.Batch(m.Spinner.Tick, fetchSearchBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, m.filter.prefixQuery, defaultBlobPrefixSearchLimit))
 	}
-	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix))
+	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
 	return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 }

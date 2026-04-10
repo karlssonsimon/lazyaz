@@ -303,7 +303,7 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 		if msg.loadAll {
 			status = fmt.Sprintf("Loaded all %d blobs in %s/%s in %s", len(m.blobs), msg.account.Name, msg.container, elapsed)
 		} else {
-			status = fmt.Sprintf("Loaded %d entries in %s/%s under %q in %s", len(m.blobs), msg.account.Name, msg.container, msg.prefix, elapsed)
+			status = fmt.Sprintf("Loaded %d entries in %s/%s under %q in %s", len(m.blobs), msg.account.Name, msg.container, displayPrefix(msg.prefix), elapsed)
 		}
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
@@ -556,7 +556,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.rebuildParentBlobsList()
 
 				m.SetLoading(blobsPane)
-				m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, m.prefix))
+				m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
 				return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 			}
 		}

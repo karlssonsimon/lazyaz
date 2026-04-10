@@ -194,6 +194,13 @@ func trimPrefixForDisplay(name, prefix string) string {
 	return trimmed
 }
 
+func displayPrefix(prefix string) string {
+	if prefix == "" {
+		return "/"
+	}
+	return prefix
+}
+
 func parentPrefix(prefix string) string {
 	prefix = strings.TrimSuffix(prefix, "/")
 	idx := strings.LastIndex(prefix, "/")
