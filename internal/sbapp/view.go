@@ -21,7 +21,7 @@ func (m Model) View() tea.View {
 		sbItems = append(sbItems, ui.StatusBarItem{Label: "Namespace:", Value: m.currentNS.Name})
 	}
 	if m.hasPeekTarget {
-		label := entityDisplayName(m.currentEntity)
+		label := m.currentEntity.Name
 		if m.currentSubName != "" {
 			label += "/" + m.currentSubName
 		}
@@ -30,14 +30,19 @@ func (m Model) View() tea.View {
 
 	ui.ClampListSelection(&m.namespacesList)
 	ui.ClampListSelection(&m.entitiesList)
-	ui.ClampListSelection(&m.detailList)
+	ui.ClampListSelection(&m.subscriptionsList)
+	ui.ClampListSelection(&m.queueTypeList)
+	ui.ClampListSelection(&m.messageList)
 
 	pw := m.paneWidths
 	h := m.paneHeight
 	km := m.Keymap
 	paneStyle := m.Styles.Chrome.Pane
 
-	namespaces := ui.RenderListPane(ui.ListPane{
+	// Build all pane renderings.
+	paneMap := make(map[int]string)
+
+	paneMap[namespacesPane] = ui.RenderListPane(ui.ListPane{
 		List:  &m.namespacesList,
 		Title: m.namespacesPaneTitle(),
 		Hints: []ui.PaneHint{
@@ -47,58 +52,63 @@ func (m Model) View() tea.View {
 			{Key: km.SubscriptionPicker.Short(), Desc: "sub"},
 			{Key: km.Inspect.Short(), Desc: "inspect"},
 		},
-		Footer: m.inspectFooter(namespacesPane, ui.PaneContentWidth(paneStyle, pw[0])),
-		Frame:  ui.PaneFrame{Width: pw[0], Height: h, Focused: m.focus == namespacesPane},
+		Footer: m.inspectFooter(namespacesPane, ui.PaneContentWidth(paneStyle, pw[namespacesPane])),
+		Frame:  ui.PaneFrame{Width: pw[namespacesPane], Height: h, Focused: m.focus == namespacesPane},
 	}, m.Styles)
 
-	entitiesContentWidth := ui.PaneContentWidth(paneStyle, pw[1])
-	entities := ui.RenderListPane(ui.ListPane{
+	paneMap[entitiesPane] = ui.RenderListPane(ui.ListPane{
 		List:  &m.entitiesList,
 		Title: m.entitiesPaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
-			{Key: km.ShowActiveQueue.Short() + "/" + km.ShowDeadLetterQueue.Short(), Desc: "type"},
 			{Key: km.ToggleDLQFilter.Short(), Desc: "DLQ-first"},
 		},
-		Header: m.renderEntityTabs(entitiesContentWidth),
-		Footer: m.inspectFooter(entitiesPane, entitiesContentWidth),
-		Frame:  ui.PaneFrame{Width: pw[1], Height: h, Focused: m.focus == entitiesPane},
+		Footer: m.inspectFooter(entitiesPane, ui.PaneContentWidth(paneStyle, pw[entitiesPane])),
+		Frame:  ui.PaneFrame{Width: pw[entitiesPane], Height: h, Focused: m.focus == entitiesPane},
 	}, m.Styles)
 
-	// Detail pane: when showing DLQ messages, paint the title and border
-	// with the danger color regardless of focus, so the user has a loud
-	// visual reminder they're operating on dead-lettered data.
-	detailPaneListPane := ui.ListPane{
-		List:  &m.detailList,
-		Title: m.detailPaneTitle(),
+	paneMap[subscriptionsPane] = ui.RenderListPane(ui.ListPane{
+		List:  &m.subscriptionsList,
+		Title: m.subscriptionsPaneTitle(),
 		Hints: []ui.PaneHint{
-			{Key: km.ToggleMark.Short(), Desc: "mark"},
-			{Key: km.ShowActiveQueue.Short() + "/" + km.ShowDeadLetterQueue.Short(), Desc: "active/DLQ"},
-			{Key: km.RequeueDLQ.Short(), Desc: "requeue"},
+			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
+			{Key: km.NavigateLeft.Short(), Desc: "back"},
 		},
-		Footer: m.inspectFooter(detailPane, ui.PaneContentWidth(paneStyle, pw[2])),
-		Frame:  ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == detailPane},
-	}
-	if m.hasPeekTarget {
-		detailPaneListPane.Header = m.renderDLQTabs(ui.PaneContentWidth(paneStyle, pw[2]))
-	}
-	if m.deadLetter && m.hasPeekTarget {
-		dangerTitle := m.Styles.DangerBold.Padding(0, 1)
-		dangerFrame := m.Styles.Chrome.Pane.Copy().BorderForeground(m.Styles.Danger.GetForeground())
-		detailPaneListPane.TitleStyle = &dangerTitle
-		detailPaneListPane.FrameStyle = &dangerFrame
-	}
-	detail := ui.RenderListPane(detailPaneListPane, m.Styles)
+		Footer: m.inspectFooter(subscriptionsPane, ui.PaneContentWidth(paneStyle, pw[subscriptionsPane])),
+		Frame:  ui.PaneFrame{Width: pw[subscriptionsPane], Height: h, Focused: m.focus == subscriptionsPane},
+	}, m.Styles)
 
-	// Build pane map for lookup by index.
-	paneMap := map[int]string{
-		namespacesPane: namespaces,
-		entitiesPane:   entities,
-		detailPane:     detail,
+	// Queue type pane — DLQ item gets danger styling.
+	queueTypeLp := ui.ListPane{
+		List:  &m.queueTypeList,
+		Title: m.queueTypePaneTitle(),
+		Hints: []ui.PaneHint{
+			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
+			{Key: km.NavigateLeft.Short(), Desc: "back"},
+		},
+		Frame: ui.PaneFrame{Width: pw[queueTypePane], Height: h, Focused: m.focus == queueTypePane},
 	}
+	paneMap[queueTypePane] = ui.RenderListPane(queueTypeLp, m.Styles)
 
-	// Render preview pane if it has a width assigned.
+	// Messages pane — danger border when viewing DLQ.
+	messagesLp := ui.ListPane{
+		List:  &m.messageList,
+		Title: m.messagesPaneTitle(),
+		Hints: []ui.PaneHint{
+			{Key: km.ActionMenu.Short(), Desc: "actions"},
+			{Key: km.NavigateLeft.Short(), Desc: "back"},
+		},
+		Footer: m.inspectFooter(messagesPane, ui.PaneContentWidth(paneStyle, pw[messagesPane])),
+		Frame:  ui.PaneFrame{Width: pw[messagesPane], Height: h, Focused: m.focus == messagesPane},
+	}
+	if m.deadLetter {
+		dangerFrame := paneStyle.Copy().BorderForeground(m.Styles.Danger.GetForeground())
+		messagesLp.FrameStyle = &dangerFrame
+	}
+	paneMap[messagesPane] = ui.RenderListPane(messagesLp, m.Styles)
+
+	// Message preview pane.
 	if pw[messagePreviewPane] > 0 && m.viewingMessage {
 		contentWidth := ui.PaneContentWidth(paneStyle, pw[messagePreviewPane])
 		msgID := ui.EmptyToDash(m.selectedMessage.MessageID)
@@ -115,24 +125,24 @@ func (m Model) View() tea.View {
 		paneMap[messagePreviewPane] = ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[messagePreviewPane], Height: h, Focused: m.focus == messagePreviewPane}, m.Styles)
 	}
 
-	// Assemble panes in visual order: parent (left), focused (center), child (right).
-	// When there's no parent pane, add an empty spacer to keep the focused pane centered.
+	// Assemble: parent, focused, child.
 	parentWidth := m.Width * 20 / 100
 	paneParts := make([]string, 0, 3)
-	if m.focus > namespacesPane && pw[m.focus-1] > 0 {
-		paneParts = append(paneParts, paneMap[m.focus-1])
+
+	parentIdx := m.parentPane()
+	if parentIdx >= 0 && pw[parentIdx] > 0 {
+		paneParts = append(paneParts, paneMap[parentIdx])
 	} else if m.focus == namespacesPane {
 		spacer := lipgloss.NewStyle().Width(parentWidth).Height(h).Render("")
 		paneParts = append(paneParts, spacer)
 	}
-	paneParts = append(paneParts, paneMap[m.focus])
 
-	// Child column (right side).
-	childIdx := m.focus + 1
-	if m.focus == detailPane {
-		childIdx = messagePreviewPane
+	if rendered, ok := paneMap[m.focus]; ok {
+		paneParts = append(paneParts, rendered)
 	}
-	if childIdx <= messagePreviewPane && pw[childIdx] > 0 {
+
+	childIdx := m.childPane()
+	if childIdx >= 0 && pw[childIdx] > 0 {
 		if rendered, ok := paneMap[childIdx]; ok {
 			paneParts = append(paneParts, rendered)
 		}
@@ -141,10 +151,12 @@ func (m Model) View() tea.View {
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, paneParts...)
 
 	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
-
 	statusBar := ui.RenderStatusBar(m.Styles, sbItems, "", false, m.Width)
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)
+	if m.actionMenu.active {
+		view = m.renderActionMenu(view)
+	}
 	out := tea.NewView(m.RenderOverlays(view))
 	out.AltScreen = true
 	out.MouseMode = tea.MouseModeCellMotion

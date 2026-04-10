@@ -14,7 +14,6 @@ import (
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Handle paste before cursor update (which can swallow PasteMsg).
 	if paste, ok := msg.(tea.PasteMsg); ok {
 		text := paste.String()
 		switch {
@@ -29,30 +28,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.HelpOverlay.PasteText(text)
 			return m, nil
 		default:
-			var cmd tea.Cmd
-			switch m.focus {
-			case namespacesPane:
-				m.namespacesList, cmd = m.namespacesList.Update(msg)
-			case entitiesPane:
-				m.entitiesList, cmd = m.entitiesList.Update(msg)
-			case detailPane:
-				m.detailList, cmd = m.detailList.Update(msg)
-			}
-			return m, cmd
+			return m.updateFocusedList(msg)
 		}
 	}
 
 	if cursorModel, cursorCmd := m.Cursor.Update(msg); cursorCmd != nil {
 		m.Cursor = cursorModel
-		var listCmd tea.Cmd
-		switch m.focus {
-		case namespacesPane:
-			m.namespacesList, listCmd = m.namespacesList.Update(msg)
-		case entitiesPane:
-			m.entitiesList, listCmd = m.entitiesList.Update(msg)
-		case detailPane:
-			m.detailList, listCmd = m.detailList.Update(msg)
-		}
+		_, listCmd := m.updateFocusedList(msg)
 		return m, tea.Batch(cursorCmd, listCmd)
 	}
 
@@ -73,25 +55,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case appshell.SubscriptionsLoadedMsg:
 		return m.handleSubscriptionsLoaded(msg)
-
 	case namespacesLoadedMsg:
 		return m.handleNamespacesLoaded(msg)
-
 	case entitiesLoadedMsg:
 		return m.handleEntitiesLoaded(msg)
-
 	case topicSubscriptionsLoadedMsg:
 		return m.handleTopicSubscriptionsLoaded(msg)
-
 	case messagesLoadedMsg:
 		return m.handleMessagesLoaded(msg)
-
 	case requeueDoneMsg:
 		return m.handleRequeueDone(msg)
-
 	case deleteDuplicateDoneMsg:
 		return m.handleDeleteDuplicateDone(msg)
-
 	case entitiesRefreshedMsg:
 		return m.handleEntitiesRefreshed(msg)
 
@@ -105,14 +80,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-
 	case tea.MouseMotionMsg:
 		if m.textSelection.Active {
 			region := m.messageViewportRegion()
 			m.textSelection.HandleMouseMotion(msg, region)
 			return m, nil
 		}
-
 	case tea.MouseReleaseMsg:
 		if m.textSelection.Active {
 			region := m.messageViewportRegion()
@@ -127,7 +100,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-
 	case clipboardMsg:
 		if msg.err != nil {
 			m.Notify(appshell.LevelError, fmt.Sprintf("Clipboard: %s", msg.err.Error()))
@@ -137,15 +109,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Fallthrough: propagate to the focused list.
+	return m.updateFocusedList(msg)
+}
+
+func (m Model) updateFocusedList(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch m.focus {
 	case namespacesPane:
 		m.namespacesList, cmd = m.namespacesList.Update(msg)
 	case entitiesPane:
 		m.entitiesList, cmd = m.entitiesList.Update(msg)
-	case detailPane:
-		m.detailList, cmd = m.detailList.Update(msg)
+	case subscriptionsPane:
+		m.subscriptionsList, cmd = m.subscriptionsList.Update(msg)
+	case queueTypePane:
+		m.queueTypeList, cmd = m.queueTypeList.Update(msg)
+	case messagesPane:
+		m.messageList, cmd = m.messageList.Update(msg)
+		if m.viewingMessage {
+			m.syncPreviewToSelection()
+		}
 	}
 	return m, cmd
 }
@@ -163,8 +145,6 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 	}
 
 	m.Subscriptions = msg.Subscriptions
-	// Keep the overlay's filtered view in sync with streaming results
-	// so new subscriptions matching the user's query appear immediately.
 	if m.SubOverlay.Active {
 		m.SubOverlay.Refilter(m.Subscriptions)
 	}
@@ -174,10 +154,6 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 		status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.Subscriptions), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		if !m.HasSubscription {
 			if matched, ok := m.TryApplyPreferredSubscription(); ok {
-				// The constructor opened the picker overlay; selectSubscription
-				// drives navigation but doesn't dismiss it (the interactive
-				// path is dismissed inside the overlay's HandleKey). Close
-				// it here so the data loading behind it actually shows.
 				m.SubOverlay.Close()
 				next, selectCmd := m.selectSubscription(matched)
 				next.ClearLoading()
@@ -198,7 +174,6 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 	if !m.HasSubscription || m.CurrentSub.ID != msg.subscriptionID {
 		return m, nil
 	}
-
 	if msg.err != nil {
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load namespaces in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
@@ -215,7 +190,6 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
 		return m, nil
 	}
-
 	return m, msg.next
 }
 
@@ -223,7 +197,6 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 	if !m.hasNamespace || m.currentNS.Name != msg.namespace.Name {
 		return m, nil
 	}
-
 	if msg.err != nil {
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load entities in %s: %s", msg.namespace.Name, msg.err.Error()))
@@ -240,89 +213,75 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
 		return m, nil
 	}
-
 	return m, msg.next
 }
 
 func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (Model, tea.Cmd) {
-	// Drop pages for stale fetches: scope changed or topic changed.
 	if !m.hasNamespace || m.currentNS.Name != msg.namespace.Name {
 		return m, nil
 	}
-	if m.topicSubsFetching != msg.topicName {
+	if m.currentEntity.Name != msg.topicName || !m.isTopicSelected() {
 		return m, nil
 	}
-	if !m.expandedTopics[msg.topicName] {
-		// User collapsed the topic before the fetch finished — drop.
-		return m, nil
-	}
-
 	if msg.err != nil {
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load subscriptions for topic %s: %s", msg.topicName, msg.err.Error()))
-		m.topicSubsFetching = ""
 		return m, nil
 	}
 
-	m.topicSubsByTopic[msg.topicName] = msg.subs
-	m.rebuildEntitiesItems()
+	m.subscriptions = msg.subs
+	ui.SetItemsPreserveKey(&m.subscriptionsList, subscriptionsToItems(msg.subs), subscriptionItemKey)
+	m.subscriptionsList.Title = fmt.Sprintf("Subscriptions (%d)", len(msg.subs))
 
 	if msg.done {
-		m.topicSubsFetching = ""
-		m.rebuildEntitiesItems()
-		status := fmt.Sprintf("Loaded %d subscriptions for topic %s in %s", len(m.topicSubsByTopic[msg.topicName]), msg.topicName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+		status := fmt.Sprintf("Loaded %d subscriptions for topic %s in %s", len(m.subscriptions), msg.topicName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
 		return m, nil
 	}
-
 	return m, msg.next
 }
 
 func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
-	// Messages are ephemeral peek results — not cached.
-	m.ClearLoading()
 	if msg.err != nil {
+		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to peek messages from %s: %s", msg.source, msg.err.Error()))
 		return m, nil
 	}
 
-	m.peekedMessages = msg.messages
-	items := messagesToItems(msg.messages, m.currentMarks(), m.currentDuplicates())
 	if msg.repeek {
-		// Same scope (after requeue, delete-duplicate, or R-key refresh):
-		// keep the cursor on whichever message the user was looking at,
-		// or clamp to the same numeric index if it's gone.
-		ui.SetItemsPreserveKey(&m.detailList, items, messageItemKey)
+		// Append mode ("peek more") — add to existing messages.
+		m.peekedMessages = append(m.peekedMessages, msg.messages...)
 	} else {
-		// Fresh items (entering an entity or active↔DLQ toggle): clear
-		// filter and start at the top. The preview pane is NOT torn
-		// down here — peekQueue/peekTopicSub close it explicitly when
-		// entering a different entity, and DLQ toggle within the same
-		// entity should keep the preview open and just have it follow
-		// the new selection.
-		m.detailList.ResetFilter()
-		m.detailList.SetItems(items)
+		m.peekedMessages = msg.messages
+	}
+	items := messagesToItems(m.peekedMessages, m.currentMarks(), m.currentDuplicates())
+	if msg.repeek {
+		ui.SetItemsPreserveKey(&m.messageList, items, messageItemKey)
+	} else {
+		m.messageList.ResetFilter()
+		m.messageList.SetItems(items)
 		if len(msg.messages) > 0 {
-			m.detailList.Select(0)
+			m.messageList.Select(0)
 		}
 	}
 	if m.viewingMessage {
-		// Force the preview pane to resync to the (possibly new)
-		// selected message. Clearing selectedMessage makes
-		// syncPreviewToSelection treat the current selection as a change.
 		m.selectedMessage = servicebus.PeekedMessage{}
 		m.syncPreviewToSelection()
 	}
-	m.detailList.Title = fmt.Sprintf("Messages (%d)", len(msg.messages))
+	m.messageList.Title = fmt.Sprintf("Messages (%d)", len(msg.messages))
 	m.resize()
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Peeked %d messages from %s", len(msg.messages), msg.source))
+	m.ClearLoading()
+	label := "active"
+	if msg.deadLetter {
+		label = "DLQ"
+	}
+	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Peeked %d %s messages from %s", len(msg.messages), label, msg.source))
 	return m, nil
 }
 
 func (m Model) handleRequeueDone(msg requeueDoneMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
-	// Successful requeues consume the marks for the current scope.
 	m.clearScopeMarks()
 	switch {
 	case msg.err != nil:
@@ -364,6 +323,10 @@ func (m Model) handleEntitiesRefreshed(msg entitiesRefreshedMsg) (Model, tea.Cmd
 	}
 	m.entities = msg.entities
 	m.rebuildEntitiesItems()
+	// Refresh queue type counts if we're looking at one.
+	if m.hasPeekTarget {
+		m.buildQueueTypeItems()
+	}
 	return m, nil
 }
 
@@ -381,10 +344,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Message preview viewport captures keys only when it has focus.
-	// When focus is on the message list (with the preview still open),
-	// keys flow through normally so the user can navigate messages while
-	// the preview pane updates live.
+	if m.actionMenu.active {
+		if selected, act := m.actionMenu.handleKey(key, m.Keymap); selected {
+			return m.executeAction(act)
+		}
+		return m, nil
+	}
+
 	if m.viewingMessage && m.focus == messagePreviewPane {
 		return m.handleViewingMessageKey(msg, key)
 	}
@@ -429,82 +395,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if !focusedFilterActive {
 			return m.navigateLeft()
 		}
-	case m.Keymap.ToggleMark.Matches(key):
-		if !focusedFilterActive && m.focus == detailPane && m.hasPeekTarget {
-			item, ok := m.detailList.SelectedItem().(messageItem)
-			if !ok {
-				return m, nil
-			}
-			if item.duplicate {
-				return m, nil
-			}
-			marks := m.ensureMarks()
-			id := item.message.MessageID
-			if _, marked := marks[id]; marked {
-				delete(marks, id)
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", id, len(marks)))
-			} else {
-				marks[id] = struct{}{}
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", id, len(marks)))
-			}
-			m.refreshItems()
+	case m.Keymap.ActionMenu.Matches(key):
+		if !focusedFilterActive && m.focus == messagesPane && m.hasPeekTarget {
+			m.actionMenu.open(m.buildActions())
 			return m, nil
-		}
-	case m.Keymap.ShowActiveQueue.Matches(key):
-		if !focusedFilterActive && m.focus == detailPane && m.hasPeekTarget {
-			if m.deadLetter {
-				m.deadLetter = false
-				m.clearDetailListForRePeek()
-				return m.rePeekMessages(false)
-			}
-			return m, nil
-		}
-		// Same key cycles entity-type tabs when focused on the entities pane.
-		if !focusedFilterActive && m.focus == entitiesPane {
-			m.cycleEntityFilter(-1)
-			return m, nil
-		}
-	case m.Keymap.ShowDeadLetterQueue.Matches(key):
-		if !focusedFilterActive && m.focus == detailPane && m.hasPeekTarget {
-			if !m.deadLetter {
-				m.deadLetter = true
-				m.clearDetailListForRePeek()
-				return m.rePeekMessages(false)
-			}
-			return m, nil
-		}
-		if !focusedFilterActive && m.focus == entitiesPane {
-			m.cycleEntityFilter(1)
-			return m, nil
-		}
-	case m.Keymap.RequeueDLQ.Matches(key):
-		if !focusedFilterActive && m.focus == detailPane && m.hasPeekTarget && m.deadLetter {
-			messageIDs := m.collectRequeueIDs()
-			if len(messageIDs) == 0 {
-				return m, nil
-			}
-			m.SetLoading(m.focus)
-			m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Requeuing %d message(s)...", len(messageIDs)))
-			return m, tea.Batch(m.Spinner.Tick, requeueMessagesCmd(m.service, m.currentNS, m.currentEntity, m.currentSubName, messageIDs))
-		}
-	case m.Keymap.DeleteDuplicate.Matches(key):
-		if !focusedFilterActive && m.focus == detailPane && m.hasPeekTarget && m.deadLetter {
-			item, ok := m.detailList.SelectedItem().(messageItem)
-			if !ok || !item.duplicate {
-				return m, nil
-			}
-			m.SetLoading(m.focus)
-			m.loadingSpinnerID = m.NotifySpinner("Deleting duplicate message...")
-			return m, tea.Batch(m.Spinner.Tick, deleteDuplicateCmd(m.service, m.currentNS, m.currentEntity, m.currentSubName, item.message.MessageID))
 		}
 	case m.Keymap.ToggleDLQFilter.Matches(key):
 		if !focusedFilterActive {
 			m.dlqSort = !m.dlqSort
 			m.applyDLQSort()
 			if m.dlqSort {
-				m.Notify(appshell.LevelInfo, "DLQ-first sort enabled – entities with dead-letter messages on top")
+				m.Notify(appshell.LevelInfo, "DLQ-first sort enabled")
 			} else {
-				m.Notify(appshell.LevelInfo, "DLQ-first sort disabled – entities in default order")
+				m.Notify(appshell.LevelInfo, "DLQ-first sort disabled")
 			}
 			return m, nil
 		}
@@ -540,63 +443,25 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	}
 
-	// Key didn't match any app-specific handler — fall through to the
-	// focused list so filter input and cursor keys reach it.
-	var cmd tea.Cmd
-	switch m.focus {
-	case namespacesPane:
-		m.namespacesList, cmd = m.namespacesList.Update(msg)
-	case entitiesPane:
-		m.entitiesList, cmd = m.entitiesList.Update(msg)
-	case detailPane:
-		m.detailList, cmd = m.detailList.Update(msg)
-		// If the preview pane is mounted, sync its content to whatever
-		// message the cursor just landed on. This makes the preview
-		// follow the cursor live.
-		if m.viewingMessage {
-			m.syncPreviewToSelection()
-		}
-	}
-	return m, cmd
+	return m.updateFocusedList(msg)
 }
 
-// syncPreviewToSelection refreshes the message preview viewport to
-// match whatever the message list cursor currently points at. Called
-// after detail-list cursor movement to make the preview pane follow
-// the cursor live. When the list is empty (e.g. switching to a DLQ
-// tab with zero messages), the viewport is cleared to a placeholder
-// instead of showing stale content from the previous selection.
 func (m *Model) syncPreviewToSelection() {
-	item, ok := m.detailList.SelectedItem().(messageItem)
+	item, ok := m.messageList.SelectedItem().(messageItem)
 	if !ok {
-		// Nothing to show — clear the viewport so the user sees a
-		// clean placeholder instead of the previously selected body.
 		m.selectedMessage = servicebus.PeekedMessage{}
 		m.messageViewport.SetContent(m.Styles.Muted.Render("(no message selected)"))
 		m.messageViewport.GotoTop()
 		return
 	}
 	if item.message.MessageID == m.selectedMessage.MessageID && item.message.MessageID != "" {
-		return // no change
+		return
 	}
 	m.selectedMessage = item.message
 	m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))
 	m.messageViewport.GotoTop()
 }
 
-// handleViewingMessageKey routes key events while the message-preview
-// pane has focus. Quit, focus changes, and the back binding are
-// intercepted; everything else scrolls the viewport.
-//
-// The back binding (h/left/backspace/esc) just moves focus to the
-// message list without closing the preview — the preview pane stays
-// mounted and follows the cursor as the user navigates messages. The
-// preview is only torn down when the user actually leaves the entity
-// (peeking a different one, going back to the entities pane, etc.).
-//
-// Note: this handler runs only when m.focus == messagePreviewPane, so
-// the message list is reachable normally via Tab/Shift+Tab without
-// being trapped here.
 func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):
@@ -608,7 +473,7 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 		m.previousFocus()
 		return m, nil
 	case m.Keymap.MessageBack.Matches(key):
-		m.setFocus(detailPane)
+		m.setFocus(messagesPane)
 		m.Notify(appshell.LevelInfo, "Back to message list")
 		return m, nil
 	}

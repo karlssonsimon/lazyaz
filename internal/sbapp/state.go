@@ -21,22 +21,10 @@ const peekMaxMessages = 50
 const (
 	namespacesPane = iota
 	entitiesPane
-	detailPane
-	// messagePreviewPane is the optional 4th pane that hosts the
-	// scrolling JSON body of the currently selected message. It is only
-	// part of the focus cycle while m.viewingMessage is true.
-	messagePreviewPane
-)
-
-// entityFilterMode controls which kinds of entities the entities pane
-// shows. Toggled via the tab strip at the top of the pane (and the
-// [/] keys when focused).
-type entityFilterMode int
-
-const (
-	entityFilterAll    entityFilterMode = iota // queues + topics
-	entityFilterQueues                         // queues only
-	entityFilterTopics                         // topics only
+	subscriptionsPane  // only visible when a topic is selected
+	queueTypePane      // Active / DLQ picker
+	messagesPane       // messages from selected queue type
+	messagePreviewPane // optional scrolling JSON preview
 )
 
 type Model struct {
@@ -44,88 +32,57 @@ type Model struct {
 
 	service *servicebus.Service
 
-	namespacesList list.Model
-	entitiesList   list.Model
-	detailList     list.Model
+	namespacesList    list.Model
+	entitiesList      list.Model
+	subscriptionsList list.Model // topic subscriptions
+	queueTypeList     list.Model // Active / DLQ picker (2 items)
+	messageList       list.Model // messages from selected queue type
 
 	focus int
 
-	namespaces     []servicebus.Namespace
-	entities       []servicebus.Entity
+	namespaces    []servicebus.Namespace
+	entities      []servicebus.Entity
+	subscriptions []servicebus.TopicSubscription // subs for selected topic
+
 	peekedMessages []servicebus.PeekedMessage
 
-	// topicSubsByTopic holds the subscriptions for each expanded topic
-	// in the current namespace, keyed by topic name. Populated lazily
-	// when the user expands a topic in the entities pane. Cleared when
-	// the namespace changes.
-	topicSubsByTopic map[string][]servicebus.TopicSubscription
-
-	// expandedTopics tracks which topics in the current namespace are
-	// expanded in the entities pane tree view. Cleared on namespace
-	// change.
-	expandedTopics map[string]bool
-
-	// topicSubsFetching is the topic name whose subscriptions are
-	// currently being fetched, used to validate incoming pages.
-	topicSubsFetching string
-
-	// Per-scope list state history. Snapshots of cursor + filter for
-	// each list are stashed here when the user navigates to a different
-	// scope, so returning later restores the view. Keyed by the same
-	// scope identifier the cache uses.
-	namespacesHistory map[string]ui.ListState // keyed by subscription ID
-	entitiesHistory   map[string]ui.ListState // keyed by sub+namespace
+	// Per-scope list state history.
+	namespacesHistory    map[string]ui.ListState
+	entitiesHistory      map[string]ui.ListState
+	subscriptionsHistory map[string]ui.ListState
 
 	hasNamespace bool
 	currentNS    servicebus.Namespace
 
-	// hasPeekTarget is true when the detail pane is bound to a queue or
-	// topic-subscription and showing (or about to show) its messages.
-	// When false, the detail pane is empty.
+	// hasPeekTarget is true when the queue type picker is bound to
+	// a queue or topic-subscription.
 	hasPeekTarget bool
-	// currentEntity is the queue or topic backing the current peek.
-	// For a queue peek, currentSubName is "". For a topic-sub peek,
-	// currentEntity is the topic and currentSubName is the sub name.
 	currentEntity  servicebus.Entity
 	currentSubName string
 
+	// deadLetter is true when the user selected "DLQ" in the queue
+	// type picker.
 	deadLetter bool
 
-	// dlqSort, when true, pulls entities with DLQ messages to the top
-	// of the entities pane (sorted by DLQ count desc) instead of hiding
-	// the rest. Toggled with ToggleDLQFilter — the keymap name is kept
-	// for backwards compatibility but the behavior is sort-not-filter.
+	// dlqSort, when true, pulls entities with DLQ messages to the top.
 	dlqSort bool
-
-	// entityFilter is the currently selected tab in the entities pane —
-	// All, Queues only, or Topics only. Cycled via [ / ] when focus is
-	// on the entities pane.
-	entityFilter entityFilterMode
 
 	messageViewport viewport.Model
 	viewingMessage  bool
 	selectedMessage servicebus.PeekedMessage
 	textSelection   ui.TextSelection
 
-	// markedMessages and duplicateMessages are scoped by peek target
-	// (entity + sub + active/DLQ) so switching tabs no longer destroys
-	// the user's selections. Outer key is the scope string returned by
-	// markScope(...); inner set is the marked / duplicate message IDs
-	// for that scope.
 	markedMessages    map[string]map[string]struct{}
 	duplicateMessages map[string]map[string]struct{}
 
 	cache sbCache
 
-	// Per-pane inspect strip toggle. When inspectPanes[pane] is true, the
-	// pane renders an inline detail strip (via ui.RenderInspectStrip) under
-	// its list. The strip updates live as the cursor moves so the user can
-	// keep browsing while details remain visible. Toggled with K.
+	actionMenu   actionMenuState
 	inspectPanes map[int]bool
 
 	loadingSpinnerID int
 
-	paneWidths [4]int // ns, ent, det, preview — set by resize
+	paneWidths [6]int // ns, ent, subs, qtype, msg, preview
 	paneHeight int
 }
 
@@ -155,15 +112,12 @@ type topicSubscriptionsLoadedMsg struct {
 }
 
 type messagesLoadedMsg struct {
-	namespace servicebus.Namespace
-	source    string
-	messages  []servicebus.PeekedMessage
-	// repeek is true when this peek is replacing an existing message list
-	// the user was already browsing (after requeue or delete-duplicate),
-	// so the handler should preserve cursor position by message ID rather
-	// than resetting to the top.
-	repeek bool
-	err    error
+	namespace  servicebus.Namespace
+	source     string
+	messages   []servicebus.PeekedMessage
+	deadLetter bool
+	repeek     bool
+	err        error
 }
 
 type requeueDoneMsg struct {
@@ -182,6 +136,18 @@ type entitiesRefreshedMsg struct {
 	err      error
 }
 
+func newList(delegate list.DefaultDelegate, name, plural string) list.Model {
+	l := list.New([]list.Item{}, delegate, 40, 10)
+	l.SetShowTitle(false)
+	l.SetShowHelp(false)
+	l.SetShowPagination(false)
+	l.SetShowStatusBar(true)
+	l.SetStatusBarItemName(name, plural)
+	l.SetFilteringEnabled(true)
+	l.DisableQuitKeybindings()
+	return l
+}
+
 func NewModel(svc *servicebus.Service, cfg ui.Config, db *cache.DB) Model {
 	return NewModelWithKeyMap(svc, cfg, keymap.Default(), db)
 }
@@ -189,51 +155,32 @@ func NewModel(svc *servicebus.Service, cfg ui.Config, db *cache.DB) Model {
 func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap, db *cache.DB) Model {
 	delegate := list.NewDefaultDelegate()
 
-	namespaces := list.New([]list.Item{}, delegate, 24, 10)
-	namespaces.SetShowTitle(false) // title is rendered by ui.RenderListPane
-	namespaces.SetShowHelp(false)
-	namespaces.SetShowPagination(false)
-	namespaces.SetShowStatusBar(true)
-	namespaces.SetStatusBarItemName("namespace", "namespaces")
-	namespaces.SetFilteringEnabled(true)
-	namespaces.DisableQuitKeybindings()
-
-	entities := list.New([]list.Item{}, delegate, 24, 10)
-	entities.SetShowTitle(false)
-	entities.SetShowHelp(false)
-	entities.SetShowPagination(false)
-	entities.SetShowStatusBar(true)
-	entities.SetStatusBarItemName("entity", "entities")
-	entities.SetFilteringEnabled(true)
-	entities.DisableQuitKeybindings()
-
-	detail := list.New([]list.Item{}, delegate, 40, 10)
-	detail.SetShowTitle(false)
-	detail.SetShowHelp(false)
-	detail.SetShowPagination(false)
-	detail.SetShowStatusBar(true)
-	detail.SetStatusBarItemName("item", "items")
-	detail.SetFilteringEnabled(true)
-	detail.DisableQuitKeybindings()
+	namespaces := newList(delegate, "namespace", "namespaces")
+	entities := newList(delegate, "entity", "entities")
+	subs := newList(delegate, "subscription", "subscriptions")
+	queueType := newList(delegate, "queue", "queues")
+	queueType.SetFilteringEnabled(false)
+	queueType.SetShowStatusBar(false)
+	messages := newList(delegate, "message", "messages")
 
 	m := Model{
-		Model:             appshell.New(cfg, km),
-		service:           svc,
-		namespacesList:    namespaces,
-		entitiesList:      entities,
-		detailList:        detail,
-		focus:             namespacesPane,
-		markedMessages:    make(map[string]map[string]struct{}),
-		duplicateMessages: make(map[string]map[string]struct{}),
-		cache:             newCache(db),
-		namespacesHistory: make(map[string]ui.ListState),
-		entitiesHistory:   make(map[string]ui.ListState),
-		topicSubsByTopic:  make(map[string][]servicebus.TopicSubscription),
-		expandedTopics:    make(map[string]bool),
-		inspectPanes:      make(map[int]bool),
+		Model:                appshell.New(cfg, km),
+		service:              svc,
+		namespacesList:       namespaces,
+		entitiesList:         entities,
+		subscriptionsList:    subs,
+		queueTypeList:        queueType,
+		messageList:          messages,
+		focus:                namespacesPane,
+		markedMessages:       make(map[string]map[string]struct{}),
+		duplicateMessages:    make(map[string]map[string]struct{}),
+		cache:                newCache(db),
+		namespacesHistory:    make(map[string]ui.ListState),
+		entitiesHistory:      make(map[string]ui.ListState),
+		subscriptionsHistory: make(map[string]ui.ListState),
+		inspectPanes:         make(map[int]bool),
 	}
 	m.applyScheme(cfg.ActiveScheme())
-	// Hydrate subscriptions from cache without hitting Azure.
 	m.HydrateSubscriptionsFromCache(m.cache.subscriptions)
 	if !m.HasSubscription {
 		m.SubOverlay.Open()
@@ -247,7 +194,6 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores SBStores, km keymap.Keymap) Model {
 	m := NewModelWithKeyMap(svc, cfg, km, nil)
 	m.cache = NewCacheWithStores(stores)
-	// Re-hydrate subscriptions from the shared store.
 	m.HydrateSubscriptionsFromCache(m.cache.subscriptions)
 	return m
 }
@@ -255,13 +201,19 @@ func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores SBStores, 
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.SetScheme(scheme)
 	m.Styles.ApplyToLists([]*list.Model{
-		&m.namespacesList, &m.entitiesList, &m.detailList,
+		&m.namespacesList, &m.entitiesList, &m.subscriptionsList,
+		&m.queueTypeList, &m.messageList,
 	}, &m.Spinner)
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.
 func (m *Model) ApplyScheme(scheme ui.Scheme) {
 	m.applyScheme(scheme)
+}
+
+// isTopicSelected reports whether the currently selected entity is a topic.
+func (m Model) isTopicSelected() bool {
+	return m.currentEntity.Kind == servicebus.EntityTopic && m.currentEntity.Name != ""
 }
 
 // HelpSections returns the help sections for the service bus explorer.
@@ -283,11 +235,8 @@ func (m Model) HelpSections() []ui.HelpSection {
 		{
 			Title: "Messages",
 			Items: []string{
-				keymap.HelpEntry(km.ToggleMark, "mark message"),
-				keymap.HelpEntry(keymap.New(km.ShowActiveQueue.Label()+"/"+km.ShowDeadLetterQueue.Label()), "switch active and DLQ"),
+				keymap.HelpEntry(km.ActionMenu, "actions (peek, peek more, clear)"),
 				keymap.HelpEntry(km.ToggleDLQFilter, "toggle DLQ-first sort"),
-				keymap.HelpEntry(km.RequeueDLQ, "requeue marked/current DLQ messages"),
-				keymap.HelpEntry(km.DeleteDuplicate, "delete duplicate DLQ message"),
 				keymap.HelpEntry(km.MessageBack, "close message preview"),
 			},
 		},
@@ -306,9 +255,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 	}
 }
 
-// SetSubscription overrides the embedded appshell.Model method to also
-// hydrate namespaces from cache. Tabapp calls this after constructing
-// the model and before Init() issues the first fetch.
+// SetSubscription overrides the embedded appshell.Model method.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
 	if cached, ok := m.cache.namespaces.Get(sub.ID); ok {

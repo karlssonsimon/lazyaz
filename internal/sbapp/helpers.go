@@ -13,8 +13,12 @@ func paneName(pane int) string {
 		return "namespaces"
 	case entitiesPane:
 		return "entities"
-	case detailPane:
-		return "detail"
+	case subscriptionsPane:
+		return "subscriptions"
+	case queueTypePane:
+		return "queue type"
+	case messagesPane:
+		return "messages"
 	default:
 		return "items"
 	}
@@ -48,44 +52,52 @@ func (m Model) entitiesPaneTitle() string {
 		title = fmt.Sprintf("%s · %s", title, m.currentNS.Name)
 	}
 	if m.entities != nil {
-		// Top-level entity count (queues + topics) — exclude expanded
-		// children so the displayed number reflects the underlying
-		// resource count, not whatever the user has unfolded.
 		title = fmt.Sprintf("%s (%d)", title, len(m.entities))
 	}
 	return title
 }
 
-func (m Model) detailPaneTitle() string {
-	if !m.hasPeekTarget {
-		return "Detail"
+func (m Model) subscriptionsPaneTitle() string {
+	title := "Subscriptions"
+	if m.currentEntity.Name != "" {
+		title = fmt.Sprintf("Subscriptions · %s", m.currentEntity.Name)
 	}
-
-	// The active/DLQ mode is shown by the tab strip immediately below
-	// the title — no need to repeat it in the title itself.
-	target := m.currentEntity.Name
-	if m.currentSubName != "" {
-		target = m.currentEntity.Name + "/" + m.currentSubName
-	}
-
-	title := target
-	if m.peekedMessages != nil {
-		title = fmt.Sprintf("%s (%d)", title, len(m.peekedMessages))
+	if len(m.subscriptions) > 0 {
+		title = fmt.Sprintf("%s (%d)", title, len(m.subscriptions))
 	}
 	return title
 }
 
-func (m *Model) rebuildEntitiesItems() {
-	items := entitiesTreeToItems(m.entities, m.topicSubsByTopic, m.expandedTopics, m.entityFilter, m.dlqSort)
-	ui.SetItemsPreserveKey(&m.entitiesList, items, entitiesTreeItemKey)
+func (m Model) queueTypePaneTitle() string {
+	if !m.hasPeekTarget {
+		return "Queue Type"
+	}
+	target := m.currentEntity.Name
+	if m.currentSubName != "" {
+		target = m.currentEntity.Name + "/" + m.currentSubName
+	}
+	return target
 }
 
-// applyDLQSort rebuilds the entities list under the current dlqSort
-// flag. Used by the toggle handler. Resets the filter and cursor so the
-// reordering is visible from the top.
+func (m Model) messagesPaneTitle() string {
+	label := "Messages"
+	if m.deadLetter {
+		label = "DLQ Messages"
+	}
+	if m.peekedMessages != nil {
+		label = fmt.Sprintf("%s (%d)", label, len(m.peekedMessages))
+	}
+	return label
+}
+
+func (m *Model) rebuildEntitiesItems() {
+	items := entitiesToItems(m.entities, m.dlqSort)
+	ui.SetItemsPreserveKey(&m.entitiesList, items, entityItemKey)
+}
+
 func (m *Model) applyDLQSort() {
 	m.entitiesList.ResetFilter()
-	items := entitiesTreeToItems(m.entities, m.topicSubsByTopic, m.expandedTopics, m.entityFilter, m.dlqSort)
+	items := entitiesToItems(m.entities, m.dlqSort)
 	m.entitiesList.SetItems(items)
 	if len(items) > 0 {
 		m.entitiesList.Select(0)

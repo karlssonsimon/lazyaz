@@ -67,7 +67,8 @@ func TestPaneName(t *testing.T) {
 	}{
 		{namespacesPane, "namespaces"},
 		{entitiesPane, "entities"},
-		{detailPane, "detail"},
+		{subscriptionsPane, "subscriptions"},
+		{messagesPane, "messages"},
 		{99, "items"},
 	}
 
