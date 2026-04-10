@@ -373,6 +373,142 @@ func (s *Service) peekSubscription(ctx context.Context, client *azservicebus.Cli
 	return peekMessages(ctx, receiver, maxCount, send)
 }
 
+// ReceivedMessages holds the result of a receive-with-lock operation.
+// The caller owns the Receiver and must Close it when done. While open,
+// messages can be completed (removed) or abandoned (lock released).
+type ReceivedMessages struct {
+	Messages []*azservicebus.ReceivedMessage
+	Receiver *azservicebus.Receiver
+}
+
+// Complete removes a locked message from the queue.
+func (r *ReceivedMessages) Complete(ctx context.Context, msg *azservicebus.ReceivedMessage) error {
+	return r.Receiver.CompleteMessage(ctx, msg, nil)
+}
+
+// Abandon releases the lock on a message so it becomes available again.
+func (r *ReceivedMessages) Abandon(ctx context.Context, msg *azservicebus.ReceivedMessage) error {
+	return r.Receiver.AbandonMessage(ctx, msg, nil)
+}
+
+// AbandonAll releases locks on all messages.
+func (r *ReceivedMessages) AbandonAll(ctx context.Context) {
+	for _, msg := range r.Messages {
+		_ = r.Receiver.AbandonMessage(ctx, msg, nil)
+	}
+}
+
+// Close abandons all messages and closes the receiver.
+func (r *ReceivedMessages) Close(ctx context.Context) {
+	if r == nil || r.Receiver == nil {
+		return
+	}
+	r.AbandonAll(ctx)
+	r.Receiver.Close(ctx)
+}
+
+func (s *Service) ReceiveFromDLQ(ctx context.Context, ns Namespace, queueName string, maxCount int) (*ReceivedMessages, error) {
+	client, err := s.getClient(ns.FQDN)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := s.receiveFromQueueDLQ(ctx, client, queueName, maxCount)
+	if err == nil || !isAuthError(err) {
+		return result, err
+	}
+
+	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("receive from DLQ %s with AAD failed: %v; fallback failed: %w", queueName, err, fallbackErr)
+	}
+	return s.receiveFromQueueDLQ(ctx, fallbackClient, queueName, maxCount)
+}
+
+func (s *Service) receiveFromQueueDLQ(ctx context.Context, client *azservicebus.Client, queueName string, maxCount int) (*ReceivedMessages, error) {
+	receiver, err := client.NewReceiverForQueue(queueName, &azservicebus.ReceiverOptions{
+		ReceiveMode: azservicebus.ReceiveModePeekLock,
+		SubQueue:    azservicebus.SubQueueDeadLetter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create DLQ receiver for %s: %w", queueName, err)
+	}
+
+	messages, err := receiver.ReceiveMessages(ctx, maxCount, nil)
+	if err != nil {
+		receiver.Close(ctx)
+		return nil, fmt.Errorf("receive from DLQ %s: %w", queueName, err)
+	}
+
+	return &ReceivedMessages{Messages: messages, Receiver: receiver}, nil
+}
+
+func (s *Service) ReceiveFromSubscriptionDLQ(ctx context.Context, ns Namespace, topicName, subName string, maxCount int) (*ReceivedMessages, error) {
+	client, err := s.getClient(ns.FQDN)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := s.receiveFromSubDLQ(ctx, client, topicName, subName, maxCount)
+	if err == nil || !isAuthError(err) {
+		return result, err
+	}
+
+	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("receive from subscription DLQ %s/%s with AAD failed: %v; fallback failed: %w", topicName, subName, err, fallbackErr)
+	}
+	return s.receiveFromSubDLQ(ctx, fallbackClient, topicName, subName, maxCount)
+}
+
+func (s *Service) receiveFromSubDLQ(ctx context.Context, client *azservicebus.Client, topicName, subName string, maxCount int) (*ReceivedMessages, error) {
+	receiver, err := client.NewReceiverForSubscription(topicName, subName, &azservicebus.ReceiverOptions{
+		ReceiveMode: azservicebus.ReceiveModePeekLock,
+		SubQueue:    azservicebus.SubQueueDeadLetter,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create DLQ receiver for %s/%s: %w", topicName, subName, err)
+	}
+
+	messages, err := receiver.ReceiveMessages(ctx, maxCount, nil)
+	if err != nil {
+		receiver.Close(ctx)
+		return nil, fmt.Errorf("receive from DLQ %s/%s: %w", topicName, subName, err)
+	}
+
+	return &ReceivedMessages{Messages: messages, Receiver: receiver}, nil
+}
+
+// SendToQueue sends a message to a queue or topic. Used for manual
+// requeue: send to active queue, then complete the DLQ message.
+func (s *Service) SendToQueue(ctx context.Context, ns Namespace, queueOrTopicName string, body []byte) error {
+	client, err := s.getClient(ns.FQDN)
+	if err != nil {
+		return err
+	}
+
+	err = s.sendToQueue(ctx, client, queueOrTopicName, body)
+	if err == nil || !isAuthError(err) {
+		return err
+	}
+
+	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
+	if fallbackErr != nil {
+		return fmt.Errorf("send to %s with AAD failed: %v; fallback failed: %w", queueOrTopicName, err, fallbackErr)
+	}
+	return s.sendToQueue(ctx, fallbackClient, queueOrTopicName, body)
+}
+
+func (s *Service) sendToQueue(ctx context.Context, client *azservicebus.Client, name string, body []byte) error {
+	sender, err := client.NewSender(name, nil)
+	if err != nil {
+		return fmt.Errorf("create sender for %s: %w", name, err)
+	}
+	defer sender.Close(ctx)
+
+	return sender.SendMessage(ctx, &azservicebus.Message{Body: body}, nil)
+}
+
 type DuplicateError struct {
 	MessageID string
 	Err       error

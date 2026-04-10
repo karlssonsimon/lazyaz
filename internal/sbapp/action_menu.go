@@ -1,7 +1,9 @@
 package sbapp
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
@@ -17,6 +19,11 @@ const (
 	actionPeekMessages actionID = iota
 	actionPeekMore
 	actionClearMessages
+	actionReceiveDLQ
+	actionRequeueCurrent
+	actionCompleteCurrent
+	actionAbandonAll
+	actionRequeueAllDLQ
 )
 
 type action struct {
@@ -124,28 +131,70 @@ func (s *actionMenuState) handleKey(key string, km keymap.Keymap) (selected bool
 func (m Model) buildActions() []action {
 	var actions []action
 
-	if m.focus == messagesPane && m.hasPeekTarget {
-		label := "active"
-		if m.deadLetter {
-			label = "DLQ"
-		}
-		if len(m.peekedMessages) == 0 {
+	// Queue type pane — offer bulk requeue when DLQ is selected.
+	if m.focus == queueTypePane && m.hasPeekTarget {
+		if item, ok := m.queueTypeList.SelectedItem().(queueTypeItem); ok && item.deadLetter && item.count > 0 {
 			actions = append(actions, action{
-				id:    actionPeekMessages,
-				label: fmt.Sprintf("Peek %s messages", label),
+				id:    actionRequeueAllDLQ,
+				label: fmt.Sprintf("Requeue all DLQ messages (%d)", item.count),
+			})
+		}
+		return actions
+	}
+
+	if m.focus != messagesPane || !m.hasPeekTarget {
+		return actions
+	}
+
+	label := "active"
+	if m.deadLetter {
+		label = "DLQ"
+	}
+
+	// Peek actions (read-only, always available).
+	if len(m.peekedMessages) == 0 && m.lockedMessages == nil {
+		actions = append(actions, action{
+			id:    actionPeekMessages,
+			label: fmt.Sprintf("Peek %s messages", label),
+		})
+	} else if m.lockedMessages == nil {
+		actions = append(actions, action{
+			id:    actionPeekMore,
+			label: fmt.Sprintf("Peek more %s messages", label),
+		})
+		actions = append(actions, action{
+			id:    actionPeekMessages,
+			label: fmt.Sprintf("Peek %s messages (fresh)", label),
+		})
+		actions = append(actions, action{
+			id:    actionClearMessages,
+			label: "Clear messages",
+		})
+	}
+
+	// DLQ receive-with-lock actions.
+	if m.deadLetter {
+		if m.lockedMessages == nil {
+			actions = append(actions, action{
+				id:    actionReceiveDLQ,
+				label: "Receive DLQ messages (with lock)",
 			})
 		} else {
+			n := len(m.currentMarks())
+			if n == 0 {
+				n = 1 // current selection
+			}
 			actions = append(actions, action{
-				id:    actionPeekMore,
-				label: fmt.Sprintf("Peek more %s messages", label),
+				id:    actionRequeueCurrent,
+				label: fmt.Sprintf("Requeue %d message(s) (send + complete)", n),
 			})
 			actions = append(actions, action{
-				id:    actionPeekMessages,
-				label: fmt.Sprintf("Peek %s messages (fresh)", label),
+				id:    actionCompleteCurrent,
+				label: fmt.Sprintf("Complete %d message(s) (remove from DLQ)", n),
 			})
 			actions = append(actions, action{
-				id:    actionClearMessages,
-				label: "Clear messages",
+				id:    actionAbandonAll,
+				label: "Abandon all (release locks)",
 			})
 		}
 	}
@@ -156,6 +205,7 @@ func (m Model) buildActions() []action {
 func (m Model) executeAction(act action) (Model, tea.Cmd) {
 	switch act.id {
 	case actionPeekMessages:
+		m.clearLockedMessages()
 		m.peekedMessages = nil
 		m.messageList.ResetFilter()
 		m.messageList.SetItems(nil)
@@ -165,6 +215,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m.doPeek(true)
 
 	case actionClearMessages:
+		m.clearLockedMessages()
 		m.peekedMessages = nil
 		m.messageList.ResetFilter()
 		m.messageList.SetItems(nil)
@@ -174,9 +225,81 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		}
 		m.Notify(appshell.LevelInfo, "Messages cleared")
 		return m, nil
+
+	case actionReceiveDLQ:
+		m.SetLoading(m.focus)
+		m.loadingSpinnerID = m.NotifySpinner("Receiving DLQ messages with lock...")
+		return m, tea.Batch(m.Spinner.Tick,
+			receiveDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, peekMaxMessages))
+
+	case actionRequeueCurrent:
+		if m.lockedMessages == nil {
+			return m, nil
+		}
+		targets := m.lockedMessageTargets()
+		if len(targets) == 0 {
+			return m, nil
+		}
+		m.SetLoading(m.focus)
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Requeuing %d message(s)...", len(targets)))
+		return m, tea.Batch(m.Spinner.Tick,
+			requeueDLQMarkedCmd(m.service, m.currentNS, m.currentEntity.Name, m.lockedMessages, targets))
+
+	case actionCompleteCurrent:
+		if m.lockedMessages == nil {
+			return m, nil
+		}
+		targets := m.lockedMessageTargets()
+		if len(targets) == 0 {
+			return m, nil
+		}
+		m.SetLoading(m.focus)
+		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Completing %d message(s)...", len(targets)))
+		return m, tea.Batch(m.Spinner.Tick,
+			completeDLQMarkedCmd(m.lockedMessages, targets))
+
+	case actionRequeueAllDLQ:
+		m.SetLoading(m.focus)
+		m.loadingSpinnerID = m.NotifySpinner("Requeuing all DLQ messages...")
+		return m, tea.Batch(m.Spinner.Tick,
+			requeueAllDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName))
+
+	case actionAbandonAll:
+		if m.lockedMessages == nil {
+			return m, nil
+		}
+		m.SetLoading(m.focus)
+		m.loadingSpinnerID = m.NotifySpinner("Abandoning locks...")
+		return m, tea.Batch(m.Spinner.Tick,
+			abandonDLQCmd(m.lockedMessages))
 	}
 
 	return m, nil
+}
+
+// lockedMessageTargets returns the set of message IDs to operate on.
+// If marks exist, returns those. Otherwise returns the currently
+// selected message as a single-element set.
+func (m Model) lockedMessageTargets() map[string]struct{} {
+	marks := m.currentMarks()
+	if len(marks) > 0 {
+		return marks
+	}
+	item, ok := m.messageList.SelectedItem().(messageItem)
+	if !ok {
+		return nil
+	}
+	return map[string]struct{}{item.message.MessageID: {}}
+}
+
+// clearLockedMessages abandons and closes any active locked messages.
+func (m *Model) clearLockedMessages() {
+	if m.lockedMessages != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		m.lockedMessages.Close(ctx)
+		m.lockedMessages = nil
+	}
 }
 
 // doPeek fires a peek command for the current scope. When append is

@@ -1,13 +1,15 @@
 package sbapp
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -63,10 +65,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleTopicSubscriptionsLoaded(msg)
 	case messagesLoadedMsg:
 		return m.handleMessagesLoaded(msg)
-	case requeueDoneMsg:
-		return m.handleRequeueDone(msg)
-	case deleteDuplicateDoneMsg:
-		return m.handleDeleteDuplicateDone(msg)
+	case dlqReceivedMsg:
+		return m.handleDLQReceived(msg)
+	case dlqCompleteMsg:
+		return m.handleDLQComplete(msg)
+	case dlqRequeueMsg:
+		return m.handleDLQRequeue(msg)
+	case dlqRequeueAllMsg:
+		return m.handleDLQRequeueAll(msg)
+	case dlqAbandonMsg:
+		return m.handleDLQAbandon(msg)
 	case entitiesRefreshedMsg:
 		return m.handleEntitiesRefreshed(msg)
 
@@ -255,7 +263,7 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	} else {
 		m.peekedMessages = msg.messages
 	}
-	items := messagesToItems(m.peekedMessages, m.currentMarks(), m.currentDuplicates())
+	items := messagesToItems(m.peekedMessages, m.currentDuplicates())
 	if msg.repeek {
 		ui.SetItemsPreserveKey(&m.messageList, items, messageItemKey)
 	} else {
@@ -280,42 +288,6 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleRequeueDone(msg requeueDoneMsg) (Model, tea.Cmd) {
-	m.ClearLoading()
-	m.clearScopeMarks()
-	switch {
-	case msg.err != nil:
-		var dupErr *servicebus.DuplicateError
-		if errors.As(msg.err, &dupErr) {
-			m.ensureDuplicates()[dupErr.MessageID] = struct{}{}
-			m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelWarn, fmt.Sprintf("Message %s sent but not removed from DLQ (possible duplicate)", dupErr.MessageID))
-		} else {
-			m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to requeue messages: %s", msg.err.Error()))
-		}
-	case msg.requeued > 0:
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("%d of %d message(s) requeued", msg.requeued, msg.total))
-	default:
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, "Failed to requeue messages")
-	}
-	var peekCmd tea.Cmd
-	m, peekCmd = m.rePeekMessages(true)
-	return m, tea.Batch(peekCmd, refreshEntitiesCmd(m.service, m.currentNS))
-}
-
-func (m Model) handleDeleteDuplicateDone(msg deleteDuplicateDoneMsg) (Model, tea.Cmd) {
-	m.ClearLoading()
-	if msg.err != nil {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to delete duplicate message: %s", msg.err.Error()))
-		return m, nil
-	}
-	if dups := m.currentDuplicates(); dups != nil {
-		delete(dups, msg.messageID)
-	}
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, "Duplicate message deleted")
-	var peekCmd tea.Cmd
-	m, peekCmd = m.rePeekMessages(true)
-	return m, tea.Batch(peekCmd, refreshEntitiesCmd(m.service, m.currentNS))
-}
 
 func (m Model) handleEntitiesRefreshed(msg entitiesRefreshedMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
@@ -326,6 +298,152 @@ func (m Model) handleEntitiesRefreshed(msg entitiesRefreshedMsg) (Model, tea.Cmd
 	// Refresh queue type counts if we're looking at one.
 	if m.hasPeekTarget {
 		m.buildQueueTypeItems()
+	}
+	return m, nil
+}
+
+func (m Model) handleDLQReceived(msg dlqReceivedMsg) (Model, tea.Cmd) {
+	m.ClearLoading()
+	if msg.err != nil {
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to receive DLQ messages: %s", msg.err.Error()))
+		return m, nil
+	}
+
+	m.lockedMessages = msg.result
+
+	// Convert received messages to peeked format for display.
+	m.peekedMessages = make([]servicebus.PeekedMessage, len(msg.result.Messages))
+	for i, raw := range msg.result.Messages {
+		pm := servicebus.PeekedMessage{
+			MessageID: raw.MessageID,
+			FullBody:  string(raw.Body),
+		}
+		if raw.EnqueuedTime != nil {
+			pm.EnqueuedAt = *raw.EnqueuedTime
+		}
+		if len(raw.Body) > 512 {
+			pm.BodyPreview = string(raw.Body[:512]) + "..."
+		} else {
+			pm.BodyPreview = string(raw.Body)
+		}
+		m.peekedMessages[i] = pm
+	}
+
+	m.messageList.ResetFilter()
+	m.messageList.SetItems(messagesToItems(m.peekedMessages, nil))
+	if len(m.peekedMessages) > 0 {
+		m.messageList.Select(0)
+	}
+	m.messageList.Title = fmt.Sprintf("DLQ Locked (%d)", len(m.peekedMessages))
+	m.resize()
+	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Received %d DLQ messages with lock", len(m.peekedMessages)))
+	return m, nil
+}
+
+func (m Model) handleDLQComplete(msg dlqCompleteMsg) (Model, tea.Cmd) {
+	m.ClearLoading()
+	if msg.err != nil {
+		partial := ""
+		if len(msg.completed) > 0 {
+			partial = fmt.Sprintf(" (%d completed before error)", len(msg.completed))
+		}
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to complete messages%s: %s", partial, msg.err.Error()))
+	} else {
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Completed %d message(s) (removed from DLQ)", len(msg.completed)))
+	}
+	for _, id := range msg.completed {
+		m.removeLockedMessage(id)
+	}
+	m.clearScopeMarks()
+	m.refreshMessageSelectionDisplay()
+	return m, nil
+}
+
+func (m Model) handleDLQRequeue(msg dlqRequeueMsg) (Model, tea.Cmd) {
+	m.ClearLoading()
+	if msg.err != nil {
+		partial := ""
+		if len(msg.requeued) > 0 {
+			partial = fmt.Sprintf(" (%d requeued before error)", len(msg.requeued))
+		}
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to requeue messages%s: %s", partial, msg.err.Error()))
+	} else {
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Requeued %d message(s) to active queue", len(msg.requeued)))
+	}
+	for _, id := range msg.requeued {
+		m.removeLockedMessage(id)
+	}
+	m.clearScopeMarks()
+	m.refreshMessageSelectionDisplay()
+	return m, nil
+}
+
+func (m Model) handleDLQAbandon(msg dlqAbandonMsg) (Model, tea.Cmd) {
+	m.ClearLoading()
+	m.lockedMessages = nil // receiver already closed by the command
+	m.peekedMessages = nil
+	m.messageList.ResetFilter()
+	m.messageList.SetItems(nil)
+	m.messageList.Title = "Messages"
+	if m.viewingMessage {
+		m.closePreview()
+	}
+	if msg.err != nil {
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to abandon: %s", msg.err.Error()))
+	} else {
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, "Locks released")
+	}
+	return m, nil
+}
+
+// removeLockedMessage removes a processed message from both the locked
+// set and the display list.
+func (m *Model) removeLockedMessage(messageID string) {
+	if m.lockedMessages == nil {
+		return
+	}
+
+	// Remove from locked messages slice.
+	remaining := make([]*azservicebus.ReceivedMessage, 0, len(m.lockedMessages.Messages))
+	for _, msg := range m.lockedMessages.Messages {
+		if msg.MessageID != messageID {
+			remaining = append(remaining, msg)
+		}
+	}
+	m.lockedMessages.Messages = remaining
+
+	// Remove from peeked display.
+	var peeked []servicebus.PeekedMessage
+	for _, pm := range m.peekedMessages {
+		if pm.MessageID != messageID {
+			peeked = append(peeked, pm)
+		}
+	}
+	m.peekedMessages = peeked
+	m.messageList.SetItems(messagesToItems(m.peekedMessages, nil))
+	m.messageList.Title = fmt.Sprintf("DLQ Locked (%d)", len(m.peekedMessages))
+
+	// If no more locked messages, clean up the receiver.
+	if len(m.lockedMessages.Messages) == 0 {
+		m.lockedMessages.Receiver.Close(context.Background())
+		m.lockedMessages = nil
+	}
+}
+
+func (m Model) handleDLQRequeueAll(msg dlqRequeueAllMsg) (Model, tea.Cmd) {
+	m.ClearLoading()
+	if msg.err != nil {
+		partial := ""
+		if msg.requeued > 0 {
+			partial = fmt.Sprintf(" (%d requeued before error)", msg.requeued)
+		}
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to requeue DLQ messages%s: %s", partial, msg.err.Error()))
+	} else {
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Requeued all %d DLQ messages to active queue", msg.requeued))
+	}
+	// Refresh entity counts to reflect the change.
+	if m.hasNamespace {
+		return m, refreshEntitiesCmd(m.service, m.currentNS)
 	}
 	return m, nil
 }
@@ -356,6 +474,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 
 	focusedFilterActive := m.focusedListSettingFilter()
+	markVisualAfterListUpdate := m.focus == messagesPane && m.visualLineMode && !focusedFilterActive && m.Keymap.BlobVisualMove.Matches(key)
 
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, focusedFilterActive):
@@ -395,9 +514,52 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		if !focusedFilterActive {
 			return m.navigateLeft()
 		}
-	case m.Keymap.ActionMenu.Matches(key):
+	case m.Keymap.ToggleVisualLine.Matches(key):
+		if m.focus == messagesPane && !focusedFilterActive {
+			m.toggleVisualLineMode()
+			return m, nil
+		}
+	case m.Keymap.VisualSwapAnchor.Matches(key):
+		if m.focus == messagesPane && m.visualLineMode && !focusedFilterActive {
+			m.swapVisualAnchor()
+			m.refreshMessageSelectionDisplay()
+			return m, nil
+		}
+	case m.Keymap.ExitVisualLine.Matches(key):
+		if m.focus == messagesPane && !focusedFilterActive {
+			if m.visualLineMode {
+				m.commitVisualSelection()
+				m.visualLineMode = false
+				m.visualAnchor = ""
+				m.refreshMessageSelectionDisplay()
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.currentMarks())))
+				return m, nil
+			}
+		}
+	case m.Keymap.ToggleMark.Matches(key):
 		if !focusedFilterActive && m.focus == messagesPane && m.hasPeekTarget {
-			m.actionMenu.open(m.buildActions())
+			item, ok := m.messageList.SelectedItem().(messageItem)
+			if !ok || item.duplicate {
+				return m, nil
+			}
+			marks := m.ensureMarks()
+			id := item.message.MessageID
+			if _, marked := marks[id]; marked {
+				delete(marks, id)
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", id, len(marks)))
+			} else {
+				marks[id] = struct{}{}
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", id, len(marks)))
+			}
+			m.refreshMessageSelectionDisplay()
+			return m, nil
+		}
+	case m.Keymap.ActionMenu.Matches(key):
+		if !focusedFilterActive && (m.focus == messagesPane || m.focus == queueTypePane) && m.hasPeekTarget {
+			actions := m.buildActions()
+			if len(actions) > 0 {
+				m.actionMenu.open(actions)
+			}
 			return m, nil
 		}
 	case m.Keymap.ToggleDLQFilter.Matches(key):
@@ -443,7 +605,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	}
 
-	return m.updateFocusedList(msg)
+	m2, cmd := m.updateFocusedList(msg)
+	if markVisualAfterListUpdate && m2.focus == messagesPane && m2.visualLineMode {
+		m2.refreshMessageSelectionDisplay()
+		m2.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m2.visualSelectionIDs())))
+	}
+	return m2, cmd
 }
 
 func (m *Model) syncPreviewToSelection() {
