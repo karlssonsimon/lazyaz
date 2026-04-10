@@ -388,15 +388,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 	focusedFilterActive := m.focusedListSettingFilter() || (m.focus == blobsPane && m.filter.inputOpen)
 
-	// Pressing the filter-input key in visual mode on the blobs pane exits
-	// visual mode. (The search pipeline above catches the active case.)
-	if m.focus == blobsPane && m.visualLineMode && m.Keymap.FilterInput.Matches(key) {
-		m.visualLineMode = false
-		m.visualAnchor = ""
-		m.refreshItems()
-		m.Notify(appshell.LevelInfo, "Visual mode off")
-	}
-
 	// If this is a visual-range move key, remember to refresh the visual
 	// selection status after the list update at the bottom of this function.
 	markVisualAfterListUpdate := m.focus == blobsPane && m.visualLineMode && !focusedFilterActive && m.Keymap.BlobVisualMove.Matches(key)
@@ -452,7 +443,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.VisualSwapAnchor.Matches(key):
 		if m.focus == blobsPane && m.visualLineMode && !focusedFilterActive {
 			m.swapVisualAnchor()
-			m.refreshItems()
+			m.refreshBlobSelectionDisplay()
 			return m, nil
 		}
 	case m.Keymap.ExitVisualLine.Matches(key):
@@ -462,7 +453,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.commitVisualSelection()
 				m.visualLineMode = false
 				m.visualAnchor = ""
-				m.refreshItems()
+				m.refreshBlobSelectionDisplay()
 				m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs)))
 				return m, nil
 			}
@@ -472,7 +463,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 				for name := range m.markedBlobs {
 					delete(m.markedBlobs, name)
 				}
-				m.refreshItems()
+				m.refreshBlobSelectionDisplay()
 				m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
 				return m, nil
 			}
@@ -577,7 +568,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 
 	if markVisualAfterListUpdate && m.focus == blobsPane && m.visualLineMode {
-		m.refreshItems()
+		m.refreshBlobSelectionDisplay()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames())))
 	}
 
