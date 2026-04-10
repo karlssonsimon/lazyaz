@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 
@@ -77,7 +78,7 @@ func (i blobItem) Description() string {
 }
 
 func (i blobItem) FilterValue() string {
-	return i.blob.Name
+	return i.displayName
 }
 
 func accountsToItems(accounts []blob.Account) []list.Item {
@@ -259,6 +260,25 @@ func fileIcon(name string) string {
 	default:
 		return "◻"
 	}
+}
+
+// blobListFilter wraps list.DefaultFilter and adjusts matched character
+// indices so the underline lands on the correct characters in the
+// title. Two adjustments are needed:
+//  1. sahilm/fuzzy returns byte indices but lipgloss.StyleRunes
+//     expects rune indices — convert via RuneCount.
+//  2. Blob titles start with "icon " (2 runes) that is not part of
+//     FilterValue — shift every index by 2.
+func blobListFilter(term string, targets []string) []list.Rank {
+	ranks := list.DefaultFilter(term, targets)
+	for i, r := range ranks {
+		target := targets[r.Index]
+		for j, byteIdx := range r.MatchedIndexes {
+			runeIdx := utf8.RuneCountInString(target[:byteIdx])
+			ranks[i].MatchedIndexes[j] = runeIdx + 2
+		}
+	}
+	return ranks
 }
 
 func blobSearchPrefix(currentPrefix, query string) string {

@@ -196,6 +196,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	blobs.SetShowStatusBar(true)
 	blobs.SetStatusBarItemName("entry", "entries")
 	blobs.SetFilteringEnabled(true)
+	blobs.Filter = blobListFilter
 	blobs.DisableQuitKeybindings()
 
 	parentBlobs := list.New([]list.Item{}, delegate, 20, 10)
