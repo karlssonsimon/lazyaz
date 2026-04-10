@@ -1,23 +1,31 @@
 package blobapp
 
 import (
+	"fmt"
 	"io"
+	"strings"
 
+	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // blobDelegate wraps the default delegate and prepends a colored bar
-// character to marked/visual blob items. The bar is rendered inline
-// inside the title so it remains visible even when the selection
-// border covers the leftmost column.
+// character to marked/visual blob items. Mark and visual state is
+// looked up by blob name at render time so the item list doesn't need
+// to be rebuilt when the selection changes. The bar replaces the
+// leading padding of the rendered output so filter match underlines
+// stay correctly aligned.
 type blobDelegate struct {
 	base      list.DefaultDelegate
 	markedBar string
 	visualBar string
+	marked    map[string]blob.BlobEntry
+	visual    map[string]struct{}
 }
 
 func newBlobDelegate(base list.DefaultDelegate, styles ui.Styles) blobDelegate {
@@ -44,39 +52,21 @@ func (d blobDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 func (d blobDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	if b, ok := item.(blobItem); ok {
 		var prefix string
-		switch {
-		case b.marked:
+		if _, isMarked := d.marked[b.blob.Name]; isMarked {
 			prefix = d.markedBar
-		case b.visual:
+		} else if _, isVisual := d.visual[b.blob.Name]; isVisual {
 			prefix = d.visualBar
 		}
 		if prefix != "" {
-			item = prefixedItem{inner: b, prefix: prefix}
+			// Render the item normally so filter match underlines are
+			// applied to the correct characters, then replace the
+			// 2-char left padding/border with the colored bar.
+			var buf strings.Builder
+			d.base.Render(&buf, m, index, item)
+			trimmed := ansi.TruncateLeft(buf.String(), 2, "")
+			fmt.Fprint(w, prefix+trimmed)
+			return
 		}
 	}
 	d.base.Render(w, m, index, item)
-}
-
-// prefixedItem wraps a list item and prepends a rendered prefix to its title.
-type prefixedItem struct {
-	inner  list.Item
-	prefix string
-}
-
-func (p prefixedItem) Title() string {
-	if t, ok := p.inner.(list.DefaultItem); ok {
-		return p.prefix + t.Title()
-	}
-	return p.prefix
-}
-
-func (p prefixedItem) Description() string {
-	if d, ok := p.inner.(list.DefaultItem); ok {
-		return d.Description()
-	}
-	return ""
-}
-
-func (p prefixedItem) FilterValue() string {
-	return p.inner.FilterValue()
 }

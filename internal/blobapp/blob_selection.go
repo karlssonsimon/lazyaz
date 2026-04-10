@@ -34,8 +34,22 @@ func (m *Model) resetBlobLoadState() {
 func (m *Model) refreshItems() {
 	entries := m.displayBlobs()
 	w := ui.PaneContentWidth(m.Styles.Chrome.Pane, m.paneWidths[blobsPane])
-	m.blobsList.SetItems(blobsToItems(entries, m.prefix, m.markedBlobs, m.visualSelectionNames(), w))
+	// Reset any active bubbles list filter before replacing items so the
+	// tea.Cmd returned by SetItems (async re-filter) isn't silently dropped.
+	m.blobsList.ResetFilter()
+	m.blobsList.SetItems(blobsToItems(entries, m.prefix, w))
 	ui.ClampListSelection(&m.blobsList)
+	m.refreshBlobSelectionDisplay()
+}
+
+// refreshBlobSelectionDisplay updates the delegate's mark/visual maps
+// and re-sets it on the list. This triggers a re-render without
+// rebuilding items or touching the filter state.
+func (m *Model) refreshBlobSelectionDisplay() {
+	d := newBlobDelegate(m.Styles.Delegate, m.Styles)
+	d.marked = m.markedBlobs
+	d.visual = m.visualSelectionNames()
+	m.blobsList.SetDelegate(d)
 }
 
 // sortOverlayState manages the sort picker popup.
@@ -245,14 +259,14 @@ func (m *Model) toggleVisualLineMode() {
 		m.commitVisualSelection()
 		m.visualLineMode = false
 		m.visualAnchor = ""
-		m.refreshItems()
+		m.refreshBlobSelectionDisplay()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs)))
 		return
 	}
 
 	m.visualLineMode = true
 	m.visualAnchor = m.currentBlobName()
-	m.refreshItems()
+	m.refreshBlobSelectionDisplay()
 	if m.visualAnchor == "" {
 		m.Notify(appshell.LevelInfo, "Visual mode on. Move up/down to select a range.")
 		return
@@ -314,13 +328,13 @@ func (m *Model) toggleCurrentBlobMark() {
 
 	if _, exists := m.markedBlobs[item.blob.Name]; exists {
 		delete(m.markedBlobs, item.blob.Name)
-		m.refreshItems()
+		m.refreshBlobSelectionDisplay()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", item.displayName, len(m.markedBlobs)))
 		return
 	}
 
 	m.markedBlobs[item.blob.Name] = item.blob
-	m.refreshItems()
+	m.refreshBlobSelectionDisplay()
 	m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", item.displayName, len(m.markedBlobs)))
 }
 
@@ -337,23 +351,6 @@ func (m Model) visualSelectionItems() []blobItem {
 		return nil
 	}
 
-	visibleItems := m.blobsList.VisibleItems()
-	if len(visibleItems) == 0 {
-		return nil
-	}
-
-	items := make([]blobItem, 0, len(visibleItems))
-	for _, item := range visibleItems {
-		blobEntry, ok := item.(blobItem)
-		if !ok {
-			continue
-		}
-		items = append(items, blobEntry)
-	}
-	if len(items) == 0 {
-		return nil
-	}
-
 	current := m.currentBlobName()
 	if current == "" {
 		return nil
@@ -364,13 +361,21 @@ func (m Model) visualSelectionItems() []blobItem {
 		anchor = current
 	}
 
+	// Use the full sorted blob list (not VisibleItems) so the visual
+	// range includes items hidden by a bubbles list filter — same
+	// mental model as vim visual mode with folds.
+	entries := m.displayBlobs()
+	if len(entries) == 0 {
+		return nil
+	}
+
 	anchorIdx := -1
 	currentIdx := -1
-	for i, item := range items {
-		if anchorIdx < 0 && item.blob.Name == anchor {
+	for i, entry := range entries {
+		if anchorIdx < 0 && entry.Name == anchor {
 			anchorIdx = i
 		}
-		if currentIdx < 0 && item.blob.Name == current {
+		if currentIdx < 0 && entry.Name == current {
 			currentIdx = i
 		}
 	}
@@ -386,7 +391,14 @@ func (m Model) visualSelectionItems() []blobItem {
 		start, end = end, start
 	}
 
-	return items[start : end+1]
+	items := make([]blobItem, 0, end-start+1)
+	for _, entry := range entries[start : end+1] {
+		items = append(items, blobItem{
+			blob:        entry,
+			displayName: trimPrefixForDisplay(entry.Name, m.prefix),
+		})
+	}
+	return items
 }
 
 func (m Model) visualSelectionNames() map[string]struct{} {

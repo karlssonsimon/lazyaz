@@ -257,7 +257,11 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 		&m.accountsList, &m.containersList, &m.blobsList, &m.parentBlobsList,
 	}, &m.Spinner)
 	// Blobs list uses a custom delegate for mark/visual borders.
-	m.blobsList.SetDelegate(newBlobDelegate(m.Styles.Delegate, m.Styles))
+	// Preserve existing mark/visual state across scheme changes.
+	d := newBlobDelegate(m.Styles.Delegate, m.Styles)
+	d.marked = m.markedBlobs
+	d.visual = m.visualSelectionNames()
+	m.blobsList.SetDelegate(d)
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.

@@ -48,8 +48,6 @@ func (i containerItem) FilterValue() string {
 type blobItem struct {
 	blob         blob.BlobEntry
 	displayName  string
-	marked       bool
-	visual       bool
 	contentWidth int // pane content width for column alignment
 }
 
@@ -63,7 +61,7 @@ func (i blobItem) Title() string {
 	size := humanSize(i.blob.Size)
 	date := formatDate(i.blob.LastModified)
 
-	return fmt.Sprintf("%s %-85s  %7s  %s", icon, name, size, date)
+	return fmt.Sprintf("%s %-85s  %s  %-7s", icon, name, date, size)
 }
 
 func formatDate(t time.Time) string {
@@ -130,34 +128,16 @@ func sortBlobs(entries []blob.BlobEntry, field blobSortField, desc bool) []blob.
 	return out
 }
 
-func blobsToItems(entries []blob.BlobEntry, prefix string, marked map[string]blob.BlobEntry, visual map[string]struct{}, contentWidth int) []list.Item {
+func blobsToItems(entries []blob.BlobEntry, prefix string, contentWidth int) []list.Item {
 	items := make([]list.Item, 0, len(entries))
 	for _, entry := range entries {
 		items = append(items, blobItem{
 			blob:         entry,
 			displayName:  trimPrefixForDisplay(entry.Name, prefix),
-			marked:       isBlobMarked(marked, entry.Name),
-			visual:       isBlobVisualSelected(visual, entry.Name),
 			contentWidth: contentWidth,
 		})
 	}
 	return items
-}
-
-func isBlobMarked(marked map[string]blob.BlobEntry, blobName string) bool {
-	if len(marked) == 0 {
-		return false
-	}
-	_, ok := marked[blobName]
-	return ok
-}
-
-func isBlobVisualSelected(visual map[string]struct{}, blobName string) bool {
-	if len(visual) == 0 {
-		return false
-	}
-	_, ok := visual[blobName]
-	return ok
 }
 
 // truncateMiddle truncates a string from the middle, preserving the
