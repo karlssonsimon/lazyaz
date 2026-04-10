@@ -187,7 +187,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		for name := range m.markedSecrets {
 			delete(m.markedSecrets, name)
 		}
-		m.refreshSecretItems()
+		m.refreshSecretSelectionDisplay()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
 		return m, nil
 	}
