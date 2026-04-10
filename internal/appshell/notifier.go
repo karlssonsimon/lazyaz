@@ -45,6 +45,9 @@ type Notification struct {
 // in the top-right corner before it's dropped from the active set.
 const ToastDuration = 1500 * time.Millisecond
 
+// ErrorToastDuration is the longer display time for error notifications.
+const ErrorToastDuration = 5 * time.Second
+
 // Notifier is the global notification store. It's a bounded ring — when
 // the cap is exceeded, the oldest entry is evicted to make room. Safe
 // for concurrent use, although in practice bubbletea's single-threaded
@@ -157,18 +160,15 @@ func (n *Notifier) Active(now time.Time) []Notification {
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	cutoff := now.Add(-ToastDuration)
 	var active []Notification
-	// Walk backwards (newest first). Regular entries stop at cutoff;
-	// spinners are always included.
 	for i := len(n.buf) - 1; i >= 0; i-- {
 		entry := n.buf[i]
 		if entry.Spinner {
 			active = append(active, entry)
 			continue
 		}
-		if entry.Time.Before(cutoff) {
-			break
+		if entry.Time.Before(now.Add(-toastDurationFor(entry.Level))) {
+			continue
 		}
 		active = append(active, entry)
 	}
@@ -193,18 +193,21 @@ func (n *Notifier) HasActive(now time.Time) bool {
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if len(n.buf) == 0 {
-		return false
-	}
-	// Check newest regular entry.
-	if !n.buf[len(n.buf)-1].Time.Before(now.Add(-ToastDuration)) {
-		return true
-	}
-	// Check for any active spinner.
 	for i := len(n.buf) - 1; i >= 0; i-- {
-		if n.buf[i].Spinner {
+		entry := n.buf[i]
+		if entry.Spinner {
+			return true
+		}
+		if !entry.Time.Before(now.Add(-toastDurationFor(entry.Level))) {
 			return true
 		}
 	}
 	return false
+}
+
+func toastDurationFor(level NotificationLevel) time.Duration {
+	if level == LevelError {
+		return ErrorToastDuration
+	}
+	return ToastDuration
 }
