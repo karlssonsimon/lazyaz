@@ -27,6 +27,10 @@ func (m *Model) clearBlobSelectionState() {
 }
 
 func (m *Model) resetBlobLoadState() {
+	if m.Loading {
+		m.ClearLoading()
+		m.DismissSpinner(m.loadingSpinnerID)
+	}
 	m.blobLoadAll = false
 	m.clearFilter()
 }

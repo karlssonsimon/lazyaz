@@ -106,6 +106,22 @@ func (n *Notifier) PushSpinner(message string) int {
 	return id
 }
 
+// DismissSpinner silently removes the spinner with the given ID without
+// pushing a replacement notification. No-op if the spinner is not found.
+func (n *Notifier) DismissSpinner(id int) {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for i, entry := range n.buf {
+		if entry.Spinner && entry.SpinnerID == id {
+			n.buf = append(n.buf[:i], n.buf[i+1:]...)
+			return
+		}
+	}
+}
+
 // ResolveSpinner finds the spinner with the given ID, removes it, and
 // pushes a regular notification in its place. If the spinner is not
 // found (already resolved or evicted), just pushes the notification.
