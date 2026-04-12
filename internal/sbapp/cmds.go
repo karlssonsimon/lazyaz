@@ -215,3 +215,89 @@ func deleteDuplicateCmd(svc *servicebus.Service, ns servicebus.Namespace, entity
 		return deleteDuplicateDoneMsg{messageID: messageID, err: err}
 	}
 }
+
+// moveAllCmd receives all messages (from DLQ or active queue) in batches and
+// sends them to a different target queue/topic, then completes the originals.
+func moveAllCmd(svc *servicebus.Service, sourceNS servicebus.Namespace, entityName, subName string, deadLetter bool, targetNS servicebus.Namespace, targetEntity string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		total := 0
+		for {
+			var result *servicebus.ReceivedMessages
+			var err error
+			if deadLetter {
+				if subName == "" {
+					result, err = svc.ReceiveFromDLQ(ctx, sourceNS, entityName, 50)
+				} else {
+					result, err = svc.ReceiveFromSubscriptionDLQ(ctx, sourceNS, entityName, subName, 50)
+				}
+			} else {
+				if subName == "" {
+					result, err = svc.ReceiveFromQueue(ctx, sourceNS, entityName, 50)
+				} else {
+					result, err = svc.ReceiveFromSubscription(ctx, sourceNS, entityName, subName, 50)
+				}
+			}
+			if err != nil {
+				return moveAllDoneMsg{moved: total, err: err}
+			}
+			if len(result.Messages) == 0 {
+				result.Receiver.Close(ctx)
+				break
+			}
+
+			for _, msg := range result.Messages {
+				if err := svc.SendToQueue(ctx, targetNS, targetEntity, msg.Body); err != nil {
+					result.Close(ctx)
+					return moveAllDoneMsg{moved: total, err: err}
+				}
+				if err := result.Complete(ctx, msg); err != nil {
+					result.Receiver.Close(ctx)
+					return moveAllDoneMsg{moved: total, err: err}
+				}
+				total++
+			}
+			result.Receiver.Close(ctx)
+		}
+
+		return moveAllDoneMsg{moved: total}
+	}
+}
+
+// moveMarkedCmd sends marked locked messages to a different target queue/topic,
+// then completes the originals.
+func moveMarkedCmd(svc *servicebus.Service, targetNS servicebus.Namespace, targetEntity string, locked *servicebus.ReceivedMessages, markedIDs map[string]struct{}) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		var moved []string
+		for _, msg := range locked.Messages {
+			if _, ok := markedIDs[msg.MessageID]; !ok {
+				continue
+			}
+			if err := svc.SendToQueue(ctx, targetNS, targetEntity, msg.Body); err != nil {
+				return moveMarkedDoneMsg{moved: moved, err: err}
+			}
+			if err := locked.Complete(ctx, msg); err != nil {
+				return moveMarkedDoneMsg{moved: moved, err: err}
+			}
+			moved = append(moved, msg.MessageID)
+		}
+		return moveMarkedDoneMsg{moved: moved}
+	}
+}
+
+// fetchTargetEntitiesCmd loads entities from a namespace for the target picker.
+func fetchTargetEntitiesCmd(svc *servicebus.Service, ns servicebus.Namespace) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		var entities []servicebus.Entity
+		err := svc.ListEntities(ctx, ns, func(batch []servicebus.Entity) {
+			entities = append(entities, batch...)
+		})
+		return targetEntitiesLoadedMsg{namespace: ns, entities: entities, err: err}
+	}
+}

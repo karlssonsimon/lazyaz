@@ -407,6 +407,78 @@ func (r *ReceivedMessages) Close(ctx context.Context) {
 	r.Receiver.Close(ctx)
 }
 
+// ReceiveFromQueue receives messages from the active queue with peek-lock.
+func (s *Service) ReceiveFromQueue(ctx context.Context, ns Namespace, queueName string, maxCount int) (*ReceivedMessages, error) {
+	client, err := s.getClient(ns.FQDN)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := s.receiveFromQueue(ctx, client, queueName, maxCount)
+	if err == nil || !isAuthError(err) {
+		return result, err
+	}
+
+	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("receive from queue %s with AAD failed: %v; fallback failed: %w", queueName, err, fallbackErr)
+	}
+	return s.receiveFromQueue(ctx, fallbackClient, queueName, maxCount)
+}
+
+func (s *Service) receiveFromQueue(ctx context.Context, client *azservicebus.Client, queueName string, maxCount int) (*ReceivedMessages, error) {
+	receiver, err := client.NewReceiverForQueue(queueName, &azservicebus.ReceiverOptions{
+		ReceiveMode: azservicebus.ReceiveModePeekLock,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create receiver for %s: %w", queueName, err)
+	}
+
+	messages, err := receiver.ReceiveMessages(ctx, maxCount, nil)
+	if err != nil {
+		receiver.Close(ctx)
+		return nil, fmt.Errorf("receive from queue %s: %w", queueName, err)
+	}
+
+	return &ReceivedMessages{Messages: messages, Receiver: receiver}, nil
+}
+
+// ReceiveFromSubscription receives messages from a topic subscription with peek-lock.
+func (s *Service) ReceiveFromSubscription(ctx context.Context, ns Namespace, topicName, subName string, maxCount int) (*ReceivedMessages, error) {
+	client, err := s.getClient(ns.FQDN)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := s.receiveFromSub(ctx, client, topicName, subName, maxCount)
+	if err == nil || !isAuthError(err) {
+		return result, err
+	}
+
+	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("receive from subscription %s/%s with AAD failed: %v; fallback failed: %w", topicName, subName, err, fallbackErr)
+	}
+	return s.receiveFromSub(ctx, fallbackClient, topicName, subName, maxCount)
+}
+
+func (s *Service) receiveFromSub(ctx context.Context, client *azservicebus.Client, topicName, subName string, maxCount int) (*ReceivedMessages, error) {
+	receiver, err := client.NewReceiverForSubscription(topicName, subName, &azservicebus.ReceiverOptions{
+		ReceiveMode: azservicebus.ReceiveModePeekLock,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create receiver for %s/%s: %w", topicName, subName, err)
+	}
+
+	messages, err := receiver.ReceiveMessages(ctx, maxCount, nil)
+	if err != nil {
+		receiver.Close(ctx)
+		return nil, fmt.Errorf("receive from subscription %s/%s: %w", topicName, subName, err)
+	}
+
+	return &ReceivedMessages{Messages: messages, Receiver: receiver}, nil
+}
+
 func (s *Service) ReceiveFromDLQ(ctx context.Context, ns Namespace, queueName string, maxCount int) (*ReceivedMessages, error) {
 	client, err := s.getClient(ns.FQDN)
 	if err != nil {
