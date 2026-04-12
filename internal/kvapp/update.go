@@ -396,8 +396,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.SubscriptionPicker.Matches(key):
 		if !focusedFilterActive {
 			m.SubOverlay.Open()
-			m.SetLoading(-1)
-			m.loadingSpinnerID = m.NotifySpinner("Refreshing subscriptions...")
+			m.startLoading(-1, "Refreshing subscriptions...")
 			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
 	case m.Keymap.Inspect.Matches(key):
@@ -434,8 +433,7 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Fetching secret value for %s...", item.secret.Name))
+		m.startLoading(m.focus, fmt.Sprintf("Fetching secret value for %s...", item.secret.Name))
 		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, item.secret.Name, ""))
 	}
 
@@ -444,8 +442,7 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Fetching secret value for %s@%s...", m.currentSecret.Name, item.version.Version))
+		m.startLoading(m.focus, fmt.Sprintf("Fetching secret value for %s@%s...", m.currentSecret.Name, item.version.Version))
 		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))
 	}
 

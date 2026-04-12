@@ -169,8 +169,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Fetching secret value for %s...", item.secret.Name))
+		m.startLoading(m.focus, fmt.Sprintf("Fetching secret value for %s...", item.secret.Name))
 		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, item.secret.Name, ""))
 
 	case actionYankMarkedAsJSON:
@@ -178,8 +177,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if len(names) == 0 {
 			return m, nil
 		}
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Fetching %d secret values...", len(names)))
+		m.startLoading(m.focus, fmt.Sprintf("Fetching %d secret values...", len(names)))
 		return m, tea.Batch(m.Spinner.Tick, yankMarkedSecretsAsJSONCmd(m.service, m.currentVault, names))
 
 	case actionClearMarks:
