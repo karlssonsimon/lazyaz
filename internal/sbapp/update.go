@@ -29,6 +29,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.HelpOverlay.Active:
 			m.HelpOverlay.PasteText(text)
 			return m, nil
+		case m.entitySortOverlay.active:
+			m.entitySortOverlay.query += text
+			m.entitySortOverlay.refilter()
+			return m, nil
 		case m.targetPicker.active:
 			m.targetPicker.query += text
 			m.targetPicker.refilter()
@@ -508,6 +512,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.entitySortOverlay.active {
+		result := m.entitySortOverlay.handleKey(key, m.Keymap)
+		if result.applied {
+			m.entitySortField = result.field
+			m.entitySortDesc = result.desc
+			m.applyEntitySort()
+		}
+		return m, nil
+	}
+
 	if m.targetPicker.active {
 		return m.updateTargetPicker(msg)
 	}
@@ -605,21 +619,22 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 	case m.Keymap.ActionMenu.Matches(key):
-		if !focusedFilterActive && (m.focus == messagesPane || m.focus == queueTypePane) && m.hasPeekTarget {
+		if !focusedFilterActive {
+			canOpen := (m.focus == messagesPane || m.focus == queueTypePane) && m.hasPeekTarget
+			canOpen = canOpen || (m.focus == entitiesPane && m.hasNamespace)
+			if canOpen {
+				actions := m.buildActions()
+				if len(actions) > 0 {
+					m.actionMenu.open(actions)
+				}
+				return m, nil
+			}
+		}
+	case m.Keymap.ToggleDLQFilter.Matches(key):
+		if !focusedFilterActive && m.focus == entitiesPane && m.hasNamespace {
 			actions := m.buildActions()
 			if len(actions) > 0 {
 				m.actionMenu.open(actions)
-			}
-			return m, nil
-		}
-	case m.Keymap.ToggleDLQFilter.Matches(key):
-		if !focusedFilterActive {
-			m.dlqSort = !m.dlqSort
-			m.applyDLQSort()
-			if m.dlqSort {
-				m.Notify(appshell.LevelInfo, "DLQ-first sort enabled")
-			} else {
-				m.Notify(appshell.LevelInfo, "DLQ-first sort disabled")
 			}
 			return m, nil
 		}

@@ -73,8 +73,11 @@ type Model struct {
 	// away or when the user explicitly abandons.
 	lockedMessages *servicebus.ReceivedMessages
 
-	// dlqSort, when true, pulls entities with DLQ messages to the top.
-	dlqSort bool
+	entitySortField entitySortField
+	entitySortDesc  bool
+	entityDLQFilter bool // show only entities with dead letters
+
+	entitySortOverlay entitySortOverlayState
 
 	messageViewport viewport.Model
 	viewingMessage  bool
@@ -290,7 +293,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 			Title: "Messages",
 			Items: []string{
 				keymap.HelpEntry(km.ActionMenu, "actions (peek, peek more, clear)"),
-				keymap.HelpEntry(km.ToggleDLQFilter, "toggle DLQ-first sort"),
+				keymap.HelpEntry(km.ToggleDLQFilter, "entity actions (sort, filter)"),
 				keymap.HelpEntry(km.MessageBack, "close message preview"),
 			},
 		},
