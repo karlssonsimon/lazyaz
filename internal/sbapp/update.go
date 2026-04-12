@@ -641,8 +641,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.SubscriptionPicker.Matches(key):
 		if !focusedFilterActive {
 			m.SubOverlay.Open()
-			m.SetLoading(-1)
-			m.loadingSpinnerID = m.NotifySpinner("Refreshing subscriptions...")
+			m.startLoading(-1, "Refreshing subscriptions...")
 			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
 	case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):

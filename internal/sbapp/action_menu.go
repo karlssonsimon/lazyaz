@@ -265,8 +265,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m, nil
 
 	case actionReceiveDLQ:
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner("Receiving DLQ messages with lock...")
+		m.startLoading(m.focus, "Receiving DLQ messages with lock...")
 		return m, tea.Batch(m.Spinner.Tick,
 			receiveDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, peekMaxMessages))
 
@@ -278,8 +277,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if len(targets) == 0 {
 			return m, nil
 		}
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Requeuing %d message(s)...", len(targets)))
+		m.startLoading(m.focus, fmt.Sprintf("Requeuing %d message(s)...", len(targets)))
 		return m, tea.Batch(m.Spinner.Tick,
 			requeueDLQMarkedCmd(m.service, m.currentNS, m.currentEntity.Name, m.lockedMessages, targets))
 
@@ -291,14 +289,12 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if len(targets) == 0 {
 			return m, nil
 		}
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Completing %d message(s)...", len(targets)))
+		m.startLoading(m.focus, fmt.Sprintf("Completing %d message(s)...", len(targets)))
 		return m, tea.Batch(m.Spinner.Tick,
 			completeDLQMarkedCmd(m.lockedMessages, targets))
 
 	case actionRequeueAllDLQ:
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner("Requeuing all DLQ messages...")
+		m.startLoading(m.focus, "Requeuing all DLQ messages...")
 		return m, tea.Batch(m.Spinner.Tick,
 			requeueAllDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName))
 
@@ -321,8 +317,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if m.lockedMessages == nil {
 			return m, nil
 		}
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner("Abandoning locks...")
+		m.startLoading(m.focus, "Abandoning locks...")
 		return m, tea.Batch(m.Spinner.Tick,
 			abandonDLQCmd(m.lockedMessages))
 
@@ -375,14 +370,12 @@ func (m Model) doPeek(append bool) (Model, tea.Cmd) {
 	if m.deadLetter {
 		label = "DLQ"
 	}
-	m.SetLoading(m.focus)
-
 	if m.currentSubName == "" {
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Peeking %s messages from queue %s", label, m.currentEntity.Name))
+		m.startLoading(m.focus, fmt.Sprintf("Peeking %s messages from queue %s", label, m.currentEntity.Name))
 		return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, append))
 	}
 
-	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Peeking %s messages from %s/%s", label, m.currentEntity.Name, m.currentSubName))
+	m.startLoading(m.focus, fmt.Sprintf("Peeking %s messages from %s/%s", label, m.currentEntity.Name, m.currentSubName))
 	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, append))
 }
 
