@@ -33,6 +33,14 @@ func (m *Model) NotifySpinner(message string) int {
 	return id
 }
 
+// DismissSpinner silently removes a spinner notification without replacement.
+func (m *Model) DismissSpinner(id int) {
+	if m == nil {
+		return
+	}
+	m.Notifier.DismissSpinner(id)
+}
+
 // ResolveSpinner replaces a spinner notification with a regular one.
 func (m *Model) ResolveSpinner(id int, level NotificationLevel, message string) {
 	if m == nil {
