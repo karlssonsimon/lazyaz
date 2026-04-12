@@ -29,6 +29,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.HelpOverlay.Active:
 			m.HelpOverlay.PasteText(text)
 			return m, nil
+		case m.targetPicker.active:
+			m.targetPicker.query += text
+			m.targetPicker.refilter()
+			return m, nil
 		default:
 			return m.updateFocusedList(msg)
 		}
@@ -77,6 +81,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleDLQAbandon(msg)
 	case entitiesRefreshedMsg:
 		return m.handleEntitiesRefreshed(msg)
+	case moveAllDoneMsg:
+		return m.handleMoveAllDone(msg)
+	case moveMarkedDoneMsg:
+		return m.handleMoveMarkedDone(msg)
+	case targetEntitiesLoadedMsg:
+		return m.handleTargetEntitiesLoaded(msg)
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -448,6 +458,42 @@ func (m Model) handleDLQRequeueAll(msg dlqRequeueAllMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) handleMoveAllDone(msg moveAllDoneMsg) (Model, tea.Cmd) {
+	m.ClearLoading()
+	if msg.err != nil {
+		partial := ""
+		if msg.moved > 0 {
+			partial = fmt.Sprintf(" (%d moved before error)", msg.moved)
+		}
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to move DLQ messages%s: %s", partial, msg.err.Error()))
+	} else {
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Moved all %d DLQ messages", msg.moved))
+	}
+	if m.hasNamespace {
+		return m, refreshEntitiesCmd(m.service, m.currentNS)
+	}
+	return m, nil
+}
+
+func (m Model) handleMoveMarkedDone(msg moveMarkedDoneMsg) (Model, tea.Cmd) {
+	m.ClearLoading()
+	if msg.err != nil {
+		partial := ""
+		if len(msg.moved) > 0 {
+			partial = fmt.Sprintf(" (%d moved before error)", len(msg.moved))
+		}
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to move messages%s: %s", partial, msg.err.Error()))
+	} else {
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Moved %d message(s)", len(msg.moved)))
+	}
+	for _, id := range msg.moved {
+		m.removeLockedMessage(id)
+	}
+	m.clearScopeMarks()
+	m.refreshMessageSelectionDisplay()
+	return m, nil
+}
+
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
@@ -460,6 +506,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			ui.SaveThemeName(m.Schemes[m.ThemeOverlay.ActiveThemeIdx].Name)
 		}
 		return m, nil
+	}
+
+	if m.targetPicker.active {
+		return m.updateTargetPicker(msg)
 	}
 
 	if m.actionMenu.active {

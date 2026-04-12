@@ -87,6 +87,7 @@ type Model struct {
 	cache sbCache
 
 	actionMenu   actionMenuState
+	targetPicker targetPickerState
 	inspectPanes map[int]bool
 
 	loadingSpinnerID int
@@ -167,6 +168,22 @@ type dlqRequeueAllMsg struct {
 type entitiesRefreshedMsg struct {
 	entities []servicebus.Entity
 	err      error
+}
+
+type moveAllDoneMsg struct {
+	moved int
+	err   error
+}
+
+type moveMarkedDoneMsg struct {
+	moved []string
+	err   error
+}
+
+type targetEntitiesLoadedMsg struct {
+	namespace servicebus.Namespace
+	entities  []servicebus.Entity
+	err       error
 }
 
 func newList(delegate list.DefaultDelegate, name, plural string) list.Model {

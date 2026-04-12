@@ -24,6 +24,8 @@ const (
 	actionCompleteCurrent
 	actionAbandonAll
 	actionRequeueAllDLQ
+	actionMoveAll
+	actionMoveCurrent
 )
 
 type action struct {
@@ -131,12 +133,22 @@ func (s *actionMenuState) handleKey(key string, km keymap.Keymap) (selected bool
 func (m Model) buildActions() []action {
 	var actions []action
 
-	// Queue type pane — offer bulk requeue when DLQ is selected.
+	// Queue type pane — offer bulk operations when a queue type is selected.
 	if m.focus == queueTypePane && m.hasPeekTarget {
-		if item, ok := m.queueTypeList.SelectedItem().(queueTypeItem); ok && item.deadLetter && item.count > 0 {
+		if item, ok := m.queueTypeList.SelectedItem().(queueTypeItem); ok && item.count > 0 {
+			if item.deadLetter {
+				actions = append(actions, action{
+					id:    actionRequeueAllDLQ,
+					label: fmt.Sprintf("Requeue all DLQ messages (%d)", item.count),
+				})
+			}
+			label := "active"
+			if item.deadLetter {
+				label = "DLQ"
+			}
 			actions = append(actions, action{
-				id:    actionRequeueAllDLQ,
-				label: fmt.Sprintf("Requeue all DLQ messages (%d)", item.count),
+				id:    actionMoveAll,
+				label: fmt.Sprintf("Move all %s messages to... (%d)", label, item.count),
 			})
 		}
 		return actions
@@ -187,6 +199,10 @@ func (m Model) buildActions() []action {
 			actions = append(actions, action{
 				id:    actionRequeueCurrent,
 				label: fmt.Sprintf("Requeue %d message(s) (send + complete)", n),
+			})
+			actions = append(actions, action{
+				id:    actionMoveCurrent,
+				label: fmt.Sprintf("Move %d message(s) to...", n),
 			})
 			actions = append(actions, action{
 				id:    actionCompleteCurrent,
@@ -263,6 +279,21 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		m.loadingSpinnerID = m.NotifySpinner("Requeuing all DLQ messages...")
 		return m, tea.Batch(m.Spinner.Tick,
 			requeueAllDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName))
+
+	case actionMoveAll:
+		m.openTargetPicker(actionMoveAll)
+		return m, nil
+
+	case actionMoveCurrent:
+		if m.lockedMessages == nil {
+			return m, nil
+		}
+		targets := m.lockedMessageTargets()
+		if len(targets) == 0 {
+			return m, nil
+		}
+		m.openTargetPicker(actionMoveCurrent)
+		return m, nil
 
 	case actionAbandonAll:
 		if m.lockedMessages == nil {
