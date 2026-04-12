@@ -89,9 +89,7 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.preview.requestID++
 	m.pendingPreviewG = false
 	m.setFocus(previewPane)
-	m.SetLoading(previewPane)
-
-	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading preview for %s", b.Name))
+	m.startLoading(previewPane, fmt.Sprintf("Loading preview for %s", b.Name))
 	m.resize()
 
 	cmd := loadPreviewWindowCmd(
@@ -121,11 +119,11 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 
 	m.ClearLoading()
 	if msg.err != nil {
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load preview for %s: %s", msg.blobName, msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load preview for %s: %s", msg.blobName, msg.err.Error()))
 		return m, nil
 	}
 
-
+	m.DismissSpinner(m.loadingSpinnerID)
 	m.preview.blobSize = msg.blobSize
 	if strings.TrimSpace(msg.contentType) != "" {
 		m.preview.contentType = msg.contentType
@@ -255,9 +253,7 @@ func (m Model) ensurePreviewWindowAtCursor() (Model, tea.Cmd) {
 
 	if needLoad {
 		m.preview.requestID++
-		m.SetLoading(previewPane)
-	
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading preview window for %s", m.preview.blobName))
+		m.startLoading(previewPane, fmt.Sprintf("Loading preview window for %s", m.preview.blobName))
 		cmd := loadPreviewWindowCmd(
 			m.service,
 			m.currentAccount,

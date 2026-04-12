@@ -513,9 +513,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.SubscriptionPicker.Matches(key):
 		if !focusedFilterActive {
 			m.SubOverlay.Open()
-			m.SetLoading(-1)
-		
-			m.loadingSpinnerID = m.NotifySpinner("Refreshing subscriptions...")
+			m.startLoading(-1, "Refreshing subscriptions...")
 			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 		}
 	// FilterInput for the blobs pane is handled by the bubbles list's
@@ -546,8 +544,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 
 				m.rebuildParentBlobsList()
 
-				m.SetLoading(blobsPane)
-				m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
+				m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
 				return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 			}
 		}

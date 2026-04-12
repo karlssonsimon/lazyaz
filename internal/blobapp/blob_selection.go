@@ -26,6 +26,18 @@ func (m *Model) clearBlobSelectionState() {
 	}
 }
 
+// startLoading dismisses any active spinner, marks the pane as loading,
+// and pushes a new spinner notification. This prevents orphaned spinners
+// when the user navigates away before a load finishes.
+func (m *Model) startLoading(pane int, message string) {
+	if m.Loading {
+		m.ClearLoading()
+		m.DismissSpinner(m.loadingSpinnerID)
+	}
+	m.SetLoading(pane)
+	m.loadingSpinnerID = m.NotifySpinner(message)
+}
+
 func (m *Model) resetBlobLoadState() {
 	if m.Loading {
 		m.ClearLoading()
@@ -224,8 +236,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 			m.refreshItems()
 		}
 
-		m.SetLoading(blobsPane)
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
+		m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
 		return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 	}
 
@@ -235,9 +246,8 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 	if savedPrefix != "" {
 		// Prefix was active — load all blobs under that prefix.
 		// Keep showing current data while the fetch runs.
-		m.SetLoading(blobsPane)
 		effectivePrefix := blobSearchPrefix(m.prefix, savedPrefix)
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading all blobs under %q", effectivePrefix))
+		m.startLoading(blobsPane, fmt.Sprintf("Loading all blobs under %q", effectivePrefix))
 		return m, tea.Batch(m.Spinner.Tick,
 			fetchAllBlobsWithPrefixCmd(m.service, m.currentAccount, m.containerName, m.prefix, savedPrefix))
 	}
@@ -248,8 +258,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		m.refreshItems()
 	}
 
-	m.SetLoading(blobsPane)
-	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName))
+	m.startLoading(blobsPane, fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName))
 	return m, tea.Batch(m.Spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.blobs))
 }
 
@@ -478,8 +487,7 @@ func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 		return m, nil
 	}
 	destinationRoot := filepath.Join(m.downloadDir, m.currentAccount.Name, m.containerName)
-	m.SetLoading(blobsPane)
-	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Downloading %d blob(s) to %s", len(blobNames), destinationRoot))
+	m.startLoading(blobsPane, fmt.Sprintf("Downloading %d blob(s) to %s", len(blobNames), destinationRoot))
 	return m, tea.Batch(m.Spinner.Tick, downloadBlobsCmd(m.service, m.currentAccount, m.containerName, blobNames, destinationRoot))
 }
 
