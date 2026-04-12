@@ -45,14 +45,15 @@ func (m Model) namespacesPaneTitle() string {
 
 func (m Model) entitiesPaneTitle() string {
 	title := "Entities"
-	if m.dlqSort {
-		title = "Entities [DLQ-first]"
+	if label := entitySortLabel(m.entitySortField, m.entitySortDesc, m.entityDLQFilter); label != "" {
+		title = fmt.Sprintf("Entities [%s]", label)
 	}
 	if m.hasNamespace {
 		title = fmt.Sprintf("%s · %s", title, m.currentNS.Name)
 	}
 	if m.entities != nil {
-		title = fmt.Sprintf("%s (%d)", title, len(m.entities))
+		n := len(sortAndFilterEntities(m.entities, m.entitySortField, m.entitySortDesc, m.entityDLQFilter))
+		title = fmt.Sprintf("%s (%d)", title, n)
 	}
 	return title
 }
@@ -91,14 +92,15 @@ func (m Model) messagesPaneTitle() string {
 }
 
 func (m *Model) rebuildEntitiesItems() {
-	items := entitiesToItems(m.entities, m.dlqSort)
+	items := entitiesToItems(m.entities, m.entitySortField, m.entitySortDesc, m.entityDLQFilter)
 	ui.SetItemsPreserveKey(&m.entitiesList, items, entityItemKey)
 }
 
-func (m *Model) applyDLQSort() {
+func (m *Model) applyEntitySort() {
 	m.entitiesList.ResetFilter()
-	items := entitiesToItems(m.entities, m.dlqSort)
+	items := entitiesToItems(m.entities, m.entitySortField, m.entitySortDesc, m.entityDLQFilter)
 	m.entitiesList.SetItems(items)
+	m.entitiesList.Title = m.entitiesPaneTitle()
 	if len(items) > 0 {
 		m.entitiesList.Select(0)
 	}

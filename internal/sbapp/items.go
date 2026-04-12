@@ -133,13 +133,10 @@ func namespacesToItems(namespaces []servicebus.Namespace) []list.Item {
 	return items
 }
 
-// entitiesToItems builds the flat list of entities for the entities pane.
-// When dlqSort is true, entities with DLQ messages are pulled to the top.
-func entitiesToItems(entities []servicebus.Entity, dlqSort bool) []list.Item {
-	ordered := entities
-	if dlqSort {
-		ordered = sortEntitiesByDLQDesc(entities)
-	}
+// entitiesToItems builds the flat list of entities for the entities pane,
+// applying the current sort and optional DLQ filter.
+func entitiesToItems(entities []servicebus.Entity, field entitySortField, desc bool, dlqFilter bool) []list.Item {
+	ordered := sortAndFilterEntities(entities, field, desc, dlqFilter)
 	items := make([]list.Item, 0, len(ordered))
 	for _, e := range ordered {
 		items = append(items, entityItem{entity: e})
@@ -153,28 +150,6 @@ func subscriptionsToItems(subs []servicebus.TopicSubscription) []list.Item {
 		items = append(items, subscriptionItem{sub: s})
 	}
 	return items
-}
-
-// sortEntitiesByDLQDesc returns a copy of entities with DLQ-bearing
-// entries pulled to the front, sorted by DeadLetterCount desc.
-func sortEntitiesByDLQDesc(entities []servicebus.Entity) []servicebus.Entity {
-	out := make([]servicebus.Entity, len(entities))
-	copy(out, entities)
-	withDLQ := make([]servicebus.Entity, 0, len(out))
-	withoutDLQ := make([]servicebus.Entity, 0, len(out))
-	for _, e := range out {
-		if e.DeadLetterCount > 0 {
-			withDLQ = append(withDLQ, e)
-		} else {
-			withoutDLQ = append(withoutDLQ, e)
-		}
-	}
-	for i := 1; i < len(withDLQ); i++ {
-		for j := i; j > 0 && withDLQ[j-1].DeadLetterCount < withDLQ[j].DeadLetterCount; j-- {
-			withDLQ[j-1], withDLQ[j] = withDLQ[j], withDLQ[j-1]
-		}
-	}
-	return append(withDLQ, withoutDLQ...)
 }
 
 func messagesToItems(messages []servicebus.PeekedMessage, duplicates map[string]struct{}) []list.Item {

@@ -144,7 +144,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		entityCacheKey := cache.Key(m.CurrentSub.ID, item.namespace.Name)
 		if cached, ok := m.cache.entities.Get(entityCacheKey); ok {
 			m.entities = cached
-			m.entitiesList.SetItems(entitiesToItems(cached, m.dlqSort))
+			m.entitiesList.SetItems(entitiesToItems(cached, m.entitySortField, m.entitySortDesc, m.entityDLQFilter))
 			m.entitiesList.Title = m.entitiesPaneTitle()
 		} else {
 			m.entities = nil

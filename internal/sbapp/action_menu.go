@@ -26,6 +26,8 @@ const (
 	actionRequeueAllDLQ
 	actionMoveAll
 	actionMoveCurrent
+	actionSortEntities
+	actionFilterDLQ
 )
 
 type action struct {
@@ -132,6 +134,26 @@ func (s *actionMenuState) handleKey(key string, km keymap.Keymap) (selected bool
 
 func (m Model) buildActions() []action {
 	var actions []action
+
+	// Entities pane — sort and filter.
+	if m.focus == entitiesPane && m.hasNamespace {
+		actions = append(actions, action{
+			id:    actionSortEntities,
+			label: "Sort entities",
+		})
+		if m.entityDLQFilter {
+			actions = append(actions, action{
+				id:    actionFilterDLQ,
+				label: "Show all entities",
+			})
+		} else {
+			actions = append(actions, action{
+				id:    actionFilterDLQ,
+				label: "Filter: only with dead letters",
+			})
+		}
+		return actions
+	}
 
 	// Queue type pane — offer bulk operations when a queue type is selected.
 	if m.focus == queueTypePane && m.hasPeekTarget {
@@ -303,6 +325,15 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		m.loadingSpinnerID = m.NotifySpinner("Abandoning locks...")
 		return m, tea.Batch(m.Spinner.Tick,
 			abandonDLQCmd(m.lockedMessages))
+
+	case actionSortEntities:
+		m.entitySortOverlay.open(m.entitySortField, m.entitySortDesc)
+		return m, nil
+
+	case actionFilterDLQ:
+		m.entityDLQFilter = !m.entityDLQFilter
+		m.applyEntitySort()
+		return m, nil
 	}
 
 	return m, nil
