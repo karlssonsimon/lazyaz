@@ -233,8 +233,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	// Open the subscription picker on first run (no subscription yet).
 	if !m.HasSubscription {
 		m.SubOverlay.Open()
-		m.SetLoading(-1)
-		m.loadingSpinnerID = m.NotifySpinner("Loading Azure subscriptions...")
+		m.startLoading(-1, "Loading Azure subscriptions...")
 	}
 	return m
 }
