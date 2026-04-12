@@ -112,8 +112,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.messageList.SetItems(nil)
 	m.resize()
 
-	m.SetLoading(m.focus)
-	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub)))
+	m.startLoading(m.focus, fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub)))
 	return m, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID, m.namespaces))
 }
 
@@ -158,8 +157,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.messageList.SetItems(nil)
 		m.resize()
 
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading entities in %s", item.namespace.Name))
+		m.startLoading(m.focus, fmt.Sprintf("Loading entities in %s", item.namespace.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityCacheKey, m.entities))
 	}
 
@@ -262,8 +260,7 @@ func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
 	m.messageList.SetItems(nil)
 	m.resize()
 
-	m.SetLoading(m.focus)
-	m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading subscriptions for topic %s", entity.Name))
+	m.startLoading(m.focus, fmt.Sprintf("Loading subscriptions for topic %s", entity.Name))
 	return m, tea.Batch(m.Spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, entity.Name, cacheKey, m.subscriptions))
 }
 

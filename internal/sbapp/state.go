@@ -237,8 +237,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 	m.HydrateSubscriptionsFromCache(m.cache.subscriptions)
 	if !m.HasSubscription {
 		m.SubOverlay.Open()
-		m.SetLoading(-1)
-		m.loadingSpinnerID = m.NotifySpinner("Loading Azure subscriptions...")
+		m.startLoading(-1, "Loading Azure subscriptions...")
 	}
 	return m
 }

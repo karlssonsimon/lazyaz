@@ -218,8 +218,7 @@ func (m Model) updateTargetPicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 	result := m.targetPicker.handleKey(msg.String(), m.Keymap)
 
 	if result.fetchNamespaceEntities {
-		m.SetLoading(-1)
-		m.loadingSpinnerID = m.NotifySpinner(fmt.Sprintf("Loading entities from %s...", result.selectedNamespace.Name))
+		m.startLoading(-1, fmt.Sprintf("Loading entities from %s...", result.selectedNamespace.Name))
 		return m, tea.Batch(m.Spinner.Tick,
 			fetchTargetEntitiesCmd(m.service, result.selectedNamespace))
 	}
@@ -246,17 +245,13 @@ func (m Model) executeMoveAction(moveAction actionID, result targetPickerResult)
 		if m.deadLetter {
 			label = "DLQ"
 		}
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner(
-			fmt.Sprintf("Moving all %s messages to %s/%s...", label, targetNS.Name, result.targetEntity.Name))
+		m.startLoading(m.focus, fmt.Sprintf("Moving all %s messages to %s/%s...", label, targetNS.Name, result.targetEntity.Name))
 		return m, tea.Batch(m.Spinner.Tick,
 			moveAllCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, targetNS, result.targetEntity.Name))
 
 	case actionMoveCurrent:
 		targets := m.lockedMessageTargets()
-		m.SetLoading(m.focus)
-		m.loadingSpinnerID = m.NotifySpinner(
-			fmt.Sprintf("Moving %d message(s) to %s/%s...", len(targets), targetNS.Name, result.targetEntity.Name))
+		m.startLoading(m.focus, fmt.Sprintf("Moving %d message(s) to %s/%s...", len(targets), targetNS.Name, result.targetEntity.Name))
 		return m, tea.Batch(m.Spinner.Tick,
 			moveMarkedCmd(m.service, targetNS, result.targetEntity.Name, m.lockedMessages, targets))
 	}
