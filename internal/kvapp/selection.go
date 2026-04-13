@@ -6,6 +6,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+
+	"charm.land/bubbles/v2/list"
 )
 
 func (m *Model) clearSecretSelectionState() {
@@ -22,10 +24,14 @@ func (m *Model) clearSecretSelectionState() {
 
 func (m *Model) refreshSecretItems() {
 	prevFilter := m.secretsList.FilterValue()
+	wasFiltering := m.secretsList.FilterState() == list.Filtering
 	m.secretsList.ResetFilter()
 	m.secretsList.SetItems(secretsToItems(m.secrets))
 	if prevFilter != "" {
 		m.secretsList.SetFilterText(prevFilter)
+		if wasFiltering {
+			m.secretsList.SetFilterState(list.Filtering)
+		}
 	}
 	ui.ClampListSelection(&m.secretsList)
 	m.refreshSecretSelectionDisplay()
