@@ -158,7 +158,7 @@ func (m Model) buildActions() []action {
 
 		// Server-side prefix search (only in hierarchy mode).
 		if !m.blobLoadAll {
-			actions = append(actions, action{actionPrefixSearch, "Server prefix search", ""})
+			actions = append(actions, action{actionPrefixSearch, "Search by prefix", ""})
 		}
 
 		// Sort.
@@ -170,7 +170,7 @@ func (m Model) buildActions() []action {
 
 		// Marked-blob actions.
 		if len(m.markedBlobs) > 0 || m.visualLineMode {
-			actions = append(actions, action{actionDownloadSelection, "Download marked/visual selection", km.DownloadSelection.Short()})
+			actions = append(actions, action{actionDownloadSelection, "Download selection", km.DownloadSelection.Short()})
 		}
 		if len(m.markedBlobs) > 0 {
 			actions = append(actions, action{
@@ -184,17 +184,17 @@ func (m Model) buildActions() []action {
 		// Current-blob actions.
 		if item, ok := m.blobsList.SelectedItem().(blobItem); ok && !item.blob.IsPrefix {
 			actions = append(actions, action{actionDownloadCurrent, "Download current blob", ""})
-			actions = append(actions, action{actionYankBlobName, "Yank blob name to clipboard", ""})
+			actions = append(actions, action{actionYankBlobName, "Yank blob name", ""})
 			if item.blob.Size > 0 && item.blob.Size < 5*1024*1024 {
-				actions = append(actions, action{actionYankBlobContent, "Yank blob content to clipboard", km.YankBlobContent.Short()})
+				actions = append(actions, action{actionYankBlobContent, "Yank blob content", km.YankBlobContent.Short()})
 			}
 		}
 	}
 
 	// App-wide actions — available from any pane.
 	actions = append(actions,
-		action{actionRefresh, "Refresh current scope", km.RefreshScope.Short()},
-		action{actionInspect, "Toggle inspect", km.Inspect.Short()},
+		action{actionRefresh, "Refresh", km.RefreshScope.Short()},
+		action{actionInspect, "Toggle details panel", km.Inspect.Short()},
 		action{actionSubscriptionPicker, "Change subscription", km.SubscriptionPicker.Short()},
 	)
 	if !m.EmbeddedMode {
