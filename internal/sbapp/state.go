@@ -130,8 +130,9 @@ type Model struct {
 
 	loadingSpinnerID int
 
-	paneWidths [6]int // ns, ent, subs, qtype, msg, preview
-	paneHeight int
+	clickTracker ui.ClickTracker
+	paneWidths   [6]int // ns, ent, subs, qtype, msg, preview
+	paneHeight   int
 }
 
 type namespacesLoadedMsg struct {

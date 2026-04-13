@@ -108,6 +108,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+
+	case tea.MouseClickMsg:
+		if consumed, double := m.handleMouseClick(msg); consumed {
+			if double {
+				return m.handleEnter()
+			}
+			return m, nil
+		}
 	}
 
 	// Fallthrough: propagate to the focused list so filter/selection keys

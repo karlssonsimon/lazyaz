@@ -102,6 +102,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		if consumed, double := m.handleMouseClick(msg); consumed {
+			if double {
+				return m.handleEnter()
+			}
+			return m, nil
+		}
+
 	case tea.MouseMotionMsg:
 		if m.textSelection.Active {
 			region := m.messageViewportRegion()
