@@ -139,6 +139,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 
 	vaults := list.New([]list.Item{}, delegate, 24, 10)
 	vaults.SetShowTitle(false) // title is rendered by ui.RenderListPane
+	vaults.SetShowFilter(false)
 	vaults.SetShowHelp(false)
 	vaults.SetShowPagination(false)
 	vaults.SetShowStatusBar(true)
@@ -148,6 +149,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 
 	secrets := list.New([]list.Item{}, delegate, 24, 10)
 	secrets.SetShowTitle(false)
+	secrets.SetShowFilter(false)
 	secrets.SetShowHelp(false)
 	secrets.SetShowPagination(false)
 	secrets.SetShowStatusBar(true)
@@ -157,6 +159,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 
 	versionsList := list.New([]list.Item{}, delegate, 40, 10)
 	versionsList.SetShowTitle(false)
+	versionsList.SetShowFilter(false)
 	versionsList.SetShowHelp(false)
 	versionsList.SetShowPagination(false)
 	versionsList.SetShowStatusBar(true)
