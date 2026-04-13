@@ -352,6 +352,11 @@ func (m Model) HelpSections() []ui.HelpSection {
 // SetSubscription overrides the embedded appshell.Model method.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
+	if sub.TenantID != "" {
+		if cred, err := azure.NewCredentialForTenant(sub.TenantID); err == nil {
+			m.service.SetCredential(cred)
+		}
+	}
 	if cached, ok := m.cache.namespaces.Get(sub.ID); ok {
 		m.namespaces = cached
 		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(cached))
