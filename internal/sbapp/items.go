@@ -32,9 +32,9 @@ type entityItem struct {
 
 func (i entityItem) Title() string {
 	if i.entity.Kind == servicebus.EntityTopic {
-		return fmt.Sprintf("▶ %s", i.entity.Name)
+		return fmt.Sprintf("◇ %s", i.entity.Name)
 	}
-	return fmt.Sprintf("☰ %s", i.entity.Name)
+	return fmt.Sprintf("≡ %s", i.entity.Name)
 }
 
 func (i entityItem) Description() string {
