@@ -1,8 +1,12 @@
 # lazyaz
 
-A keyboard-driven TUI for Azure — Blob Storage, Service Bus, and Key Vault — built with Bubble Tea.
+A keyboard-driven TUI for Azure — Blob Storage, Service Bus, and Key Vault.
 
-`lazyaz` is to `az` what `lazygit` is to `git`: a fast, fully-keyboard explorer that turns common Azure browse/inspect tasks into a few keystrokes.
+`lazyaz` is to `az` what `lazygit` is to `git`: a fast terminal explorer that turns
+common Azure browse-and-inspect tasks into a few keystrokes. No more clicking
+through the Azure Portal to peek at a dead-letter queue or download a blob.
+
+<!-- TODO: add a GIF/screenshot here -->
 
 ## Install
 
@@ -10,57 +14,59 @@ A keyboard-driven TUI for Azure — Blob Storage, Service Bus, and Key Vault —
 go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest
 ```
 
-## Features
+Requires Go 1.22+ and Azure CLI logged in (`az login`).
 
-- Azure authentication via `DefaultAzureCredential` (works with `az login`)
-- Subscription-first navigation: select a subscription, then browse its storage accounts
-- Multi-subscription and multi-account browsing
-- Container listing
-- Blob browsing with virtual folder navigation (`/` delimiter)
-- Blob load modes: hierarchical browse by default, optional full container load on demand
-- Blobs load a capped initial subset on container open; use prefix search to narrow or `a` for full load
-- Live fuzzy filtering in subscriptions/accounts/containers and in blobs when full-load mode is active
-- Prefix search in blobs pane when not in full-load mode (press `/`, type prefix, `enter`; server-side, limited)
-- Blob multi-selection in blob pane: `space` toggles mark, `v` enters visual line marking mode
-- Download marked blobs with `D` to `downloads/<account>/<container>/...`
-- In-pane blob preview opened from blob entries (`enter`/`l`) with streamed range reads and syntax highlighting for JSON/XML/CSV
-- Auth mode similar to Storage Explorer: Azure AD first, Shared Key fallback via ARM `ListKeys`
-- Blob details in status bar (size, modified time, content type, tier, metadata count)
-
-## Requirements
-
-- Go 1.22+
-- Azure CLI installed and logged in: `az login`
-- RBAC permissions on target accounts (for example `Storage Blob Data Reader`)
-
-## Run
+## Quick start
 
 ```bash
-go run ./cmd/lazyaz
+az login
+lazyaz
 ```
 
-## Keys
+Pick a subscription and start browsing. Press `?` at any time to see keybindings
+for the current view.
 
-- `tab` / `shift+tab`: move focus between panes
-- `enter` / `l` / `right`: open selected item and move focus right
-- `h` / `left`: move focus left, or go up folder when browsing blobs
-- `ctrl+d` / `ctrl+u`: scroll half-page down/up in the focused pane
-- In preview pane: `j`/`k` line scroll, `ctrl+d`/`ctrl+u` half-page, `gg` top, `G` bottom
-- `backspace`: go to parent folder in blobs
-- `/`: filter the focused pane live (fzf-style), `enter` applies and exits filter input
-- `a`: toggle blob load-all mode for current container
-- `space`: toggle mark on current blob
-- `v` / `V`: visual line mode in blobs (move to mark multiple)
-- `D`: download all marked blobs (or current blob if none marked)
-- `r`: refresh current view
-- `d`: reload subscriptions
-- `q`: quit
+## What it does
 
-## Notes
+**Blob Storage** — Browse containers, navigate virtual folders, preview files
+with syntax highlighting, multi-select and download in bulk.
 
-- Filtering is local to the currently loaded list in each pane.
-- In blobs pane: default mode uses server-side prefix search; full-load mode uses local fuzzy filtering.
-- Preview uses blob range reads with buffered windows to avoid loading full files when scrolling.
-- Discovery uses ARM list APIs (subscriptions -> storage accounts), while browsing uses Blob data-plane APIs.
-- Shared Key fallback requires permission to list storage account keys and that Shared Key access is allowed on the account.
-- Marked selection is container-scoped and intentionally action-oriented so more bulk actions can be added later.
+**Service Bus** — Peek active and dead-letter queues, requeue or move DLQ
+messages, inspect topics and subscriptions.
+
+**Key Vault** — Browse vaults and secrets, view version history, yank secret
+values to clipboard.
+
+All three run side by side in tabs with per-tab subscription selection.
+
+## Navigation
+
+| Key | Action |
+|---|---|
+| `Tab` / `Shift+Tab` | Cycle pane focus |
+| `Enter` / `l` | Open / drill in |
+| `h` / `Left` | Go back |
+| `/` | Filter focused pane |
+| `Ctrl+D` / `Ctrl+U` | Half-page scroll |
+| `S` | Switch subscription |
+| `a` | Action menu |
+| `K` | Toggle inspect panel |
+| `?` | Help |
+| `Ctrl+P` | Command palette |
+| `Ctrl+T` | New tab |
+
+## Configuration
+
+Config lives in `~/.config/lazyaz/`:
+
+- `config.yaml` — theme, download directory, startup tabs, keymap
+- `themes/` — Base16 color schemes (switch at runtime with `T`)
+- `keymaps/` — JSON keybinding overrides
+
+## Documentation
+
+Full documentation: **[karlssonsimon.github.io/lazyaz](https://karlssonsimon.github.io/lazyaz)**
+
+## License
+
+MIT
