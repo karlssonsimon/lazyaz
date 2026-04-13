@@ -196,12 +196,12 @@ func deleteDuplicateCmd(svc *servicebus.Service, ns servicebus.Namespace, entity
 
 // moveAllCmd receives all messages (from DLQ or active queue) and
 // sends them to a different target queue/topic, then completes the originals.
-func moveAllCmd(svc *servicebus.Service, sourceNS servicebus.Namespace, entityName, subName string, deadLetter bool, targetNS servicebus.Namespace, targetEntity string) tea.Cmd {
+func moveAllCmd(svc *servicebus.Service, sourceNS servicebus.Namespace, entityName, subName string, deadLetter bool, targetNS servicebus.Namespace, targetEntity string, count int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		total, err := svc.ResendAllFromSource(ctx, sourceNS, entityName, subName, deadLetter, targetNS, targetEntity)
+		total, err := svc.ResendAllFromSource(ctx, sourceNS, entityName, subName, deadLetter, targetNS, targetEntity, count)
 		return moveAllDoneMsg{moved: total, err: err}
 	}
 }

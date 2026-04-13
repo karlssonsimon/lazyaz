@@ -250,21 +250,23 @@ func (m *Model) refreshMessageSelectionDisplay() {
 	m.messageList.SetDelegate(d)
 }
 
-// buildQueueTypeItems creates the 2-item list for the Active/DLQ picker.
-func (m *Model) buildQueueTypeItems() {
-	var active, dead int64
+// currentMessageCounts returns the active and dead-letter message counts
+// for the current scope (queue or topic subscription).
+func (m *Model) currentMessageCounts() (active, dead int64) {
 	if m.currentSubName == "" {
-		active = m.currentEntity.ActiveMsgCount
-		dead = m.currentEntity.DeadLetterCount
-	} else {
-		for _, sub := range m.subscriptions {
-			if sub.Name == m.currentSubName {
-				active = sub.ActiveMsgCount
-				dead = sub.DeadLetterCount
-				break
-			}
+		return m.currentEntity.ActiveMsgCount, m.currentEntity.DeadLetterCount
+	}
+	for _, sub := range m.subscriptions {
+		if sub.Name == m.currentSubName {
+			return sub.ActiveMsgCount, sub.DeadLetterCount
 		}
 	}
+	return 0, 0
+}
+
+// buildQueueTypeItems creates the 2-item list for the Active/DLQ picker.
+func (m *Model) buildQueueTypeItems() {
+	active, dead := m.currentMessageCounts()
 	m.queueTypeList.SetItems([]list.Item{
 		queueTypeItem{label: "Active", deadLetter: false, count: active},
 		queueTypeItem{label: "DLQ", deadLetter: true, count: dead},

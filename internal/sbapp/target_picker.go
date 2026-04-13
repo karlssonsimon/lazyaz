@@ -241,13 +241,16 @@ func (m Model) executeMoveAction(moveAction actionID, result targetPickerResult)
 
 	switch moveAction {
 	case actionMoveAll:
+		active, dead := m.currentMessageCounts()
 		label := "active"
+		count := int(active)
 		if m.deadLetter {
 			label = "DLQ"
+			count = int(dead)
 		}
 		m.startLoading(m.focus, fmt.Sprintf("Moving all %s messages to %s/%s...", label, targetNS.Name, result.targetEntity.Name))
 		return m, tea.Batch(m.Spinner.Tick,
-			moveAllCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, targetNS, result.targetEntity.Name))
+			moveAllCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, targetNS, result.targetEntity.Name, count))
 
 	case actionMoveCurrent:
 		targets := m.lockedMessageTargets()
