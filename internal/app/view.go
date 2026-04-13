@@ -45,6 +45,20 @@ func (m Model) View() tea.View {
 	if m.tabPicker.active {
 		view = renderTabPickerOverlay(&m.tabPicker, closeHint, cursorView, m.styles.Overlay, m.width, m.height, view)
 	}
+	if m.tenantPicker.active {
+		title := "Switch Tenant"
+		if m.tenantPicker.loading {
+			title += " ..."
+		}
+		view = ui.RenderOverlayList(ui.OverlayListConfig{
+			Title:      title,
+			Query:      m.tenantPicker.query,
+			CursorView: cursorView,
+			CloseHint:  closeHint,
+			MaxVisible: 12,
+			Center:     true,
+		}, m.tenantPicker.visibleItems(), m.tenantPicker.cursor, m.styles.Overlay, m.width, m.height, view)
+	}
 	if m.themeOverlay.Active {
 		view = ui.RenderThemeOverlay(m.themeOverlay, closeHint, cursorView, m.schemes, m.styles, m.width, m.height, view)
 	}

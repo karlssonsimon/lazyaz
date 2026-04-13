@@ -77,6 +77,21 @@ type sharedBrokers struct {
 	kvVersions *cache.Broker[keyvault.SecretVersion]
 }
 
+// resetAll cancels all active streams and clears all cached data.
+// Called after az login to invalidate stale tenant-scoped data.
+func (b *sharedBrokers) resetAll() {
+	b.subscriptions.Reset()
+	b.blobAccounts.Reset()
+	b.blobContainers.Reset()
+	b.blobs.Reset()
+	b.sbNamespaces.Reset()
+	b.sbEntities.Reset()
+	b.sbTopicSubs.Reset()
+	b.kvVaults.Reset()
+	b.kvSecrets.Reset()
+	b.kvVersions.Reset()
+}
+
 func newSharedBrokers(db *cache.DB) sharedBrokers {
 	if db != nil {
 		return sharedBrokers{

@@ -59,9 +59,10 @@ type Model struct {
 	notificationsOverlay ui.NotificationsOverlayState
 	streamOverlay        ui.StreamOverlayState
 
-	cursor     cursor.Model
-	tabPicker  tabPickerState
-	cmdPalette commandPalette
+	cursor       cursor.Model
+	tabPicker    tabPickerState
+	tenantPicker tenantPickerState
+	cmdPalette   commandPalette
 
 	width  int
 	height int
@@ -330,6 +331,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tabPicker.query += text
 			m.tabPicker.refilter()
 			return m, nil
+		case m.tenantPicker.active:
+			m.tenantPicker.query += text
+			m.tenantPicker.refilter()
+			return m, nil
 		case m.themeOverlay.Active:
 			m.themeOverlay.PasteText(text, m.schemes)
 			return m, nil
@@ -469,6 +474,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case openAzLoginMsg:
+		updated, cmd := m.handleOpenAzLogin()
+		return updated, cmd
+
+	case tenantsLoadedMsg:
+		updated, cmd := m.handleTenantsLoaded(msg)
+		toastCmd := updated.maybeStartToastTick()
+		return updated, tea.Batch(cmd, toastCmd)
+
+	case tenantCredentialMsg:
+		updated, cmd := m.handleTenantCredential(msg)
+		toastCmd := updated.maybeStartToastTick()
+		return updated, tea.Batch(cmd, toastCmd)
+
+	case azLoginFinishedMsg:
+		updated, cmd := m.handleAzLoginFinished(msg)
+		toastCmd := updated.maybeStartToastTick()
+		return updated, tea.Batch(cmd, toastCmd)
+
 	case toastTickMsg:
 		// Self-extinguishing tick: re-render to drop expired toasts,
 		// reschedule only if any are still active.
@@ -507,6 +531,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Erase:  m.keymap.BackspaceUp,
 			}); ok {
 				return m.Update(tabPickerMsg{kind: kind})
+			}
+			return m, nil
+		}
+
+		// Tenant picker overlay.
+		if m.tenantPicker.active {
+			if tenant, ok := m.tenantPicker.handleKey(key, ui.ThemeKeyBindings{
+				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
+				Apply:  m.keymap.ThemeApply,
+				Cancel: m.keymap.Cancel,
+				Erase:  m.keymap.BackspaceUp,
+			}); ok {
+				updated, cmd := m.handleTenantSelected(tenant)
+				toastCmd := updated.maybeStartToastTick()
+				return updated, tea.Batch(cmd, toastCmd)
 			}
 			return m, nil
 		}
@@ -717,6 +756,9 @@ func (m *Model) buildCommands() []command {
 	}
 
 	cmds = append(cmds,
+		command{name: "Azure Login / Switch Tenant", action: func() commandAction {
+			return commandAction{msg: openAzLoginMsg{}}
+		}},
 		command{name: "Theme Picker", hint: "T", action: func() commandAction {
 			return commandAction{msg: openThemePickerMsg{}}
 		}},

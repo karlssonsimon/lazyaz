@@ -17,12 +17,65 @@ type Subscription struct {
 	State string
 }
 
+type Tenant struct {
+	ID          string
+	DisplayName string
+	Domain      string
+}
+
 // SubscriptionKey returns the stable identity used by cache.Broker to
 // dedupe streamed subscriptions.
 func SubscriptionKey(s Subscription) string { return s.ID }
 
 func NewDefaultCredential() (azcore.TokenCredential, error) {
 	return azidentity.NewDefaultAzureCredential(nil)
+}
+
+// NewCredentialForTenant creates a credential scoped to the given tenant.
+// This reuses the existing az login session — no browser sign-in needed.
+func NewCredentialForTenant(tenantID string) (azcore.TokenCredential, error) {
+	return azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+		TenantID:                   tenantID,
+		AdditionallyAllowedTenants: []string{"*"},
+	})
+}
+
+func ListTenants(ctx context.Context, cred azcore.TokenCredential) ([]Tenant, error) {
+	client, err := armsubscriptions.NewTenantsClient(cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create tenants client: %w", err)
+	}
+
+	var tenants []Tenant
+	pager := client.NewListPager(nil)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list tenants: %w", err)
+		}
+		for _, t := range page.Value {
+			if t == nil || t.TenantID == nil {
+				continue
+			}
+			tenant := Tenant{ID: *t.TenantID}
+			if t.DisplayName != nil {
+				tenant.DisplayName = *t.DisplayName
+			}
+			if t.DefaultDomain != nil {
+				tenant.Domain = *t.DefaultDomain
+			}
+			tenants = append(tenants, tenant)
+		}
+	}
+	sort.Slice(tenants, func(i, j int) bool {
+		nameI := strings.ToLower(strings.TrimSpace(tenants[i].DisplayName))
+		nameJ := strings.ToLower(strings.TrimSpace(tenants[j].DisplayName))
+		if nameI == nameJ {
+			return tenants[i].ID < tenants[j].ID
+		}
+		return nameI < nameJ
+	})
+	return tenants, nil
 }
 
 func ListSubscriptions(ctx context.Context, cred azcore.TokenCredential, send func([]Subscription)) error {

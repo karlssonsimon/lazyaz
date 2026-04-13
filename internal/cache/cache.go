@@ -9,6 +9,7 @@ package cache
 type Store[T any] interface {
 	Get(key string) ([]T, bool)
 	Set(key string, items []T)
+	Clear()
 }
 
 // Map is an in-memory [Store] backed by a plain Go map.
@@ -30,6 +31,11 @@ func (c *Map[T]) Get(key string) ([]T, bool) {
 // Set stores items under the given key, replacing any previous value.
 func (c *Map[T]) Set(key string, items []T) {
 	c.entries[key] = items
+}
+
+// Clear removes all entries from the map.
+func (c *Map[T]) Clear() {
+	c.entries = make(map[string][]T)
 }
 
 // Key joins segments with a null byte separator to form a cache key.

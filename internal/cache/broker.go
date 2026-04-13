@@ -332,6 +332,23 @@ func (b *Broker[T]) recv(
 	}
 }
 
+// Reset cancels all active streams, clears all cached data from the
+// store, and removes all stream tracking. Used after an az login to
+// invalidate everything.
+func (b *Broker[T]) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, s := range b.streams {
+		if s.status == StreamActive {
+			s.status = StreamCancelled
+			s.endedAt = time.Now()
+			s.cancel()
+		}
+	}
+	b.streams = make(map[string]*stream[T])
+	b.store.Clear()
+}
+
 // ClearStream removes a completed/cancelled/errored stream from the
 // broker's tracking. Active streams are not removed. Used to keep the
 // stream list tidy.
