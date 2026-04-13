@@ -19,8 +19,9 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 		return m, nil
 	case messagesPane:
 		m.closePreview()
+		cmd := m.abandonLockedIfHeld()
 		m.transitionTo(queueTypePane)
-		return m, nil
+		return m, cmd
 	case queueTypePane:
 		if m.isTopicSelected() {
 			m.transitionTo(subscriptionsPane)

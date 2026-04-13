@@ -47,7 +47,7 @@ func (i entityItem) FilterValue() string {
 
 // entityListFilter wraps list.DefaultFilter and adjusts matched character
 // indices so the underline lands on the correct characters in the title.
-// Entity titles start with "▶ " or "☰ " (2 runes) that is not part of
+// Entity titles start with "◇ " or "≡ " (2 runes) that is not part of
 // FilterValue — shift every index by 2.
 func entityListFilter(term string, targets []string) []list.Rank {
 	ranks := list.DefaultFilter(term, targets)
@@ -136,8 +136,9 @@ func compactPreview(s string, max int) string {
 		b.WriteRune(r)
 	}
 	out := strings.TrimSpace(b.String())
-	if len(out) > max {
-		return out[:max] + "..."
+	if utf8.RuneCountInString(out) > max {
+		runes := []rune(out)
+		return string(runes[:max]) + "..."
 	}
 	return out
 }

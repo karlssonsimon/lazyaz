@@ -396,14 +396,30 @@ func (m Model) lockedMessageTargets() map[string]struct{} {
 	return map[string]struct{}{item.message.MessageID: {}}
 }
 
-// clearLockedMessages abandons and closes any active locked messages.
+// clearLockedMessages abandons and closes any active locked messages
+// asynchronously to avoid blocking the UI thread.
 func (m *Model) clearLockedMessages() {
 	if m.lockedMessages != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		m.lockedMessages.Close(ctx)
+		locked := m.lockedMessages
 		m.lockedMessages = nil
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			locked.Close(ctx)
+		}()
 	}
+}
+
+// abandonLockedIfHeld returns a tea.Cmd that abandons and closes any
+// held locked messages. Use this when navigating away from the messages
+// pane so the UI doesn't block on network calls.
+func (m *Model) abandonLockedIfHeld() tea.Cmd {
+	if m.lockedMessages == nil {
+		return nil
+	}
+	locked := m.lockedMessages
+	m.lockedMessages = nil
+	return abandonDLQCmd(locked)
 }
 
 // doPeek fires a peek command for the current scope. When append is

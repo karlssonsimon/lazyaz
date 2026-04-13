@@ -160,9 +160,19 @@ func sortAndFilterEntities(entities []servicebus.Entity, field entitySortField, 
 				cmp = 1
 			}
 		case entitySortActive:
-			cmp = int(a.ActiveMsgCount - b.ActiveMsgCount)
+			switch {
+			case a.ActiveMsgCount < b.ActiveMsgCount:
+				cmp = -1
+			case a.ActiveMsgCount > b.ActiveMsgCount:
+				cmp = 1
+			}
 		case entitySortDLQ:
-			cmp = int(a.DeadLetterCount - b.DeadLetterCount)
+			switch {
+			case a.DeadLetterCount < b.DeadLetterCount:
+				cmp = -1
+			case a.DeadLetterCount > b.DeadLetterCount:
+				cmp = 1
+			}
 		}
 		if desc {
 			cmp = -cmp

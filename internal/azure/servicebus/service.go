@@ -141,6 +141,11 @@ func (s *Service) getConnStrClient(ctx context.Context, ns Namespace) (*azservic
 	}
 
 	s.mu.Lock()
+	// Re-check under lock: another goroutine may have raced us.
+	if existing, ok := s.connStrClients[ns.FQDN]; ok {
+		s.mu.Unlock()
+		return existing, nil
+	}
 	s.connStrClients[ns.FQDN] = c
 	s.mu.Unlock()
 
@@ -890,7 +895,7 @@ func requeueMessages(ctx context.Context, receiver *azservicebus.Receiver, sende
 
 		msg := messages[0]
 		if _, ok := target[msg.MessageID]; ok {
-			if err := sender.SendMessage(ctx, &azservicebus.Message{Body: msg.Body}, nil); err != nil {
+			if err := sender.SendMessage(ctx, toSendableMessage(msg), nil); err != nil {
 				_ = receiver.AbandonMessage(ctx, msg, nil)
 				return requeued, fmt.Errorf("send message %s: %w", msg.MessageID, err)
 			}
