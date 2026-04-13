@@ -66,9 +66,9 @@ func (i blobItem) Title() string {
 
 func formatDate(t time.Time) string {
 	if t.IsZero() {
-		return "    -     "
+		return "       -        "
 	}
-	return t.Local().Format("2006-01-02")
+	return t.Local().Format("2006-01-02 15:04")
 }
 
 func (i blobItem) Description() string {
