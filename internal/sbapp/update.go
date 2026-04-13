@@ -370,6 +370,9 @@ func (m Model) handleDLQComplete(msg dlqCompleteMsg) (Model, tea.Cmd) {
 	}
 	m.clearScopeMarks()
 	m.refreshMessageSelectionDisplay()
+	if len(msg.completed) > 0 && m.hasNamespace {
+		return m, refreshEntitiesCmd(m.service, m.currentNS)
+	}
 	return m, nil
 }
 
@@ -389,6 +392,9 @@ func (m Model) handleDLQRequeue(msg dlqRequeueMsg) (Model, tea.Cmd) {
 	}
 	m.clearScopeMarks()
 	m.refreshMessageSelectionDisplay()
+	if len(msg.requeued) > 0 && m.hasNamespace {
+		return m, refreshEntitiesCmd(m.service, m.currentNS)
+	}
 	return m, nil
 }
 
@@ -495,6 +501,9 @@ func (m Model) handleMoveMarkedDone(msg moveMarkedDoneMsg) (Model, tea.Cmd) {
 	}
 	m.clearScopeMarks()
 	m.refreshMessageSelectionDisplay()
+	if len(msg.moved) > 0 && m.hasNamespace {
+		return m, refreshEntitiesCmd(m.service, m.currentNS)
+	}
 	return m, nil
 }
 
