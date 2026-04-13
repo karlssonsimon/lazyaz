@@ -1,0 +1,32 @@
+---
+title: Authentication
+description: How lazyaz authenticates with Azure and what permissions are needed.
+---
+
+## Credential chain
+
+lazyaz authenticates using Azure's [`DefaultAzureCredential`](https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication)
+chain, which picks up credentials from the Azure CLI, environment variables,
+managed identity, and other standard sources — in that order.
+
+If you can run `az account show` and see your subscription, you're good to go.
+
+## How access works
+
+Resource discovery (listing subscriptions, storage accounts, namespaces, vaults) uses
+ARM APIs. Data-plane access uses shared key fallback — similar to how Azure Storage
+Explorer works. lazyaz tries Azure AD first and falls back to shared keys automatically.
+
+## Permissions
+
+A `Contributor` role on the relevant resource groups generally covers Blob Storage
+and Service Bus. Key Vault access policies are managed separately.
+
+In detail:
+
+| Service | What it needs | Why |
+|---|---|---|
+| Browsing (all) | `Reader` | List subscriptions, accounts, namespaces, vaults via ARM |
+| Blob Storage | `Contributor` or `Storage Account Key Operator` | Calls `ListKeys` for shared key data-plane access |
+| Service Bus | `Contributor` | Calls `ListKeys` on namespace authorization rules |
+| Key Vault | Key Vault access policy or `Key Vault Secrets User` | Reading secret values requires separate vault-level permissions |

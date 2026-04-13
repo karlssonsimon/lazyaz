@@ -1,0 +1,62 @@
+---
+title: Configuration
+description: Config file, themes, and custom keybindings.
+---
+
+lazyaz stores its configuration in `~/.config/lazyaz/` (or `$XDG_CONFIG_HOME/lazyaz/` if set).
+
+## Config file
+
+The main config file is `config.yaml`:
+
+```yaml
+# Color scheme — pick from the themes/ directory
+theme: "Default Dark"
+
+# Where to save downloaded blobs (defaults to ~/Downloads)
+download_dir: "~/Downloads"
+
+# Keymap name — matches a file in keymaps/ (default: "default")
+keymap: "default"
+
+# Pre-configured tabs for the tabbed app
+tabs:
+  - kind: "blob"
+    subscription: "<subscription-id>"
+  - kind: "servicebus"
+    subscription: "<subscription-id>"
+  - kind: "keyvault"
+    subscription: "<subscription-id>"
+```
+
+When `tabs` are configured, lazyaz opens directly into those tabs on launch instead of
+showing the subscription picker.
+
+## Themes
+
+Theme files live in `~/.config/lazyaz/themes/` as Base16 YAML schemes. Stock themes
+(Tokyo Night, Rosé Pine, Bamboo, and more) are written to this directory on first run.
+You can edit them or add your own — any `.yaml` file in the themes directory is picked up.
+
+Switch themes at runtime with `T`.
+
+## Keybindings
+
+Keybinding files live in `~/.config/lazyaz/keymaps/` as JSON files. The `default.json`
+keymap uses vim-style navigation and is written on first run.
+
+To customize, edit the file or create a new one and set `keymap` in `config.yaml`.
+Each key in the JSON maps an action name to an array of key strings:
+
+```json
+{
+  "name": "custom",
+  "bindings": {
+    "quit": ["ctrl+c"],
+    "next_focus": ["tab"],
+    "open_focused": ["enter", "l"]
+  }
+}
+```
+
+Only the bindings you specify are overridden — everything else keeps its default.

@@ -19,8 +19,9 @@ export default defineConfig({
 				},
 			],
 			sidebar: [
-				{ label: 'Introduction', slug: 'index' },
+				{ label: 'Introduction', link: '/' },
 				{ label: 'Getting Started', slug: 'getting-started' },
+				{ label: 'Navigation', slug: 'navigation' },
 				{
 					label: 'Resources',
 					items: [
@@ -32,6 +33,14 @@ export default defineConfig({
 						{ label: 'Key Vault', slug: 'resources/key-vault' },
 					],
 				},
+				{
+					label: 'Configuration',
+					items: [
+						{ label: 'Overview', slug: 'configuration/overview' },
+						{ label: 'Keymaps', slug: 'configuration/keymaps' },
+					],
+				},
+				{ label: 'Authentication', slug: 'authentication' },
 			],
 		}),
 	],

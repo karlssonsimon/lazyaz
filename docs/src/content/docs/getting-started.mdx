@@ -1,24 +1,13 @@
 ---
 title: Getting Started
-description: Install lazyaz, connect to Azure, and start browsing resources.
+description: Install lazyaz and start browsing Azure resources in under a minute.
 ---
 
-import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-## Prerequisites
-
-- **Go 1.22+** — required to install from source
-- **Azure CLI** — installed and logged in (`az login`)
-- **RBAC permissions** on the resources you want to browse (e.g. `Storage Blob Data Reader`,
-  `Azure Service Bus Data Receiver`, `Key Vault Secrets User`)
-
-lazyaz authenticates using Azure's [`DefaultAzureCredential`](https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication)
-chain, which means it picks up credentials from the Azure CLI, environment variables,
-managed identity, and other standard sources — in that order. If you can run `az account show`
-and see your subscription, you're good to go.
-
-For Blob Storage specifically, lazyaz tries Azure AD first, then falls back to Shared Key
-(via ARM `ListKeys`) if your account allows it — similar to how Azure Storage Explorer works.
+Browse Azure Blob Storage, Service Bus, and Key Vault from your terminal.
+Navigate storage accounts, peek dead-letter queues, yank secrets — all without
+leaving the keyboard. Runs anywhere `az login` works.
 
 ## Installation
 
@@ -37,135 +26,18 @@ go build -o lazyaz ./cmd/lazyaz
 </TabItem>
 </Tabs>
 
-## First launch
+## Prerequisites
 
-<Steps>
+Make sure you're logged in to Azure:
 
-1. Make sure you're logged in to Azure:
-   ```bash
-   az login
-   ```
-
-2. Run lazyaz:
-   ```bash
-   lazyaz
-   ```
-
-3. The app opens with a subscription picker. Select a subscription and press `Enter`
-   to start browsing its resources.
-
-</Steps>
-
-## Configuration
-
-lazyaz stores its configuration in `~/.config/lazyaz/` (or `$XDG_CONFIG_HOME/lazyaz/` if set).
-
-The main config file is `config.yaml`:
-
-```yaml
-# Color scheme — pick from the themes/ directory
-theme: "Default Dark"
-
-# Where to save downloaded blobs (defaults to ~/Downloads)
-download_dir: "~/Downloads"
-
-# Keymap name — matches a file in keymaps/ (default: "default")
-keymap: "default"
-
-# Pre-configured tabs for the tabbed app
-tabs:
-  - kind: "blob"
-    subscription: "<subscription-id>"
-  - kind: "servicebus"
-    subscription: "<subscription-id>"
-  - kind: "keyvault"
-    subscription: "<subscription-id>"
+```bash
+az login
 ```
 
-When `tabs` are configured, lazyaz opens directly into those tabs on launch instead of
-showing the subscription picker.
+## Launch
 
-### Themes
-
-Theme files live in `~/.config/lazyaz/themes/` as Base16 YAML schemes. Stock themes are
-shipped with the binary and written to this directory on first run. You can edit them or
-add your own — any `.yaml` file in the themes directory is picked up.
-
-Switch themes at runtime with `T`.
-
-### Keybindings
-
-Keybinding files live in `~/.config/lazyaz/keymaps/` as JSON files. The `default.json` keymap
-is written on first run. To customize, edit the file or create a new one and set `keymap` in
-`config.yaml`.
-
-Each key in the JSON maps an action name to an array of key strings:
-
-```json
-{
-  "name": "custom",
-  "bindings": {
-    "quit": ["ctrl+c"],
-    "next_focus": ["tab"],
-    "open_focused": ["enter", "l"]
-  }
-}
+```bash
+lazyaz
 ```
 
-Only the bindings you specify are overridden — everything else keeps its default.
-
-## Navigation basics
-
-lazyaz uses a **pane-based** layout. Each service has 3–4 vertical panes that you move
-between with `Tab` / `Shift+Tab`:
-
-| Key | Action |
-|---|---|
-| `Tab` / `Shift+Tab` | Move focus between panes |
-| `Enter` / `l` / `→` | Open selected item / drill in |
-| `h` / `←` | Go back / move focus left |
-| `Backspace` | Go to parent folder (blobs) |
-| `/` | Filter the focused pane (fuzzy or prefix search) |
-| `Ctrl+D` / `Ctrl+U` | Half-page scroll down / up |
-| `S` | Switch subscription |
-| `?` or `F1` | Toggle help overlay |
-| `q` | Quit |
-
-### Tabs (tabbed app only)
-
-| Key | Action |
-|---|---|
-| `Ctrl+T` | New tab |
-| `Ctrl+W` | Close tab |
-| `L` / `Ctrl+→` | Next tab |
-| `H` / `Ctrl+←` | Previous tab |
-| `Alt+1`–`Alt+9` | Jump to tab by number |
-| `Ctrl+P` | Command palette |
-
-## Your first 5 minutes
-
-Here's a quick walkthrough to get oriented:
-
-<Steps>
-
-1. **Launch and pick a subscription.** Run `lazyaz` and select your subscription with
-   the arrow keys + `Enter`.
-
-2. **Browse blob storage.** You start in the Blob Storage view. Select a storage account,
-   then a container, and you'll see blobs listed with virtual folder navigation. Press
-   `Enter` on a blob to preview it inline.
-
-3. **Download a blob.** Press `Space` to mark one or more blobs, then `D` to download
-   them to your downloads directory.
-
-4. **Switch to Service Bus.** Open a new tab with `Ctrl+T`, select "Service Bus" from the
-   command palette (`Ctrl+P`), and pick a subscription. Browse namespaces, queues, and
-   topics. Press `]` to switch to the dead-letter queue view.
-
-5. **Check Key Vault.** Open another tab with `Ctrl+T`, select "Key Vault", and browse
-   your vaults and secrets. Press `y` on a secret to yank its value to the clipboard.
-
-6. **Get help.** Press `?` at any time to see the full keybinding reference for the
-   current view.
-
-</Steps>
+Pick a subscription and you're in. Press `?` for help, `a` for actions.

@@ -3,6 +3,124 @@ title: Blob Storage
 description: Browse containers, preview blobs, and download files.
 ---
 
-:::note
-TODO: detailed Blob Storage documentation — coming soon.
-:::
+import { Steps } from '@astrojs/starlight/components';
+
+The Blob Storage view lets you browse storage accounts, containers, and blobs
+with virtual folder navigation. You can preview files inline, multi-select
+blobs, and download them in bulk.
+
+## Pane layout
+
+The view uses a miller-columns layout with up to four panes:
+
+**Storage Accounts** → **Containers** → **Blobs** → **Preview**
+
+Focus moves between panes with `Tab` / `Shift+Tab`. Press `Enter` or `l` to
+drill into the selected item, and `h` or `Left` to go back.
+
+When browsing inside a virtual folder, the left column shows the parent folder
+contents so you can see where you came from. Press `Backspace` to go up one level.
+
+## Loading modes
+
+Blobs load in **hierarchy mode** by default — the view shows one level of
+virtual folders and files at a time, similar to a file manager. This is fast
+even on containers with millions of blobs.
+
+Press `A` to switch to **load-all mode**, which fetches every blob in the
+container as a flat list. This enables local fuzzy filtering but can be slow
+on large containers.
+
+## Filtering and search
+
+| Key | Mode | How it works |
+|---|---|---|
+| `/` | Hierarchy | Server-side prefix search — type a prefix, press `Enter` |
+| `/` | Load-all | Local fuzzy filter on the full blob list |
+| `Esc` | Either | Clear active filter |
+
+In hierarchy mode, filtering calls the Azure API with your prefix, so it
+works on containers of any size. In load-all mode, filtering is instant
+because the full list is already in memory.
+
+## Preview
+
+Press `Enter` on a blob to open the preview pane. The preview uses range
+reads — it doesn't download the entire file, so it's safe to open large blobs.
+
+Syntax highlighting is applied automatically for JSON, XML, and CSV based on
+the blob's content type or file extension.
+
+| Key | Action |
+|---|---|
+| `j` / `k` | Scroll line by line |
+| `Ctrl+D` / `Ctrl+U` | Half-page scroll |
+| `G` | Jump to bottom |
+| `gg` | Jump to top |
+| `h` / `Esc` | Close preview |
+
+You can select text in the preview with the mouse — the selection is copied
+to your clipboard on release.
+
+## Selecting and downloading
+
+Mark individual blobs with `Space`, or use visual-line mode for ranges:
+
+<Steps>
+
+1. Press `v` to enter visual-line mode on the blobs pane.
+2. Move the cursor to extend the selection. Press `o` to extend from the other end.
+3. Press `v` again to commit the selection, or `Esc` to cancel.
+4. Press `D` to download all marked blobs.
+
+</Steps>
+
+Downloads are saved to `<download_dir>/<account>/<container>/...`, preserving
+the blob path structure. Configure `download_dir` in `config.yaml` (defaults
+to `~/Downloads`).
+
+## Sorting
+
+Press `s` on the blobs pane to open the sort picker:
+
+- Default (Azure order)
+- Name (ascending / descending)
+- Size (ascending / descending)
+- Date (ascending / descending)
+
+The active sort is shown in the pane title.
+
+## Clipboard
+
+| Key | Action |
+|---|---|
+| `y` | Yank blob content to clipboard (blobs under 5 MB) |
+
+You can also yank blob names and content through the action menu (`a`).
+
+## Inspect panel
+
+Press `K` to toggle an inline detail strip below the focused pane. It shows
+metadata for the selected item — storage account properties, container details,
+or blob size/type/tier/modified time — and updates live as you move the cursor.
+
+## Keybindings
+
+| Key | Action |
+|---|---|
+| `Tab` / `Shift+Tab` | Cycle pane focus |
+| `Enter` / `l` | Open / drill in |
+| `h` / `Left` | Go back |
+| `Backspace` | Up one folder |
+| `/` | Filter / prefix search |
+| `Ctrl+D` / `Ctrl+U` | Half-page scroll |
+| `a` | Action menu |
+| `A` | Toggle load-all mode |
+| `s` | Sort blobs |
+| `Space` | Toggle mark |
+| `v` | Visual-line selection |
+| `D` | Download marked blobs |
+| `y` | Yank blob content |
+| `K` | Toggle inspect panel |
+| `S` | Switch subscription |
+| `r` | Refresh current scope |

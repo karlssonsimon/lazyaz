@@ -3,6 +3,60 @@ title: Key Vault
 description: Browse vaults, inspect secrets and versions, and copy values to clipboard.
 ---
 
-:::note
-TODO: detailed Key Vault documentation — coming soon.
-:::
+The Key Vault view lets you browse vaults, list secrets and their version
+history, and yank secret values to your clipboard.
+
+## Pane layout
+
+**Vaults** → **Secrets** → **Versions**
+
+Focus moves between panes with `Tab` / `Shift+Tab`. Press `Enter` or `l` to
+drill in, and `h` or `Left` to go back.
+
+## Browsing secrets
+
+Select a vault to load its secrets. Each secret shows its name in the list.
+Press `Enter` on a secret to see its version history — versions are listed
+with their creation date and status (enabled / disabled).
+
+## Yanking secret values
+
+Press `y` on a secret or version to fetch its value and copy it to your
+clipboard. The value is never displayed on screen — it goes straight to the
+clipboard and a confirmation toast appears.
+
+For bulk export, mark multiple secrets with `Space` or visual-line mode (`v`),
+then open the action menu (`a`) and select "Yank marked as JSON". This fetches
+all marked secret values and copies them as a JSON object to your clipboard.
+
+## Selecting secrets
+
+Mark individual secrets with `Space`, or use visual-line mode for ranges:
+
+1. Press `v` to enter visual-line mode on the secrets pane.
+2. Move the cursor to extend the selection.
+3. Press `v` again to commit, or `Esc` to cancel.
+
+Marked secrets can be bulk-yanked through the action menu.
+
+## Inspect panel
+
+Press `K` to toggle the inspect strip, which shows details for the selected
+vault, secret, or version — including metadata and properties.
+
+## Keybindings
+
+| Key | Action |
+|---|---|
+| `Tab` / `Shift+Tab` | Cycle pane focus |
+| `Enter` / `l` | Open / drill in |
+| `h` / `Left` | Go back |
+| `/` | Filter focused pane |
+| `Ctrl+D` / `Ctrl+U` | Half-page scroll |
+| `a` | Action menu |
+| `y` | Yank secret value to clipboard |
+| `Space` | Toggle mark |
+| `v` | Visual-line selection |
+| `K` | Toggle inspect panel |
+| `S` | Switch subscription |
+| `r` | Refresh current scope |

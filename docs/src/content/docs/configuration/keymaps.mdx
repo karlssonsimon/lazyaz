@@ -1,0 +1,347 @@
+---
+title: Keymaps
+description: Full reference for the default (vim) and standard keymaps.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+lazyaz ships with two keymaps. Set `keymap` in your `config.yaml` to switch:
+
+```yaml
+keymap: "default"   # vim-style (default)
+keymap: "standard"  # conventional keys
+```
+
+## General
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+| Action | Keys |
+|---|---|
+| Quit | `q` / `Ctrl+C` |
+| Cancel | `Esc` / `Ctrl+C` |
+| Next pane | `Tab` |
+| Previous pane | `Shift+Tab` |
+| Open / drill in | `Enter` / `l` / `Right` |
+| Go back | `h` / `Left` |
+| Parent folder | `Backspace` |
+| Half-page down | `Ctrl+D` / `PgDown` |
+| Half-page up | `Ctrl+U` / `PgUp` |
+| Filter | `/` |
+| Refresh | `r` |
+| Reload subscriptions | `d` |
+| Switch subscription | `S` |
+| Action menu | `a` |
+| Inspect panel | `K` |
+| Theme picker | `T` |
+| Help | `?` / `F1` |
+| Notifications | `N` |
+| Stream manager | `F` |
+</TabItem>
+<TabItem label="Standard">
+| Action | Keys |
+|---|---|
+| Quit | `Ctrl+Q` / `Ctrl+C` |
+| Cancel | `Esc` |
+| Next pane | `Tab` |
+| Previous pane | `Shift+Tab` |
+| Open / drill in | `Enter` / `Right` |
+| Go back | `Left` |
+| Parent folder | `Backspace` |
+| Half-page down | `PgDown` |
+| Half-page up | `PgUp` |
+| Filter | `Ctrl+F` |
+| Refresh | `F5` |
+| Reload subscriptions | `Ctrl+R` |
+| Switch subscription | `Ctrl+S` |
+| Action menu | `a` |
+| Inspect panel | `Ctrl+I` |
+| Theme picker | `Ctrl+T` |
+| Help | `F1` |
+| Notifications | `Ctrl+N` |
+| Stream manager | `Ctrl+G` |
+</TabItem>
+</Tabs>
+
+## Tabs
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+| Action | Keys |
+|---|---|
+| New tab | `Ctrl+T` |
+| Close tab | `Ctrl+W` |
+| Next tab | `L` / `Ctrl+Right` |
+| Previous tab | `H` / `Ctrl+Left` |
+| Jump to tab | `Alt+1`–`Alt+9` |
+| Command palette | `Ctrl+P` |
+</TabItem>
+<TabItem label="Standard">
+| Action | Keys |
+|---|---|
+| New tab | `Ctrl+N` |
+| Close tab | `Ctrl+W` |
+| Next tab | `Ctrl+PgDown` |
+| Previous tab | `Ctrl+PgUp` |
+| Jump to tab | `Alt+1`–`Alt+9` |
+| Command palette | `Ctrl+P` |
+</TabItem>
+</Tabs>
+
+## Blob Storage
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+| Action | Keys |
+|---|---|
+| Toggle load-all | `A` |
+| Sort blobs | `s` |
+| Toggle mark | `Space` |
+| Visual-line mode | `v` / `V` |
+| Exit visual mode | `Esc` |
+| Swap visual anchor | `o` |
+| Download selection | `D` |
+| Yank blob content | `y` |
+</TabItem>
+<TabItem label="Standard">
+| Action | Keys |
+|---|---|
+| Toggle load-all | `Ctrl+A` |
+| Sort blobs | `Ctrl+O` |
+| Toggle mark | `Space` |
+| Visual-line mode | `Shift+Down` / `Shift+Up` |
+| Exit visual mode | `Esc` |
+| Swap visual anchor | `o` |
+| Download selection | `Ctrl+D` |
+| Yank blob content | `Ctrl+C` |
+</TabItem>
+</Tabs>
+
+## Blob preview
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+| Action | Keys |
+|---|---|
+| Close preview | `h` / `Left` / `Esc` |
+| Scroll down | `j` / `Down` |
+| Scroll up | `k` / `Up` |
+| Go to bottom | `G` / `End` |
+| Go to top | `gg` / `Home` |
+| Next focus | `Tab` |
+| Previous focus | `Shift+Tab` |
+</TabItem>
+<TabItem label="Standard">
+| Action | Keys |
+|---|---|
+| Close preview | `Left` / `Esc` |
+| Scroll down | `Down` |
+| Scroll up | `Up` |
+| Go to bottom | `End` |
+| Go to top | `Home` |
+| Next focus | `Tab` |
+| Previous focus | `Shift+Tab` |
+</TabItem>
+</Tabs>
+
+## Service Bus
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+| Action | Keys |
+|---|---|
+| Active queue | `[` |
+| Dead-letter queue | `]` |
+| Requeue all DLQ | `R` |
+| Delete duplicates | `D` |
+| DLQ entity filter | `f` |
+| Close message | `h` / `Left` / `Backspace` / `Esc` |
+</TabItem>
+<TabItem label="Standard">
+| Action | Keys |
+|---|---|
+| Active queue | `[` |
+| Dead-letter queue | `]` |
+| Requeue all DLQ | `Ctrl+R` |
+| Delete duplicates | `Delete` |
+| DLQ entity filter | `Ctrl+L` |
+| Close message | `Left` / `Backspace` / `Esc` |
+</TabItem>
+</Tabs>
+
+## Key Vault
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+| Action | Keys |
+|---|---|
+| Yank secret value | `y` |
+</TabItem>
+<TabItem label="Standard">
+| Action | Keys |
+|---|---|
+| Yank secret value | `Ctrl+C` |
+</TabItem>
+</Tabs>
+
+## Overlay navigation
+
+These keys apply to all overlays (subscription picker, theme picker, sort, etc.)
+and are the same in both keymaps:
+
+| Action | Keys |
+|---|---|
+| Move up | `Up` / `Ctrl+K` (vim) or `Up` (standard) |
+| Move down | `Down` / `Ctrl+J` (vim) or `Down` (standard) |
+| Apply | `Enter` |
+| Cancel | `Esc` / `Ctrl+C` |
+| Delete character | `Backspace` |
+
+## Full JSON reference
+
+The complete keymap files shipped with lazyaz. Copy one as a starting point for your own.
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+```json
+// ~/.config/lazyaz/keymaps/default.json
+{
+  "name": "Default (Vim)",
+  "bindings": {
+    "quit": ["ctrl+c", "q"],
+    "cancel": ["esc", "ctrl+c"],
+    "half_page_down": ["ctrl+d", "pgdown"],
+    "half_page_up": ["ctrl+u", "pgup"],
+    "next_focus": ["tab"],
+    "previous_focus": ["shift+tab"],
+    "reload_subscriptions": ["d"],
+    "refresh_scope": ["r"],
+    "filter_input": ["/"],
+    "open_focused": ["enter"],
+    "open_focused_alt": ["l", "right"],
+    "navigate_left": ["h", "left"],
+    "backspace_up": ["backspace"],
+    "subscription_picker": ["S"],
+    "toggle_theme_picker": ["T"],
+    "toggle_help": ["?", "f1"],
+    "toggle_notifications": ["N"],
+    "toggle_streams": ["F"],
+    "theme_up": ["up", "ctrl+k"],
+    "theme_down": ["down", "ctrl+j"],
+    "theme_apply": ["enter"],
+    "theme_cancel": ["esc", "ctrl+c"],
+    "new_tab": ["ctrl+t"],
+    "close_tab": ["ctrl+w"],
+    "next_tab": ["L", "ctrl+right"],
+    "prev_tab": ["H", "ctrl+left"],
+    "command_palette": ["ctrl+p"],
+    "jump_1": ["alt+1"],
+    "jump_2": ["alt+2"],
+    "jump_3": ["alt+3"],
+    "jump_4": ["alt+4"],
+    "jump_5": ["alt+5"],
+    "jump_6": ["alt+6"],
+    "jump_7": ["alt+7"],
+    "jump_8": ["alt+8"],
+    "jump_9": ["alt+9"],
+    "action_menu": ["a"],
+    "toggle_load_all": ["A"],
+    "toggle_mark": ["space", " "],
+    "toggle_visual_line": ["v", "V"],
+    "exit_visual_line": ["esc"],
+    "visual_swap_anchor": ["o"],
+    "download_selection": ["D"],
+    "sort_blobs": ["s"],
+    "blob_visual_move": ["up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G"],
+    "yank_blob_content": ["y"],
+    "preview_back": ["h", "left", "esc"],
+    "preview_next_focus": ["tab"],
+    "preview_previous_focus": ["shift+tab"],
+    "preview_down": ["j", "down"],
+    "preview_up": ["k", "up"],
+    "preview_bottom": ["G", "end"],
+    "preview_top_prefix": ["g", "home"],
+    "show_active_queue": ["["],
+    "show_dead_letter_queue": ["]"],
+    "requeue_dlq": ["R"],
+    "delete_duplicate": ["D"],
+    "toggle_dlq_filter": ["f"],
+    "message_back": ["h", "left", "backspace", "esc"],
+    "yank_secret": ["y"],
+    "inspect": ["K"]
+  }
+}
+```
+</TabItem>
+<TabItem label="Standard">
+```json
+// ~/.config/lazyaz/keymaps/standard.json
+{
+  "name": "Standard",
+  "bindings": {
+    "quit": ["ctrl+c", "ctrl+q"],
+    "cancel": ["esc"],
+    "half_page_down": ["pgdown"],
+    "half_page_up": ["pgup"],
+    "next_focus": ["tab"],
+    "previous_focus": ["shift+tab"],
+    "reload_subscriptions": ["ctrl+r"],
+    "refresh_scope": ["f5"],
+    "filter_input": ["ctrl+f"],
+    "open_focused": ["enter"],
+    "open_focused_alt": ["right"],
+    "navigate_left": ["left"],
+    "backspace_up": ["backspace"],
+    "subscription_picker": ["ctrl+s"],
+    "toggle_theme_picker": ["ctrl+t"],
+    "toggle_help": ["f1"],
+    "toggle_notifications": ["ctrl+n"],
+    "toggle_streams": ["ctrl+g"],
+    "theme_up": ["up"],
+    "theme_down": ["down"],
+    "theme_apply": ["enter"],
+    "theme_cancel": ["esc"],
+    "new_tab": ["ctrl+n"],
+    "close_tab": ["ctrl+w"],
+    "next_tab": ["ctrl+pgdown"],
+    "prev_tab": ["ctrl+pgup"],
+    "command_palette": ["ctrl+p"],
+    "jump_1": ["alt+1"],
+    "jump_2": ["alt+2"],
+    "jump_3": ["alt+3"],
+    "jump_4": ["alt+4"],
+    "jump_5": ["alt+5"],
+    "jump_6": ["alt+6"],
+    "jump_7": ["alt+7"],
+    "jump_8": ["alt+8"],
+    "jump_9": ["alt+9"],
+    "action_menu": ["a"],
+    "toggle_load_all": ["ctrl+a"],
+    "toggle_mark": ["space", " "],
+    "toggle_visual_line": ["shift+down", "shift+up"],
+    "exit_visual_line": ["esc"],
+    "visual_swap_anchor": ["o"],
+    "download_selection": ["ctrl+d"],
+    "sort_blobs": ["ctrl+o"],
+    "blob_visual_move": ["up", "down", "pgup", "pgdown", "home", "end"],
+    "yank_blob_content": ["ctrl+c"],
+    "preview_back": ["left", "esc"],
+    "preview_next_focus": ["tab"],
+    "preview_previous_focus": ["shift+tab"],
+    "preview_down": ["down"],
+    "preview_up": ["up"],
+    "preview_bottom": ["end"],
+    "preview_top_prefix": ["home"],
+    "show_active_queue": ["["],
+    "show_dead_letter_queue": ["]"],
+    "requeue_dlq": ["ctrl+r"],
+    "delete_duplicate": ["delete"],
+    "toggle_dlq_filter": ["ctrl+l"],
+    "message_back": ["left", "backspace", "esc"],
+    "yank_secret": ["ctrl+c"],
+    "inspect": ["ctrl+i"]
+  }
+}
+```
+</TabItem>
+</Tabs>

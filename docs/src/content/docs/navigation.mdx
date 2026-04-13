@@ -1,0 +1,86 @@
+---
+title: Navigation
+description: Panes, keybindings, tabs, mouse, and the action menu.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Pane layout
+
+lazyaz uses a **miller-columns** layout — parent, focused, and child panes
+arranged left to right. As you drill into resources, the focused pane shifts
+right and the previous pane becomes the parent column on the left.
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+| Key | Action |
+|---|---|
+| `Tab` / `Shift+Tab` | Cycle pane focus |
+| `Enter` / `l` / `Right` | Open / drill in |
+| `h` / `Left` | Go back |
+| `Backspace` | Parent folder (blobs) |
+| `/` | Filter focused pane |
+| `Ctrl+D` / `Ctrl+U` | Half-page scroll |
+| `a` | Action menu |
+| `K` | Inspect panel |
+| `S` | Switch subscription |
+| `?` / `F1` | Help |
+| `q` / `Ctrl+C` | Quit |
+</TabItem>
+<TabItem label="Standard">
+| Key | Action |
+|---|---|
+| `Tab` / `Shift+Tab` | Cycle pane focus |
+| `Enter` / `Right` | Open / drill in |
+| `Left` | Go back |
+| `Backspace` | Parent folder (blobs) |
+| `Ctrl+F` | Filter focused pane |
+| `PgDown` / `PgUp` | Half-page scroll |
+| `a` | Action menu |
+| `Ctrl+I` | Inspect panel |
+| `Ctrl+S` | Switch subscription |
+| `F1` | Help |
+| `Ctrl+Q` / `Ctrl+C` | Quit |
+</TabItem>
+</Tabs>
+
+## Tabs
+
+Run Blob Storage, Service Bus, and Key Vault side by side. Each tab has its
+own subscription context.
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+| Key | Action |
+|---|---|
+| `Ctrl+T` | New tab |
+| `Ctrl+W` | Close tab |
+| `L` / `Ctrl+Right` | Next tab |
+| `H` / `Ctrl+Left` | Previous tab |
+| `Alt+1`–`Alt+9` | Jump to tab |
+| `Ctrl+P` | Command palette |
+</TabItem>
+<TabItem label="Standard">
+| Key | Action |
+|---|---|
+| `Ctrl+N` | New tab |
+| `Ctrl+W` | Close tab |
+| `Ctrl+PgDown` | Next tab |
+| `Ctrl+PgUp` | Previous tab |
+| `Alt+1`–`Alt+9` | Jump to tab |
+| `Ctrl+P` | Command palette |
+</TabItem>
+</Tabs>
+
+## Action menu
+
+Press `a` to open a context-aware action menu for the current pane. The menu
+shows only actions relevant to your current selection — download, yank, sort,
+requeue, and more depending on the resource type. Type to filter, `Enter` to
+execute.
+
+## Command palette
+
+Press `Ctrl+P` to open the command palette. It lists all available commands —
+open tabs, switch themes, view notifications, and more. Type to filter,
+`Enter` to execute.
