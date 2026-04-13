@@ -3,6 +3,7 @@ package sbapp
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 
@@ -42,6 +43,22 @@ func (i entityItem) Description() string {
 
 func (i entityItem) FilterValue() string {
 	return i.entity.Name
+}
+
+// entityListFilter wraps list.DefaultFilter and adjusts matched character
+// indices so the underline lands on the correct characters in the title.
+// Entity titles start with "▶ " or "☰ " (2 runes) that is not part of
+// FilterValue — shift every index by 2.
+func entityListFilter(term string, targets []string) []list.Rank {
+	ranks := list.DefaultFilter(term, targets)
+	for i, r := range ranks {
+		target := targets[r.Index]
+		for j, byteIdx := range r.MatchedIndexes {
+			runeIdx := utf8.RuneCountInString(target[:byteIdx])
+			ranks[i].MatchedIndexes[j] = runeIdx + 2
+		}
+	}
+	return ranks
 }
 
 type subscriptionItem struct {
