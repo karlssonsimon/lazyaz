@@ -27,7 +27,16 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, m.currentNS, entityCacheKey, m.entities))
 	}
 
+	if m.focus == queueTypePane {
+		m.startLoading(m.focus, fmt.Sprintf("Loading entities in %s", m.currentNS.Name))
+		return m, tea.Batch(m.Spinner.Tick, refreshEntitiesCmd(m.service, m.currentNS))
+	}
+
 	if m.focus == messagesPane || m.focus == messagePreviewPane {
+		if m.lockedMessages != nil {
+			// Locked DLQ messages can't be re-peeked; refresh entity counts instead.
+			return m, refreshEntitiesCmd(m.service, m.currentNS)
+		}
 		return m.rePeekMessages(true)
 	}
 
