@@ -245,6 +245,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 
 	namespaces := newList(delegate, "namespace", "namespaces")
 	entities := newList(delegate, "entity", "entities")
+	entities.Filter = entityListFilter
 	subs := newList(delegate, "subscription", "subscriptions")
 	queueType := newList(delegate, "queue", "queues")
 	queueType.SetFilteringEnabled(false)
