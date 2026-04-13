@@ -4,47 +4,97 @@ import (
 	"fmt"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 )
 
-func (m *Model) setFocus(pane int) {
-	m.focus = pane
-	m.resize()
+// snapshotCurrentPane saves the focused pane's cursor and filter into
+// the appropriate history map so they survive navigation.
+func (m *Model) snapshotCurrentPane() {
+	switch m.focus {
+	case accountsPane:
+		if m.HasSubscription {
+			m.accountsHistory[m.CurrentSub.ID] = ui.SnapshotListState(&m.accountsList, accountItemKey)
+		}
+	case containersPane:
+		if m.hasAccount {
+			m.containersHistory[cache.Key(m.CurrentSub.ID, m.currentAccount.Name)] = ui.SnapshotListState(&m.containersList, containerItemKey)
+		}
+	case blobsPane:
+		if m.hasContainer {
+			m.blobsHistory[blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, m.blobLoadAll)] = ui.SnapshotListState(&m.blobsList, blobItemKey)
+		}
+	}
 }
 
-func (m *Model) nextFocus() {
+// restoreCurrentPane re-applies saved cursor and filter for the focused
+// pane from the history map, ensuring filters survive transitions.
+func (m *Model) restoreCurrentPane() {
+	switch m.focus {
+	case accountsPane:
+		if m.HasSubscription {
+			ui.RestoreListState(&m.accountsList, m.accountsHistory[m.CurrentSub.ID], accountItemKey)
+		}
+	case containersPane:
+		if m.hasAccount {
+			ui.RestoreListState(&m.containersList, m.containersHistory[cache.Key(m.CurrentSub.ID, m.currentAccount.Name)], containerItemKey)
+		}
+	case blobsPane:
+		if m.hasContainer {
+			ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, m.blobLoadAll)], blobItemKey)
+		}
+	}
+}
+
+// exitPane cleans up the outgoing pane before a transition.
+// Snapshots the pane's state, blurs filter inputs, and exits visual
+// mode if active. When clearFilter is true, the blobFilter prefix
+// search is also cleared (used for prefix scope changes).
+func (m *Model) exitPane(clearFilter bool) {
+	m.snapshotCurrentPane()
+	m.blurAllFilters()
 	if m.focus == blobsPane && m.visualLineMode {
 		m.visualLineMode = false
 		m.visualAnchor = ""
 		m.refreshItems()
 	}
-	m.blurAllFilters()
+	if clearFilter && m.focus == blobsPane {
+		m.clearFilter()
+	}
+}
+
+// transitionTo performs exitPane cleanup on the current pane, then sets
+// focus to the target pane and restores its saved state. This is the
+// single codepath for all focus changes, guaranteeing that filters and
+// cursor positions survive navigation.
+func (m *Model) transitionTo(pane int, clearFilter bool) {
+	m.exitPane(clearFilter)
+	m.focus = pane
+	m.resize()
+	m.restoreCurrentPane()
+}
+
+func (m *Model) nextFocus() {
 	count := 3
 	if m.preview.open {
 		count = 4
 	}
-	m.focus = (m.focus + 1) % count
-	m.resize()
+	next := (m.focus + 1) % count
+	m.transitionTo(next, false)
 }
 
 func (m *Model) previousFocus() {
-	if m.focus == blobsPane && m.visualLineMode {
-		m.visualLineMode = false
-		m.visualAnchor = ""
-		m.refreshItems()
-	}
-	m.blurAllFilters()
-	m.focus--
-	if m.focus < 0 {
-		m.focus = 2
+	prev := m.focus - 1
+	if prev < 0 {
+		prev = 2
 		if m.preview.open {
-			m.focus = 3
+			prev = 3
 		}
 	}
-	m.resize()
+	m.transitionTo(prev, false)
 }
 
 func (m *Model) blurAllFilters() {

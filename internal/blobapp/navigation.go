@@ -33,7 +33,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.clearBlobSelectionState()
 	m.resetBlobLoadState()
 	m.resetPreviewState()
-	m.setFocus(accountsPane)
+	m.transitionTo(accountsPane, false)
 
 	if cached, ok := m.cache.accounts.Get(sub.ID); ok {
 		m.accounts = cached
@@ -62,46 +62,47 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case previewPane:
-		m.setFocus(blobsPane)
+		m.transitionTo(blobsPane, false)
 		return m, nil
 	case blobsPane:
 		if m.hasContainer && !m.blobLoadAll && m.prefix != "" {
-			// Snapshot current prefix's blobs list before going up.
-			oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
-			m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
-
-			m.clearFilter()
-			m.prefix = parentPrefix(m.prefix)
-
-			blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
-			if cached, ok := m.cache.blobs.Get(blobsScope); ok {
-				m.blobs = cached
-				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
-				m.refreshItems()
-			}
-			ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
-
-			// Update parent blobs list for the new parent prefix.
-			m.rebuildParentBlobsList()
-
-			m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
-			return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
+			return m.prefixUp()
 		}
-		if m.visualLineMode {
-			m.visualLineMode = false
-			m.visualAnchor = ""
-			m.refreshItems()
-		}
-		m.setFocus(containersPane)
+		m.transitionTo(containersPane, false)
 		return m, nil
 	case containersPane:
-		m.setFocus(accountsPane)
+		m.transitionTo(accountsPane, false)
 		return m, nil
 	case accountsPane:
 		return m, nil
 	default:
 		return m, nil
 	}
+}
+
+// prefixUp navigates up one prefix level within the blobsPane.
+// Precondition: m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != ""
+func (m Model) prefixUp() (Model, tea.Cmd) {
+	// Snapshot current prefix's blobs list before going up.
+	oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
+	m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
+
+	m.transitionTo(blobsPane, true) // exitPane clears filter + visual mode
+	m.prefix = parentPrefix(m.prefix)
+
+	blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
+	if cached, ok := m.cache.blobs.Get(blobsScope); ok {
+		m.blobs = cached
+		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
+		m.refreshItems()
+	}
+	ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
+
+	// Update parent blobs list for the new parent prefix.
+	m.rebuildParentBlobsList()
+
+	m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
+	return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
@@ -113,7 +114,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		// Re-selecting the same account: just move focus.
 		if m.hasAccount && sameAccount(m.currentAccount, item.account) {
-			m.setFocus(containersPane)
+			m.transitionTo(containersPane, false)
 			return m, nil
 		}
 
@@ -131,7 +132,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearBlobSelectionState()
 		m.resetBlobLoadState()
 		m.resetPreviewState()
-		m.setFocus(containersPane)
+		m.transitionTo(containersPane, false)
 
 		containersScope := cache.Key(m.CurrentSub.ID, item.account.Name)
 		if cached, ok := m.cache.containers.Get(containersScope); ok {
@@ -162,7 +163,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		// Re-selecting the same container: just move focus.
 		if m.hasContainer && m.containerName == item.container.Name {
-			m.setFocus(blobsPane)
+			m.transitionTo(blobsPane, false)
 			return m, nil
 		}
 
@@ -179,7 +180,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearBlobSelectionState()
 		m.resetBlobLoadState()
 		m.resetPreviewState()
-		m.setFocus(blobsPane)
+		m.transitionTo(blobsPane, false)
 
 		blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, item.container.Name, "", false)
 		if cached, ok := m.cache.blobs.Get(blobsScope); ok {
@@ -216,7 +217,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			// so the left column shows where we came from.
 			m.updateParentBlobsList()
 
-			m.clearFilter()
+			m.transitionTo(blobsPane, true) // exitPane clears filter + visual mode
 			m.prefix = item.blob.Name
 
 			blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)

@@ -50,10 +50,15 @@ func (m *Model) resetBlobLoadState() {
 func (m *Model) refreshItems() {
 	entries := m.displayBlobs()
 	w := ui.PaneContentWidth(m.Styles.Chrome.Pane, m.paneWidths[blobsPane])
-	// Reset any active bubbles list filter before replacing items so the
-	// tea.Cmd returned by SetItems (async re-filter) isn't silently dropped.
+	// Preserve any active bubbles list filter across the item replacement.
+	// ResetFilter before SetItems avoids the async re-filter tea.Cmd being
+	// silently dropped; SetFilterText re-runs the filter synchronously.
+	prevFilter := m.blobsList.FilterValue()
 	m.blobsList.ResetFilter()
 	m.blobsList.SetItems(blobsToItems(entries, m.prefix, w))
+	if prevFilter != "" {
+		m.blobsList.SetFilterText(prevFilter)
+	}
 	ui.ClampListSelection(&m.blobsList)
 	m.refreshBlobSelectionDisplay()
 }

@@ -1,29 +1,85 @@
 package kvapp
 
 import (
+	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/list"
 )
 
-func (m *Model) setFocus(pane int) {
+// snapshotCurrentPane saves the focused pane's cursor and filter into
+// the appropriate history map so they survive navigation.
+func (m *Model) snapshotCurrentPane() {
+	switch m.focus {
+	case vaultsPane:
+		if m.HasSubscription {
+			m.vaultsHistory[m.CurrentSub.ID] = ui.SnapshotListState(&m.vaultsList, vaultItemKey)
+		}
+	case secretsPane:
+		if m.hasVault {
+			m.secretsHistory[cache.Key(m.CurrentSub.ID, m.currentVault.Name)] = ui.SnapshotListState(&m.secretsList, secretItemKey)
+		}
+	case versionsPane:
+		if m.hasSecret {
+			m.versionsHistory[cache.Key(m.CurrentSub.ID, m.currentVault.Name, m.currentSecret.Name)] = ui.SnapshotListState(&m.versionsList, versionItemKey)
+		}
+	}
+}
+
+// restoreCurrentPane re-applies saved cursor and filter for the focused
+// pane from the history map, ensuring filters survive transitions.
+func (m *Model) restoreCurrentPane() {
+	switch m.focus {
+	case vaultsPane:
+		if m.HasSubscription {
+			ui.RestoreListState(&m.vaultsList, m.vaultsHistory[m.CurrentSub.ID], vaultItemKey)
+		}
+	case secretsPane:
+		if m.hasVault {
+			ui.RestoreListState(&m.secretsList, m.secretsHistory[cache.Key(m.CurrentSub.ID, m.currentVault.Name)], secretItemKey)
+		}
+	case versionsPane:
+		if m.hasSecret {
+			ui.RestoreListState(&m.versionsList, m.versionsHistory[cache.Key(m.CurrentSub.ID, m.currentVault.Name, m.currentSecret.Name)], versionItemKey)
+		}
+	}
+}
+
+// exitPane cleans up the outgoing pane before a transition.
+// Snapshots the pane's state, blurs filter inputs, and exits visual
+// mode if active.
+func (m *Model) exitPane() {
+	m.snapshotCurrentPane()
+	m.blurAllFilters()
+	if m.focus == secretsPane && m.visualLineMode {
+		m.visualLineMode = false
+		m.visualAnchor = ""
+		m.refreshSecretItems()
+	}
+}
+
+// transitionTo performs exitPane cleanup on the current pane, then sets
+// focus to the target pane and restores its saved state. This is the
+// single codepath for all focus changes, guaranteeing that filters and
+// cursor positions survive navigation.
+func (m *Model) transitionTo(pane int) {
+	m.exitPane()
 	m.focus = pane
 	m.resize()
+	m.restoreCurrentPane()
 }
 
 func (m *Model) nextFocus() {
-	m.blurAllFilters()
-	m.focus = (m.focus + 1) % 3
-	m.resize()
+	next := (m.focus + 1) % 3
+	m.transitionTo(next)
 }
 
 func (m *Model) previousFocus() {
-	m.blurAllFilters()
-	m.focus--
-	if m.focus < 0 {
-		m.focus = 2
+	prev := m.focus - 1
+	if prev < 0 {
+		prev = 2
 	}
-	m.resize()
+	m.transitionTo(prev)
 }
 
 func (m *Model) blurAllFilters() {
