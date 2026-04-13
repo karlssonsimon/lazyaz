@@ -1,0 +1,272 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/blobapp"
+	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/kvapp"
+	"github.com/karlssonsimon/lazyaz/internal/sbapp"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
+
+	tea "charm.land/bubbletea/v2"
+)
+
+// tenantPickerState manages the overlay for choosing a tenant before
+// running az login --tenant <id>.
+type tenantPickerState struct {
+	active   bool
+	loading  bool
+	tenants  []azure.Tenant
+	cursor   int
+	query    string
+	filtered []int
+}
+
+func (s *tenantPickerState) open() {
+	s.active = true
+	s.loading = true
+	s.tenants = nil
+	s.cursor = 0
+	s.query = ""
+	s.filtered = nil
+}
+
+func (s *tenantPickerState) close() {
+	s.active = false
+	s.loading = false
+}
+
+func (s *tenantPickerState) refilter() {
+	s.filtered = fuzzy.Filter(s.query, s.tenants, func(t azure.Tenant) string {
+		return t.DisplayName + " " + t.Domain + " " + t.ID
+	})
+	if s.cursor >= len(s.filtered) {
+		s.cursor = max(0, len(s.filtered)-1)
+	}
+}
+
+func (s *tenantPickerState) visibleItems() []ui.OverlayItem {
+	items := make([]ui.OverlayItem, len(s.filtered))
+	for ci, ti := range s.filtered {
+		t := s.tenants[ti]
+		label := t.DisplayName
+		if label == "" {
+			label = t.ID
+		}
+		items[ci] = ui.OverlayItem{
+			Label: " " + label,
+			Desc:  "  " + t.Domain,
+		}
+	}
+	return items
+}
+
+func (s *tenantPickerState) selected() (azure.Tenant, bool) {
+	if len(s.filtered) == 0 || s.cursor >= len(s.filtered) {
+		return azure.Tenant{}, false
+	}
+	return s.tenants[s.filtered[s.cursor]], true
+}
+
+func (s *tenantPickerState) handleKey(key string, bindings ui.ThemeKeyBindings) (azure.Tenant, bool) {
+	if len(s.tenants) == 0 && !s.loading {
+		s.close()
+		return azure.Tenant{}, false
+	}
+
+	count := len(s.filtered)
+
+	switch {
+	case bindings.Up.Matches(key):
+		if s.cursor > 0 {
+			s.cursor--
+		}
+	case bindings.Down.Matches(key):
+		if s.cursor < count-1 {
+			s.cursor++
+		}
+	case bindings.Apply.Matches(key):
+		if t, ok := s.selected(); ok {
+			return t, true
+		}
+	case bindings.Cancel.Matches(key):
+		if s.query != "" {
+			s.query = ""
+			s.refilter()
+		} else {
+			s.close()
+		}
+	case bindings.Erase != nil && bindings.Erase.Matches(key):
+		if len(s.query) > 0 {
+			s.query = s.query[:len(s.query)-1]
+			s.refilter()
+		}
+	default:
+		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
+			s.query += key
+			s.refilter()
+		}
+	}
+	return azure.Tenant{}, false
+}
+
+// -- Messages --
+
+// tenantsLoadedMsg is sent when tenant listing completes.
+type tenantsLoadedMsg struct {
+	tenants []azure.Tenant
+	err     error
+}
+
+// azLoginFinishedMsg is sent when the az login process exits.
+type azLoginFinishedMsg struct {
+	err error
+}
+
+// tenantCredentialMsg carries a freshly created credential scoped to
+// the chosen tenant. Produced by switchTenantCmd.
+type tenantCredentialMsg struct {
+	cred azcore.TokenCredential
+	err  error
+}
+
+// -- Commands --
+
+func listTenantsCmd(cred azcore.TokenCredential) tea.Cmd {
+	return func() tea.Msg {
+		tenants, err := azure.ListTenants(context.Background(), cred)
+		return tenantsLoadedMsg{tenants: tenants, err: err}
+	}
+}
+
+// switchTenantCmd creates a new credential scoped to the given tenant.
+// No browser sign-in needed — it reuses the existing az login session.
+func switchTenantCmd(tenantID string) tea.Cmd {
+	return func() tea.Msg {
+		cred, err := azure.NewCredentialForTenant(tenantID)
+		return tenantCredentialMsg{cred: cred, err: err}
+	}
+}
+
+func azLoginCmd() tea.Cmd {
+	c := exec.Command("az", "login")
+	// Disable the interactive subscription selector introduced in az CLI v2 —
+	// the app has its own picker. This overrides the core.login_experience_v2
+	// config setting via the env var that knack's CLIConfig reads.
+	c.Env = append(os.Environ(), "AZURE_CORE_LOGIN_EXPERIENCE_V2=false")
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return azLoginFinishedMsg{err: err}
+	})
+}
+
+// openAzLoginMsg triggers the az login / tenant picker flow.
+type openAzLoginMsg struct{}
+
+// -- Model methods --
+
+// handleOpenAzLogin opens the tenant picker and starts fetching tenants.
+func (m *Model) handleOpenAzLogin() (Model, tea.Cmd) {
+	m.tenantPicker.open()
+	return *m, listTenantsCmd(m.blobSvc.Credential())
+}
+
+// handleTenantsLoaded processes the tenant list result.
+func (m *Model) handleTenantsLoaded(msg tenantsLoadedMsg) (Model, tea.Cmd) {
+	m.tenantPicker.loading = false
+	if msg.err != nil {
+		// Can't list tenants — not logged in. Run az login directly.
+		m.tenantPicker.close()
+		m.notifier.Push(appshell.LevelInfo, "Opening az login...")
+		return *m, azLoginCmd()
+	}
+	m.tenantPicker.tenants = msg.tenants
+	m.tenantPicker.refilter()
+	return *m, nil
+}
+
+// handleTenantSelected creates a credential for the chosen tenant.
+// No browser needed — reuses the existing az login session.
+func (m *Model) handleTenantSelected(tenant azure.Tenant) (Model, tea.Cmd) {
+	m.tenantPicker.close()
+	m.notifier.Push(appshell.LevelInfo, fmt.Sprintf("Switching to %s...", tenant.DisplayName))
+	return *m, switchTenantCmd(tenant.ID)
+}
+
+// handleTenantCredential swaps the tenant-scoped credential into all
+// services, resets caches, and opens the subscription picker.
+func (m *Model) handleTenantCredential(msg tenantCredentialMsg) (Model, tea.Cmd) {
+	if msg.err != nil {
+		m.notifier.Push(appshell.LevelError, fmt.Sprintf("Failed to switch tenant: %s", msg.err))
+		return *m, nil
+	}
+	return m.applyNewCredential(msg.cred, "Switched tenant")
+}
+
+// handleAzLoginFinished re-initializes credentials after az login exits.
+func (m *Model) handleAzLoginFinished(msg azLoginFinishedMsg) (Model, tea.Cmd) {
+	if msg.err != nil {
+		m.notifier.Push(appshell.LevelError, fmt.Sprintf("az login failed: %s", msg.err))
+		return *m, nil
+	}
+	cred, err := azure.NewDefaultCredential()
+	if err != nil {
+		m.notifier.Push(appshell.LevelError, fmt.Sprintf("Failed to create credential: %s", err))
+		return *m, nil
+	}
+	return m.applyNewCredential(cred, "Logged in successfully")
+}
+
+// applyNewCredential swaps a credential into all services, resets caches,
+// and reinitializes tabs so they open the subscription picker with fresh data.
+func (m *Model) applyNewCredential(cred azcore.TokenCredential, successMsg string) (Model, tea.Cmd) {
+	m.blobSvc.SetCredential(cred)
+	m.sbSvc.SetCredential(cred)
+	m.kvSvc.SetCredential(cred)
+
+	// Reset all caches — tenant-scoped data is now stale.
+	m.brokers.resetAll()
+
+	// Reset all tabs: clear subscription, open the subscription picker,
+	// and re-init so they fetch fresh subscription data.
+	var cmds []tea.Cmd
+	for i := range m.tabs {
+		switch child := m.tabs[i].Model.(type) {
+		case blobapp.Model:
+			child.HasSubscription = false
+			child.CurrentSub = azure.Subscription{}
+			child.Subscriptions = nil
+			child.SubOverlay.Open()
+			m.tabs[i].Model = child
+		case sbapp.Model:
+			child.HasSubscription = false
+			child.CurrentSub = azure.Subscription{}
+			child.Subscriptions = nil
+			child.SubOverlay.Open()
+			m.tabs[i].Model = child
+		case kvapp.Model:
+			child.HasSubscription = false
+			child.CurrentSub = azure.Subscription{}
+			child.Subscriptions = nil
+			child.SubOverlay.Open()
+			m.tabs[i].Model = child
+		}
+		if c := m.tabs[i].Model.Init(); c != nil {
+			cmds = append(cmds, wrapCmd(m.tabs[i].ID, c))
+		}
+	}
+
+	cmds = append(cmds, m.forwardToActive(tea.WindowSizeMsg{
+		Width:  m.width,
+		Height: m.childHeight(),
+	}))
+
+	m.notifier.Push(appshell.LevelSuccess, successMsg)
+	return *m, tea.Batch(cmds...)
+}

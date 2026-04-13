@@ -97,3 +97,8 @@ func (s *SQLiteStore[T]) Set(key string, items []T) {
 		[]byte(key), string(data), time.Now().Unix(),
 	)
 }
+
+// Clear removes all entries from the table.
+func (s *SQLiteStore[T]) Clear() {
+	s.db.db.Exec(fmt.Sprintf(`DELETE FROM %q`, s.table))
+}

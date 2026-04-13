@@ -71,6 +71,23 @@ func NewService(cred azcore.TokenCredential) *Service {
 	}
 }
 
+// Credential returns the current credential for use by the tenant listing flow.
+func (s *Service) Credential() azcore.TokenCredential {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cred
+}
+
+// SetCredential swaps the credential and clears all cached clients so
+// they are re-created with the new identity on next use.
+func (s *Service) SetCredential(cred azcore.TokenCredential) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cred = cred
+	s.aadClients = make(map[string]*service.Client)
+	s.sharedKeyClients = make(map[string]*service.Client)
+}
+
 func (s *Service) ListSubscriptions(ctx context.Context, send func([]azure.Subscription)) error {
 	return azure.ListSubscriptions(ctx, s.cred, send)
 }
