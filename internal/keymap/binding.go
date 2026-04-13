@@ -29,13 +29,18 @@ func (b Binding) Label() string {
 	if len(b.Keys) == 0 {
 		return ""
 	}
+	seen := make(map[string]bool, len(b.Keys))
 	labels := make([]string, 0, len(b.Keys))
 	for _, key := range b.Keys {
+		display := key
 		if key == " " {
-			labels = append(labels, "space")
+			display = "space"
+		}
+		if seen[display] {
 			continue
 		}
-		labels = append(labels, key)
+		seen[display] = true
+		labels = append(labels, display)
 	}
 	return strings.Join(labels, "/")
 }

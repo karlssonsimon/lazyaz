@@ -26,12 +26,21 @@ const (
 	actionDownloadCurrent
 	actionYankBlobName
 	actionYankBlobContent
+	actionToggleMark
+	actionToggleVisualLine
+	actionDownloadSelection
+	actionInspect
+	actionRefresh
+	actionSubscriptionPicker
+	actionThemePicker
+	actionHelp
 )
 
 // action describes one entry in the action menu.
 type action struct {
 	id    actionID
 	label string
+	hint  string // keybinding shown right-aligned in menu
 }
 
 // actionMenuState manages the action menu overlay.
@@ -136,41 +145,63 @@ func (s *actionMenuState) handleKey(key string, km keymap.Keymap) (selected bool
 // buildActions returns the context-aware list of actions for the
 // current model state. Called when the action menu is opened.
 func (m Model) buildActions() []action {
+	km := m.Keymap
 	var actions []action
 
-	if m.hasContainer {
+	if m.hasContainer && m.focus == blobsPane {
 		// Load mode toggle.
 		if m.blobLoadAll {
-			actions = append(actions, action{id: actionHierarchy, label: "Browse by folder"})
+			actions = append(actions, action{actionHierarchy, "Browse by folder", km.ToggleLoadAll.Short()})
 		} else {
-			actions = append(actions, action{id: actionLoadAll, label: "Load all blobs"})
+			actions = append(actions, action{actionLoadAll, "Load all blobs", km.ToggleLoadAll.Short()})
 		}
 
 		// Server-side prefix search (only in hierarchy mode).
 		if !m.blobLoadAll {
-			actions = append(actions, action{id: actionPrefixSearch, label: "Server prefix search"})
+			actions = append(actions, action{actionPrefixSearch, "Server prefix search", ""})
 		}
 
 		// Sort.
-		actions = append(actions, action{id: actionSort, label: "Sort blobs"})
+		actions = append(actions, action{actionSort, "Sort blobs", km.SortBlobs.Short()})
+
+		// Selection.
+		actions = append(actions, action{actionToggleMark, "Toggle mark", km.ToggleMark.Short()})
+		actions = append(actions, action{actionToggleVisualLine, "Toggle visual line selection", km.ToggleVisualLine.Short()})
 
 		// Marked-blob actions.
+		if len(m.markedBlobs) > 0 || m.visualLineMode {
+			actions = append(actions, action{actionDownloadSelection, "Download marked/visual selection", km.DownloadSelection.Short()})
+		}
 		if len(m.markedBlobs) > 0 {
 			actions = append(actions, action{
-				id:    actionDownloadMarked,
-				label: fmt.Sprintf("Download marked (%d)", len(m.markedBlobs)),
+				actionDownloadMarked,
+				fmt.Sprintf("Download marked (%d)", len(m.markedBlobs)),
+				"",
 			})
-			actions = append(actions, action{id: actionClearMarks, label: "Clear all marks"})
+			actions = append(actions, action{actionClearMarks, "Clear all marks", ""})
 		}
 
 		// Current-blob actions.
 		if item, ok := m.blobsList.SelectedItem().(blobItem); ok && !item.blob.IsPrefix {
-			actions = append(actions, action{id: actionDownloadCurrent, label: "Download current blob"})
-			actions = append(actions, action{id: actionYankBlobName, label: "Yank blob name to clipboard"})
+			actions = append(actions, action{actionDownloadCurrent, "Download current blob", ""})
+			actions = append(actions, action{actionYankBlobName, "Yank blob name to clipboard", ""})
 			if item.blob.Size > 0 && item.blob.Size < 5*1024*1024 {
-				actions = append(actions, action{id: actionYankBlobContent, label: "Yank blob content to clipboard"})
+				actions = append(actions, action{actionYankBlobContent, "Yank blob content to clipboard", km.YankBlobContent.Short()})
 			}
 		}
+	}
+
+	// App-wide actions — available from any pane.
+	actions = append(actions,
+		action{actionRefresh, "Refresh current scope", km.RefreshScope.Short()},
+		action{actionInspect, "Toggle inspect", km.Inspect.Short()},
+		action{actionSubscriptionPicker, "Change subscription", km.SubscriptionPicker.Short()},
+	)
+	if !m.EmbeddedMode {
+		actions = append(actions,
+			action{actionThemePicker, "Open theme picker", km.ToggleThemePicker.Short()},
+			action{actionHelp, "Toggle help", km.ToggleHelp.Short()},
+		)
 	}
 
 	return actions
@@ -226,6 +257,47 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		}
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Downloading %s...", item.blob.Name))
 		return m, downloadBlobToClipboardCmd(m.service, m.currentAccount, m.containerName, item.blob.Name, item.blob.Size)
+
+	case actionToggleMark:
+		m.toggleCurrentBlobMark()
+		return m, nil
+
+	case actionToggleVisualLine:
+		m.toggleVisualLineMode()
+		return m, nil
+
+	case actionDownloadSelection:
+		return m.startMarkedAction("download")
+
+	case actionRefresh:
+		return m.refresh()
+
+	case actionInspect:
+		if m.focus != previewPane {
+			m.toggleInspect()
+		}
+		return m, nil
+
+	case actionSubscriptionPicker:
+		m.SubOverlay.Open()
+		m.startLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
+
+	case actionThemePicker:
+		if !m.EmbeddedMode && !m.ThemeOverlay.Active {
+			m.ThemeOverlay.Open()
+		}
+		return m, nil
+
+	case actionHelp:
+		if !m.EmbeddedMode {
+			if m.HelpOverlay.Active {
+				m.HelpOverlay.Close()
+			} else {
+				m.HelpOverlay.Open("Azure Blob Explorer Help", m.HelpSections())
+			}
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -245,6 +317,7 @@ func (m Model) renderActionMenu(base string) string {
 	for ci, si := range indices {
 		items[ci] = ui.OverlayItem{
 			Label: s.actions[si].label,
+			Hint:  s.actions[si].hint,
 		}
 	}
 	cfg := ui.OverlayListConfig{

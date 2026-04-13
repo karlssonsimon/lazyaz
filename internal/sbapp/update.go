@@ -620,15 +620,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	case m.Keymap.ActionMenu.Matches(key):
 		if !focusedFilterActive {
-			canOpen := (m.focus == messagesPane || m.focus == queueTypePane) && m.hasPeekTarget
-			canOpen = canOpen || (m.focus == entitiesPane && m.hasNamespace)
-			if canOpen {
-				actions := m.buildActions()
-				if len(actions) > 0 {
-					m.actionMenu.open(actions)
-				}
-				return m, nil
-			}
+			m.actionMenu.open(m.buildActions())
+			return m, nil
 		}
 	case m.Keymap.ToggleDLQFilter.Matches(key):
 		if !focusedFilterActive && m.focus == entitiesPane && m.hasNamespace {

@@ -50,7 +50,7 @@ func Default() Keymap {
 		// Blob.
 		ActionMenu:        New("a"),
 		ToggleLoadAll:     New("A"),
-		ToggleMark:        New(" "),
+		ToggleMark:        New("space", " "),
 		ToggleVisualLine:  New("v", "V"),
 		ExitVisualLine:    New("esc"),
 		VisualSwapAnchor:  New("o"),

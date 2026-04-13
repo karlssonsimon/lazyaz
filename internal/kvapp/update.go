@@ -371,7 +371,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 	case m.Keymap.ActionMenu.Matches(key):
-		if m.focus == secretsPane && !focusedFilterActive && m.hasVault {
+		if !focusedFilterActive {
 			m.actionMenu.open(m.buildActions())
 			return m, nil
 		}

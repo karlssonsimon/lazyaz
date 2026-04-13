@@ -24,11 +24,20 @@ const (
 	actionYankSecretValue
 	actionYankMarkedAsJSON
 	actionClearMarks
+	actionYankSecretVersion
+	actionToggleMark
+	actionToggleVisualLine
+	actionInspect
+	actionRefresh
+	actionSubscriptionPicker
+	actionThemePicker
+	actionHelp
 )
 
 type action struct {
 	id    actionID
 	label string
+	hint  string // keybinding shown right-aligned in menu
 }
 
 type actionMenuState struct {
@@ -130,21 +139,48 @@ func (s *actionMenuState) handleKey(key string, km keymap.Keymap) (selected bool
 }
 
 func (m Model) buildActions() []action {
+	km := m.Keymap
 	var actions []action
 
 	if m.focus == secretsPane && m.hasVault {
 		if item, ok := m.secretsList.SelectedItem().(secretItem); ok {
-			actions = append(actions, action{id: actionYankSecretName, label: "Yank secret name to clipboard"})
-			actions = append(actions, action{id: actionYankSecretValue, label: fmt.Sprintf("Yank secret value (%s)", item.secret.Name)})
+			actions = append(actions, action{actionYankSecretName, "Yank secret name to clipboard", ""})
+			actions = append(actions, action{actionYankSecretValue, fmt.Sprintf("Yank secret value (%s)", item.secret.Name), km.YankSecret.Short()})
 		}
+
+		// Selection.
+		actions = append(actions,
+			action{actionToggleMark, "Toggle mark", km.ToggleMark.Short()},
+			action{actionToggleVisualLine, "Toggle visual line selection", km.ToggleVisualLine.Short()},
+		)
 
 		if len(m.markedSecrets) > 0 {
 			actions = append(actions, action{
-				id:    actionYankMarkedAsJSON,
-				label: fmt.Sprintf("Yank marked as JSON (%d)", len(m.markedSecrets)),
+				actionYankMarkedAsJSON,
+				fmt.Sprintf("Yank marked as JSON (%d)", len(m.markedSecrets)),
+				"",
 			})
-			actions = append(actions, action{id: actionClearMarks, label: "Clear all marks"})
+			actions = append(actions, action{actionClearMarks, "Clear all marks", ""})
 		}
+	}
+
+	if m.focus == versionsPane && m.hasSecret {
+		if item, ok := m.versionsList.SelectedItem().(versionItem); ok {
+			actions = append(actions, action{actionYankSecretVersion, fmt.Sprintf("Yank version value (%s)", item.version.Version), km.YankSecret.Short()})
+		}
+	}
+
+	// App-wide actions — available from any pane.
+	actions = append(actions,
+		action{actionRefresh, "Refresh current scope", km.RefreshScope.Short()},
+		action{actionInspect, "Toggle inspect", km.Inspect.Short()},
+		action{actionSubscriptionPicker, "Change subscription", km.SubscriptionPicker.Short()},
+	)
+	if !m.EmbeddedMode {
+		actions = append(actions,
+			action{actionThemePicker, "Open theme picker", km.ToggleThemePicker.Short()},
+			action{actionHelp, "Toggle help", km.ToggleHelp.Short()},
+		)
 	}
 
 	return actions
@@ -188,6 +224,54 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		m.refreshSecretSelectionDisplay()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
 		return m, nil
+
+	case actionYankSecretVersion:
+		item, ok := m.versionsList.SelectedItem().(versionItem)
+		if !ok {
+			return m, nil
+		}
+		m.startLoading(m.focus, fmt.Sprintf("Fetching secret value for %s (version %s)...", m.currentSecret.Name, item.version.Version))
+		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))
+
+	case actionToggleMark:
+		if m.focus == secretsPane {
+			m.toggleCurrentSecretMark()
+		}
+		return m, nil
+
+	case actionToggleVisualLine:
+		if m.focus == secretsPane {
+			m.toggleVisualLineMode()
+		}
+		return m, nil
+
+	case actionRefresh:
+		return m.refresh()
+
+	case actionInspect:
+		m.toggleInspect()
+		return m, nil
+
+	case actionSubscriptionPicker:
+		m.SubOverlay.Open()
+		m.startLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
+
+	case actionThemePicker:
+		if !m.EmbeddedMode && !m.ThemeOverlay.Active {
+			m.ThemeOverlay.Open()
+		}
+		return m, nil
+
+	case actionHelp:
+		if !m.EmbeddedMode {
+			if m.HelpOverlay.Active {
+				m.HelpOverlay.Close()
+			} else {
+				m.HelpOverlay.Open("Key Vault Explorer Help", m.HelpSections())
+			}
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -206,6 +290,7 @@ func (m Model) renderActionMenu(base string) string {
 	for ci, si := range indices {
 		items[ci] = ui.OverlayItem{
 			Label: s.actions[si].label,
+			Hint:  s.actions[si].hint,
 		}
 	}
 	cfg := ui.OverlayListConfig{

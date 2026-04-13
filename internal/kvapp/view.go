@@ -59,6 +59,7 @@ func (m Model) View() tea.View {
 		Title: m.versionsPaneTitle(),
 		Hints: []ui.PaneHint{
 			{Key: km.YankSecret.Short(), Desc: "yank version"},
+			{Key: km.ActionMenu.Short(), Desc: "actions"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
 		},
 		Footer: m.inspectFooter(versionsPane, ui.PaneContentWidth(paneStyle, pw[2])),
