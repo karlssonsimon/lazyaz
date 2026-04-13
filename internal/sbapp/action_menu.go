@@ -28,11 +28,19 @@ const (
 	actionMoveCurrent
 	actionSortEntities
 	actionFilterDLQ
+	actionToggleMark
+	actionToggleVisualLine
+	actionInspect
+	actionRefresh
+	actionSubscriptionPicker
+	actionThemePicker
+	actionHelp
 )
 
 type action struct {
 	id    actionID
 	label string
+	hint  string // keybinding shown right-aligned in menu
 }
 
 type actionMenuState struct {
@@ -133,26 +141,17 @@ func (s *actionMenuState) handleKey(key string, km keymap.Keymap) (selected bool
 }
 
 func (m Model) buildActions() []action {
+	km := m.Keymap
 	var actions []action
 
 	// Entities pane — sort and filter.
 	if m.focus == entitiesPane && m.hasNamespace {
-		actions = append(actions, action{
-			id:    actionSortEntities,
-			label: "Sort entities",
-		})
+		actions = append(actions, action{actionSortEntities, "Sort entities", km.ToggleDLQFilter.Short()})
 		if m.entityDLQFilter {
-			actions = append(actions, action{
-				id:    actionFilterDLQ,
-				label: "Show all entities",
-			})
+			actions = append(actions, action{actionFilterDLQ, "Show all entities", ""})
 		} else {
-			actions = append(actions, action{
-				id:    actionFilterDLQ,
-				label: "Filter: only with dead letters",
-			})
+			actions = append(actions, action{actionFilterDLQ, "Filter: only with dead letters", ""})
 		}
-		return actions
 	}
 
 	// Queue type pane — offer bulk operations when a queue type is selected.
@@ -160,8 +159,9 @@ func (m Model) buildActions() []action {
 		if item, ok := m.queueTypeList.SelectedItem().(queueTypeItem); ok && item.count > 0 {
 			if item.deadLetter {
 				actions = append(actions, action{
-					id:    actionRequeueAllDLQ,
-					label: fmt.Sprintf("Requeue all DLQ messages (%d)", item.count),
+					actionRequeueAllDLQ,
+					fmt.Sprintf("Requeue all DLQ messages (%d)", item.count),
+					"",
 				})
 			}
 			label := "active"
@@ -169,72 +169,65 @@ func (m Model) buildActions() []action {
 				label = "DLQ"
 			}
 			actions = append(actions, action{
-				id:    actionMoveAll,
-				label: fmt.Sprintf("Move all %s messages to... (%d)", label, item.count),
+				actionMoveAll,
+				fmt.Sprintf("Move all %s messages to... (%d)", label, item.count),
+				"",
 			})
 		}
-		return actions
 	}
 
-	if m.focus != messagesPane || !m.hasPeekTarget {
-		return actions
-	}
+	// Messages pane — peek, DLQ, and selection actions.
+	if m.focus == messagesPane && m.hasPeekTarget {
+		label := "active"
+		if m.deadLetter {
+			label = "DLQ"
+		}
 
-	label := "active"
-	if m.deadLetter {
-		label = "DLQ"
-	}
+		// Peek actions (read-only, always available).
+		if len(m.peekedMessages) == 0 && m.lockedMessages == nil {
+			actions = append(actions, action{actionPeekMessages, fmt.Sprintf("Peek %s messages", label), ""})
+		} else if m.lockedMessages == nil {
+			actions = append(actions, action{actionPeekMore, fmt.Sprintf("Peek more %s messages", label), ""})
+			actions = append(actions, action{actionPeekMessages, fmt.Sprintf("Peek %s messages (fresh)", label), ""})
+			actions = append(actions, action{actionClearMessages, "Clear messages", ""})
+		}
 
-	// Peek actions (read-only, always available).
-	if len(m.peekedMessages) == 0 && m.lockedMessages == nil {
-		actions = append(actions, action{
-			id:    actionPeekMessages,
-			label: fmt.Sprintf("Peek %s messages", label),
-		})
-	} else if m.lockedMessages == nil {
-		actions = append(actions, action{
-			id:    actionPeekMore,
-			label: fmt.Sprintf("Peek more %s messages", label),
-		})
-		actions = append(actions, action{
-			id:    actionPeekMessages,
-			label: fmt.Sprintf("Peek %s messages (fresh)", label),
-		})
-		actions = append(actions, action{
-			id:    actionClearMessages,
-			label: "Clear messages",
-		})
-	}
-
-	// DLQ receive-with-lock actions.
-	if m.deadLetter {
-		if m.lockedMessages == nil {
-			actions = append(actions, action{
-				id:    actionReceiveDLQ,
-				label: "Receive DLQ messages (with lock)",
-			})
-		} else {
-			n := len(m.currentMarks())
-			if n == 0 {
-				n = 1 // current selection
+		// DLQ receive-with-lock actions.
+		if m.deadLetter {
+			if m.lockedMessages == nil {
+				actions = append(actions, action{actionReceiveDLQ, "Receive DLQ messages (with lock)", ""})
+			} else {
+				n := len(m.currentMarks())
+				if n == 0 {
+					n = 1
+				}
+				actions = append(actions,
+					action{actionRequeueCurrent, fmt.Sprintf("Requeue %d message(s) (send + complete)", n), ""},
+					action{actionMoveCurrent, fmt.Sprintf("Move %d message(s) to...", n), ""},
+					action{actionCompleteCurrent, fmt.Sprintf("Complete %d message(s) (remove from DLQ)", n), ""},
+					action{actionAbandonAll, "Abandon all (release locks)", ""},
+				)
 			}
-			actions = append(actions, action{
-				id:    actionRequeueCurrent,
-				label: fmt.Sprintf("Requeue %d message(s) (send + complete)", n),
-			})
-			actions = append(actions, action{
-				id:    actionMoveCurrent,
-				label: fmt.Sprintf("Move %d message(s) to...", n),
-			})
-			actions = append(actions, action{
-				id:    actionCompleteCurrent,
-				label: fmt.Sprintf("Complete %d message(s) (remove from DLQ)", n),
-			})
-			actions = append(actions, action{
-				id:    actionAbandonAll,
-				label: "Abandon all (release locks)",
-			})
 		}
+
+		// Selection.
+		actions = append(actions,
+			action{actionToggleMark, "Toggle mark", km.ToggleMark.Short()},
+			action{actionToggleVisualLine, "Toggle visual line selection", km.ToggleVisualLine.Short()},
+		)
+	}
+
+	// App-wide actions — available from any pane.
+	actions = append(actions,
+		action{actionRefresh, "Refresh current scope", km.RefreshScope.Short()},
+		action{actionInspect, "Toggle inspect", km.Inspect.Short()},
+		action{actionSubscriptionPicker, "Change subscription", km.SubscriptionPicker.Short()},
+	)
+	if !m.EmbeddedMode {
+		actions = append(actions,
+			action{actionThemePicker, "Open theme picker", km.ToggleThemePicker.Short()},
+			action{actionHelp, "Toggle help", km.ToggleHelp.Short()},
+		)
 	}
 
 	return actions
@@ -329,6 +322,59 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		m.entityDLQFilter = !m.entityDLQFilter
 		m.applyEntitySort()
 		return m, nil
+
+	case actionToggleMark:
+		if m.focus == messagesPane {
+			item, ok := m.messageList.SelectedItem().(messageItem)
+			if !ok || item.duplicate {
+				return m, nil
+			}
+			marks := m.ensureMarks()
+			id := item.message.MessageID
+			if _, marked := marks[id]; marked {
+				delete(marks, id)
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", id, len(marks)))
+			} else {
+				marks[id] = struct{}{}
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", id, len(marks)))
+			}
+			m.refreshMessageSelectionDisplay()
+		}
+		return m, nil
+
+	case actionToggleVisualLine:
+		if m.focus == messagesPane {
+			m.toggleVisualLineMode()
+		}
+		return m, nil
+
+	case actionRefresh:
+		return m.refresh()
+
+	case actionInspect:
+		m.toggleInspect()
+		return m, nil
+
+	case actionSubscriptionPicker:
+		m.SubOverlay.Open()
+		m.startLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
+
+	case actionThemePicker:
+		if !m.EmbeddedMode && !m.ThemeOverlay.Active {
+			m.ThemeOverlay.Open()
+		}
+		return m, nil
+
+	case actionHelp:
+		if !m.EmbeddedMode {
+			if m.HelpOverlay.Active {
+				m.HelpOverlay.Close()
+			} else {
+				m.HelpOverlay.Open("Service Bus Explorer Help", m.HelpSections())
+			}
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -392,6 +438,7 @@ func (m Model) renderActionMenu(base string) string {
 	for ci, si := range indices {
 		items[ci] = ui.OverlayItem{
 			Label: s.actions[si].label,
+			Hint:  s.actions[si].hint,
 		}
 	}
 	cfg := ui.OverlayListConfig{

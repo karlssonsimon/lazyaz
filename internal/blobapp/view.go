@@ -81,7 +81,7 @@ func (m Model) View() tea.View {
 			{Key: km.FilterInput.Short(), Desc: "filter"},
 			{Key: km.ActionMenu.Short(), Desc: "actions"},
 			{Key: km.ToggleMark.Short(), Desc: "mark"},
-			{Key: km.OpenFocusedAlt.Short(), Desc: "preview"},
+			{Key: km.DownloadSelection.Short(), Desc: "download"},
 		}
 	}
 

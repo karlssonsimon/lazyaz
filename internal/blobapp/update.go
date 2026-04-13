@@ -417,7 +417,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 	case m.Keymap.ActionMenu.Matches(key):
-		if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
+		if !focusedFilterActive {
 			m.actionMenu.open(m.buildActions())
 			return m, nil
 		}
