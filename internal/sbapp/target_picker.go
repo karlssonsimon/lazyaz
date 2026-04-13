@@ -265,14 +265,16 @@ func (m Model) executeMoveAction(moveAction actionID, result targetPickerResult)
 // handleTargetEntitiesLoaded populates the picker with entities from the selected namespace.
 func (m Model) handleTargetEntitiesLoaded(msg targetEntitiesLoadedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess,
-		fmt.Sprintf("Loaded %d entities from %s", len(msg.entities), msg.namespace.Name))
 
 	if msg.err != nil {
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError,
+			fmt.Sprintf("Failed to load entities from %s: %s", msg.namespace.Name, msg.err))
 		m.targetPicker.close()
-		m.Notify(appshell.LevelError, fmt.Sprintf("Failed to load entities: %s", msg.err))
 		return m, nil
 	}
+
+	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess,
+		fmt.Sprintf("Loaded %d entities from %s", len(msg.entities), msg.namespace.Name))
 
 	if !m.targetPicker.active {
 		return m, nil

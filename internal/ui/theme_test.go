@@ -107,20 +107,15 @@ func TestLoadConfig_ThemeName(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_CreatesConfigFileWhenMissing(t *testing.T) {
+func TestLoadConfig_DefaultsWhenConfigMissing(t *testing.T) {
 	dir := t.TempDir()
 
 	cfg := loadConfigFromDir(dir)
 	if cfg.ThemeName != "Default Dark" {
 		t.Fatalf("expected theme=Default Dark, got %s", cfg.ThemeName)
 	}
-
-	data, err := os.ReadFile(filepath.Join(dir, "config.yaml"))
-	if err != nil {
-		t.Fatalf("expected config.yaml to be created: %v", err)
-	}
-	if !strings.Contains(string(data), "Default") {
-		t.Fatalf("expected config.yaml to contain Default, got %s", string(data))
+	if len(cfg.Schemes) == 0 {
+		t.Fatal("expected schemes to be populated from stock themes")
 	}
 }
 
@@ -192,18 +187,6 @@ palette:
 	}
 }
 
-func TestMigrateOldConfig(t *testing.T) {
-	dir := t.TempDir()
-	data := []byte("theme: tokyonight\n")
-	if err := os.WriteFile(filepath.Join(dir, "azblob.yaml"), data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	migrated := migrateOldConfig(dir)
-	if migrated != "tokyonight" {
-		t.Fatalf("expected migrated theme=tokyonight, got %s", migrated)
-	}
-}
 
 type testKey string
 
