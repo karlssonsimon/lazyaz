@@ -501,18 +501,20 @@ func (m Model) handleMoveMarkedDone(msg moveMarkedDoneMsg) (Model, tea.Cmd) {
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
-	if result := m.HandleOverlayKeys(key); result.Handled {
-		if result.SelectSub != nil {
-			return m.selectSubscription(*result.SelectSub)
-		}
-		if result.ThemeSelected {
-			m.applyScheme(m.Schemes[m.ThemeOverlay.ActiveThemeIdx])
-			ui.SaveThemeName(m.Schemes[m.ThemeOverlay.ActiveThemeIdx].Name)
+	switch m.inputMode() {
+	case ModeOverlay:
+		if result := m.HandleOverlayKeys(key); result.Handled {
+			if result.SelectSub != nil {
+				return m.selectSubscription(*result.SelectSub)
+			}
+			if result.ThemeSelected {
+				m.applyScheme(m.Schemes[m.ThemeOverlay.ActiveThemeIdx])
+				ui.SaveThemeName(m.Schemes[m.ThemeOverlay.ActiveThemeIdx].Name)
+			}
 		}
 		return m, nil
-	}
 
-	if m.entitySortOverlay.active {
+	case ModeSortOverlay:
 		result := m.entitySortOverlay.handleKey(key, m.Keymap)
 		if result.applied {
 			m.entitySortField = result.field
@@ -520,28 +522,78 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.applyEntitySort()
 		}
 		return m, nil
-	}
 
-	if m.targetPicker.active {
+	case ModeTargetPicker:
 		return m.updateTargetPicker(msg)
-	}
 
-	if m.actionMenu.active {
+	case ModeActionMenu:
 		if selected, act := m.actionMenu.handleKey(key, m.Keymap); selected {
 			return m.executeAction(act)
 		}
 		return m, nil
-	}
 
-	if m.viewingMessage && m.focus == messagePreviewPane {
+	case ModeMessagePreview:
 		return m.handleViewingMessageKey(msg, key)
+
+	case ModeListFilter:
+		return m.handleListFilterKey(msg, key)
+
+	case ModeVisualLine:
+		return m.handleVisualLineKey(msg, key)
+
+	case ModeNormal:
+		return m.handleNormalKey(msg, key)
 	}
 
-	focusedFilterActive := m.focusedListSettingFilter()
-	markVisualAfterListUpdate := m.focus == messagesPane && m.visualLineMode && !focusedFilterActive && m.Keymap.BlobVisualMove.Matches(key)
+	return m, nil
+}
 
+func (m Model) handleListFilterKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 	switch {
-	case ui.ShouldQuit(key, m.Keymap.Quit, focusedFilterActive):
+	case ui.ShouldQuit(key, m.Keymap.Quit, true):
+		return m, tea.Quit
+	case m.Keymap.OpenFocused.Matches(key):
+		m.commitFocusedFilter()
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
+		return m, nil
+	}
+	return m.updateFocusedList(msg)
+}
+
+func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
+	switch {
+	case ui.ShouldQuit(key, m.Keymap.Quit, false):
+		return m, tea.Quit
+	case m.Keymap.HalfPageDown.Matches(key):
+		m.scrollFocusedHalfPage(1)
+		return m, nil
+	case m.Keymap.HalfPageUp.Matches(key):
+		m.scrollFocusedHalfPage(-1)
+		return m, nil
+	case m.Keymap.VisualSwapAnchor.Matches(key):
+		m.swapVisualAnchor()
+		m.refreshMessageSelectionDisplay()
+		return m, nil
+	case m.Keymap.ExitVisualLine.Matches(key):
+		m.commitVisualSelection()
+		m.visualLineMode = false
+		m.visualAnchor = ""
+		m.refreshMessageSelectionDisplay()
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.currentMarks())))
+		return m, nil
+	}
+
+	m2, cmd := m.updateFocusedList(msg)
+	if m.Keymap.BlobVisualMove.Matches(key) && m2.focus == messagesPane && m2.visualLineMode {
+		m2.refreshMessageSelectionDisplay()
+		m2.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m2.visualSelectionIDs())))
+	}
+	return m2, cmd
+}
+
+func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
+	switch {
+	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
 	case m.Keymap.HalfPageDown.Matches(key):
 		m.scrollFocusedHalfPage(1)
@@ -550,58 +602,26 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.scrollFocusedHalfPage(-1)
 		return m, nil
 	case m.Keymap.NextFocus.Matches(key):
-		if !focusedFilterActive {
-			m.nextFocus()
-			return m, nil
-		}
+		m.nextFocus()
+		return m, nil
 	case m.Keymap.PreviousFocus.Matches(key):
-		if !focusedFilterActive {
-			m.previousFocus()
-			return m, nil
-		}
+		m.previousFocus()
+		return m, nil
 	case m.Keymap.RefreshScope.Matches(key):
-		if !focusedFilterActive {
-			return m.refresh()
-		}
+		return m.refresh()
 	case m.Keymap.OpenFocused.Matches(key):
-		if focusedFilterActive {
-			m.commitFocusedFilter()
-			m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
-			return m, nil
-		}
 		return m.handleEnter()
 	case m.Keymap.OpenFocusedAlt.Matches(key):
-		if !focusedFilterActive {
-			return m.handleEnter()
-		}
+		return m.handleEnter()
 	case m.Keymap.NavigateLeft.Matches(key):
-		if !focusedFilterActive {
-			return m.navigateLeft()
-		}
+		return m.navigateLeft()
 	case m.Keymap.ToggleVisualLine.Matches(key):
-		if m.focus == messagesPane && !focusedFilterActive {
+		if m.focus == messagesPane {
 			m.toggleVisualLineMode()
 			return m, nil
 		}
-	case m.Keymap.VisualSwapAnchor.Matches(key):
-		if m.focus == messagesPane && m.visualLineMode && !focusedFilterActive {
-			m.swapVisualAnchor()
-			m.refreshMessageSelectionDisplay()
-			return m, nil
-		}
-	case m.Keymap.ExitVisualLine.Matches(key):
-		if m.focus == messagesPane && !focusedFilterActive {
-			if m.visualLineMode {
-				m.commitVisualSelection()
-				m.visualLineMode = false
-				m.visualAnchor = ""
-				m.refreshMessageSelectionDisplay()
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.currentMarks())))
-				return m, nil
-			}
-		}
 	case m.Keymap.ToggleMark.Matches(key):
-		if !focusedFilterActive && m.focus == messagesPane && m.hasPeekTarget {
+		if m.focus == messagesPane && m.hasPeekTarget {
 			item, ok := m.messageList.SelectedItem().(messageItem)
 			if !ok || item.duplicate {
 				return m, nil
@@ -619,12 +639,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 	case m.Keymap.ActionMenu.Matches(key):
-		if !focusedFilterActive {
-			m.actionMenu.open(m.buildActions())
-			return m, nil
-		}
+		m.actionMenu.open(m.buildActions())
+		return m, nil
 	case m.Keymap.ToggleDLQFilter.Matches(key):
-		if !focusedFilterActive && m.focus == entitiesPane && m.hasNamespace {
+		if m.focus == entitiesPane && m.hasNamespace {
 			actions := m.buildActions()
 			if len(actions) > 0 {
 				m.actionMenu.open(actions)
@@ -632,18 +650,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 	case m.Keymap.SubscriptionPicker.Matches(key):
-		if !focusedFilterActive {
-			m.SubOverlay.Open()
-			m.startLoading(-1, "Refreshing subscriptions...")
-			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
-		}
+		m.SubOverlay.Open()
+		m.startLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 	case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):
-		if !focusedFilterActive && !m.ThemeOverlay.Active {
+		if !m.ThemeOverlay.Active {
 			m.ThemeOverlay.Open()
 			return m, nil
 		}
 	case !m.EmbeddedMode && m.Keymap.ToggleHelp.Matches(key):
-		if !focusedFilterActive && !m.ThemeOverlay.Active {
+		if !m.ThemeOverlay.Active {
 			if m.HelpOverlay.Active {
 				m.HelpOverlay.Close()
 			} else {
@@ -652,22 +668,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 	case m.Keymap.Inspect.Matches(key):
-		if !focusedFilterActive {
-			m.toggleInspect()
-			return m, nil
-		}
+		m.toggleInspect()
+		return m, nil
 	case m.Keymap.BackspaceUp.Matches(key):
-		if !focusedFilterActive {
-			return m.handleBackspace()
-		}
+		return m.handleBackspace()
 	}
 
-	m2, cmd := m.updateFocusedList(msg)
-	if markVisualAfterListUpdate && m2.focus == messagesPane && m2.visualLineMode {
-		m2.refreshMessageSelectionDisplay()
-		m2.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m2.visualSelectionIDs())))
-	}
-	return m2, cmd
+	return m.updateFocusedList(msg)
 }
 
 func (m *Model) syncPreviewToSelection() {

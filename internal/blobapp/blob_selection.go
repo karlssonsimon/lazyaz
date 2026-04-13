@@ -11,8 +11,6 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"charm.land/bubbles/v2/list"
-
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -52,22 +50,7 @@ func (m *Model) resetBlobLoadState() {
 func (m *Model) refreshItems() {
 	entries := m.displayBlobs()
 	w := ui.PaneContentWidth(m.Styles.Chrome.Pane, m.paneWidths[blobsPane])
-	// Preserve any active bubbles list filter across the item replacement.
-	// ResetFilter before SetItems avoids the async re-filter tea.Cmd being
-	// silently dropped; SetFilterText re-runs the filter synchronously.
-	// If the user is mid-typing (Filtering state), restore that state so
-	// the input stays open.
-	prevFilter := m.blobsList.FilterValue()
-	wasFiltering := m.blobsList.FilterState() == list.Filtering
-	m.blobsList.ResetFilter()
-	m.blobsList.SetItems(blobsToItems(entries, m.prefix, w))
-	if prevFilter != "" {
-		m.blobsList.SetFilterText(prevFilter)
-		if wasFiltering {
-			m.blobsList.SetFilterState(list.Filtering)
-		}
-	}
-	ui.ClampListSelection(&m.blobsList)
+	ui.SetItemsPreserveKey(&m.blobsList, blobsToItems(entries, m.prefix, w), blobItemKey)
 	m.refreshBlobSelectionDisplay()
 }
 

@@ -21,6 +21,37 @@ const (
 	versionsPane
 )
 
+// InputMode represents the user's current interaction mode. It is a
+// computed property (via inputMode()) derived from existing boolean
+// state, used for key dispatch and data handler safety.
+type InputMode int
+
+const (
+	ModeNormal     InputMode = iota // Browsing lists
+	ModeActionMenu                  // Action menu overlay open
+	ModeOverlay                     // Sub/Theme/Help overlay open
+	ModeListFilter                  // User is typing a list filter
+	ModeVisualLine                  // Visual line selection active
+)
+
+// inputMode returns the current interaction mode by checking state
+// flags in priority order. This determines which key handler runs
+// and how data handlers should behave.
+func (m Model) inputMode() InputMode {
+	switch {
+	case m.actionMenu.active:
+		return ModeActionMenu
+	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
+		return ModeOverlay
+	case m.focusedListSettingFilter():
+		return ModeListFilter
+	case m.visualLineMode && m.focus == secretsPane:
+		return ModeVisualLine
+	default:
+		return ModeNormal
+	}
+}
+
 type Model struct {
 	appshell.Model
 

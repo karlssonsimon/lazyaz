@@ -27,6 +27,41 @@ const (
 	messagePreviewPane // optional scrolling JSON preview
 )
 
+// InputMode represents the user's current interaction mode.
+type InputMode int
+
+const (
+	ModeNormal         InputMode = iota // Browsing lists
+	ModeOverlay                         // Sub/Theme/Help overlay open
+	ModeSortOverlay                     // Entity sort picker open
+	ModeTargetPicker                    // Target entity picker open
+	ModeActionMenu                      // Action menu open
+	ModeMessagePreview                  // Viewing message detail
+	ModeListFilter                      // User is typing a list filter
+	ModeVisualLine                      // Visual line selection active
+)
+
+func (m Model) inputMode() InputMode {
+	switch {
+	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
+		return ModeOverlay
+	case m.entitySortOverlay.active:
+		return ModeSortOverlay
+	case m.targetPicker.active:
+		return ModeTargetPicker
+	case m.actionMenu.active:
+		return ModeActionMenu
+	case m.viewingMessage && m.focus == messagePreviewPane:
+		return ModeMessagePreview
+	case m.focusedListSettingFilter():
+		return ModeListFilter
+	case m.visualLineMode && m.focus == messagesPane:
+		return ModeVisualLine
+	default:
+		return ModeNormal
+	}
+}
+
 type Model struct {
 	appshell.Model
 

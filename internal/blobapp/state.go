@@ -25,6 +25,40 @@ const (
 	previewPane
 )
 
+// InputMode represents the user's current interaction mode.
+type InputMode int
+
+const (
+	ModeNormal       InputMode = iota // Browsing lists
+	ModeOverlay                       // Sub/Theme/Help overlay open
+	ModeActionMenu                    // Action menu open
+	ModeSortOverlay                   // Sort picker open
+	ModePreview                       // Blob preview focused
+	ModePrefixSearch                  // Server prefix search input open
+	ModeListFilter                    // User is typing a list filter
+	ModeVisualLine                    // Visual line selection active
+)
+
+func (m Model) inputMode() InputMode {
+	switch {
+	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
+		return ModeOverlay
+	case m.actionMenu.active:
+		return ModeActionMenu
+	case m.sortOverlay.active:
+		return ModeSortOverlay
+	case m.preview.open && m.focus == previewPane:
+		return ModePreview
+	case m.filter.inputOpen && m.focus == blobsPane:
+		return ModePrefixSearch
+	case m.focusedListSettingFilter():
+		return ModeListFilter
+	case m.visualLineMode && m.focus == blobsPane:
+		return ModeVisualLine
+	default:
+		return ModeNormal
+	}
+}
 
 type blobSortField int
 

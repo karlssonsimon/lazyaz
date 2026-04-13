@@ -179,5 +179,10 @@ func (m Model) focusedListSettingFilter() bool {
 // IsTextInputActive reports whether the model is currently accepting
 // free-form text input.
 func (m Model) IsTextInputActive() bool {
-	return m.focusedListSettingFilter() || m.SubOverlay.Active || m.entitySortOverlay.active || m.targetPicker.active
+	switch m.inputMode() {
+	case ModeNormal, ModeVisualLine:
+		return false
+	default:
+		return true
+	}
 }
