@@ -64,6 +64,10 @@ type Model struct {
 	tenantPicker tenantPickerState
 	cmdPalette   commandPalette
 
+	// pendingLoginMsg is the success toast queued by applyNewCredential,
+	// shown once the post-login subscription fetch completes.
+	pendingLoginMsg string
+
 	width  int
 	height int
 }
@@ -485,6 +489,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tenantCredentialMsg:
 		updated, cmd := m.handleTenantCredential(msg)
+		toastCmd := updated.maybeStartToastTick()
+		return updated, tea.Batch(cmd, toastCmd)
+
+	case postLoginSubsMsg:
+		updated, cmd := m.handlePostLoginSubs(msg)
 		toastCmd := updated.maybeStartToastTick()
 		return updated, tea.Batch(cmd, toastCmd)
 

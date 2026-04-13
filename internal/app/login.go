@@ -137,6 +137,13 @@ type tenantCredentialMsg struct {
 	err  error
 }
 
+// postLoginSubsMsg carries the subscription list fetched after a
+// credential swap, so tabs can be updated without the empty-overlay flash.
+type postLoginSubsMsg struct {
+	subs []azure.Subscription
+	err  error
+}
+
 // -- Commands --
 
 func listTenantsCmd(cred azcore.TokenCredential) tea.Cmd {
@@ -152,6 +159,16 @@ func switchTenantCmd(tenantID string) tea.Cmd {
 	return func() tea.Msg {
 		cred, err := azure.NewCredentialForTenant(tenantID)
 		return tenantCredentialMsg{cred: cred, err: err}
+	}
+}
+
+func fetchPostLoginSubsCmd(cred azcore.TokenCredential) tea.Cmd {
+	return func() tea.Msg {
+		var all []azure.Subscription
+		err := azure.ListSubscriptions(context.Background(), cred, func(batch []azure.Subscription) {
+			all = append(all, batch...)
+		})
+		return postLoginSubsMsg{subs: all, err: err}
 	}
 }
 
@@ -224,41 +241,96 @@ func (m *Model) handleAzLoginFinished(msg azLoginFinishedMsg) (Model, tea.Cmd) {
 }
 
 // applyNewCredential swaps a credential into all services, resets caches,
-// and reinitializes tabs so they open the subscription picker with fresh data.
+// and starts a subscription fetch. Tabs are not touched yet — that happens
+// in handlePostLoginSubs once we know which subscriptions are available.
 func (m *Model) applyNewCredential(cred azcore.TokenCredential, successMsg string) (Model, tea.Cmd) {
 	m.blobSvc.SetCredential(cred)
 	m.sbSvc.SetCredential(cred)
 	m.kvSvc.SetCredential(cred)
 
-	// Reset all caches — tenant-scoped data is now stale.
 	m.brokers.resetAll()
+	m.pendingLoginMsg = successMsg
 
-	// Reset all tabs: clear subscription, open the subscription picker,
-	// and re-init so they fetch fresh subscription data.
+	return *m, fetchPostLoginSubsCmd(cred)
+}
+
+// handlePostLoginSubs runs after the subscription fetch completes. For each
+// tab it checks whether the current subscription still exists in the new
+// tenant. If so, the subscription is silently re-applied (triggering a
+// resource refresh with the new credential). Otherwise the subscription
+// picker opens with the list already populated — no empty flash.
+func (m *Model) handlePostLoginSubs(msg postLoginSubsMsg) (Model, tea.Cmd) {
+	successMsg := m.pendingLoginMsg
+	m.pendingLoginMsg = ""
+
+	if msg.err != nil {
+		m.notifier.Push(appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.err))
+		return *m, nil
+	}
+
+	// Seed the broker cache so child tabs don't re-fetch.
+	m.brokers.subscriptions.Set("", msg.subs)
+
+	// Build a set for fast lookup.
+	subsByID := make(map[string]azure.Subscription, len(msg.subs))
+	for _, s := range msg.subs {
+		subsByID[s.ID] = s
+	}
+
 	var cmds []tea.Cmd
 	for i := range m.tabs {
+		var prevSubID string
 		switch child := m.tabs[i].Model.(type) {
 		case blobapp.Model:
-			child.HasSubscription = false
-			child.CurrentSub = azure.Subscription{}
-			child.Subscriptions = nil
-			child.SubOverlay.Open()
-			m.tabs[i].Model = child
+			prevSubID = child.CurrentSub.ID
 		case sbapp.Model:
-			child.HasSubscription = false
-			child.CurrentSub = azure.Subscription{}
-			child.Subscriptions = nil
-			child.SubOverlay.Open()
-			m.tabs[i].Model = child
+			prevSubID = child.CurrentSub.ID
 		case kvapp.Model:
-			child.HasSubscription = false
-			child.CurrentSub = azure.Subscription{}
-			child.Subscriptions = nil
-			child.SubOverlay.Open()
-			m.tabs[i].Model = child
+			prevSubID = child.CurrentSub.ID
 		}
-		if c := m.tabs[i].Model.Init(); c != nil {
-			cmds = append(cmds, wrapCmd(m.tabs[i].ID, c))
+
+		if _, ok := subsByID[prevSubID]; ok {
+			// The tab's subscription still exists in the new tenant.
+			// The credential is already swapped on the services, so
+			// just update the subscription list. The tab keeps its
+			// current view — no flash, no disruption.
+			switch child := m.tabs[i].Model.(type) {
+			case blobapp.Model:
+				child.Subscriptions = msg.subs
+				m.tabs[i].Model = child
+			case sbapp.Model:
+				child.Subscriptions = msg.subs
+				m.tabs[i].Model = child
+			case kvapp.Model:
+				child.Subscriptions = msg.subs
+				m.tabs[i].Model = child
+			}
+		} else {
+			// Subscription gone — clear it and open the picker
+			// with data already populated.
+			switch child := m.tabs[i].Model.(type) {
+			case blobapp.Model:
+				child.HasSubscription = false
+				child.CurrentSub = azure.Subscription{}
+				child.Subscriptions = msg.subs
+				child.SubOverlay.Open()
+				m.tabs[i].Model = child
+			case sbapp.Model:
+				child.HasSubscription = false
+				child.CurrentSub = azure.Subscription{}
+				child.Subscriptions = msg.subs
+				child.SubOverlay.Open()
+				m.tabs[i].Model = child
+			case kvapp.Model:
+				child.HasSubscription = false
+				child.CurrentSub = azure.Subscription{}
+				child.Subscriptions = msg.subs
+				child.SubOverlay.Open()
+				m.tabs[i].Model = child
+			}
+			if c := m.tabs[i].Model.Init(); c != nil {
+				cmds = append(cmds, wrapCmd(m.tabs[i].ID, c))
+			}
 		}
 	}
 

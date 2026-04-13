@@ -12,9 +12,10 @@ import (
 )
 
 type Subscription struct {
-	ID    string
-	Name  string
-	State string
+	ID       string
+	Name     string
+	State    string
+	TenantID string
 }
 
 type Tenant struct {
@@ -28,7 +29,9 @@ type Tenant struct {
 func SubscriptionKey(s Subscription) string { return s.ID }
 
 func NewDefaultCredential() (azcore.TokenCredential, error) {
-	return azidentity.NewDefaultAzureCredential(nil)
+	return azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+		AdditionallyAllowedTenants: []string{"*"},
+	})
 }
 
 // NewCredentialForTenant creates a credential scoped to the given tenant.
@@ -103,6 +106,9 @@ func ListSubscriptions(ctx context.Context, cred azcore.TokenCredential, send fu
 			}
 			if subscription.State != nil {
 				entry.State = string(*subscription.State)
+			}
+			if subscription.TenantID != nil {
+				entry.TenantID = *subscription.TenantID
 			}
 
 			batch = append(batch, entry)

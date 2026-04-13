@@ -364,6 +364,13 @@ func (m Model) HelpSections() []ui.HelpSection {
 // model and before Init() issues the first fetch.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
+	// Scope the credential to the subscription's tenant so ARM and data
+	// plane calls authenticate against the correct directory.
+	if sub.TenantID != "" {
+		if cred, err := azure.NewCredentialForTenant(sub.TenantID); err == nil {
+			m.service.SetCredential(cred)
+		}
+	}
 	if cached, ok := m.cache.accounts.Get(sub.ID); ok {
 		m.accounts = cached
 		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(cached))

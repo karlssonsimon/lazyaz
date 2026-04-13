@@ -261,6 +261,11 @@ func (m Model) HelpSections() []ui.HelpSection {
 // cached vaults instantly while the network call runs in the background.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
+	if sub.TenantID != "" {
+		if cred, err := azure.NewCredentialForTenant(sub.TenantID); err == nil {
+			m.service.SetCredential(cred)
+		}
+	}
 	if cached, ok := m.cache.vaults.Get(sub.ID); ok {
 		m.vaults = cached
 		m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(cached))
