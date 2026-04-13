@@ -238,10 +238,14 @@ func (m Model) collectRequeueIDs() []string {
 func (m *Model) refreshMessageItems() {
 	idx := m.messageList.Index()
 	prevFilter := m.messageList.FilterValue()
+	wasFiltering := m.messageList.FilterState() == list.Filtering
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(messagesToItems(m.peekedMessages, m.currentDuplicates()))
 	if prevFilter != "" {
 		m.messageList.SetFilterText(prevFilter)
+		if wasFiltering {
+			m.messageList.SetFilterState(list.Filtering)
+		}
 	}
 	m.messageList.Select(idx)
 	m.refreshMessageSelectionDisplay()

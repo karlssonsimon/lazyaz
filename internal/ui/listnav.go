@@ -151,10 +151,14 @@ func SetItemsPreserveKey(l *list.Model, items []list.Item, keyOf func(list.Item)
 		prevKey = keyOf(selected)
 	}
 	prevFilter := l.FilterValue()
+	wasFiltering := l.FilterState() == list.Filtering
 
 	l.SetItems(items)
 	if prevFilter != "" {
 		l.SetFilterText(prevFilter)
+		if wasFiltering {
+			l.SetFilterState(list.Filtering)
+		}
 	}
 
 	visible := l.VisibleItems()
