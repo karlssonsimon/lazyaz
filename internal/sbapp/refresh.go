@@ -28,8 +28,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	}
 
 	if m.focus == queueTypePane {
-		m.startLoading(m.focus, fmt.Sprintf("Loading entities in %s", m.currentNS.Name))
-		return m, tea.Batch(m.Spinner.Tick, refreshEntitiesCmd(m.service, m.currentNS))
+		return m, refreshEntitiesCmd(m.service, m.currentNS)
 	}
 
 	if m.focus == messagesPane || m.focus == messagePreviewPane {
