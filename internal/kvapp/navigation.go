@@ -14,10 +14,10 @@ import (
 func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case versionsPane:
-		m.setFocus(secretsPane)
+		m.transitionTo(secretsPane)
 		return m, nil
 	case secretsPane:
-		m.setFocus(vaultsPane)
+		m.transitionTo(vaultsPane)
 		return m, nil
 	case vaultsPane:
 		return m, nil
@@ -27,8 +27,8 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 }
 
 func (m Model) handleBackspace() (Model, tea.Cmd) {
-	if m.focus == versionsPane {
-		m.setFocus(secretsPane)
+	if m.focus > vaultsPane {
+		return m.navigateLeft()
 	}
 	return m, nil
 }
@@ -52,7 +52,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.currentVault = keyvault.Vault{}
 	m.currentSecret = keyvault.Secret{}
 	m.clearSecretSelectionState()
-	m.setFocus(vaultsPane)
+	m.transitionTo(vaultsPane)
 
 	if cached, ok := m.cache.vaults.Get(sub.ID); ok {
 		m.vaults = cached
@@ -87,7 +87,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		// Re-selecting the same vault: just move focus.
 		if m.hasVault && m.currentVault.Name == item.vault.Name {
-			m.setFocus(secretsPane)
+			m.transitionTo(secretsPane)
 			return m, nil
 		}
 
@@ -104,7 +104,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.hasSecret = false
 		m.currentSecret = keyvault.Secret{}
 		m.clearSecretSelectionState()
-		m.setFocus(secretsPane)
+		m.transitionTo(secretsPane)
 
 		secretsScope := cache.Key(m.CurrentSub.ID, item.vault.Name)
 		if cached, ok := m.cache.secrets.Get(secretsScope); ok {
@@ -135,7 +135,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		// Re-selecting the same secret: just move focus.
 		if m.hasSecret && m.currentSecret.Name == item.secret.Name {
-			m.setFocus(versionsPane)
+			m.transitionTo(versionsPane)
 			return m, nil
 		}
 
@@ -147,7 +147,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 		m.currentSecret = item.secret
 		m.hasSecret = true
-		m.setFocus(versionsPane)
+		m.transitionTo(versionsPane)
 
 		versionScope := cache.Key(m.CurrentSub.ID, m.currentVault.Name, item.secret.Name)
 		if cached, ok := m.cache.versions.Get(versionScope); ok {

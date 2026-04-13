@@ -1,14 +1,71 @@
 package sbapp
 
 import (
+	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/list"
 )
 
-func (m *Model) setFocus(pane int) {
+// snapshotCurrentPane saves the focused pane's cursor and filter into
+// the appropriate history map so they survive navigation.
+func (m *Model) snapshotCurrentPane() {
+	switch m.focus {
+	case namespacesPane:
+		if m.HasSubscription {
+			m.namespacesHistory[m.CurrentSub.ID] = ui.SnapshotListState(&m.namespacesList, namespaceItemKey)
+		}
+	case entitiesPane:
+		if m.hasNamespace {
+			m.entitiesHistory[cache.Key(m.CurrentSub.ID, m.currentNS.Name)] = ui.SnapshotListState(&m.entitiesList, entityItemKey)
+		}
+	case subscriptionsPane:
+		if m.isTopicSelected() {
+			m.subscriptionsHistory[cache.Key(m.CurrentSub.ID, m.currentNS.Name, m.currentEntity.Name)] = ui.SnapshotListState(&m.subscriptionsList, subscriptionItemKey)
+		}
+	}
+}
+
+// restoreCurrentPane re-applies saved cursor and filter for the focused
+// pane from the history map, ensuring filters survive transitions.
+func (m *Model) restoreCurrentPane() {
+	switch m.focus {
+	case namespacesPane:
+		if m.HasSubscription {
+			ui.RestoreListState(&m.namespacesList, m.namespacesHistory[m.CurrentSub.ID], namespaceItemKey)
+		}
+	case entitiesPane:
+		if m.hasNamespace {
+			ui.RestoreListState(&m.entitiesList, m.entitiesHistory[cache.Key(m.CurrentSub.ID, m.currentNS.Name)], entityItemKey)
+		}
+	case subscriptionsPane:
+		if m.isTopicSelected() {
+			ui.RestoreListState(&m.subscriptionsList, m.subscriptionsHistory[cache.Key(m.CurrentSub.ID, m.currentNS.Name, m.currentEntity.Name)], subscriptionItemKey)
+		}
+	}
+}
+
+// exitPane cleans up the outgoing pane before a transition.
+// Snapshots the pane's state, blurs filter inputs, and exits visual
+// mode if active.
+func (m *Model) exitPane() {
+	m.snapshotCurrentPane()
+	m.blurAllFilters()
+	if m.focus == messagesPane && m.visualLineMode {
+		m.visualLineMode = false
+		m.visualAnchor = ""
+	}
+}
+
+// transitionTo performs exitPane cleanup on the current pane, then sets
+// focus to the target pane and restores its saved state. This is the
+// single codepath for all focus changes, guaranteeing that filters and
+// cursor positions survive navigation.
+func (m *Model) transitionTo(pane int) {
+	m.exitPane()
 	m.focus = pane
 	m.resize()
+	m.restoreCurrentPane()
 }
 
 // navigablePanes returns the ordered list of pane indices the user can
@@ -31,31 +88,27 @@ func (m Model) navigablePanes() []int {
 }
 
 func (m *Model) nextFocus() {
-	m.blurAllFilters()
 	panes := m.navigablePanes()
+	next := panes[0]
 	for i, p := range panes {
 		if p == m.focus {
-			m.focus = panes[(i+1)%len(panes)]
-			m.resize()
-			return
+			next = panes[(i+1)%len(panes)]
+			break
 		}
 	}
-	m.focus = panes[0]
-	m.resize()
+	m.transitionTo(next)
 }
 
 func (m *Model) previousFocus() {
-	m.blurAllFilters()
 	panes := m.navigablePanes()
+	prev := panes[len(panes)-1]
 	for i, p := range panes {
 		if p == m.focus {
-			m.focus = panes[(i-1+len(panes))%len(panes)]
-			m.resize()
-			return
+			prev = panes[(i-1+len(panes))%len(panes)]
+			break
 		}
 	}
-	m.focus = panes[len(panes)-1]
-	m.resize()
+	m.transitionTo(prev)
 }
 
 func (m *Model) blurAllFilters() {

@@ -237,7 +237,12 @@ func (m Model) collectRequeueIDs() []string {
 // flag changes). Mark/visual rendering is handled by the delegate.
 func (m *Model) refreshMessageItems() {
 	idx := m.messageList.Index()
+	prevFilter := m.messageList.FilterValue()
+	m.messageList.ResetFilter()
 	m.messageList.SetItems(messagesToItems(m.peekedMessages, m.currentDuplicates()))
+	if prevFilter != "" {
+		m.messageList.SetFilterText(prevFilter)
+	}
 	m.messageList.Select(idx)
 	m.refreshMessageSelectionDisplay()
 }

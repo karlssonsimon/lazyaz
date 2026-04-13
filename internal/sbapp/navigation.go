@@ -15,24 +15,24 @@ import (
 func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case messagePreviewPane:
-		m.setFocus(messagesPane)
+		m.transitionTo(messagesPane)
 		return m, nil
 	case messagesPane:
 		m.closePreview()
-		m.setFocus(queueTypePane)
+		m.transitionTo(queueTypePane)
 		return m, nil
 	case queueTypePane:
 		if m.isTopicSelected() {
-			m.setFocus(subscriptionsPane)
+			m.transitionTo(subscriptionsPane)
 		} else {
-			m.setFocus(entitiesPane)
+			m.transitionTo(entitiesPane)
 		}
 		return m, nil
 	case subscriptionsPane:
-		m.setFocus(entitiesPane)
+		m.transitionTo(entitiesPane)
 		return m, nil
 	case entitiesPane:
-		m.setFocus(namespacesPane)
+		m.transitionTo(namespacesPane)
 		return m, nil
 	default:
 		return m, nil
@@ -90,7 +90,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.clearPeekState()
 	m.clearAllMarks()
 	m.subscriptions = nil
-	m.setFocus(namespacesPane)
+	m.transitionTo(namespacesPane)
 
 	if cached, ok := m.cache.namespaces.Get(sub.ID); ok {
 		m.namespaces = cached
@@ -107,10 +107,11 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.entitiesList.ResetFilter()
 	m.entitiesList.SetItems(nil)
 	m.entitiesList.Title = "Entities"
+	m.subscriptionsList.ResetFilter()
 	m.subscriptionsList.SetItems(nil)
 	m.queueTypeList.SetItems(nil)
+	m.messageList.ResetFilter()
 	m.messageList.SetItems(nil)
-	m.resize()
 
 	m.startLoading(m.focus, fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub)))
 	return m, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID, m.namespaces))
@@ -124,7 +125,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		}
 
 		if m.hasNamespace && m.currentNS.Name == item.namespace.Name {
-			m.setFocus(entitiesPane)
+			m.transitionTo(entitiesPane)
 			return m, nil
 		}
 
@@ -138,7 +139,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearPeekState()
 		m.clearAllMarks()
 		m.subscriptions = nil
-		m.setFocus(entitiesPane)
+		m.transitionTo(entitiesPane)
 
 		entityCacheKey := cache.Key(m.CurrentSub.ID, item.namespace.Name)
 		if cached, ok := m.cache.entities.Get(entityCacheKey); ok {
@@ -152,10 +153,11 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		}
 		ui.RestoreListState(&m.entitiesList, m.entitiesHistory[entityCacheKey], entityItemKey)
 
+		m.subscriptionsList.ResetFilter()
 		m.subscriptionsList.SetItems(nil)
 		m.queueTypeList.SetItems(nil)
+		m.messageList.ResetFilter()
 		m.messageList.SetItems(nil)
-		m.resize()
 
 		m.startLoading(m.focus, fmt.Sprintf("Loading entities in %s", item.namespace.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityCacheKey, m.entities))
@@ -195,7 +197,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		}
 		m.selectedMessage = item.message
 		m.viewingMessage = true
-		m.setFocus(messagePreviewPane)
+		m.transitionTo(messagePreviewPane)
 		m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))
 		m.messageViewport.GotoTop()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Viewing message %s", ui.EmptyToDash(item.message.MessageID)))
@@ -208,7 +210,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 // selectQueue binds the queue type picker to a queue.
 func (m Model) selectQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 	if m.hasPeekTarget && m.currentSubName == "" && m.currentEntity.Name == entity.Name {
-		m.setFocus(queueTypePane)
+		m.transitionTo(queueTypePane)
 		return m, nil
 	}
 
@@ -220,11 +222,10 @@ func (m Model) selectQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 	m.deadLetter = false
 	m.subscriptions = nil
 	m.buildQueueTypeItems()
-	m.setFocus(queueTypePane)
+	m.transitionTo(queueTypePane)
 
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(nil)
-	m.resize()
 
 	return m, nil
 }
@@ -232,7 +233,7 @@ func (m Model) selectQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 // selectTopic loads a topic's subscriptions.
 func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
 	if m.currentEntity.Name == entity.Name && m.isTopicSelected() {
-		m.setFocus(subscriptionsPane)
+		m.transitionTo(subscriptionsPane)
 		return m, nil
 	}
 
@@ -242,7 +243,7 @@ func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
 	m.hasPeekTarget = false
 	m.peekedMessages = nil
 	m.deadLetter = false
-	m.setFocus(subscriptionsPane)
+	m.transitionTo(subscriptionsPane)
 
 	cacheKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, entity.Name)
 	if cached, ok := m.cache.topicSubs.Get(cacheKey); ok {
@@ -257,8 +258,8 @@ func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
 	ui.RestoreListState(&m.subscriptionsList, m.subscriptionsHistory[cacheKey], subscriptionItemKey)
 
 	m.queueTypeList.SetItems(nil)
+	m.messageList.ResetFilter()
 	m.messageList.SetItems(nil)
-	m.resize()
 
 	m.startLoading(m.focus, fmt.Sprintf("Loading subscriptions for topic %s", entity.Name))
 	return m, tea.Batch(m.Spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, entity.Name, cacheKey, m.subscriptions))
@@ -267,7 +268,7 @@ func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
 // selectSubscriptionSub binds the queue type picker to a topic subscription.
 func (m Model) selectSubscriptionSub(topicName string, sub servicebus.TopicSubscription) (Model, tea.Cmd) {
 	if m.hasPeekTarget && m.currentSubName == sub.Name && m.currentEntity.Name == topicName {
-		m.setFocus(queueTypePane)
+		m.transitionTo(queueTypePane)
 		return m, nil
 	}
 
@@ -286,11 +287,10 @@ func (m Model) selectSubscriptionSub(topicName string, sub servicebus.TopicSubsc
 	m.peekedMessages = nil
 	m.deadLetter = false
 	m.buildQueueTypeItems()
-	m.setFocus(queueTypePane)
+	m.transitionTo(queueTypePane)
 
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(nil)
-	m.resize()
 
 	return m, nil
 }
@@ -300,18 +300,17 @@ func (m Model) selectSubscriptionSub(topicName string, sub servicebus.TopicSubsc
 // NOT peeked automatically — the user opens the action menu to peek.
 func (m Model) peekMessages(deadLetter bool) (Model, tea.Cmd) {
 	if m.deadLetter == deadLetter && len(m.peekedMessages) > 0 {
-		m.setFocus(messagesPane)
+		m.transitionTo(messagesPane)
 		return m, nil
 	}
 
 	m.deadLetter = deadLetter
 	m.peekedMessages = nil
-	m.setFocus(messagesPane)
+	m.transitionTo(messagesPane)
 
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(nil)
 	m.messageList.Title = m.messagesPaneTitle()
-	m.resize()
 
 	return m, nil
 }

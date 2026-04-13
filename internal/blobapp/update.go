@@ -527,25 +527,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.BackspaceUp.Matches(key):
 		if !focusedFilterActive {
 			if m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != "" {
-				// Snapshot current prefix's blobs list before going up.
-				oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
-				m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
-
-				m.clearFilter()
-				m.prefix = parentPrefix(m.prefix)
-
-				blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
-				if cached, ok := m.cache.blobs.Get(blobsScope); ok {
-					m.blobs = cached
-					m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
-					m.refreshItems()
-				}
-				ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
-
-				m.rebuildParentBlobsList()
-
-				m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
-				return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
+				return m.prefixUp()
 			}
 		}
 	}

@@ -21,8 +21,12 @@ func (m *Model) clearSecretSelectionState() {
 }
 
 func (m *Model) refreshSecretItems() {
+	prevFilter := m.secretsList.FilterValue()
 	m.secretsList.ResetFilter()
 	m.secretsList.SetItems(secretsToItems(m.secrets))
+	if prevFilter != "" {
+		m.secretsList.SetFilterText(prevFilter)
+	}
 	ui.ClampListSelection(&m.secretsList)
 	m.refreshSecretSelectionDisplay()
 }
