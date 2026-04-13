@@ -355,7 +355,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cursorCmd, tabCmd)
 	}
 
+	// Handle mouse events: tab bar clicks are consumed here; everything
+	// else is forwarded to the active child.
 	switch msg := msg.(type) {
+	case tea.MouseClickMsg:
+		if msg.Y == 0 {
+			if idx := tabIndexAtX(m.tabs, m.activeIdx, m.styles.TabBar, msg.X); idx >= 0 && idx != m.activeIdx {
+				m.activeIdx = idx
+				return m, m.resizeAndTickActive()
+			}
+			return m, nil
+		}
+		return m, m.forwardToActive(msg)
+
+	case tea.MouseMotionMsg:
+		return m, m.forwardToActive(msg)
+
+	case tea.MouseReleaseMsg:
+		return m, m.forwardToActive(msg)
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height

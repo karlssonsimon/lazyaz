@@ -138,8 +138,9 @@ type Model struct {
 	// keep browsing while details remain visible. Toggled with K.
 	inspectPanes map[int]bool
 
-	paneWidths [4]int // acc, con, blob, preview — set by resize
-	paneHeight int
+	clickTracker ui.ClickTracker
+	paneWidths   [4]int // acc, con, blob, preview — set by resize
+	paneHeight   int
 }
 
 type accountsLoadedMsg struct {

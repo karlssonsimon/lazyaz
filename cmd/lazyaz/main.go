@@ -39,7 +39,7 @@ func main() {
 		km,
 	)
 
-	program := tea.NewProgram(model)
+	program := tea.NewProgram(model, tea.WithFilter(ui.MouseEventFilter))
 	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "application error: %v\n", err)
 		os.Exit(1)

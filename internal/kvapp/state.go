@@ -95,8 +95,9 @@ type Model struct {
 	// keep browsing while details remain visible. Toggled with K.
 	inspectPanes map[int]bool
 
-	paneWidths [3]int // vlt, sec, ver — set by resize
-	paneHeight int
+	clickTracker ui.ClickTracker
+	paneWidths   [3]int // vlt, sec, ver — set by resize
+	paneHeight   int
 }
 
 type vaultsLoadedMsg struct {
