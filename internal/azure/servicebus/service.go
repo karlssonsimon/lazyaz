@@ -50,10 +50,11 @@ func EntityKey(e Entity) string                 { return e.Name }
 func TopicSubscriptionKey(s TopicSubscription) string { return s.Name }
 
 type PeekedMessage struct {
-	MessageID   string
-	EnqueuedAt  time.Time
-	BodyPreview string
-	FullBody    string
+	MessageID      string
+	SequenceNumber int64
+	EnqueuedAt     time.Time
+	BodyPreview    string
+	FullBody       string
 }
 
 type Service struct {
@@ -295,13 +296,13 @@ func (s *Service) ListTopicSubscriptions(ctx context.Context, ns Namespace, topi
 	return nil
 }
 
-func (s *Service) PeekQueueMessages(ctx context.Context, ns Namespace, queueName string, maxCount int, deadLetter bool, send func([]PeekedMessage)) error {
+func (s *Service) PeekQueueMessages(ctx context.Context, ns Namespace, queueName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
 	client, err := s.getClient(ns.FQDN)
 	if err != nil {
 		return err
 	}
 
-	err = s.peekQueue(ctx, client, queueName, maxCount, deadLetter, send)
+	err = s.peekQueue(ctx, client, queueName, maxCount, deadLetter, fromSequenceNumber, send)
 	if err == nil || !isAuthError(err) {
 		return err
 	}
@@ -311,14 +312,14 @@ func (s *Service) PeekQueueMessages(ctx context.Context, ns Namespace, queueName
 		return fmt.Errorf("peek queue %s with AAD failed: %v; connection string fallback failed: %w", queueName, err, fallbackErr)
 	}
 
-	err = s.peekQueue(ctx, fallbackClient, queueName, maxCount, deadLetter, send)
+	err = s.peekQueue(ctx, fallbackClient, queueName, maxCount, deadLetter, fromSequenceNumber, send)
 	if err != nil {
 		return fmt.Errorf("peek queue %s with connection string fallback: %w", queueName, err)
 	}
 	return nil
 }
 
-func (s *Service) peekQueue(ctx context.Context, client *azservicebus.Client, queueName string, maxCount int, deadLetter bool, send func([]PeekedMessage)) error {
+func (s *Service) peekQueue(ctx context.Context, client *azservicebus.Client, queueName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
 	opts := &azservicebus.ReceiverOptions{
 		ReceiveMode: azservicebus.ReceiveModePeekLock,
 	}
@@ -331,16 +332,16 @@ func (s *Service) peekQueue(ctx context.Context, client *azservicebus.Client, qu
 	}
 	defer receiver.Close(ctx)
 
-	return peekMessages(ctx, receiver, maxCount, send)
+	return peekMessages(ctx, receiver, maxCount, fromSequenceNumber, send)
 }
 
-func (s *Service) PeekSubscriptionMessages(ctx context.Context, ns Namespace, topicName, subName string, maxCount int, deadLetter bool, send func([]PeekedMessage)) error {
+func (s *Service) PeekSubscriptionMessages(ctx context.Context, ns Namespace, topicName, subName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
 	client, err := s.getClient(ns.FQDN)
 	if err != nil {
 		return err
 	}
 
-	err = s.peekSubscription(ctx, client, topicName, subName, maxCount, deadLetter, send)
+	err = s.peekSubscription(ctx, client, topicName, subName, maxCount, deadLetter, fromSequenceNumber, send)
 	if err == nil || !isAuthError(err) {
 		return err
 	}
@@ -350,14 +351,14 @@ func (s *Service) PeekSubscriptionMessages(ctx context.Context, ns Namespace, to
 		return fmt.Errorf("peek subscription %s/%s with AAD failed: %v; connection string fallback failed: %w", topicName, subName, err, fallbackErr)
 	}
 
-	err = s.peekSubscription(ctx, fallbackClient, topicName, subName, maxCount, deadLetter, send)
+	err = s.peekSubscription(ctx, fallbackClient, topicName, subName, maxCount, deadLetter, fromSequenceNumber, send)
 	if err != nil {
 		return fmt.Errorf("peek subscription %s/%s with connection string fallback: %w", topicName, subName, err)
 	}
 	return nil
 }
 
-func (s *Service) peekSubscription(ctx context.Context, client *azservicebus.Client, topicName, subName string, maxCount int, deadLetter bool, send func([]PeekedMessage)) error {
+func (s *Service) peekSubscription(ctx context.Context, client *azservicebus.Client, topicName, subName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
 	opts := &azservicebus.ReceiverOptions{
 		ReceiveMode: azservicebus.ReceiveModePeekLock,
 	}
@@ -370,7 +371,7 @@ func (s *Service) peekSubscription(ctx context.Context, client *azservicebus.Cli
 	}
 	defer receiver.Close(ctx)
 
-	return peekMessages(ctx, receiver, maxCount, send)
+	return peekMessages(ctx, receiver, maxCount, fromSequenceNumber, send)
 }
 
 // ReceivedMessages holds the result of a receive-with-lock operation.
@@ -820,8 +821,14 @@ func isAuthError(err error) bool {
 	return false
 }
 
-func peekMessages(ctx context.Context, receiver *azservicebus.Receiver, maxCount int, send func([]PeekedMessage)) error {
-	peeked, err := receiver.PeekMessages(ctx, maxCount, nil)
+func peekMessages(ctx context.Context, receiver *azservicebus.Receiver, maxCount int, fromSequenceNumber int64, send func([]PeekedMessage)) error {
+	var opts *azservicebus.PeekMessagesOptions
+	if fromSequenceNumber > 0 {
+		opts = &azservicebus.PeekMessagesOptions{
+			FromSequenceNumber: &fromSequenceNumber,
+		}
+	}
+	peeked, err := receiver.PeekMessages(ctx, maxCount, opts)
 	if err != nil {
 		return fmt.Errorf("peek messages: %w", err)
 	}
@@ -830,6 +837,9 @@ func peekMessages(ctx context.Context, receiver *azservicebus.Receiver, maxCount
 	for _, msg := range peeked {
 		entry := PeekedMessage{
 			MessageID: msg.MessageID,
+		}
+		if msg.SequenceNumber != nil {
+			entry.SequenceNumber = *msg.SequenceNumber
 		}
 		if msg.EnqueuedTime != nil {
 			entry.EnqueuedAt = *msg.EnqueuedTime

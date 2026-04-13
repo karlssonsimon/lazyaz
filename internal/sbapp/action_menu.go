@@ -412,17 +412,22 @@ func (m Model) doPeek(append bool) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	var fromSeqNo int64
+	if append && len(m.peekedMessages) > 0 {
+		fromSeqNo = m.peekedMessages[len(m.peekedMessages)-1].SequenceNumber + 1
+	}
+
 	label := "active"
 	if m.deadLetter {
 		label = "DLQ"
 	}
 	if m.currentSubName == "" {
 		m.startLoading(m.focus, fmt.Sprintf("Peeking %s messages from queue %s", label, m.currentEntity.Name))
-		return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, append))
+		return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, append, false, fromSeqNo))
 	}
 
 	m.startLoading(m.focus, fmt.Sprintf("Peeking %s messages from %s/%s", label, m.currentEntity.Name, m.currentSubName))
-	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, append))
+	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, append, false, fromSeqNo))
 }
 
 func (m Model) renderActionMenu(base string) string {

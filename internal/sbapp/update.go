@@ -278,7 +278,7 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 		m.peekedMessages = msg.messages
 	}
 	items := messagesToItems(m.peekedMessages, m.currentDuplicates())
-	if msg.repeek {
+	if msg.repeek || msg.preserveCursor {
 		ui.SetItemsPreserveKey(&m.messageList, items, messageItemKey)
 	} else {
 		m.messageList.ResetFilter()
@@ -291,7 +291,7 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 		m.selectedMessage = servicebus.PeekedMessage{}
 		m.syncPreviewToSelection()
 	}
-	m.messageList.Title = fmt.Sprintf("Messages (%d)", len(msg.messages))
+	m.messageList.Title = fmt.Sprintf("Messages (%d)", len(m.peekedMessages))
 	m.resize()
 	m.ClearLoading()
 	label := "active"

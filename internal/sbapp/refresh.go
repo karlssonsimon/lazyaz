@@ -45,9 +45,9 @@ func (m Model) rePeekMessages(preserveCursor bool) (Model, tea.Cmd) {
 
 	if m.currentSubName == "" {
 		m.startLoading(m.focus, fmt.Sprintf("Peeking %s messages from queue %s", dlqLabel, m.currentEntity.Name))
-		return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, preserveCursor))
+		return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, false, preserveCursor, 0))
 	}
 
 	m.startLoading(m.focus, fmt.Sprintf("Peeking %s messages from %s/%s", dlqLabel, m.currentEntity.Name, m.currentSubName))
-	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, preserveCursor))
+	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, false, preserveCursor, 0))
 }

@@ -198,11 +198,11 @@ func TestPreviewPaneOverflowDoesNotEatStatusBar(t *testing.T) {
 	if !strings.Contains(stripped, "test-account") {
 		t.Errorf("status bar account value missing from view")
 	}
-	// Sanity: the rounded bottom-border character should appear in every
+	// Sanity: the bottom-border corner character should appear in every
 	// pane's bottom row. If the preview pane's bottom border is missing
 	// (because we let lipgloss MaxHeight clip from below), this fails.
 	lines := strings.Split(stripped, "\n")
-	// Find the last line containing rounded-corner border characters.
+	// Find the last line containing border corner characters.
 	var lastBorderLine string
 	for i := len(lines) - 1; i >= 0; i-- {
 		if strings.Contains(lines[i], "╯") {

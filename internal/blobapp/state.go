@@ -207,6 +207,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 
 	accounts := list.New([]list.Item{}, delegate, 24, 10)
 	accounts.SetShowTitle(false) // title is rendered by ui.RenderListPane
+	accounts.SetShowFilter(false)
 	accounts.SetShowHelp(false)
 	accounts.SetShowPagination(false)
 	accounts.SetShowStatusBar(true)
@@ -216,6 +217,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 
 	containers := list.New([]list.Item{}, delegate, 24, 10)
 	containers.SetShowTitle(false)
+	containers.SetShowFilter(false)
 	containers.SetShowHelp(false)
 	containers.SetShowPagination(false)
 	containers.SetShowStatusBar(true)
@@ -225,6 +227,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 
 	blobs := list.New([]list.Item{}, delegate, 40, 10)
 	blobs.SetShowTitle(false)
+	blobs.SetShowFilter(false)
 	blobs.SetShowHelp(false)
 	blobs.SetShowPagination(false)
 	blobs.SetShowStatusBar(true)
@@ -235,6 +238,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 
 	parentBlobs := list.New([]list.Item{}, delegate, 20, 10)
 	parentBlobs.SetShowTitle(false)
+	parentBlobs.SetShowFilter(false)
 	parentBlobs.SetShowHelp(false)
 	parentBlobs.SetShowPagination(false)
 	parentBlobs.SetShowStatusBar(false)

@@ -48,27 +48,27 @@ func fetchTopicSubscriptionsCmd(svc *servicebus.Service, broker *cache.Broker[se
 	return cmd
 }
 
-func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queueName string, deadLetter, repeek bool) tea.Cmd {
+func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queueName string, deadLetter, repeek, preserveCursor bool, fromSeqNo int64) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		var messages []servicebus.PeekedMessage
-		err := svc.PeekQueueMessages(ctx, ns, queueName, peekMaxMessages, deadLetter, func(batch []servicebus.PeekedMessage) {
+		err := svc.PeekQueueMessages(ctx, ns, queueName, peekMaxMessages, deadLetter, fromSeqNo, func(batch []servicebus.PeekedMessage) {
 			messages = append(messages, batch...)
 		})
-		return messagesLoadedMsg{namespace: ns, source: queueName, messages: messages, deadLetter: deadLetter, repeek: repeek, err: err}
+		return messagesLoadedMsg{namespace: ns, source: queueName, messages: messages, deadLetter: deadLetter, repeek: repeek, preserveCursor: preserveCursor, err: err}
 	}
 }
 
-func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, topicName, subName string, deadLetter, repeek bool) tea.Cmd {
+func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, topicName, subName string, deadLetter, repeek, preserveCursor bool, fromSeqNo int64) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		var messages []servicebus.PeekedMessage
-		err := svc.PeekSubscriptionMessages(ctx, ns, topicName, subName, peekMaxMessages, deadLetter, func(batch []servicebus.PeekedMessage) {
+		err := svc.PeekSubscriptionMessages(ctx, ns, topicName, subName, peekMaxMessages, deadLetter, fromSeqNo, func(batch []servicebus.PeekedMessage) {
 			messages = append(messages, batch...)
 		})
-		return messagesLoadedMsg{namespace: ns, source: topicName + "/" + subName, messages: messages, deadLetter: deadLetter, repeek: repeek, err: err}
+		return messagesLoadedMsg{namespace: ns, source: topicName + "/" + subName, messages: messages, deadLetter: deadLetter, repeek: repeek, preserveCursor: preserveCursor, err: err}
 	}
 }
 
