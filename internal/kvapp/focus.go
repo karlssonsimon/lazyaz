@@ -145,5 +145,10 @@ func (m Model) focusedListSettingFilter() bool {
 // free-form text input (list filter, overlay search, etc.). The parent
 // tabapp uses this to suppress single-key shortcuts like quit.
 func (m Model) IsTextInputActive() bool {
-	return m.focusedListSettingFilter() || m.SubOverlay.Active || m.actionMenu.active
+	switch m.inputMode() {
+	case ModeNormal, ModeVisualLine:
+		return false
+	default:
+		return true
+	}
 }

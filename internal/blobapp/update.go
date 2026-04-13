@@ -333,25 +333,26 @@ func (m Model) handleBlobsDownloaded(msg blobsDownloadedMsg) (Model, tea.Cmd) {
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
-	if result := m.HandleOverlayKeys(key); result.Handled {
-		if result.SelectSub != nil {
-			return m.selectSubscription(*result.SelectSub)
-		}
-		if result.ThemeSelected {
-			m.applyScheme(m.Schemes[m.ThemeOverlay.ActiveThemeIdx])
-			ui.SaveThemeName(m.Schemes[m.ThemeOverlay.ActiveThemeIdx].Name)
+	switch m.inputMode() {
+	case ModeOverlay:
+		if result := m.HandleOverlayKeys(key); result.Handled {
+			if result.SelectSub != nil {
+				return m.selectSubscription(*result.SelectSub)
+			}
+			if result.ThemeSelected {
+				m.applyScheme(m.Schemes[m.ThemeOverlay.ActiveThemeIdx])
+				ui.SaveThemeName(m.Schemes[m.ThemeOverlay.ActiveThemeIdx].Name)
+			}
 		}
 		return m, nil
-	}
 
-	if m.actionMenu.active {
+	case ModeActionMenu:
 		if selected, act := m.actionMenu.handleKey(key, m.Keymap); selected {
 			return m.executeAction(act)
 		}
 		return m, nil
-	}
 
-	if m.sortOverlay.active {
+	case ModeSortOverlay:
 		if applied, field, desc := m.sortOverlay.handleKey(key, m.Keymap); applied {
 			m.blobSortField = field
 			m.blobSortDesc = desc
@@ -359,21 +360,78 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.Notify(appshell.LevelInfo, "Sort: "+blobSortLabel(field, desc))
 		}
 		return m, nil
-	}
 
-	if m.preview.open && m.focus == previewPane {
+	case ModePreview:
 		return m.handlePreviewKey(msg)
-	}
 
-	// Server prefix search overlay.
-	if m.filter.inputOpen && m.focus == blobsPane {
+	case ModePrefixSearch:
 		return m.handlePrefixSearchKey(msg)
+
+	case ModeListFilter:
+		return m.handleListFilterKey(msg, key)
+
+	case ModeVisualLine:
+		return m.handleVisualLineKey(msg, key)
+
+	case ModeNormal:
+		return m.handleNormalKey(msg, key)
 	}
 
-	// Esc peels filters like a stack:
-	//  1. If the bubbles list has an applied filter → clear it and return.
-	//  2. If no list filter but a prefix search is active → clear it here.
-	//  3. Otherwise fall through to normal esc handlers (visual mode, etc).
+	return m, nil
+}
+
+func (m Model) handleListFilterKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
+	switch {
+	case ui.ShouldQuit(key, m.Keymap.Quit, true):
+		return m, tea.Quit
+	case m.Keymap.OpenFocused.Matches(key):
+		cmd := m.commitFocusedFilter()
+		return m, cmd
+	}
+	return m.updateFocusedList(msg)
+}
+
+func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
+	switch {
+	case ui.ShouldQuit(key, m.Keymap.Quit, false):
+		return m, tea.Quit
+	case m.Keymap.HalfPageDown.Matches(key):
+		m.scrollFocusedHalfPage(1)
+		return m, nil
+	case m.Keymap.HalfPageUp.Matches(key):
+		m.scrollFocusedHalfPage(-1)
+		return m, nil
+	case m.Keymap.VisualSwapAnchor.Matches(key):
+		m.swapVisualAnchor()
+		m.refreshBlobSelectionDisplay()
+		return m, nil
+	case m.Keymap.ExitVisualLine.Matches(key):
+		m.commitVisualSelection()
+		m.visualLineMode = false
+		m.visualAnchor = ""
+		m.refreshBlobSelectionDisplay()
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs)))
+		return m, nil
+	case m.Keymap.DownloadSelection.Matches(key):
+		return m.startMarkedAction("download")
+	case m.Keymap.ToggleMark.Matches(key):
+		m.toggleCurrentBlobMark()
+		return m, nil
+	}
+
+	m2, cmd := m.updateFocusedList(msg)
+	if m.Keymap.BlobVisualMove.Matches(key) && m2.focus == blobsPane && m2.visualLineMode {
+		m2.refreshBlobSelectionDisplay()
+		m2.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m2.visualSelectionBlobNames())))
+	}
+	return m2, cmd
+}
+
+func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
+	// Esc peels filters like a stack on the blobs pane:
+	//  1. If the bubbles list has an applied filter → clear it.
+	//  2. If a prefix search is active → clear it.
+	//  3. Otherwise fall through.
 	if m.Keymap.Cancel.Matches(key) && m.focus == blobsPane {
 		if m.blobsList.FilterState() != list.Unfiltered {
 			m.blobsList.ResetFilter()
@@ -386,14 +444,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	}
 
-	focusedFilterActive := m.focusedListSettingFilter() || (m.focus == blobsPane && m.filter.inputOpen)
-
-	// If this is a visual-range move key, remember to refresh the visual
-	// selection status after the list update at the bottom of this function.
-	markVisualAfterListUpdate := m.focus == blobsPane && m.visualLineMode && !focusedFilterActive && m.Keymap.BlobVisualMove.Matches(key)
-
 	switch {
-	case ui.ShouldQuit(key, m.Keymap.Quit, focusedFilterActive):
+	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
 	case m.Keymap.HalfPageDown.Matches(key):
 		m.scrollFocusedHalfPage(1)
@@ -402,11 +454,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.scrollFocusedHalfPage(-1)
 		return m, nil
 	case m.Keymap.DownloadSelection.Matches(key):
-		if m.focus == blobsPane && !focusedFilterActive {
+		if m.focus == blobsPane {
 			return m.startMarkedAction("download")
 		}
 	case m.Keymap.YankBlobContent.Matches(key):
-		if m.focus == blobsPane && !focusedFilterActive {
+		if m.focus == blobsPane {
 			if item, ok := m.blobsList.SelectedItem().(blobItem); ok && !item.blob.IsPrefix {
 				if item.blob.Size == 0 || item.blob.Size >= 5*1024*1024 {
 					m.Notify(appshell.LevelError, "Blob too large to yank (must be < 5 MB)")
@@ -417,92 +469,58 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 	case m.Keymap.ActionMenu.Matches(key):
-		if !focusedFilterActive {
-			m.actionMenu.open(m.buildActions())
-			return m, nil
-		}
+		m.actionMenu.open(m.buildActions())
+		return m, nil
 	case m.Keymap.ToggleLoadAll.Matches(key):
-		if m.focus == blobsPane && !focusedFilterActive {
+		if m.focus == blobsPane {
 			return m.toggleBlobLoadAllMode()
 		}
 	case m.Keymap.SortBlobs.Matches(key):
-		if m.focus == blobsPane && !focusedFilterActive && m.hasContainer {
+		if m.focus == blobsPane && m.hasContainer {
 			m.sortOverlay.open(m.blobSortField, m.blobSortDesc)
 			return m, nil
 		}
 	case m.Keymap.ToggleVisualLine.Matches(key):
-		if m.focus == blobsPane && !focusedFilterActive {
+		if m.focus == blobsPane {
 			m.toggleVisualLineMode()
 			return m, nil
 		}
 	case m.Keymap.ToggleMark.Matches(key):
-		if m.focus == blobsPane && !focusedFilterActive {
+		if m.focus == blobsPane {
 			m.toggleCurrentBlobMark()
 			return m, nil
 		}
-	case m.Keymap.VisualSwapAnchor.Matches(key):
-		if m.focus == blobsPane && m.visualLineMode && !focusedFilterActive {
-			m.swapVisualAnchor()
-			m.refreshBlobSelectionDisplay()
-			return m, nil
-		}
 	case m.Keymap.ExitVisualLine.Matches(key):
-		if m.focus == blobsPane && !focusedFilterActive {
-			if m.visualLineMode {
-				// Commit visual range into marks, then exit visual mode.
-				m.commitVisualSelection()
-				m.visualLineMode = false
-				m.visualAnchor = ""
-				m.refreshBlobSelectionDisplay()
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs)))
-				return m, nil
+		if m.focus == blobsPane && len(m.markedBlobs) > 0 {
+			count := len(m.markedBlobs)
+			for name := range m.markedBlobs {
+				delete(m.markedBlobs, name)
 			}
-			if len(m.markedBlobs) > 0 {
-				// Clear all marks.
-				count := len(m.markedBlobs)
-				for name := range m.markedBlobs {
-					delete(m.markedBlobs, name)
-				}
-				m.refreshBlobSelectionDisplay()
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
-				return m, nil
-			}
+			m.refreshBlobSelectionDisplay()
+			m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
+			return m, nil
 		}
 	case m.Keymap.NextFocus.Matches(key):
-		if !focusedFilterActive {
-			m.nextFocus()
-			return m, nil
-		}
+		m.nextFocus()
+		return m, nil
 	case m.Keymap.PreviousFocus.Matches(key):
-		if !focusedFilterActive {
-			m.previousFocus()
-			return m, nil
-		}
+		m.previousFocus()
+		return m, nil
 	case m.Keymap.RefreshScope.Matches(key):
-		if !focusedFilterActive {
-			return m.refresh()
-		}
+		return m.refresh()
 	case m.Keymap.OpenFocused.Matches(key):
-		if focusedFilterActive {
-			cmd := m.commitFocusedFilter()
-			return m, cmd
-		}
 		return m.handleEnter()
 	case m.Keymap.OpenFocusedAlt.Matches(key):
-		if !focusedFilterActive {
-			return m.handleEnter()
-		}
+		return m.handleEnter()
 	case m.Keymap.NavigateLeft.Matches(key):
-		if !focusedFilterActive {
-			return m.navigateLeft()
-		}
+		return m.navigateLeft()
 	case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):
-		if !focusedFilterActive && !m.ThemeOverlay.Active {
+		if !m.ThemeOverlay.Active {
 			m.ThemeOverlay.Open()
 			return m, nil
 		}
 	case !m.EmbeddedMode && m.Keymap.ToggleHelp.Matches(key):
-		if !focusedFilterActive && !m.ThemeOverlay.Active {
+		if !m.ThemeOverlay.Active {
 			if m.HelpOverlay.Active {
 				m.HelpOverlay.Close()
 			} else {
@@ -511,29 +529,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 	case m.Keymap.SubscriptionPicker.Matches(key):
-		if !focusedFilterActive {
-			m.SubOverlay.Open()
-			m.startLoading(-1, "Refreshing subscriptions...")
-			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
-		}
-	// FilterInput for the blobs pane is handled by the bubbles list's
-	// built-in filter (SetFilteringEnabled=true). No explicit handler
-	// needed — the keypress falls through to the list's Update below.
+		m.SubOverlay.Open()
+		m.startLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 	case m.Keymap.Inspect.Matches(key):
-		if !focusedFilterActive && m.focus != previewPane {
+		if m.focus != previewPane {
 			m.toggleInspect()
 			return m, nil
 		}
 	case m.Keymap.BackspaceUp.Matches(key):
-		if !focusedFilterActive {
-			if m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != "" {
-				return m.prefixUp()
-			}
+		if m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != "" {
+			return m.prefixUp()
 		}
 	}
 
-	// Key didn't match any app-specific handler — fall through to the
-	// focused list so filter input and cursor keys reach it.
+	return m.updateFocusedList(msg)
+}
+
+func (m Model) updateFocusedList(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch m.focus {
 	case accountsPane:
@@ -545,11 +558,5 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case previewPane:
 		cmd = nil
 	}
-
-	if markVisualAfterListUpdate && m.focus == blobsPane && m.visualLineMode {
-		m.refreshBlobSelectionDisplay()
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames())))
-	}
-
 	return m, cmd
 }

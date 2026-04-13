@@ -5,6 +5,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/list"
 )
@@ -236,18 +237,7 @@ func (m Model) collectRequeueIDs() []string {
 // refreshMessageItems rebuilds the message list items (for duplicate
 // flag changes). Mark/visual rendering is handled by the delegate.
 func (m *Model) refreshMessageItems() {
-	idx := m.messageList.Index()
-	prevFilter := m.messageList.FilterValue()
-	wasFiltering := m.messageList.FilterState() == list.Filtering
-	m.messageList.ResetFilter()
-	m.messageList.SetItems(messagesToItems(m.peekedMessages, m.currentDuplicates()))
-	if prevFilter != "" {
-		m.messageList.SetFilterText(prevFilter)
-		if wasFiltering {
-			m.messageList.SetFilterState(list.Filtering)
-		}
-	}
-	m.messageList.Select(idx)
+	ui.SetItemsPreserveKey(&m.messageList, messagesToItems(m.peekedMessages, m.currentDuplicates()), messageItemKey)
 	m.refreshMessageSelectionDisplay()
 }
 

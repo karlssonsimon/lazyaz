@@ -263,29 +263,91 @@ func (m Model) handleSecretValueYanked(msg secretValueYankedMsg) (Model, tea.Cmd
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
-	if m.actionMenu.active {
+	switch m.inputMode() {
+	case ModeActionMenu:
 		if selected, act := m.actionMenu.handleKey(key, m.Keymap); selected {
 			return m.executeAction(act)
 		}
 		return m, nil
+
+	case ModeOverlay:
+		if result := m.HandleOverlayKeys(key); result.Handled {
+			if result.SelectSub != nil {
+				return m.selectSubscription(*result.SelectSub)
+			}
+			if result.ThemeSelected {
+				m.applyScheme(m.Schemes[m.ThemeOverlay.ActiveThemeIdx])
+				ui.SaveThemeName(m.Schemes[m.ThemeOverlay.ActiveThemeIdx].Name)
+			}
+		}
+		return m, nil
+
+	case ModeListFilter:
+		return m.handleListFilterKey(msg, key)
+
+	case ModeVisualLine:
+		return m.handleVisualLineKey(msg, key)
+
+	case ModeNormal:
+		return m.handleNormalKey(msg, key)
 	}
 
-	if result := m.HandleOverlayKeys(key); result.Handled {
-		if result.SelectSub != nil {
-			return m.selectSubscription(*result.SelectSub)
-		}
-		if result.ThemeSelected {
-			m.applyScheme(m.Schemes[m.ThemeOverlay.ActiveThemeIdx])
-			ui.SaveThemeName(m.Schemes[m.ThemeOverlay.ActiveThemeIdx].Name)
-		}
+	return m, nil
+}
+
+// handleListFilterKey handles keys while the user is typing a list filter.
+// Enter commits, Esc cancels, everything else goes to the bubbles list.
+func (m Model) handleListFilterKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
+	switch {
+	case ui.ShouldQuit(key, m.Keymap.Quit, true):
+		return m, tea.Quit
+	case m.Keymap.OpenFocused.Matches(key):
+		m.commitFocusedFilter()
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
 		return m, nil
 	}
 
-	focusedFilterActive := m.focusedListSettingFilter()
+	return m.updateFocusedList(msg)
+}
 
+// handleVisualLineKey handles keys during visual line selection.
+func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
+	switch {
+	case ui.ShouldQuit(key, m.Keymap.Quit, false):
+		return m, tea.Quit
+	case m.Keymap.HalfPageDown.Matches(key):
+		m.scrollFocusedHalfPage(1)
+		return m, nil
+	case m.Keymap.HalfPageUp.Matches(key):
+		m.scrollFocusedHalfPage(-1)
+		return m, nil
+	case m.Keymap.VisualSwapAnchor.Matches(key):
+		m.swapVisualAnchor()
+		m.refreshSecretSelectionDisplay()
+		return m, nil
+	case m.Keymap.ExitVisualLine.Matches(key):
+		m.commitVisualSelection()
+		m.visualLineMode = false
+		m.visualAnchor = ""
+		m.refreshSecretSelectionDisplay()
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedSecrets)))
+		return m, nil
+	}
+
+	// Cursor movement keys fall through to the list, then refresh visual display.
+	mdl, cmd := m.updateFocusedList(msg)
+	if m.Keymap.BlobVisualMove.Matches(key) {
+		mdl.refreshSecretSelectionDisplay()
+	}
+	return mdl, cmd
+}
+
+// handleNormalKey handles keys during normal browsing.
+func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 	// Esc peels selection state like a stack on the secrets pane:
-	//  1. If the bubbles list has an applied filter → clear it and return.
-	//  2. Otherwise fall through to normal esc handlers (visual mode, etc).
+	//  1. If the bubbles list has an applied filter → clear it.
+	//  2. If marks exist → clear them.
+	//  3. Otherwise fall through.
 	if m.Keymap.Cancel.Matches(key) && m.focus == secretsPane {
 		if m.secretsList.FilterState() != list.Unfiltered {
 			m.secretsList.ResetFilter()
@@ -293,11 +355,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	}
 
-	// Track visual range updates after list cursor moves.
-	markVisualAfterListUpdate := m.focus == secretsPane && m.visualLineMode && !focusedFilterActive && m.Keymap.BlobVisualMove.Matches(key)
-
 	switch {
-	case ui.ShouldQuit(key, m.Keymap.Quit, focusedFilterActive):
+	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
 	case m.Keymap.HalfPageDown.Matches(key):
 		m.scrollFocusedHalfPage(1)
@@ -306,86 +365,51 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.scrollFocusedHalfPage(-1)
 		return m, nil
 	case m.Keymap.NextFocus.Matches(key):
-		if !focusedFilterActive {
-			m.nextFocus()
-			return m, nil
-		}
+		m.nextFocus()
+		return m, nil
 	case m.Keymap.PreviousFocus.Matches(key):
-		if !focusedFilterActive {
-			m.previousFocus()
-			return m, nil
-		}
+		m.previousFocus()
+		return m, nil
 	case m.Keymap.RefreshScope.Matches(key):
-		if !focusedFilterActive {
-			return m.refresh()
-		}
+		return m.refresh()
 	case m.Keymap.OpenFocused.Matches(key):
-		if focusedFilterActive {
-			m.commitFocusedFilter()
-			m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
-			return m, nil
-		}
 		return m.handleEnter()
 	case m.Keymap.OpenFocusedAlt.Matches(key):
-		if !focusedFilterActive {
-			return m.handleEnter()
-		}
+		return m.handleEnter()
 	case m.Keymap.NavigateLeft.Matches(key):
-		if !focusedFilterActive {
-			return m.navigateLeft()
-		}
+		return m.navigateLeft()
 	case m.Keymap.ToggleVisualLine.Matches(key):
-		if m.focus == secretsPane && !focusedFilterActive {
+		if m.focus == secretsPane {
 			m.toggleVisualLineMode()
 			return m, nil
 		}
 	case m.Keymap.ToggleMark.Matches(key):
-		if m.focus == secretsPane && !focusedFilterActive {
+		if m.focus == secretsPane {
 			m.toggleCurrentSecretMark()
 			return m, nil
 		}
-	case m.Keymap.VisualSwapAnchor.Matches(key):
-		if m.focus == secretsPane && m.visualLineMode && !focusedFilterActive {
-			m.swapVisualAnchor()
-			m.refreshSecretSelectionDisplay()
-			return m, nil
-		}
 	case m.Keymap.ExitVisualLine.Matches(key):
-		if m.focus == secretsPane && !focusedFilterActive {
-			if m.visualLineMode {
-				m.commitVisualSelection()
-				m.visualLineMode = false
-				m.visualAnchor = ""
-				m.refreshSecretSelectionDisplay()
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedSecrets)))
-				return m, nil
+		if m.focus == secretsPane && len(m.markedSecrets) > 0 {
+			count := len(m.markedSecrets)
+			for name := range m.markedSecrets {
+				delete(m.markedSecrets, name)
 			}
-			if len(m.markedSecrets) > 0 {
-				count := len(m.markedSecrets)
-				for name := range m.markedSecrets {
-					delete(m.markedSecrets, name)
-				}
-				m.refreshSecretSelectionDisplay()
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
-				return m, nil
-			}
+			m.refreshSecretSelectionDisplay()
+			m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
+			return m, nil
 		}
 	case m.Keymap.ActionMenu.Matches(key):
-		if !focusedFilterActive {
-			m.actionMenu.open(m.buildActions())
-			return m, nil
-		}
+		m.actionMenu.open(m.buildActions())
+		return m, nil
 	case m.Keymap.YankSecret.Matches(key):
-		if !focusedFilterActive {
-			return m.handleYank()
-		}
+		return m.handleYank()
 	case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):
-		if !focusedFilterActive && !m.ThemeOverlay.Active {
+		if !m.ThemeOverlay.Active {
 			m.ThemeOverlay.Open()
 			return m, nil
 		}
 	case !m.EmbeddedMode && m.Keymap.ToggleHelp.Matches(key):
-		if !focusedFilterActive && !m.ThemeOverlay.Active {
+		if !m.ThemeOverlay.Active {
 			if m.HelpOverlay.Active {
 				m.HelpOverlay.Close()
 			} else {
@@ -394,24 +418,22 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 	case m.Keymap.SubscriptionPicker.Matches(key):
-		if !focusedFilterActive {
-			m.SubOverlay.Open()
-			m.startLoading(-1, "Refreshing subscriptions...")
-			return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
-		}
+		m.SubOverlay.Open()
+		m.startLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
 	case m.Keymap.Inspect.Matches(key):
-		if !focusedFilterActive {
-			m.toggleInspect()
-			return m, nil
-		}
+		m.toggleInspect()
+		return m, nil
 	case m.Keymap.BackspaceUp.Matches(key):
-		if !focusedFilterActive {
-			return m.handleBackspace()
-		}
+		return m.handleBackspace()
 	}
 
-	// Key didn't match any app-specific handler — fall through to the
-	// focused list so filter input and cursor keys reach it.
+	return m.updateFocusedList(msg)
+}
+
+// updateFocusedList forwards a message to the currently focused list
+// and returns the updated model.
+func (m Model) updateFocusedList(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch m.focus {
 	case vaultsPane:
@@ -420,9 +442,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.secretsList, cmd = m.secretsList.Update(msg)
 	case versionsPane:
 		m.versionsList, cmd = m.versionsList.Update(msg)
-	}
-	if markVisualAfterListUpdate {
-		m.refreshSecretSelectionDisplay()
 	}
 	return m, cmd
 }
