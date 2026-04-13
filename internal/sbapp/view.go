@@ -104,10 +104,6 @@ func (m Model) View() tea.View {
 		Footer: m.inspectFooter(messagesPane, ui.PaneContentWidth(paneStyle, pw[messagesPane])),
 		Frame:  ui.PaneFrame{Width: pw[messagesPane], Height: h, Focused: m.focus == messagesPane},
 	}
-	if m.deadLetter {
-		dangerFrame := paneStyle.Copy().BorderForeground(m.Styles.Danger.GetForeground())
-		messagesLp.FrameStyle = &dangerFrame
-	}
 	paneMap[messagesPane] = ui.RenderListPane(messagesLp, m.Styles)
 
 	// Message preview pane.
