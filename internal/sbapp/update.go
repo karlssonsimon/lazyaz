@@ -309,8 +309,14 @@ func (m Model) handleEntitiesRefreshed(msg entitiesRefreshedMsg) (Model, tea.Cmd
 	}
 	m.entities = msg.entities
 	m.rebuildEntitiesItems()
-	// Refresh queue type counts if we're looking at one.
+	// Sync currentEntity so queue type counts reflect the latest data.
 	if m.hasPeekTarget {
+		for _, e := range m.entities {
+			if e.Name == m.currentEntity.Name {
+				m.currentEntity = e
+				break
+			}
+		}
 		m.buildQueueTypeItems()
 	}
 	return m, nil
