@@ -62,7 +62,7 @@ func (m Model) View() tea.View {
 		Hints: []ui.PaneHint{
 			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
 			{Key: km.NavigateLeft.Short(), Desc: "back"},
-			{Key: km.ToggleDLQFilter.Short(), Desc: "DLQ-first"},
+			{Key: km.ToggleDLQFilter.Short(), Desc: "sort/filter"},
 		},
 		Footer: m.inspectFooter(entitiesPane, ui.PaneContentWidth(paneStyle, pw[entitiesPane])),
 		Frame:  ui.PaneFrame{Width: pw[entitiesPane], Height: h, Focused: m.focus == entitiesPane},

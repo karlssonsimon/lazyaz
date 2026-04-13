@@ -202,7 +202,7 @@ func (m Model) buildActions() []action {
 					n = 1
 				}
 				actions = append(actions,
-					action{actionRequeueCurrent, fmt.Sprintf("Requeue %d message(s) (send + complete)", n), ""},
+					action{actionRequeueCurrent, fmt.Sprintf("Requeue %d message(s)", n), ""},
 					action{actionMoveCurrent, fmt.Sprintf("Move %d message(s) to...", n), ""},
 					action{actionCompleteCurrent, fmt.Sprintf("Complete %d message(s) (remove from DLQ)", n), ""},
 					action{actionAbandonAll, "Abandon all (release locks)", ""},
@@ -219,8 +219,8 @@ func (m Model) buildActions() []action {
 
 	// App-wide actions — available from any pane.
 	actions = append(actions,
-		action{actionRefresh, "Refresh current scope", km.RefreshScope.Short()},
-		action{actionInspect, "Toggle inspect", km.Inspect.Short()},
+		action{actionRefresh, "Refresh", km.RefreshScope.Short()},
+		action{actionInspect, "Toggle details panel", km.Inspect.Short()},
 		action{actionSubscriptionPicker, "Change subscription", km.SubscriptionPicker.Short()},
 	)
 	if !m.EmbeddedMode {

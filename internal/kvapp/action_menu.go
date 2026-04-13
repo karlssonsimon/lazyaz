@@ -144,7 +144,7 @@ func (m Model) buildActions() []action {
 
 	if m.focus == secretsPane && m.hasVault {
 		if item, ok := m.secretsList.SelectedItem().(secretItem); ok {
-			actions = append(actions, action{actionYankSecretName, "Yank secret name to clipboard", ""})
+			actions = append(actions, action{actionYankSecretName, "Yank secret name", ""})
 			actions = append(actions, action{actionYankSecretValue, fmt.Sprintf("Yank secret value (%s)", item.secret.Name), km.YankSecret.Short()})
 		}
 
@@ -172,8 +172,8 @@ func (m Model) buildActions() []action {
 
 	// App-wide actions — available from any pane.
 	actions = append(actions,
-		action{actionRefresh, "Refresh current scope", km.RefreshScope.Short()},
-		action{actionInspect, "Toggle inspect", km.Inspect.Short()},
+		action{actionRefresh, "Refresh", km.RefreshScope.Short()},
+		action{actionInspect, "Toggle details panel", km.Inspect.Short()},
 		action{actionSubscriptionPicker, "Change subscription", km.SubscriptionPicker.Short()},
 	)
 	if !m.EmbeddedMode {

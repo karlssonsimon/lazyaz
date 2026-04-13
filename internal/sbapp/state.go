@@ -228,7 +228,6 @@ type targetEntitiesLoadedMsg struct {
 func newList(delegate list.DefaultDelegate, name, plural string) list.Model {
 	l := list.New([]list.Item{}, delegate, 40, 10)
 	l.SetShowTitle(false)
-	l.SetShowFilter(false)
 	l.SetShowHelp(false)
 	l.SetShowPagination(false)
 	l.SetShowStatusBar(true)
