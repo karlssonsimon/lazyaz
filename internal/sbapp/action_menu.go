@@ -288,9 +288,9 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 
 	case actionRequeueAllDLQ:
 		m.startLoading(m.focus, "Requeuing all DLQ messages...")
-		dlqCount := int(m.currentEntity.DeadLetterCount)
+		_, dead := m.currentMessageCounts()
 		return m, tea.Batch(m.Spinner.Tick,
-			requeueAllDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, dlqCount))
+			requeueAllDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, int(dead)))
 
 	case actionMoveAll:
 		m.openTargetPicker(actionMoveAll)

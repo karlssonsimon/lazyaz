@@ -750,7 +750,7 @@ func (s *Service) resendAllFromDLQ(ctx context.Context, client *azservicebus.Cli
 
 // ResendAllFromSource receives all messages from a source (active or DLQ) and
 // resends them to a target entity using a single receiver and sender.
-func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityName, subName string, deadLetter bool, targetNS Namespace, targetName string) (int, error) {
+func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityName, subName string, deadLetter bool, targetNS Namespace, targetName string, expectedCount int) (int, error) {
 	client, err := s.getClient(ns.FQDN)
 	if err != nil {
 		return 0, err
@@ -776,7 +776,11 @@ func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityN
 	}
 	defer receiver.Close(ctx)
 
-	return s.resendAll(ctx, targetClient, receiver, targetName, 50, 0)
+	batchSize := 50
+	if expectedCount > 0 && expectedCount < batchSize {
+		batchSize = expectedCount
+	}
+	return s.resendAll(ctx, targetClient, receiver, targetName, batchSize, expectedCount)
 }
 
 type DuplicateError struct {
