@@ -1,6 +1,6 @@
 ---
-title: Blob Storage
-description: Browse containers, preview blobs, and download files.
+title: "Blob Storage - Browse Containers, Preview & Download Blobs from Terminal"
+description: "Browse Azure Blob Storage from your terminal with lazyaz. Navigate containers and virtual folders, preview files with syntax highlighting, multi-select and bulk download blobs. Works on containers with millions of blobs."
 ---
 
 import { Steps } from '@astrojs/starlight/components';
@@ -8,6 +8,12 @@ import { Steps } from '@astrojs/starlight/components';
 The Blob Storage view lets you browse storage accounts, containers, and blobs
 with virtual folder navigation. You can preview files inline, multi-select
 blobs, and download them in bulk.
+
+**Common tasks this replaces:**
+- `az storage blob list` + `az storage blob download` pipelines
+- Opening Azure Portal to check "what's in this container?"
+- Using Storage Explorer to browse a folder structure or preview a file
+- Writing scripts to search for blobs by prefix
 
 ## Pane layout
 
@@ -35,13 +41,13 @@ on large containers.
 
 | Key | Mode | How it works |
 |---|---|---|
-| `/` | Hierarchy | Server-side prefix search — type a prefix, press `Enter` |
-| `/` | Load-all | Local fuzzy filter on the full blob list |
+| `/` | Either | Local fuzzy filter on the current blob list |
+| `a` → Search by prefix | Hierarchy | Server-side prefix search — calls the Azure API, works on any container size |
 | `Esc` | Either | Clear active filter |
 
-In hierarchy mode, filtering calls the Azure API with your prefix, so it
-works on containers of any size. In load-all mode, filtering is instant
-because the full list is already in memory.
+Use `/` for quick local filtering on what's already loaded. For large containers
+in hierarchy mode, use the action menu (`a`) and select **Search by prefix** to
+run a server-side query — this works regardless of container size.
 
 ## Preview
 
@@ -76,7 +82,7 @@ Mark individual blobs with `Space`, or use visual-line mode for ranges:
 </Steps>
 
 Downloads are saved to `<download_dir>/<account>/<container>/...`, preserving
-the blob path structure. Configure `download_dir` in `config.yaml` (defaults
+the blob path structure. Configure `download_dir` in `config.json` (defaults
 to `~/Downloads`).
 
 ## Sorting
@@ -104,6 +110,34 @@ Press `K` to toggle an inline detail strip below the focused pane. It shows
 metadata for the selected item — storage account properties, container details,
 or blob size/type/tier/modified time — and updates live as you move the cursor.
 
+## Actions
+
+Press `a` to open the action menu. Available actions depend on context:
+
+### Blobs pane
+
+| Action | Description |
+|---|---|
+| Load all blobs / Browse by folder | Switch between hierarchy and flat load-all mode |
+| Search by prefix | Server-side prefix search (hierarchy mode only) |
+| Sort blobs | Open the sort picker |
+| Toggle mark | Mark or unmark the current blob |
+| Toggle visual line selection | Enter or exit visual-line mode |
+| Download selection | Download marked or visually selected blobs |
+| Download marked (N) | Download all marked blobs (shown when marks exist) |
+| Clear all marks | Remove all marks (shown when marks exist) |
+| Download current blob | Download the blob under the cursor |
+| Yank blob name | Copy the blob name to clipboard |
+| Yank blob content | Copy the blob data to clipboard (blobs under 5 MB) |
+
+### Any pane
+
+| Action | Description |
+|---|---|
+| Refresh | Reload the current scope |
+| Toggle details panel | Show or hide the inspect strip |
+| Change subscription | Open the subscription picker |
+
 ## Keybindings
 
 | Key | Action |
@@ -112,7 +146,7 @@ or blob size/type/tier/modified time — and updates live as you move the cursor
 | `Enter` / `l` | Open / drill in |
 | `h` / `Left` | Go back |
 | `Backspace` | Up one folder |
-| `/` | Filter / prefix search |
+| `/` | Filter current list |
 | `Ctrl+D` / `Ctrl+U` | Half-page scroll |
 | `a` | Action menu |
 | `A` | Toggle load-all mode |

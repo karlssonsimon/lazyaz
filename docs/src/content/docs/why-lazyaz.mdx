@@ -1,0 +1,70 @@
+---
+title: "Why lazyaz - Azure Portal & Storage Explorer Alternative for the Terminal"
+description: "Compare lazyaz to the Azure Portal, Azure Storage Explorer, and the az CLI. Learn why a terminal UI is the fastest way to browse Azure Blob Storage, Service Bus, and Key Vault."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+If you're reading this, you probably already have a way to interact with Azure. So why add another tool? Here's how lazyaz compares to what you're likely using today.
+
+## vs. Azure Portal
+
+The Azure Portal is the default way to browse Azure resources, but it's designed for everything — provisioning, monitoring, billing, RBAC, networking — not for the narrow task of "let me quickly check what's in this container" or "what messages are stuck in the dead-letter queue."
+
+**Where lazyaz wins:**
+- **Speed** — no browser, no page loads, no waiting for the portal to render. lazyaz shows results in milliseconds.
+- **Keyboard-first** — every action is a keystroke. No mouse required.
+- **Works over SSH** — debugging a production issue from a jump host? lazyaz runs in any terminal.
+- **Multi-service tabs** — Blob, Service Bus, and Key Vault side by side. The portal makes you navigate between separate blades.
+- **DLQ operations** — requeue, move, or delete dead-letter messages in bulk. The portal's Service Bus explorer is limited.
+
+**Where the portal wins:**
+- Resource provisioning and management (creating storage accounts, setting up RBAC, etc.)
+- Monitoring dashboards and metrics
+- Anything outside Blob/ServiceBus/KeyVault
+
+lazyaz is not a portal replacement — it's a shortcut for the inspect-and-debug tasks you do every day.
+
+## vs. Azure Storage Explorer
+
+Storage Explorer is Microsoft's desktop app for browsing Blob, Table, Queue, and File storage. It's Electron-based and focused primarily on storage.
+
+**Where lazyaz wins:**
+- **Lighter** — no Electron, no GUI framework. lazyaz is a single Go binary under 20 MB.
+- **Faster startup** — launches instantly. Storage Explorer can take several seconds.
+- **Service Bus + Key Vault** — Storage Explorer only covers storage. lazyaz covers three services in one tool.
+- **Terminal-native** — works over SSH, inside tmux, on headless servers. Storage Explorer needs a display.
+- **DLQ management** — Storage Explorer has no Service Bus support at all.
+
+**Where Storage Explorer wins:**
+- Table and Queue storage (lazyaz focuses on Blob)
+- Drag-and-drop uploads
+- AzCopy integration for large transfers
+- GUI for users who prefer mouse-driven workflows
+
+## vs. `az` CLI
+
+The Azure CLI is powerful and scriptable, but it's designed for one-shot commands — not interactive browsing.
+
+**Where lazyaz wins:**
+- **Interactive exploration** — browse and drill into resources without knowing exact names. No need to construct `az storage blob list --account-name X --container-name Y --prefix Z` from memory.
+- **Context** — see parent and child resources simultaneously in a miller-columns layout.
+- **DLQ workflows** — peeking a dead-letter queue with `az servicebus` requires multiple commands and JSON parsing. lazyaz shows it in a list.
+- **Preview** — view blob contents with syntax highlighting, inline. No piping to `jq` or writing to temp files.
+
+**Where `az` CLI wins:**
+- Scripting and automation (CI/CD pipelines, shell scripts)
+- Full API coverage — `az` wraps every Azure API. lazyaz covers browse/inspect operations.
+- Write operations (uploads, deletes, config changes) — lazyaz is read-focused with targeted write operations (DLQ requeue, download).
+
+## The sweet spot
+
+lazyaz is purpose-built for one thing: **fast, keyboard-driven browsing and inspection of Azure resources during development and debugging.** It doesn't try to replace the portal, Storage Explorer, or the CLI — it complements them by making the most common inspect tasks faster.
+
+If you find yourself doing any of these regularly, lazyaz will save you time:
+
+- Checking what's in a blob container
+- Peeking dead-letter queues to debug message failures
+- Pulling a secret value during local development
+- Browsing resources across multiple subscriptions or tenants
+- Inspecting message properties or blob metadata

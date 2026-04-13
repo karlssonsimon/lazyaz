@@ -88,8 +88,8 @@ func TestLoadConfig_MissingFile(t *testing.T) {
 
 func TestLoadConfig_ThemeName(t *testing.T) {
 	dir := t.TempDir()
-	data := []byte("theme: \"Rose Pine\"\n")
-	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), data, 0o644); err != nil {
+	data := []byte(`{"theme": "Rose Pine"}`)
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -169,7 +169,7 @@ palette:
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("theme: \"My Custom\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"theme": "My Custom"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

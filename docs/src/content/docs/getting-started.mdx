@@ -1,13 +1,19 @@
 ---
-title: Getting Started
-description: Install lazyaz and start browsing Azure resources in under a minute.
+title: "Getting Started - Install and Launch lazyaz"
+description: "Install lazyaz and start browsing Azure Blob Storage, Service Bus, and Key Vault from your terminal in under a minute. Works anywhere az login works."
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
 Browse Azure Blob Storage, Service Bus, and Key Vault from your terminal.
 Navigate storage accounts, peek dead-letter queues, yank secrets — all without
 leaving the keyboard. Runs anywhere `az login` works.
+
+## Prerequisites
+
+- **Go 1.22+** (for `go install`)
+- **Azure CLI** (`az`) — [install guide](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
+- An active Azure subscription with resources to browse
 
 ## Installation
 
@@ -26,13 +32,15 @@ go build -o lazyaz ./cmd/lazyaz
 </TabItem>
 </Tabs>
 
-## Prerequisites
+## Log in to Azure
 
-Make sure you're logged in to Azure:
+Make sure you're authenticated:
 
 ```bash
 az login
 ```
+
+If you work with multiple tenants, don't worry — lazyaz supports [switching tenants](/lazyaz/multi-tenant/) from within the app without re-opening a browser.
 
 ## Launch
 
@@ -40,4 +48,67 @@ az login
 lazyaz
 ```
 
-Pick a subscription and you're in. Press `?` for help, `a` for actions.
+## Your first 60 seconds
+
+lazyaz ships with two keymaps: **vim-style** (default) and **standard**. Switch by setting `keymap` in `~/.config/lazyaz/config.json`:
+
+```json
+{ "keymap": "standard" }
+```
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+<Steps>
+
+1. **Pick a subscription** — the subscription picker opens automatically. Type to fuzzy-filter, press `Enter` to select.
+
+2. **Browse resources** — storage accounts, namespaces, or vaults appear in the left pane. Press `Enter` or `l` to drill in.
+
+3. **Navigate** — `j`/`k` to move the cursor, `Tab` to switch panes, `h` to go back. It works like you'd expect.
+
+4. **Use the action menu** — press `a` for context-aware actions: download blobs, requeue dead-letter messages, yank secrets.
+
+5. **Open the command palette** — press `Ctrl+P` to search all commands: open new tabs, switch themes, change subscriptions, switch tenants.
+
+</Steps>
+</TabItem>
+<TabItem label="Standard">
+<Steps>
+
+1. **Pick a subscription** — the subscription picker opens automatically. Type to fuzzy-filter, press `Enter` to select.
+
+2. **Browse resources** — storage accounts, namespaces, or vaults appear in the left pane. Press `Enter` or `Right` to drill in.
+
+3. **Navigate** — arrow keys to move, `Tab` to switch panes, `Left` to go back.
+
+4. **Use the action menu** — press `a` for context-aware actions: download blobs, requeue dead-letter messages, yank secrets.
+
+5. **Open the command palette** — press `Ctrl+P` to search all commands: open new tabs, switch themes, change subscriptions, switch tenants.
+
+</Steps>
+</TabItem>
+</Tabs>
+
+## Pre-configured tabs
+
+Skip the subscription picker by configuring startup tabs in `~/.config/lazyaz/config.json`:
+
+```json
+{
+  "tabs": [
+    { "kind": "blob", "subscription": "your-subscription-id" },
+    { "kind": "servicebus", "subscription": "your-subscription-id" },
+    { "kind": "keyvault" }
+  ]
+}
+```
+
+lazyaz opens directly into these tabs on launch. See [Configuration](/lazyaz/configuration/overview/) for all options.
+
+## Next steps
+
+- [Navigation](/lazyaz/navigation/) — learn the keyboard shortcuts and pane layout
+- [Blob Storage](/lazyaz/resources/blob-storage/) — browse containers, preview and download blobs
+- [Service Bus](/lazyaz/resources/service-bus/) — peek queues and manage dead-letter messages
+- [Key Vault](/lazyaz/resources/key-vault/) — browse secrets and copy values to clipboard
+- [Authentication](/lazyaz/authentication/) — how Azure credentials work and what permissions you need

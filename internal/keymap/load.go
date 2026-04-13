@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-
-	"gopkg.in/yaml.v3"
 )
 
 //go:embed keymaps/*.json
@@ -21,9 +19,11 @@ type keymapFile struct {
 
 // Load reads the active keymap from the config directory. Stock keymaps are
 // copied to configDir/keymaps/ if missing. The active keymap name is read
-// from configDir/config.yaml (field "keymap", default "default"). Any
-// bindings present in the JSON override the defaults; omitted actions keep
-// their default bindings.
+// from configDir/config.json (field "keymap", default "default"). Any
+// bindings present in the keymap file override the defaults; omitted actions
+// keep their default bindings. Inline "bindings" in config.json are applied
+// on top of the keymap file, allowing per-user overrides without a custom
+// keymap file.
 func Load(configDir string) Keymap {
 	if configDir == "" {
 		return Default()
@@ -32,21 +32,23 @@ func Load(configDir string) Keymap {
 	keymapsDir := filepath.Join(configDir, "keymaps")
 	ensureStockKeymaps(keymapsDir)
 
-	name := activeKeymapName(configDir)
+	name, inlineBindings := readKeymapConfig(configDir)
 	km := Default()
 
 	path := filepath.Join(keymapsDir, name+".json")
 	data, err := os.ReadFile(path)
-	if err != nil {
-		return km
+	if err == nil {
+		var f keymapFile
+		if json.Unmarshal(data, &f) == nil {
+			mergeBindings(&km, f.Bindings)
+		}
 	}
 
-	var f keymapFile
-	if json.Unmarshal(data, &f) != nil {
-		return km
+	// Inline bindings from config.json override the keymap file.
+	if len(inlineBindings) > 0 {
+		mergeBindings(&km, inlineBindings)
 	}
 
-	mergeBindings(&km, f.Bindings)
 	return km
 }
 
@@ -67,18 +69,25 @@ func ensureStockKeymaps(keymapsDir string) {
 	}
 }
 
-func activeKeymapName(configDir string) string {
-	data, err := os.ReadFile(filepath.Join(configDir, "config.yaml"))
+// readKeymapConfig reads the keymap name and optional inline bindings from
+// config.json. Returns ("default", nil) if the file is missing or invalid.
+func readKeymapConfig(configDir string) (string, map[string][]string) {
+	data, err := os.ReadFile(filepath.Join(configDir, "config.json"))
 	if err != nil {
-		return "default"
+		return "default", nil
 	}
 	var cfg struct {
-		Keymap string `yaml:"keymap"`
+		Keymap   string              `json:"keymap"`
+		Bindings map[string][]string `json:"bindings"`
 	}
-	if yaml.Unmarshal(data, &cfg) != nil || cfg.Keymap == "" {
-		return "default"
+	if json.Unmarshal(data, &cfg) != nil {
+		return "default", nil
 	}
-	return cfg.Keymap
+	name := cfg.Keymap
+	if name == "" {
+		name = "default"
+	}
+	return name, cfg.Bindings
 }
 
 // mergeBindings overlays JSON bindings onto the keymap struct using

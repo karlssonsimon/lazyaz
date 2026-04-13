@@ -1,9 +1,9 @@
 ---
-title: lazyaz
-description: A keyboard-driven TUI for Azure — Blob Storage, Service Bus, and Key Vault.
+title: "lazyaz - A Terminal UI for Azure"
+description: "lazyaz is a fast, keyboard-driven terminal UI (TUI) for Azure. Browse resources, inspect messages, manage secrets — all without leaving your terminal. Like lazygit, but for Azure."
 template: splash
 hero:
-  tagline: A keyboard-driven TUI for Azure — Blob Storage, Service Bus, and Key Vault — built with Bubble Tea.
+  tagline: "A keyboard-driven terminal UI for Azure. Like lazygit, but for Azure."
   actions:
     - text: Get Started
       link: /lazyaz/getting-started/
@@ -18,38 +18,54 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## What is lazyaz?
 
-`lazyaz` is to `az` what `lazygit` is to `git`: a fast, fully-keyboard terminal explorer that
-turns common Azure browse-and-inspect tasks into a few keystrokes. No more clicking through the
-Azure Portal to peek at a dead-letter queue or download a blob.
+`lazyaz` is a terminal user interface (TUI) for Azure, built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). It's designed for developers and platform engineers who work with Azure daily and want a faster alternative to clicking through the Azure Portal or writing `az` CLI one-liners.
+
+If [lazygit](https://github.com/jesseduffield/lazygit) is to `git` what lazyaz is to Azure: a fast, fully-keyboard terminal explorer that turns common browse-and-inspect tasks into a few keystrokes. Navigate storage accounts, peek dead-letter queues, pull secrets during debugging sessions — all without opening a browser.
 
 {/* TODO: add a screenshot — place the image in public/ and reference it here */}
-{/* ![lazyaz in action](/lazyaz/screenshot.png) */}
+{/* ![lazyaz terminal UI showing Azure Blob Storage browser](/lazyaz/screenshot.png) */}
 
 ## Who is it for?
 
-Developers and platform engineers who work with Azure regularly and want a fast, keyboard-driven
-alternative to the portal. If you spend time browsing storage accounts, tailing dead-letter queues,
-or pulling secrets during debugging sessions, this is for you.
+- **Backend developers** debugging production issues — peek Service Bus dead-letter queues to see why messages failed, inspect blob contents, or pull a Key Vault secret for a local test run.
+- **Platform engineers** managing infrastructure — browse storage accounts across subscriptions, check queue depths, audit secret versions.
+- **DevOps engineers** working in SSH sessions or remote terminals where a browser isn't available — lazyaz runs anywhere `az login` works.
+- **Anyone tired of the Azure Portal** for routine inspection tasks — no page loads, no clicking through menus, just keyboard shortcuts.
 
 ## Feature highlights
 
 <CardGrid>
-	<Card title="Blob Storage" icon="document">
-		Browse containers, navigate virtual folders, preview files with syntax highlighting, multi-select and download in bulk. Server-side prefix search on containers of any size.
+	<Card title="Blob Storage browser" icon="document">
+		Browse containers, navigate virtual folders, preview files with syntax highlighting, multi-select and download in bulk. Server-side prefix search works on containers of any size — even millions of blobs.
 	</Card>
-	<Card title="Service Bus" icon="warning">
-		Peek active and dead-letter queues, requeue or move DLQ messages, delete duplicates, and inspect topics and subscriptions — without writing CLI one-liners.
+	<Card title="Service Bus inspector" icon="warning">
+		Peek active and dead-letter queues, requeue or move DLQ messages, delete duplicates, and inspect topics and subscriptions. Manage message flow without writing CLI scripts.
 	</Card>
-	<Card title="Key Vault" icon="setting">
-		Browse secrets and their version history. Yank a secret value to your clipboard with a single keystroke, or bulk-export marked secrets as JSON.
+	<Card title="Key Vault secrets" icon="setting">
+		Browse secrets and their version history. Yank a secret value to your clipboard with a single keystroke, or bulk-export marked secrets as JSON. Values never appear on screen.
 	</Card>
 	<Card title="Tabbed multi-service UI" icon="open-book">
-		Run Blob, Service Bus, and Key Vault side by side in tabs. Each tab has its own subscription. Switch with `Alt+1`–`9` or the command palette (`Ctrl+P`).
+		Run Blob, Service Bus, and Key Vault side by side in tabs. Each tab has its own subscription context. Switch with `Alt+1`-`9` or the command palette (`Ctrl+P`).
 	</Card>
-	<Card title="Action menu & command palette" icon="list-format">
-		Press `a` for context-aware actions on the current selection, or `Ctrl+P` to search all available commands. Every operation is a few keystrokes away.
+	<Card title="Multi-tenant Azure support" icon="random">
+		Switch between Azure tenants instantly from the command palette — no browser sign-in needed. If your subscription exists in the new tenant, the switch is seamless with no interruption.
 	</Card>
 	<Card title="Customizable themes & keybindings" icon="puzzle">
-		Ships with 20+ Base16 color schemes. Keybindings are fully remappable via JSON — vim-style by default.
+		Ships with 300+ Base16 color schemes (Tokyo Night, Rose Pine, and more). Keybindings are fully remappable via JSON — vim-style by default, with a standard keymap included.
 	</Card>
 </CardGrid>
+
+## Quick start
+
+```bash
+# Install
+go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest
+
+# Log in to Azure (if you haven't already)
+az login
+
+# Launch
+lazyaz
+```
+
+Pick a subscription and start browsing. Press `?` for help, `a` for context-aware actions, `Ctrl+P` for the command palette.

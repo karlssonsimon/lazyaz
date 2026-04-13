@@ -126,7 +126,7 @@ func TestLoadFromDir(t *testing.T) {
 	os.WriteFile(filepath.Join(keymapsDir, "custom.json"), data, 0o644)
 
 	// Write config selecting it.
-	os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("keymap: custom\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"keymap": "custom"}`), 0o644)
 
 	km := Load(dir)
 	if !km.Quit.Matches("ctrl+q") {
@@ -138,6 +138,52 @@ func TestLoadFromDir(t *testing.T) {
 	// Non-overridden binding should use default.
 	if !km.NextFocus.Matches("tab") {
 		t.Fatal("expected default next_focus")
+	}
+}
+
+func TestLoadInlineBindings(t *testing.T) {
+	dir := t.TempDir()
+
+	// Config with inline bindings and no keymap file reference.
+	cfg := `{"bindings": {"quit": ["ctrl+q"], "next_focus": ["ctrl+n"]}}`
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(cfg), 0o644)
+
+	km := Load(dir)
+	if !km.Quit.Matches("ctrl+q") {
+		t.Fatal("expected inline quit binding")
+	}
+	if !km.NextFocus.Matches("ctrl+n") {
+		t.Fatal("expected inline next_focus binding")
+	}
+	// Non-overridden binding should use default.
+	if !km.RefreshScope.Matches("r") {
+		t.Fatal("expected default refresh_scope")
+	}
+}
+
+func TestLoadInlineBindingsOverrideKeymapFile(t *testing.T) {
+	dir := t.TempDir()
+	keymapsDir := filepath.Join(dir, "keymaps")
+	os.MkdirAll(keymapsDir, 0o755)
+
+	// Keymap file sets quit to ctrl+w.
+	custom := map[string]any{
+		"name":     "custom",
+		"bindings": map[string][]string{"quit": {"ctrl+w"}},
+	}
+	data, _ := json.Marshal(custom)
+	os.WriteFile(filepath.Join(keymapsDir, "custom.json"), data, 0o644)
+
+	// Config selects the keymap but also inlines a quit override.
+	cfg := `{"keymap": "custom", "bindings": {"quit": ["ctrl+q"]}}`
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(cfg), 0o644)
+
+	km := Load(dir)
+	if !km.Quit.Matches("ctrl+q") {
+		t.Fatal("expected inline binding to override keymap file")
+	}
+	if km.Quit.Matches("ctrl+w") {
+		t.Fatal("expected keymap file binding to be overridden")
 	}
 }
 

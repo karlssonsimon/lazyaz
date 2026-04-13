@@ -58,7 +58,7 @@
     "show_dead_letter_queue": ["]"],
     "requeue_dlq": ["R"],
     "delete_duplicate": ["D"],
-    "toggle_dlq_filter": ["f"],
+    "toggle_dlq_filter": ["s"],
     "message_back": ["h", "left", "backspace", "esc"],
     "yank_secret": ["y"],
     "inspect": ["K"]

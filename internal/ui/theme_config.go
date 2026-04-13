@@ -2,6 +2,7 @@ package ui
 
 import (
 	"embed"
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -41,15 +42,15 @@ func loadConfigFromDir(dir string) Config {
 	}
 
 	// Read shared config file.
-	cfgFile := filepath.Join(dir, "config.yaml")
+	cfgFile := filepath.Join(dir, "config.json")
 	data, err := os.ReadFile(cfgFile)
 	if err == nil {
 		var fileCfg struct {
-			ThemeName   string      `yaml:"theme"`
-			DownloadDir string      `yaml:"download_dir"`
-			Tabs        []TabConfig `yaml:"tabs"`
+			ThemeName   string      `json:"theme"`
+			DownloadDir string      `json:"download_dir"`
+			Tabs        []TabConfig `json:"tabs"`
 		}
-		if yaml.Unmarshal(data, &fileCfg) == nil {
+		if json.Unmarshal(data, &fileCfg) == nil {
 			if fileCfg.ThemeName != "" {
 				cfg.ThemeName = fileCfg.ThemeName
 			}
@@ -130,13 +131,13 @@ func SaveThemeName(name string) {
 	if dir == "" {
 		return
 	}
-	saveThemeNameToFile(filepath.Join(dir, "config.yaml"), name)
+	saveThemeNameToFile(filepath.Join(dir, "config.json"), name)
 }
 
 func saveThemeNameToFile(path, name string) {
 	cfg := make(map[string]any)
 	if data, err := os.ReadFile(path); err == nil {
-		if err := yaml.Unmarshal(data, &cfg); err != nil {
+		if err := json.Unmarshal(data, &cfg); err != nil {
 			cfg = make(map[string]any)
 		}
 	}
@@ -145,11 +146,11 @@ func saveThemeNameToFile(path, name string) {
 	}
 	cfg["theme"] = name
 
-	data, err := yaml.Marshal(cfg)
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return
 	}
 	os.MkdirAll(filepath.Dir(path), 0o755)
-	os.WriteFile(path, data, 0o644)
+	os.WriteFile(path, append(data, '\n'), 0o644)
 }
 

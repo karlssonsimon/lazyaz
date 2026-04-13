@@ -1,0 +1,117 @@
+---
+title: "FAQ & Troubleshooting"
+description: "Common questions and troubleshooting tips for lazyaz — Azure credential errors, permission issues, Service Bus dead-letter queue operations, and more."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Installation
+
+### Do I need the Azure CLI installed?
+
+Yes. lazyaz uses `DefaultAzureCredential` which relies on `az login` for local development. Install the Azure CLI from [Microsoft's guide](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli).
+
+### What Go version do I need?
+
+Go 1.22 or later for `go install`. Check with `go version`.
+
+### Does it work on Windows / macOS / Linux?
+
+Yes. lazyaz is a Go binary that runs on all three platforms. It uses your terminal's capabilities for rendering, so any modern terminal emulator works.
+
+## Authentication
+
+### "failed to initialize default azure credential"
+
+This means no Azure credential was found. Make sure you're logged in:
+
+```bash
+az login
+```
+
+If you're using managed identity or environment variables, ensure they're configured before launching lazyaz.
+
+### I see subscriptions but can't access resources (403 errors)
+
+This usually means your credential is authenticated against a different tenant than the one owning the resource. lazyaz handles this automatically by scoping credentials to each subscription's tenant, but if you're seeing persistent 403s:
+
+1. Check that your Azure AD identity has the right role on the resource (see [Authentication](/lazyaz/authentication/) for required permissions).
+2. Try switching to the correct tenant explicitly via **Azure Login / Switch Tenant** in the command palette (`Ctrl+P`).
+
+### How do I switch between Azure tenants?
+
+Open the command palette (`Ctrl+P`), select **Azure Login / Switch Tenant**, and pick a tenant. No browser sign-in needed — it reuses your existing session. See [Multi-Tenant Support](/lazyaz/multi-tenant/) for details.
+
+### Does lazyaz support managed identity?
+
+Yes. `DefaultAzureCredential` tries managed identity automatically when running on Azure VMs, App Service, or AKS. No extra configuration needed.
+
+## Blob Storage
+
+### Can I upload blobs?
+
+Not currently. lazyaz is focused on browsing, inspecting, and downloading. Use `az storage blob upload` or Storage Explorer for uploads.
+
+### How does it handle containers with millions of blobs?
+
+In the default hierarchy mode, lazyaz only loads one level of virtual folders at a time using server-side prefix listing. This is fast regardless of container size. To search by prefix, press `a` to open the action menu and select **Search by prefix** — this runs a server-side query so it works on containers of any size.
+
+For local fuzzy filtering on the full blob list, press `A` to switch to load-all mode — but this fetches every blob name, so it can be slow on very large containers.
+
+### Where are downloaded blobs saved?
+
+Downloads go to `<download_dir>/<account>/<container>/...`, preserving the path structure. The default download directory is `~/Downloads`. Change it in `~/.config/lazyaz/config.json`:
+
+```json
+{ "download_dir": "~/my-blobs" }
+```
+
+## Service Bus
+
+### Does peeking consume messages?
+
+No. Peeking is read-only — it does not lock or consume messages. You can peek the same messages repeatedly.
+
+### How do I requeue dead-letter messages?
+
+Navigate to a queue or topic subscription, select the dead-letter queue (`]`), then:
+- Press `R` to requeue **all** DLQ messages back to the active queue.
+- Or press `a` to open the action menu for single/marked message operations (requeue, move, complete).
+
+See [Service Bus](/lazyaz/resources/service-bus/) for the full workflow.
+
+### Can I send messages to a queue?
+
+Not currently. lazyaz focuses on inspection and DLQ management. Use `az servicebus` or your application code for sending.
+
+## Key Vault
+
+### Is the secret value displayed on screen?
+
+No. When you press `y` to yank a secret, the value goes directly to your clipboard. It's never rendered in the terminal. A confirmation toast appears to let you know it worked.
+
+### Can I create or update secrets?
+
+Not currently. lazyaz is read-only for Key Vault — browse, inspect versions, and copy values.
+
+## General
+
+### How do I change the color theme?
+
+Press `T` to open the theme picker. lazyaz ships with 300+ Base16 color schemes. Your selection is saved to `~/.config/lazyaz/config.json`.
+
+### Can I customize keybindings?
+
+Yes. Edit `~/.config/lazyaz/keymaps/default.json` or create a new keymap file. See [Keymaps](/lazyaz/configuration/keymaps/) for the full reference.
+
+### How do I open multiple resource types at once?
+
+Press `Ctrl+T` (or `Ctrl+N` in standard keymap) to open a new tab. Each tab can be Blob Storage, Service Bus, or Key Vault with its own subscription.
+
+### Is there mouse support?
+
+Yes. You can click on tabs, click to focus panes, scroll with the mouse wheel, and select text in preview panes. But lazyaz is designed keyboard-first — everything is faster with shortcuts.
+
+### How do I report a bug or request a feature?
+
+Open an issue at [github.com/karlssonsimon/lazyaz/issues](https://github.com/karlssonsimon/lazyaz/issues).

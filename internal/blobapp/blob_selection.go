@@ -479,7 +479,7 @@ func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 	}
 
 	if m.downloadDir == "" {
-		m.Notify(appshell.LevelError, "no download directory available — set download_dir in ~/.config/lazyaz/config.yaml")
+		m.Notify(appshell.LevelError, "no download directory available — set download_dir in ~/.config/lazyaz/config.json")
 		return m, nil
 	}
 	destinationRoot := filepath.Join(m.downloadDir, m.currentAccount.Name, m.containerName)

@@ -1,15 +1,15 @@
 ---
-title: Keymaps
-description: Full reference for the default (vim) and standard keymaps.
+title: "Keymaps - Full Keybinding Reference (Vim & Standard)"
+description: "Complete keybinding reference for lazyaz — vim-style and standard keymaps for navigation, Blob Storage, Service Bus, Key Vault, tabs, and overlays. Fully customizable via JSON."
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-lazyaz ships with two keymaps. Set `keymap` in your `config.yaml` to switch:
+lazyaz ships with two keymaps. Set `keymap` in your `config.json` to switch:
 
-```yaml
-keymap: "default"   # vim-style (default)
-keymap: "standard"  # conventional keys
+```json
+{ "keymap": "default" }   // vim-style (default)
+{ "keymap": "standard" }  // conventional keys
 ```
 
 ## General
@@ -154,7 +154,7 @@ keymap: "standard"  # conventional keys
 | Dead-letter queue | `]` |
 | Requeue all DLQ | `R` |
 | Delete duplicates | `D` |
-| DLQ entity filter | `f` |
+| Sort / filter entities | `s` |
 | Close message | `h` / `Left` / `Backspace` / `Esc` |
 </TabItem>
 <TabItem label="Standard">
@@ -265,7 +265,7 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
     "show_dead_letter_queue": ["]"],
     "requeue_dlq": ["R"],
     "delete_duplicate": ["D"],
-    "toggle_dlq_filter": ["f"],
+    "toggle_dlq_filter": ["s"],
     "message_back": ["h", "left", "backspace", "esc"],
     "yank_secret": ["y"],
     "inspect": ["K"]

@@ -2,7 +2,7 @@ package keymap
 
 // Default returns the built-in keymap with all default bindings.
 // This is vim-style navigation. Users who prefer standard arrow-key
-// bindings can set keymap: standard in config.yaml.
+// bindings can set "keymap": "standard" in config.json.
 func Default() Keymap {
 	return Keymap{
 		// Shared.
@@ -73,7 +73,7 @@ func Default() Keymap {
 		ShowDeadLetterQueue: New("]"),
 		RequeueDLQ:          New("R"),
 		DeleteDuplicate:     New("D"),
-		ToggleDLQFilter:     New("f"),
+		ToggleDLQFilter:     New("s"),
 		MessageBack:         New("h", "left", "backspace", "esc"),
 
 		// Key Vault.

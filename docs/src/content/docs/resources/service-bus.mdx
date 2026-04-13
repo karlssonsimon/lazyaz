@@ -1,6 +1,6 @@
 ---
-title: Service Bus
-description: Peek queues and topics, requeue dead-letter messages, and inspect subscriptions.
+title: "Service Bus - Peek Queues, Manage Dead-Letter Messages from Terminal"
+description: "Browse Azure Service Bus from your terminal with lazyaz. Peek active and dead-letter queues, requeue DLQ messages, delete duplicates, inspect topic subscriptions — all with keyboard shortcuts."
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -8,6 +8,12 @@ import { Aside } from '@astrojs/starlight/components';
 The Service Bus view lets you browse namespaces, queues, and topics. You can
 peek messages from active and dead-letter queues, requeue or move DLQ messages,
 and manage topic subscriptions.
+
+**Common tasks this replaces:**
+- `az servicebus` commands chained together to peek and parse messages
+- Opening Azure Portal's Service Bus Explorer to check dead-letter queues
+- Writing scripts to requeue or clean up DLQ messages
+- Manually counting message depths across multiple queues
 
 ## Pane layout
 
@@ -38,7 +44,7 @@ Press `a` to open the action menu, then select "Sort entities" to sort by:
 - Active message count (ascending / descending)
 - Dead-letter count (ascending / descending)
 
-Use `f` to toggle the DLQ filter, which hides entities with zero dead-letter messages.
+Use `s` to open the sort/filter menu, which hides entities with zero dead-letter messages.
 
 ## Peeking messages
 
@@ -90,6 +96,47 @@ Press `K` to toggle the inspect strip, which shows details for the selected
 namespace, entity, or message — including message counts, metadata, and
 properties.
 
+## Actions
+
+Press `a` to open the action menu. Available actions depend on which pane is focused and what state you're in.
+
+### Entities pane
+
+| Action | Description |
+|---|---|
+| Sort entities | Sort by name, active count, or dead-letter count |
+| Show all entities / Filter: only with dead letters | Toggle the DLQ entity filter |
+
+### Queue type pane
+
+| Action | Description |
+|---|---|
+| Requeue all DLQ messages (N) | Requeue every dead-letter message back to the active queue |
+| Move all messages to... (N) | Move all active or DLQ messages to a different queue or subscription |
+
+### Messages pane
+
+| Action | Description |
+|---|---|
+| Peek messages | Read-only peek of active or DLQ messages |
+| Peek more messages | Append more messages to the current list |
+| Clear messages | Remove peeked messages from the view |
+| Receive DLQ messages (with lock) | Lock DLQ messages for transactional operations |
+| Requeue N message(s) | Move locked messages back to the active queue |
+| Move N message(s) to... | Transfer locked messages to a different target |
+| Complete N message(s) | Permanently remove locked messages from the DLQ |
+| Abandon all (release locks) | Release all held locks without modifying messages |
+| Toggle mark | Mark or unmark the current message |
+| Toggle visual line selection | Enter or exit visual-line mode |
+
+### Any pane
+
+| Action | Description |
+|---|---|
+| Refresh | Reload the current scope |
+| Toggle details panel | Show or hide the inspect strip |
+| Change subscription | Open the subscription picker |
+
 ## Keybindings
 
 | Key | Action |
@@ -103,7 +150,7 @@ properties.
 | `[` / `]` | Switch active / DLQ |
 | `R` | Requeue all DLQ messages |
 | `D` | Delete duplicate messages |
-| `f` | Toggle DLQ entity filter |
+| `s` | Sort / filter entities |
 | `Space` | Toggle mark |
 | `v` | Visual-line selection |
 | `K` | Toggle inspect panel |

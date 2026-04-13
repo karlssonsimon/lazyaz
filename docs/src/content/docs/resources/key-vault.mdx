@@ -1,10 +1,16 @@
 ---
-title: Key Vault
-description: Browse vaults, inspect secrets and versions, and copy values to clipboard.
+title: "Key Vault - Browse Secrets, Copy Values to Clipboard from Terminal"
+description: "Browse Azure Key Vault from your terminal with lazyaz. List secrets and version history, yank values to clipboard without displaying them, bulk-export as JSON. Keyboard-driven and secure."
 ---
 
 The Key Vault view lets you browse vaults, list secrets and their version
 history, and yank secret values to your clipboard.
+
+**Common tasks this replaces:**
+- `az keyvault secret show` to retrieve individual secret values
+- Opening Azure Portal to browse secret version history
+- Writing scripts to export multiple secrets for local development
+- Manually copying secret values from the portal (which displays them on screen)
 
 ## Pane layout
 
@@ -43,6 +49,35 @@ Marked secrets can be bulk-yanked through the action menu.
 
 Press `K` to toggle the inspect strip, which shows details for the selected
 vault, secret, or version — including metadata and properties.
+
+## Actions
+
+Press `a` to open the action menu. Available actions depend on which pane is focused.
+
+### Secrets pane
+
+| Action | Description |
+|---|---|
+| Yank secret name | Copy the secret name to clipboard |
+| Yank secret value | Fetch and copy the secret value to clipboard |
+| Toggle mark | Mark or unmark the current secret |
+| Toggle visual line selection | Enter or exit visual-line mode |
+| Yank marked as JSON (N) | Fetch all marked secrets and copy as a JSON object (shown when marks exist) |
+| Clear all marks | Remove all marks (shown when marks exist) |
+
+### Versions pane
+
+| Action | Description |
+|---|---|
+| Yank version value | Fetch and copy a specific version's value to clipboard |
+
+### Any pane
+
+| Action | Description |
+|---|---|
+| Refresh | Reload the current scope |
+| Toggle details panel | Show or hide the inspect strip |
+| Change subscription | Open the subscription picker |
 
 ## Keybindings
 

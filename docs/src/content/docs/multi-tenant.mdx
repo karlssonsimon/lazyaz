@@ -1,0 +1,75 @@
+---
+title: "Multi-Tenant Azure Support - Switch Tenants Without Re-Authenticating"
+description: "lazyaz supports switching between Azure AD tenants instantly from the command palette. No browser sign-in needed — just pick a tenant and go. Works with multiple Azure subscriptions across tenants."
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+If you work with multiple Azure AD tenants — common for consultants, multi-org setups, or teams with separate dev/prod tenants — lazyaz lets you switch between them without leaving the app.
+
+## How it works
+
+lazyaz uses Azure's `DefaultAzureCredential` with cross-tenant support. When you select a subscription, the credential is automatically scoped to that subscription's tenant. When you explicitly switch tenants via the command palette, a new credential is created for the target tenant using your existing `az login` session — no browser sign-in needed.
+
+## Switching tenants
+
+<Steps>
+
+1. Open the command palette with `Ctrl+P`.
+
+2. Select **Azure Login / Switch Tenant**.
+
+3. Pick a tenant from the list (type to fuzzy-filter).
+
+4. If your current subscription exists in the new tenant, everything continues seamlessly — no disruption. If not, the subscription picker opens with the new tenant's subscriptions pre-loaded.
+
+</Steps>
+
+<Aside type="tip">
+Tenant switching reuses your existing `az login` session. You won't be prompted to sign in again unless your session has expired.
+</Aside>
+
+## Not logged in?
+
+If you're not logged in when you select **Azure Login / Switch Tenant**, lazyaz detects this and opens `az login` directly in your terminal. After authentication completes, you're returned to the app with the subscription picker ready.
+
+## Cross-tenant subscriptions at startup
+
+lazyaz lists subscriptions from all tenants you have access to. When you select a subscription, the credential is automatically scoped to that subscription's tenant — so resources in any tenant work out of the box, even at first launch.
+
+## Pre-configured tabs with specific subscriptions
+
+If you work with the same subscriptions daily, configure them in `~/.config/lazyaz/config.json`:
+
+```json
+{
+  "tabs": [
+    { "kind": "blob", "subscription": "sub-id-in-tenant-A" },
+    { "kind": "servicebus", "subscription": "sub-id-in-tenant-B" }
+  ]
+}
+```
+
+Each tab resolves its subscription's tenant automatically. You can have tabs pointing to different tenants side by side.
+
+## Troubleshooting
+
+### "Failed to switch tenant"
+
+This usually means your `az login` session doesn't have access to the selected tenant. Try logging in again:
+
+```bash
+az login
+```
+
+### Subscriptions from a tenant are missing
+
+The subscription list depends on what your Azure AD identity has access to. If you were recently added to a tenant, it may take a few minutes for permissions to propagate. You can also try:
+
+```bash
+az account list --refresh
+```
+
+### Token expired after switching
+
+If you see authentication errors after switching, your cached token may have expired. Open the command palette and run **Azure Login / Switch Tenant** again — if the token is expired, it will fall back to `az login` in the terminal.

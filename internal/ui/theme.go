@@ -23,10 +23,10 @@ type schemeFile struct {
 
 // Config holds the loaded configuration and available schemes.
 type Config struct {
-	ThemeName   string      `yaml:"theme"`
-	DownloadDir string      `yaml:"download_dir"`
-	Tabs        []TabConfig `yaml:"tabs"`
-	Schemes     []Scheme    `yaml:"-"`
+	ThemeName   string      `json:"theme"`
+	DownloadDir string      `json:"download_dir"`
+	Tabs        []TabConfig `json:"tabs"`
+	Schemes     []Scheme    `json:"-"`
 }
 
 // ResolvedDownloadDir returns the directory under which marked blobs
@@ -73,8 +73,8 @@ func (c Config) ResolvedDownloadDir() string {
 // "servicebus", "keyvault"). Subscription is an optional Azure
 // subscription ID to auto-select once subscriptions are loaded.
 type TabConfig struct {
-	Kind         string `yaml:"kind"`
-	Subscription string `yaml:"subscription,omitempty"`
+	Kind         string `json:"kind"`
+	Subscription string `json:"subscription,omitempty"`
 }
 
 // ActiveScheme returns the scheme matching ThemeName, or the first available.
