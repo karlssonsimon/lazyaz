@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
@@ -109,14 +110,21 @@ func requeueDLQMarkedCmd(svc *servicebus.Service, ns servicebus.Namespace, entit
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		var requeued []string
+
+		// Collect messages to requeue.
+		var toRequeue []*azservicebus.ReceivedMessage
 		for _, msg := range locked.Messages {
-			if _, ok := markedIDs[msg.MessageID]; !ok {
-				continue
+			if _, ok := markedIDs[msg.MessageID]; ok {
+				toRequeue = append(toRequeue, msg)
 			}
-			if err := svc.SendToQueue(ctx, ns, entityName, msg.Body); err != nil {
-				return dlqRequeueMsg{requeued: requeued, err: err}
-			}
+		}
+
+		if err := svc.SendBatch(ctx, ns, entityName, toRequeue); err != nil {
+			return dlqRequeueMsg{err: err}
+		}
+
+		var requeued []string
+		for _, msg := range toRequeue {
 			if err := locked.Complete(ctx, msg); err != nil {
 				return dlqRequeueMsg{requeued: requeued, err: err}
 			}
@@ -135,43 +143,13 @@ func abandonDLQCmd(locked *servicebus.ReceivedMessages) tea.Cmd {
 	}
 }
 
-func requeueAllDLQCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName, subName string) tea.Cmd {
+func requeueAllDLQCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName, subName string, count int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		total := 0
-		for {
-			var result *servicebus.ReceivedMessages
-			var err error
-			if subName == "" {
-				result, err = svc.ReceiveFromDLQ(ctx, ns, entityName, 50)
-			} else {
-				result, err = svc.ReceiveFromSubscriptionDLQ(ctx, ns, entityName, subName, 50)
-			}
-			if err != nil {
-				return dlqRequeueAllMsg{requeued: total, err: err}
-			}
-			if len(result.Messages) == 0 {
-				result.Receiver.Close(ctx)
-				break
-			}
-
-			for _, msg := range result.Messages {
-				if err := svc.SendToQueue(ctx, ns, entityName, msg.Body); err != nil {
-					result.Close(ctx)
-					return dlqRequeueAllMsg{requeued: total, err: err}
-				}
-				if err := result.Complete(ctx, msg); err != nil {
-					result.Receiver.Close(ctx)
-					return dlqRequeueAllMsg{requeued: total, err: err}
-				}
-				total++
-			}
-			result.Receiver.Close(ctx)
-		}
-
-		return dlqRequeueAllMsg{requeued: total}
+		total, err := svc.ResendAllFromDLQ(ctx, ns, entityName, subName, entityName, count)
+		return dlqRequeueAllMsg{requeued: total, err: err}
 	}
 }
 
@@ -216,53 +194,15 @@ func deleteDuplicateCmd(svc *servicebus.Service, ns servicebus.Namespace, entity
 	}
 }
 
-// moveAllCmd receives all messages (from DLQ or active queue) in batches and
+// moveAllCmd receives all messages (from DLQ or active queue) and
 // sends them to a different target queue/topic, then completes the originals.
 func moveAllCmd(svc *servicebus.Service, sourceNS servicebus.Namespace, entityName, subName string, deadLetter bool, targetNS servicebus.Namespace, targetEntity string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		total := 0
-		for {
-			var result *servicebus.ReceivedMessages
-			var err error
-			if deadLetter {
-				if subName == "" {
-					result, err = svc.ReceiveFromDLQ(ctx, sourceNS, entityName, 50)
-				} else {
-					result, err = svc.ReceiveFromSubscriptionDLQ(ctx, sourceNS, entityName, subName, 50)
-				}
-			} else {
-				if subName == "" {
-					result, err = svc.ReceiveFromQueue(ctx, sourceNS, entityName, 50)
-				} else {
-					result, err = svc.ReceiveFromSubscription(ctx, sourceNS, entityName, subName, 50)
-				}
-			}
-			if err != nil {
-				return moveAllDoneMsg{moved: total, err: err}
-			}
-			if len(result.Messages) == 0 {
-				result.Receiver.Close(ctx)
-				break
-			}
-
-			for _, msg := range result.Messages {
-				if err := svc.SendToQueue(ctx, targetNS, targetEntity, msg.Body); err != nil {
-					result.Close(ctx)
-					return moveAllDoneMsg{moved: total, err: err}
-				}
-				if err := result.Complete(ctx, msg); err != nil {
-					result.Receiver.Close(ctx)
-					return moveAllDoneMsg{moved: total, err: err}
-				}
-				total++
-			}
-			result.Receiver.Close(ctx)
-		}
-
-		return moveAllDoneMsg{moved: total}
+		total, err := svc.ResendAllFromSource(ctx, sourceNS, entityName, subName, deadLetter, targetNS, targetEntity)
+		return moveAllDoneMsg{moved: total, err: err}
 	}
 }
 
@@ -272,14 +212,21 @@ func moveMarkedCmd(svc *servicebus.Service, targetNS servicebus.Namespace, targe
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		var moved []string
+
+		// Collect messages to move.
+		var toMove []*azservicebus.ReceivedMessage
 		for _, msg := range locked.Messages {
-			if _, ok := markedIDs[msg.MessageID]; !ok {
-				continue
+			if _, ok := markedIDs[msg.MessageID]; ok {
+				toMove = append(toMove, msg)
 			}
-			if err := svc.SendToQueue(ctx, targetNS, targetEntity, msg.Body); err != nil {
-				return moveMarkedDoneMsg{moved: moved, err: err}
-			}
+		}
+
+		if err := svc.SendBatch(ctx, targetNS, targetEntity, toMove); err != nil {
+			return moveMarkedDoneMsg{err: err}
+		}
+
+		var moved []string
+		for _, msg := range toMove {
 			if err := locked.Complete(ctx, msg); err != nil {
 				return moveMarkedDoneMsg{moved: moved, err: err}
 			}

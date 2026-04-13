@@ -552,34 +552,231 @@ func (s *Service) receiveFromSubDLQ(ctx context.Context, client *azservicebus.Cl
 	return &ReceivedMessages{Messages: messages, Receiver: receiver}, nil
 }
 
-// SendToQueue sends a message to a queue or topic. Used for manual
-// requeue: send to active queue, then complete the DLQ message.
-func (s *Service) SendToQueue(ctx context.Context, ns Namespace, queueOrTopicName string, body []byte) error {
+// toSendableMessage converts a received message to a sendable message,
+// preserving properties like SessionID, ContentType, etc.
+func toSendableMessage(orig *azservicebus.ReceivedMessage) *azservicebus.Message {
+	msg := &azservicebus.Message{
+		Body:             orig.Body,
+		SessionID:        orig.SessionID,
+		ContentType:      orig.ContentType,
+		CorrelationID:    orig.CorrelationID,
+		Subject:          orig.Subject,
+		MessageID:        &orig.MessageID,
+		To:               orig.To,
+		ReplyTo:          orig.ReplyTo,
+		ReplyToSessionID: orig.ReplyToSessionID,
+	}
+	if len(orig.ApplicationProperties) > 0 {
+		msg.ApplicationProperties = orig.ApplicationProperties
+	}
+	return msg
+}
+
+// SendBatch sends multiple messages to a queue or topic using batched sends.
+func (s *Service) SendBatch(ctx context.Context, ns Namespace, queueOrTopicName string, messages []*azservicebus.ReceivedMessage) error {
 	client, err := s.getClient(ns.FQDN)
 	if err != nil {
 		return err
 	}
 
-	err = s.sendToQueue(ctx, client, queueOrTopicName, body)
+	err = s.sendBatch(ctx, client, queueOrTopicName, messages)
 	if err == nil || !isAuthError(err) {
 		return err
 	}
 
 	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
 	if fallbackErr != nil {
-		return fmt.Errorf("send to %s with AAD failed: %v; fallback failed: %w", queueOrTopicName, err, fallbackErr)
+		return fmt.Errorf("send batch to %s with AAD failed: %v; fallback failed: %w", queueOrTopicName, err, fallbackErr)
 	}
-	return s.sendToQueue(ctx, fallbackClient, queueOrTopicName, body)
+	return s.sendBatch(ctx, fallbackClient, queueOrTopicName, messages)
 }
 
-func (s *Service) sendToQueue(ctx context.Context, client *azservicebus.Client, name string, body []byte) error {
+func (s *Service) sendBatch(ctx context.Context, client *azservicebus.Client, name string, messages []*azservicebus.ReceivedMessage) error {
 	sender, err := client.NewSender(name, nil)
 	if err != nil {
 		return fmt.Errorf("create sender for %s: %w", name, err)
 	}
 	defer sender.Close(ctx)
 
-	return sender.SendMessage(ctx, &azservicebus.Message{Body: body}, nil)
+	batch, err := sender.NewMessageBatch(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("create message batch for %s: %w", name, err)
+	}
+
+	for _, orig := range messages {
+		err := batch.AddMessage(toSendableMessage(orig), nil)
+		if err == nil {
+			continue
+		}
+		// Batch is full — send what we have and start a new one.
+		if err := sender.SendMessageBatch(ctx, batch, nil); err != nil {
+			return fmt.Errorf("send batch to %s: %w", name, err)
+		}
+		batch, err = sender.NewMessageBatch(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("create message batch for %s: %w", name, err)
+		}
+		// Retry adding the message that didn't fit.
+		if err := batch.AddMessage(toSendableMessage(orig), nil); err != nil {
+			return fmt.Errorf("message %s too large for batch: %w", orig.MessageID, err)
+		}
+	}
+
+	if batch.NumMessages() > 0 {
+		if err := sender.SendMessageBatch(ctx, batch, nil); err != nil {
+			return fmt.Errorf("send batch to %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// resendAll receives all messages from a receiver, batch-sends them to
+// targetName via the given client, and completes the originals. The sender
+// and receiver are kept open for the entire operation to avoid repeated
+// AMQP handshakes. When maxMessages > 0 the loop stops after that many
+// messages to avoid infinite cycles when a consumer immediately dead-letters
+// resent messages. Returns the number of messages successfully resent.
+func (s *Service) resendAll(ctx context.Context, client *azservicebus.Client, receiver *azservicebus.Receiver, targetName string, batchSize, maxMessages int) (int, error) {
+	sender, err := client.NewSender(targetName, nil)
+	if err != nil {
+		return 0, fmt.Errorf("create sender for %s: %w", targetName, err)
+	}
+	defer sender.Close(ctx)
+
+	total := 0
+	for {
+		receiveCtx, receiveCancel := context.WithTimeout(ctx, 15*time.Second)
+		messages, err := receiver.ReceiveMessages(receiveCtx, batchSize, &azservicebus.ReceiveMessagesOptions{
+			TimeAfterFirstMessage: 1 * time.Second,
+		})
+		receiveCancel()
+		if err != nil && len(messages) == 0 {
+			if ctx.Err() == nil && total > 0 {
+				break
+			}
+			return total, fmt.Errorf("receive messages: %w", err)
+		}
+		if len(messages) == 0 {
+			break
+		}
+
+		// Batch-send all received messages.
+		batch, err := sender.NewMessageBatch(ctx, nil)
+		if err != nil {
+			return total, fmt.Errorf("create message batch: %w", err)
+		}
+		for _, msg := range messages {
+			if err := batch.AddMessage(toSendableMessage(msg), nil); err != nil {
+				// Batch full — flush and start a new one.
+				if err := sender.SendMessageBatch(ctx, batch, nil); err != nil {
+					return total, fmt.Errorf("send batch: %w", err)
+				}
+				batch, err = sender.NewMessageBatch(ctx, nil)
+				if err != nil {
+					return total, fmt.Errorf("create message batch: %w", err)
+				}
+				if err := batch.AddMessage(toSendableMessage(msg), nil); err != nil {
+					return total, fmt.Errorf("message %s too large for batch: %w", msg.MessageID, err)
+				}
+			}
+		}
+		if batch.NumMessages() > 0 {
+			if err := sender.SendMessageBatch(ctx, batch, nil); err != nil {
+				return total, fmt.Errorf("send batch: %w", err)
+			}
+		}
+
+		// Complete originals.
+		for _, msg := range messages {
+			if err := receiver.CompleteMessage(ctx, msg, nil); err != nil {
+				return total, fmt.Errorf("complete message %s: %w", msg.MessageID, err)
+			}
+			total++
+		}
+
+		if maxMessages > 0 && total >= maxMessages {
+			break
+		}
+	}
+	return total, nil
+}
+
+// ResendAllFromDLQ receives all DLQ messages and resends them to the target
+// entity using a single receiver and sender for the entire operation.
+// expectedCount is used to clamp the receive batch size when known (pass 0 to use the default).
+func (s *Service) ResendAllFromDLQ(ctx context.Context, ns Namespace, entityName, subName, targetName string, expectedCount int) (int, error) {
+	client, err := s.getClient(ns.FQDN)
+	if err != nil {
+		return 0, err
+	}
+
+	n, err := s.resendAllFromDLQ(ctx, client, entityName, subName, targetName, expectedCount)
+	if err == nil || !isAuthError(err) {
+		return n, err
+	}
+
+	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
+	if fallbackErr != nil {
+		return n, fmt.Errorf("resend DLQ with AAD failed: %v; fallback failed: %w", err, fallbackErr)
+	}
+	return s.resendAllFromDLQ(ctx, fallbackClient, entityName, subName, targetName, expectedCount)
+}
+
+func (s *Service) resendAllFromDLQ(ctx context.Context, client *azservicebus.Client, entityName, subName, targetName string, expectedCount int) (int, error) {
+	var receiver *azservicebus.Receiver
+	var err error
+	if subName == "" {
+		receiver, err = client.NewReceiverForQueue(entityName, &azservicebus.ReceiverOptions{
+			ReceiveMode: azservicebus.ReceiveModePeekLock,
+			SubQueue:    azservicebus.SubQueueDeadLetter,
+		})
+	} else {
+		receiver, err = client.NewReceiverForSubscription(entityName, subName, &azservicebus.ReceiverOptions{
+			ReceiveMode: azservicebus.ReceiveModePeekLock,
+			SubQueue:    azservicebus.SubQueueDeadLetter,
+		})
+	}
+	if err != nil {
+		return 0, fmt.Errorf("create DLQ receiver: %w", err)
+	}
+	defer receiver.Close(ctx)
+
+	batchSize := 50
+	if expectedCount > 0 && expectedCount < batchSize {
+		batchSize = expectedCount
+	}
+	return s.resendAll(ctx, client, receiver, targetName, batchSize, expectedCount)
+}
+
+// ResendAllFromSource receives all messages from a source (active or DLQ) and
+// resends them to a target entity using a single receiver and sender.
+func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityName, subName string, deadLetter bool, targetNS Namespace, targetName string) (int, error) {
+	client, err := s.getClient(ns.FQDN)
+	if err != nil {
+		return 0, err
+	}
+
+	targetClient, err := s.getClient(targetNS.FQDN)
+	if err != nil {
+		return 0, err
+	}
+
+	var receiver *azservicebus.Receiver
+	opts := &azservicebus.ReceiverOptions{ReceiveMode: azservicebus.ReceiveModePeekLock}
+	if deadLetter {
+		opts.SubQueue = azservicebus.SubQueueDeadLetter
+	}
+	if subName == "" {
+		receiver, err = client.NewReceiverForQueue(entityName, opts)
+	} else {
+		receiver, err = client.NewReceiverForSubscription(entityName, subName, opts)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("create receiver: %w", err)
+	}
+	defer receiver.Close(ctx)
+
+	return s.resendAll(ctx, targetClient, receiver, targetName, 50, 0)
 }
 
 type DuplicateError struct {
