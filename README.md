@@ -67,6 +67,10 @@ Config lives in `~/.config/lazyaz/`:
 
 Full documentation: **[karlssonsimon.github.io/lazyaz](https://karlssonsimon.github.io/lazyaz)**
 
+## Thanks
+
+Thanks to [bosvik](https://github.com/bosvik) and [svenclaesson](https://github.com/svenclaesson) for contributions and feedback.
+
 ## License
 
-MIT
+MIT — see [`LICENSE`](LICENSE). Third-party licenses in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
