@@ -658,9 +658,18 @@ func (s *Service) resendAll(ctx context.Context, client *azservicebus.Client, re
 	}
 	defer sender.Close(ctx)
 
+	// Service Bus receivers can silently stall — returning zero messages while
+	// the entity still holds more. Retry a few times with growing wait windows
+	// before concluding the source is drained.
+	const maxConsecutiveZero = 3
+	consecutiveZero := 0
 	total := 0
 	for {
-		receiveCtx, receiveCancel := context.WithTimeout(ctx, 15*time.Second)
+		waitTime := 15 * time.Second
+		if consecutiveZero > 0 {
+			waitTime = time.Duration(20*(consecutiveZero+1)) * time.Second
+		}
+		receiveCtx, receiveCancel := context.WithTimeout(ctx, waitTime)
 		messages, err := receiver.ReceiveMessages(receiveCtx, batchSize, &azservicebus.ReceiveMessagesOptions{
 			TimeAfterFirstMessage: 1 * time.Second,
 		})
@@ -672,8 +681,13 @@ func (s *Service) resendAll(ctx context.Context, client *azservicebus.Client, re
 			return total, fmt.Errorf("receive messages: %w", err)
 		}
 		if len(messages) == 0 {
-			break
+			consecutiveZero++
+			if consecutiveZero >= maxConsecutiveZero {
+				break
+			}
+			continue
 		}
+		consecutiveZero = 0
 
 		// Batch-send all received messages.
 		batch, err := sender.NewMessageBatch(ctx, nil)
