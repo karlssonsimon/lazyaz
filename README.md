@@ -10,11 +10,25 @@ through the Azure Portal to peek at a dead-letter queue or download a blob.
 
 ## Install
 
+**macOS / Linux:**
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.ps1 | iex
+```
+
+**Or with Go:**
+
 ```bash
 go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest
 ```
 
-Requires Go 1.22+ and Azure CLI logged in (`az login`).
+Requires Azure CLI logged in (`az login`). Go install additionally needs Go 1.22+.
 
 ## Quick start
 

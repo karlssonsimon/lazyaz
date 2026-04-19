@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -16,7 +17,18 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+var version = "dev"
+
 func main() {
+	showVersion := flag.Bool("version", false, "print version and exit")
+	flag.BoolVar(showVersion, "v", false, "print version and exit (shorthand)")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
+
 	cred, err := azure.NewDefaultCredential()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialize default azure credential: %v\n", err)
