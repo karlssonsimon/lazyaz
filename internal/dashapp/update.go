@@ -1,6 +1,8 @@
 package dashapp
 
 import (
+	"time"
+
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
@@ -11,8 +13,25 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// dashboardRefreshInterval is how often the dashboard re-fires its
+// fetches in the background. The refreshInFlight guard means a slow
+// network can't pile up overlapping refreshes — if the previous one
+// hasn't finished by the next tick, the tick is a no-op.
+const dashboardRefreshInterval = 30 * time.Second
+
+// refreshTickMsg is the periodic auto-refresh trigger. Scheduled by
+// scheduleRefreshTick; the handler re-schedules itself so the chain
+// runs as long as the dashboard tab is alive.
+type refreshTickMsg struct{}
+
+func scheduleRefreshTick() tea.Cmd {
+	return tea.Tick(dashboardRefreshInterval, func(time.Time) tea.Msg {
+		return refreshTickMsg{}
+	})
+}
+
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.Spinner.Tick, cursor.Blink}
+	cmds := []tea.Cmd{m.Spinner.Tick, cursor.Blink, scheduleRefreshTick()}
 	if m.SubOverlay.Active || len(m.Subscriptions) == 0 {
 		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.stores.Subscriptions, m.Subscriptions))
 	}
@@ -81,6 +100,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case topicSubsLoadedMsg:
 		return m.handleTopicSubsLoaded(msg)
+
+	case refreshTickMsg:
+		// refreshAll is debounced via refreshInFlight, so a slow
+		// network can't cause overlapping refreshes. Always reschedule
+		// so the tick chain continues for the tab's lifetime.
+		updated, refreshCmd := m.refreshAll()
+		return updated, tea.Batch(refreshCmd, scheduleRefreshTick())
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
