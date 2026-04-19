@@ -43,6 +43,16 @@ type Model struct {
 	cfg    ui.Config
 	keymap keymap.Keymap
 
+	// db is the persistent cache handle, also used for app-level
+	// preferences (last selected subscription, etc.). May be nil if
+	// the user opted out of disk cache.
+	db *cache.DB
+
+	// lastPersistedSubID tracks what's currently in the preferences
+	// table so we only write when the active subscription actually
+	// changes. Compared after every Update.
+	lastPersistedSubID string
+
 	// notifier is the single global notification log shared with every
 	// tab. The parent owns it and renders both the toast stack and the
 	// history overlay from it.
@@ -73,6 +83,12 @@ type Model struct {
 	height int
 }
 
+// lastSubscriptionPrefKey is the preferences key holding the most
+// recently selected subscription ID, used as the preferred sub for
+// fallback default tabs and for any configured tab that doesn't
+// specify its own subscription.
+const lastSubscriptionPrefKey = "last_subscription"
+
 // NewModel creates the parent tabbed model.
 // If db is non-nil, a persistent SQLite cache is used; otherwise in-memory.
 func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.Service, cfg ui.Config, db *cache.DB, km keymap.Keymap) Model {
@@ -89,15 +105,24 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		cursor:   cur,
 		schemes:  cfg.Schemes,
 		notifier: appshell.NewNotifier(1000),
+		db:       db,
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
 	}
 	m.styles = ui.NewStyles(cfg.ActiveScheme())
 
+	// Last subscription used in a previous session (best-effort read,
+	// missing or empty → no preferred sub). Used for any tab whose
+	// config doesn't pin a specific subscription, including the
+	// fallback default tab when no tabs are configured at all.
+	lastSub, _ := db.GetPreference(lastSubscriptionPrefKey)
+	m.lastPersistedSubID = lastSub
+
 	// Resolve configured startup tabs. Invalid kinds are skipped and
 	// surfaced as a warning on the first opened tab. If nothing valid
-	// remains, fall back to a single blob tab so the app is usable.
+	// remains, fall back to a single dashboard tab — it gives an
+	// at-a-glance view of all the data the explorers also surface.
 	var warnings []string
 	opened := 0
 	for _, tc := range cfg.Tabs {
@@ -106,11 +131,15 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 			warnings = append(warnings, fmt.Sprintf("unknown tab kind %q in config", tc.Kind))
 			continue
 		}
-		m.addTab(kind, tc.Subscription)
+		preferred := tc.Subscription
+		if preferred == "" {
+			preferred = lastSub
+		}
+		m.addTab(kind, preferred)
 		opened++
 	}
 	if opened == 0 {
-		m.addTab(TabBlob, "")
+		m.addTab(TabDashboard, lastSub)
 	}
 	m.activeIdx = 0
 
@@ -262,6 +291,27 @@ func (m *Model) openSBTabWithNav(sub azure.Subscription, nav sbapp.PendingNav) (
 	return m, tea.Batch(initCmd, wrapCmd(tab.ID, ffCmd), resizeCmd)
 }
 
+// persistActiveSubIfChanged writes the active tab's subscription ID to
+// the preferences table when it differs from what's currently there.
+// Called after every Update via the Update wrapper. Cheap (one string
+// compare in the common case where nothing changed); idempotent. The
+// receiver is value but updates lastPersistedSubID via a pointer because
+// the wrapper hands us a freshly returned Model copy.
+func (m *Model) persistActiveSubIfChanged() {
+	if m.db == nil {
+		return
+	}
+	sub, ok := m.activeSubscription()
+	if !ok || sub.ID == "" {
+		return
+	}
+	if sub.ID == m.lastPersistedSubID {
+		return
+	}
+	m.db.SetPreference(lastSubscriptionPrefKey, sub.ID)
+	m.lastPersistedSubID = sub.ID
+}
+
 // activeSubscription returns the current subscription from the active tab.
 func (m *Model) activeSubscription() (azure.Subscription, bool) {
 	if len(m.tabs) == 0 {
@@ -372,7 +422,20 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// Update runs the inner dispatcher and then persists the active
+// subscription if it changed. Wrapping at this single point catches
+// every state transition (key, mouse, tab switch, child-emitted msg)
+// without scattering write calls through the dispatcher body.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	updated, cmd := m.updateInner(msg)
+	if mm, ok := updated.(Model); ok {
+		mm.persistActiveSubIfChanged()
+		return mm, cmd
+	}
+	return updated, cmd
+}
+
+func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle paste before cursor update (which can swallow PasteMsg).
 	// Route to whichever overlay or child is active.
 	if paste, ok := msg.(tea.PasteMsg); ok {

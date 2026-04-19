@@ -47,6 +47,52 @@ func (d *DB) Close() error {
 	return d.db.Close()
 }
 
+// preferencesTable is a single key/value table used for app-wide
+// preferences that don't fit the per-resource cache model — last used
+// subscription, last opened tab kind, etc. Created lazily on first
+// access so callers don't pay for it if they never use it.
+const preferencesTable = "preferences"
+
+// GetPreference returns the stored value for key and whether it exists.
+// Errors are silently treated as "not found" — preferences are
+// best-effort UX hints, not load-bearing data.
+func (d *DB) GetPreference(key string) (string, bool) {
+	if d == nil || d.db == nil {
+		return "", false
+	}
+	d.ensurePreferences()
+	var value string
+	err := d.db.QueryRow(
+		fmt.Sprintf(`SELECT value FROM %q WHERE key = ?`, preferencesTable),
+		key,
+	).Scan(&value)
+	if err != nil {
+		return "", false
+	}
+	return value, true
+}
+
+// SetPreference upserts a value for key. Failures are swallowed for the
+// same reason as GetPreference — never block UX on a preference write.
+func (d *DB) SetPreference(key, value string) {
+	if d == nil || d.db == nil {
+		return
+	}
+	d.ensurePreferences()
+	d.db.Exec(
+		fmt.Sprintf(`INSERT OR REPLACE INTO %q (key, value, updated_at) VALUES (?, ?, ?)`, preferencesTable),
+		key, value, time.Now().Unix(),
+	)
+}
+
+func (d *DB) ensurePreferences() {
+	d.db.Exec(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %q (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL,
+		updated_at INTEGER NOT NULL
+	)`, preferencesTable))
+}
+
 func (d *DB) createTable(name string) {
 	d.db.Exec(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %q (
 		key BLOB PRIMARY KEY,
