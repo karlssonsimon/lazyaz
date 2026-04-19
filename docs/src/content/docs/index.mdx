@@ -58,8 +58,8 @@ If [lazygit](https://github.com/jesseduffield/lazygit) is to `git` what lazyaz i
 ## Quick start
 
 ```bash
-# Install
-go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest
+# Install (macOS / Linux)
+curl -sSfL https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.sh | sh
 
 # Log in to Azure (if you haven't already)
 az login
@@ -67,5 +67,7 @@ az login
 # Launch
 lazyaz
 ```
+
+Windows: `iwr -useb https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.ps1 | iex`. With Go: `go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest`.
 
 Pick a subscription and start browsing. Press `?` for help, `a` for context-aware actions, `Ctrl+P` for the command palette.

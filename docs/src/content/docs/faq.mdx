@@ -11,9 +11,9 @@ import { Aside } from '@astrojs/starlight/components';
 
 Yes. lazyaz uses `DefaultAzureCredential` which relies on `az login` for local development. Install the Azure CLI from [Microsoft's guide](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli).
 
-### What Go version do I need?
+### Do I need Go installed?
 
-Go 1.22 or later for `go install`. Check with `go version`.
+No. The install script downloads a prebuilt binary. Go is only needed if you prefer `go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest` (requires Go 1.22+).
 
 ### Does it work on Windows / macOS / Linux?
 

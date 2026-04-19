@@ -11,14 +11,39 @@ leaving the keyboard. Runs anywhere `az login` works.
 
 ## Prerequisites
 
-- **Go 1.22+** (for `go install`)
 - **Azure CLI** (`az`) — [install guide](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
 - An active Azure subscription with resources to browse
+
+No Go toolchain needed for the install script — it downloads a prebuilt binary.
 
 ## Installation
 
 <Tabs>
-<TabItem label="go install">
+<TabItem label="macOS / Linux">
+```bash
+curl -sSfL https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.sh | sh
+```
+
+Installs to `$HOME/.local/bin` by default (or `/usr/local/bin` if writable). Override with `LAZYAZ_INSTALL_DIR`:
+
+```bash
+LAZYAZ_INSTALL_DIR=~/bin curl -sSfL https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.sh | sh
+```
+
+Pin to a specific version:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.sh | sh -s -- --version v0.1.0
+```
+</TabItem>
+<TabItem label="Windows (PowerShell)">
+```powershell
+iwr -useb https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.ps1 | iex
+```
+</TabItem>
+<TabItem label="Go">
+Requires Go 1.22+.
+
 ```bash
 go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest
 ```
@@ -31,6 +56,8 @@ go build -o lazyaz ./cmd/lazyaz
 ```
 </TabItem>
 </Tabs>
+
+Prebuilt binaries for every release are also on the [GitHub releases page](https://github.com/karlssonsimon/lazyaz/releases).
 
 ## Log in to Azure
 
