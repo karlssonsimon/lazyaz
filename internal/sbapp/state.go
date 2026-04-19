@@ -133,6 +133,12 @@ type Model struct {
 	clickTracker ui.ClickTracker
 	paneWidths   [6]int // ns, ent, subs, qtype, msg, preview
 	paneHeight   int
+
+	// pendingNav is set by the parent app (via SetPendingNav) when the
+	// dashboard wants this tab to navigate to a specific entity. The
+	// state machine in advancePendingNav drives the selection forward
+	// each time a fetch completes.
+	pendingNav PendingNav
 }
 
 type namespacesLoadedMsg struct {

@@ -40,6 +40,12 @@ func (m Model) View() tea.View {
 	body := lipgloss.JoinVertical(lipgloss.Left, rowSlots...)
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, body, statusBar), m.Width, m.Height, m.Styles.Bg)
 
+	if m.sortOverlay.active {
+		view = m.renderSortOverlay(view)
+	}
+	if m.actionMenu.active {
+		view = m.renderActionMenu(view)
+	}
 	out := tea.NewView(m.RenderOverlays(view))
 	out.AltScreen = true
 	out.MouseMode = tea.MouseModeCellMotion
@@ -49,8 +55,30 @@ func (m Model) View() tea.View {
 func (m Model) renderWidget(w Widget, idx, width, height int) string {
 	focused := idx == m.focusedIdx
 	innerHeight := height - 2 // pane border
-	body := w.Render(&m, width, innerHeight, m.offsets[idx])
-	return m.widgetFrame(w.Title(), body, width, height, focused)
+	cursor := -1
+	// Only show the highlight on the focused widget so it's clear
+	// where keys land. Background cursor rows would compete visually.
+	if focused {
+		cursor = m.cursors[idx]
+	}
+	body := w.Render(&m, width, innerHeight, m.offsets[idx], cursor, m.viewStates[idx])
+	return m.widgetFrame(m.widgetTitleFor(w, idx, focused), body, width, height, focused)
+}
+
+// widgetTitleFor returns the title shown in the pane header. While the
+// filter input is open on the focused widget, the title carries the
+// filter prompt so the user sees what they're typing without a
+// separate input box.
+func (m Model) widgetTitleFor(w Widget, idx int, focused bool) string {
+	title := w.Title()
+	view := m.viewStates[idx]
+	if focused && m.filterInputActive {
+		return title + "  /" + view.filter + "▎"
+	}
+	if view.filter != "" {
+		return title + "  filter: " + view.filter
+	}
+	return title
 }
 
 func (m Model) statusBarItems() []ui.StatusBarItem {
@@ -98,8 +126,9 @@ func (m Model) loadingOrEmpty(empty string) string {
 // renderScrollableTable renders a table sliced by offset. cells[0] is
 // always the header (rendered in place); cells[1:] are data rows — a
 // window of up to maxDataRows starting at offset is shown. A "N more"
-// hint is appended when rows are hidden above or below.
-func renderScrollableTable(cells [][]string, aligns []lipgloss.Position, styles ui.Styles, offset, maxDataRows int) string {
+// hint is appended when rows are hidden above or below. cursorRow is
+// the data row index to highlight (negative = no highlight).
+func renderScrollableTable(cells [][]string, aligns []lipgloss.Position, styles ui.Styles, offset, maxDataRows, cursorRow int) string {
 	if len(cells) == 0 {
 		return ""
 	}
@@ -129,7 +158,13 @@ func renderScrollableTable(cells [][]string, aligns []lipgloss.Position, styles 
 	}
 	window := [][]string{header}
 	window = append(window, data[offset:end]...)
-	table := renderTable(window, aligns, styles)
+	// Cursor index inside the rendered window: header is row 0, data
+	// starts at row 1. Pass -1 if cursor is outside the window.
+	highlightInWindow := -1
+	if cursorRow >= offset && cursorRow < end {
+		highlightInWindow = (cursorRow - offset) + 1
+	}
+	table := renderTable(window, aligns, styles, highlightInWindow)
 
 	if !reserveHint {
 		return table
@@ -148,8 +183,10 @@ func renderScrollableTable(cells [][]string, aligns []lipgloss.Position, styles 
 }
 
 // renderTable lays out a simple padded table with per-column alignment.
-// First row is treated as the header and rendered with the Meta style.
-func renderTable(cells [][]string, aligns []lipgloss.Position, styles ui.Styles) string {
+// First row is the header (Meta style). Row at index highlightRow gets
+// the SelectionHighlight style applied — that's the visual cursor.
+// Pass -1 to skip the highlight.
+func renderTable(cells [][]string, aligns []lipgloss.Position, styles ui.Styles, highlightRow int) string {
 	if len(cells) == 0 {
 		return ""
 	}
@@ -181,8 +218,11 @@ func renderTable(cells [][]string, aligns []lipgloss.Position, styles ui.Styles)
 			parts = append(parts, cell)
 		}
 		line := strings.Join(parts, "  ")
-		if ri == 0 {
+		switch {
+		case ri == 0:
 			line = styles.Chrome.Meta.Render(line)
+		case ri == highlightRow:
+			line = styles.SelectionHighlight.Render(line)
 		}
 		out.WriteString(line)
 		if ri < len(cells)-1 {

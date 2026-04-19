@@ -1,6 +1,10 @@
 package app
 
-import tea "charm.land/bubbletea/v2"
+import (
+	"github.com/karlssonsimon/lazyaz/internal/dashapp"
+
+	tea "charm.land/bubbletea/v2"
+)
 
 // tabMsg wraps a message with the tab ID it belongs to, so the parent
 // can route it to the correct child even when multiple tabs of the
@@ -61,6 +65,11 @@ func wrapMsg(id int, msg tea.Msg) tea.Msg {
 			wrapped[i] = wrapCmd(id, cmd)
 		}
 		return wrapped
+	// Cross-tab messages: bypass the tabMsg wrap so the parent
+	// handles them directly instead of routing them back to the
+	// emitting tab.
+	case dashapp.OpenSBNamespaceMsg, dashapp.OpenSBEntityMsg:
+		return msg
 	default:
 		return tabMsg{tabID: id, inner: msg}
 	}

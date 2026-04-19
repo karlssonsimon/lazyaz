@@ -124,44 +124,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-
-		if m.hasNamespace && m.currentNS.Name == item.namespace.Name {
-			m.transitionTo(entitiesPane)
-			return m, nil
-		}
-
-		if m.hasNamespace {
-			oldKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name)
-			m.entitiesHistory[oldKey] = ui.SnapshotListState(&m.entitiesList, entityItemKey)
-		}
-
-		m.currentNS = item.namespace
-		m.hasNamespace = true
-		m.clearPeekState()
-		m.clearAllMarks()
-		m.subscriptions = nil
-		m.transitionTo(entitiesPane)
-
-		entityCacheKey := cache.Key(m.CurrentSub.ID, item.namespace.Name)
-		if cached, ok := m.cache.entities.Get(entityCacheKey); ok {
-			m.entities = cached
-			m.entitiesList.SetItems(entitiesToItems(cached, m.entitySortField, m.entitySortDesc, m.entityDLQFilter))
-			m.entitiesList.Title = m.entitiesPaneTitle()
-		} else {
-			m.entities = nil
-			m.entitiesList.SetItems(nil)
-			m.entitiesList.Title = "Entities"
-		}
-		ui.RestoreListState(&m.entitiesList, m.entitiesHistory[entityCacheKey], entityItemKey)
-
-		m.subscriptionsList.ResetFilter()
-		m.subscriptionsList.SetItems(nil)
-		m.queueTypeList.SetItems(nil)
-		m.messageList.ResetFilter()
-		m.messageList.SetItems(nil)
-
-		m.startLoading(m.focus, fmt.Sprintf("Loading entities in %s", item.namespace.Name))
-		return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, item.namespace, entityCacheKey, m.entities))
+		return m.selectNamespace(item.namespace)
 	}
 
 	if m.focus == entitiesPane {
@@ -307,6 +270,15 @@ func (m Model) peekMessages(deadLetter bool) (Model, tea.Cmd) {
 
 	m.deadLetter = deadLetter
 	m.peekedMessages = nil
+	// Sync the Active/DLQ picker selection so navigating back from
+	// the messages pane reflects the user's actual choice. Without
+	// this, programmatic navigation (dashboard "open DLQ" action)
+	// leaves the picker stuck on Active even though deadLetter=true.
+	if deadLetter {
+		m.queueTypeList.Select(1)
+	} else {
+		m.queueTypeList.Select(0)
+	}
 	m.transitionTo(messagesPane)
 
 	m.messageList.ResetFilter()
@@ -314,4 +286,48 @@ func (m Model) peekMessages(deadLetter bool) (Model, tea.Cmd) {
 	m.messageList.Title = m.messagesPaneTitle()
 
 	return m, nil
+}
+
+// selectNamespace binds the explorer to a namespace, hydrates entities
+// from cache if available, and kicks off a fetch to refresh. Extracted
+// from handleEnter so programmatic navigation (the dashboard's "open in
+// SB tab" action) can drive the same flow.
+func (m Model) selectNamespace(ns servicebus.Namespace) (Model, tea.Cmd) {
+	if m.hasNamespace && m.currentNS.Name == ns.Name {
+		m.transitionTo(entitiesPane)
+		return m, nil
+	}
+
+	if m.hasNamespace {
+		oldKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name)
+		m.entitiesHistory[oldKey] = ui.SnapshotListState(&m.entitiesList, entityItemKey)
+	}
+
+	m.currentNS = ns
+	m.hasNamespace = true
+	m.clearPeekState()
+	m.clearAllMarks()
+	m.subscriptions = nil
+	m.transitionTo(entitiesPane)
+
+	entityCacheKey := cache.Key(m.CurrentSub.ID, ns.Name)
+	if cached, ok := m.cache.entities.Get(entityCacheKey); ok {
+		m.entities = cached
+		m.entitiesList.SetItems(entitiesToItems(cached, m.entitySortField, m.entitySortDesc, m.entityDLQFilter))
+		m.entitiesList.Title = m.entitiesPaneTitle()
+	} else {
+		m.entities = nil
+		m.entitiesList.SetItems(nil)
+		m.entitiesList.Title = "Entities"
+	}
+	ui.RestoreListState(&m.entitiesList, m.entitiesHistory[entityCacheKey], entityItemKey)
+
+	m.subscriptionsList.ResetFilter()
+	m.subscriptionsList.SetItems(nil)
+	m.queueTypeList.SetItems(nil)
+	m.messageList.ResetFilter()
+	m.messageList.SetItems(nil)
+
+	m.startLoading(m.focus, fmt.Sprintf("Loading entities in %s", ns.Name))
+	return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, ns, entityCacheKey, m.entities))
 }

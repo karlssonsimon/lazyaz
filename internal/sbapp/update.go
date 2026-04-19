@@ -217,7 +217,8 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 		status := fmt.Sprintf("Loaded %d namespaces from %s in %s", len(m.namespaces), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
-		return m, nil
+		updated, navCmd := m.advancePendingNav()
+		return updated, navCmd
 	}
 	return m, msg.next
 }
@@ -240,7 +241,8 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 		status := fmt.Sprintf("Loaded %d entities from %s in %s", len(m.entities), msg.namespace.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
-		return m, nil
+		updated, navCmd := m.advancePendingNav()
+		return updated, navCmd
 	}
 	return m, msg.next
 }
@@ -266,7 +268,8 @@ func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (
 		status := fmt.Sprintf("Loaded %d subscriptions for topic %s in %s", len(m.subscriptions), msg.topicName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
-		return m, nil
+		updated, navCmd := m.advancePendingNav()
+		return updated, navCmd
 	}
 	return m, msg.next
 }

@@ -108,6 +108,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, refreshCmd := m.refreshAll()
 		return updated, tea.Batch(refreshCmd, scheduleRefreshTick())
 
+	case openSortOverlayMsg:
+		if m.focusedIdx < 0 || m.focusedIdx >= len(m.widgets) {
+			return m, nil
+		}
+		fields := m.widgets[m.focusedIdx].SortFields()
+		if len(fields) == 0 {
+			return m, nil
+		}
+		m.sortOverlay.open(m.focusedIdx, fields, m.viewStates[m.focusedIdx])
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -158,6 +169,7 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (tea.Model, tea.C
 	}
 	m.refreshDone()
 	m.ClearLoading()
+	m.clampCursorsToData()
 	// On final page, kick off entity fetches for any namespace we
 	// haven't already started or finished.
 	var cmds []tea.Cmd
@@ -187,6 +199,7 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (tea.Model, tea.Cmd) 
 	}
 	m.pendingFetches--
 	m.refreshDone()
+	m.clampCursorsToData()
 	// For any topics in this namespace, kick off a topic-subs fetch so
 	// the DLQ widget can see per-subscription DLQ counts.
 	var cmds []tea.Cmd
@@ -218,6 +231,7 @@ func (m Model) handleTopicSubsLoaded(msg topicSubsLoadedMsg) (tea.Model, tea.Cmd
 		return m, msg.next
 	}
 	m.refreshDone()
+	m.clampCursorsToData()
 	return m, nil
 }
 
@@ -235,13 +249,57 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	km := m.Keymap
 
+	// Filter input mode — typed characters extend the focused widget's
+	// filter; nothing else fires. Has to come BEFORE the action menu
+	// and other shortcuts so e.g. `/test` doesn't trigger `t`-bound
+	// actions.
+	if m.filterInputActive {
+		return m.handleFilterKey(key)
+	}
+
+	// Sort overlay — owns input while open. Each entry is a fully
+	// specified (field, direction) combo (or "Default" = clear sort).
+	// applySortResult mutates view state directly; no toggle semantics.
+	if m.sortOverlay.active {
+		if res := m.sortOverlay.handleKey(key, km); res.applied {
+			m.applySortResult(res)
+		}
+		return m, nil
+	}
+
+	// Action menu overlay — consumes input while open. Direct action
+	// keybinds inside the menu fire and close; up/down navigate;
+	// enter confirms; esc cancels.
+	if m.actionMenu.active {
+		if a, fired := m.actionMenu.handleKey(key, km); fired {
+			return m, fireAction(a)
+		}
+		return m, nil
+	}
+
+	// `a` opens the action menu for the focused widget's cursor row.
+	if km.ActionMenu.Matches(key) {
+		var actions []Action
+		if m.focusedIdx >= 0 && m.focusedIdx < len(m.widgets) {
+			actions = m.widgets[m.focusedIdx].Actions(&m, m.focusedCursor())
+		}
+		m.actionMenu.open(actions)
+		return m, nil
+	}
+
+	// `/` enters filter input mode for the focused widget.
+	if km.FilterInput.Matches(key) {
+		m.filterInputActive = true
+		return m, nil
+	}
+
 	// gg jump-to-top chord: first 'g' arms the prefix, second 'g' fires.
 	// Any other key clears the prefix so unrelated input doesn't trigger
 	// the jump on the next 'g'.
 	if km.WidgetScrollTop.Matches(key) {
 		if m.gPrefixActive {
 			m.gPrefixActive = false
-			m.scrollFocusedToTop()
+			m.cursorToTop()
 			return m, nil
 		}
 		m.gPrefixActive = true
@@ -251,7 +309,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case km.WidgetScrollBottom.Matches(key):
-		m.scrollFocusedToBottom()
+		m.cursorToBottom()
 		return m, nil
 	case km.WidgetLeft.Matches(key):
 		m.focusedIdx = moveFocus(m.widgets, m.focusedIdx, 0, -1)
@@ -266,16 +324,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focusedIdx = moveFocus(m.widgets, m.focusedIdx, 0, 1)
 		return m, nil
 	case km.WidgetScrollUp.Matches(key):
-		m.scrollFocused(-1)
+		m.moveCursorFocused(-1)
 		return m, nil
 	case km.WidgetScrollDown.Matches(key):
-		m.scrollFocused(1)
+		m.moveCursorFocused(1)
 		return m, nil
 	case km.HalfPageUp.Matches(key):
-		m.scrollFocused(-m.halfPageStep())
+		m.moveCursorFocused(-m.halfPageStep())
 		return m, nil
 	case km.HalfPageDown.Matches(key):
-		m.scrollFocused(m.halfPageStep())
+		m.moveCursorFocused(m.halfPageStep())
 		return m, nil
 	case km.SubscriptionPicker.Matches(key):
 		m.SubOverlay.Open()
@@ -287,6 +345,76 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.SubOverlay.Open()
 		return m, fetchSubscriptionsCmd(m.service, m.stores.Subscriptions, nil)
 	}
+
+	// Per-widget action keybinds. Each widget exposes its own actions
+	// for the current cursor row; if any matches the keypress, fire it.
+	if m.focusedIdx >= 0 && m.focusedIdx < len(m.widgets) {
+		w := m.widgets[m.focusedIdx]
+		for _, a := range w.Actions(&m, m.focusedCursor()) {
+			if a.Key == key && a.Cmd != nil {
+				return m, a.Cmd
+			}
+		}
+	}
+	return m, nil
+}
+
+// applySortResult mutates the focused widget's view state per the sort
+// overlay's outcome. clear means "remove sort entirely" (Default option).
+// Cursor + scroll reset so the highlight doesn't dangle on a row that
+// just moved.
+func (m *Model) applySortResult(res sortResult) {
+	if m.focusedIdx < 0 || m.focusedIdx >= len(m.viewStates) {
+		return
+	}
+	vs := m.viewStates[m.focusedIdx]
+	if res.clear {
+		vs.hasSort = false
+		vs.sortField = 0
+		vs.sortDesc = false
+	} else {
+		vs.hasSort = true
+		vs.sortField = res.field
+		vs.sortDesc = res.desc
+	}
+	m.viewStates[m.focusedIdx] = vs
+	m.cursors[m.focusedIdx] = 0
+	m.offsets[m.focusedIdx] = 0
+}
+
+// handleFilterKey processes input while the focused widget's filter
+// box is open. esc cancels (clears filter), enter accepts (keeps the
+// filter, closes the box), backspace deletes, printable chars append.
+func (m Model) handleFilterKey(key string) (tea.Model, tea.Cmd) {
+	if m.focusedIdx < 0 || m.focusedIdx >= len(m.viewStates) {
+		m.filterInputActive = false
+		return m, nil
+	}
+	vs := m.viewStates[m.focusedIdx]
+	switch key {
+	case "esc":
+		vs.filter = ""
+		m.filterInputActive = false
+	case "enter":
+		m.filterInputActive = false
+	case "backspace":
+		if len(vs.filter) > 0 {
+			vs.filter = vs.filter[:len(vs.filter)-1]
+		}
+	default:
+		// Single printable character. Multi-byte input arrives as a
+		// >1-rune key string (e.g. "shift+a" = "A"). For our scope
+		// (ASCII substring filter) accepting single-rune keys is
+		// enough — anything else is treated as a no-op.
+		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
+			vs.filter += key
+		}
+	}
+	m.viewStates[m.focusedIdx] = vs
+	// Filter changed → reset cursor + scroll so the highlight doesn't
+	// dangle past the now-shorter list.
+	m.cursors[m.focusedIdx] = 0
+	m.offsets[m.focusedIdx] = 0
 	return m, nil
 }
 

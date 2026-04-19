@@ -14,7 +14,7 @@ func (m Model) focusedWidgetDims() (total, visible int) {
 		widgetH = m.rowHeights[row]
 	}
 	visible = innerHeightToVisibleData(widgetH - 2) // pane border is 2 rows
-	total = w.RowCount(&m)
+	total = w.RowCount(&m, m.viewStates[m.focusedIdx])
 	return
 }
 
@@ -29,41 +29,96 @@ func innerHeightToVisibleData(innerHeight int) int {
 	return visible
 }
 
-// scrollFocused shifts the focused widget's offset by delta rows,
-// clamped so the last row is reachable. When the list overflows we
-// reserve one row for the "N hidden" hint, so usable budget is
-// visible-1; max offset reflects that.
-func (m *Model) scrollFocused(delta int) {
-	if m.focusedIdx < 0 || m.focusedIdx >= len(m.offsets) {
+// moveCursorFocused shifts the focused widget's cursor by delta rows,
+// clamped to [0, total-1], then nudges the scroll offset so the cursor
+// stays visible. j/k/ctrl+d/ctrl+u all funnel through here.
+func (m *Model) moveCursorFocused(delta int) {
+	if m.focusedIdx < 0 || m.focusedIdx >= len(m.cursors) {
 		return
 	}
-	maxOffset := m.maxFocusedOffset()
-	m.offsets[m.focusedIdx] = clampInt(m.offsets[m.focusedIdx]+delta, 0, maxOffset)
-}
-
-func (m *Model) scrollFocusedToTop() {
-	if m.focusedIdx < 0 || m.focusedIdx >= len(m.offsets) {
+	total, _ := m.focusedWidgetDims()
+	if total <= 0 {
+		m.cursors[m.focusedIdx] = 0
+		m.offsets[m.focusedIdx] = 0
 		return
 	}
-	m.offsets[m.focusedIdx] = 0
+	m.cursors[m.focusedIdx] = clampInt(m.cursors[m.focusedIdx]+delta, 0, total-1)
+	m.scrollToKeepCursorVisible()
 }
 
-func (m *Model) scrollFocusedToBottom() {
-	if m.focusedIdx < 0 || m.focusedIdx >= len(m.offsets) {
+func (m *Model) cursorToTop() {
+	if m.focusedIdx < 0 || m.focusedIdx >= len(m.cursors) {
 		return
 	}
-	m.offsets[m.focusedIdx] = m.maxFocusedOffset()
+	m.cursors[m.focusedIdx] = 0
+	m.scrollToKeepCursorVisible()
 }
 
-// maxFocusedOffset is the largest valid offset for the focused widget.
-// When the list overflows, the renderer reserves one row for the "N
-// hidden" hint, so reaching the last row needs offset = total - (visible-1).
-func (m Model) maxFocusedOffset() int {
+func (m *Model) cursorToBottom() {
+	if m.focusedIdx < 0 || m.focusedIdx >= len(m.cursors) {
+		return
+	}
+	total, _ := m.focusedWidgetDims()
+	if total <= 0 {
+		return
+	}
+	m.cursors[m.focusedIdx] = total - 1
+	m.scrollToKeepCursorVisible()
+}
+
+// scrollToKeepCursorVisible nudges the focused widget's offset so the
+// cursor row stays inside the visible window. Vim-style: cursor at the
+// top edge → offset shrinks; cursor at the bottom edge → offset grows.
+// Accounts for the "N hidden" hint row that the renderer reserves
+// when the list overflows.
+func (m *Model) scrollToKeepCursorVisible() {
 	total, visible := m.focusedWidgetDims()
 	if total <= visible {
-		return 0
+		m.offsets[m.focusedIdx] = 0
+		return
 	}
-	return total - (visible - 1)
+	// When the list overflows we lose one row to the hint, so the
+	// cursor must fit in [offset, offset + visible-1).
+	visibleData := visible - 1
+	if visibleData < 1 {
+		visibleData = 1
+	}
+	cursor := m.cursors[m.focusedIdx]
+	offset := m.offsets[m.focusedIdx]
+	if cursor < offset {
+		offset = cursor
+	} else if cursor >= offset+visibleData {
+		offset = cursor - visibleData + 1
+	}
+	maxOffset := total - visibleData
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	m.offsets[m.focusedIdx] = clampInt(offset, 0, maxOffset)
+}
+
+// clampCursorsToData runs after data updates to keep cursors valid
+// when rows disappear (e.g. a refresh removes a namespace). Without
+// this, the cursor could point past the end and actions would target
+// the wrong row.
+func (m *Model) clampCursorsToData() {
+	for i, w := range m.widgets {
+		total := w.RowCount(m, m.viewStates[i])
+		if total <= 0 {
+			m.cursors[i] = 0
+			m.offsets[i] = 0
+			continue
+		}
+		if m.cursors[i] >= total {
+			m.cursors[i] = total - 1
+		}
+		if m.cursors[i] < 0 {
+			m.cursors[i] = 0
+		}
+	}
+	// Re-run scroll-follows-cursor for the focused widget so the new
+	// cursor position is in view after data updates.
+	m.scrollToKeepCursorVisible()
 }
 
 func (m Model) halfPageStep() int {
@@ -73,6 +128,15 @@ func (m Model) halfPageStep() int {
 		step = 1
 	}
 	return step
+}
+
+// focusedCursor returns the cursor row of the focused widget, or 0 if
+// indices are out of range. Convenience for action handlers.
+func (m Model) focusedCursor() int {
+	if m.focusedIdx < 0 || m.focusedIdx >= len(m.cursors) {
+		return 0
+	}
+	return m.cursors[m.focusedIdx]
 }
 
 func clampInt(v, lo, hi int) int {

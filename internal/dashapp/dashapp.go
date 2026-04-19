@@ -64,6 +64,15 @@ type Model struct {
 	// leave a widget scrolled past its end.
 	offsets []int
 
+	// cursors is parallel to widgets — cursors[i] is the row the
+	// cursor is on within widgets[i]'s data list. Drives highlight
+	// rendering and is the row index actions operate on.
+	cursors []int
+
+	// viewStates is parallel to widgets — per-widget sort/filter
+	// state. Ephemeral (not persisted across tab close).
+	viewStates []widgetViewState
+
 	// gPrefixActive is true between the first 'g' and the second 'g'
 	// of a `gg` jump-to-top chord. Cleared by the second g (which
 	// triggers the jump) or by any other key press.
@@ -74,6 +83,21 @@ type Model struct {
 	// Scroll math reads these so the clamp matches what the renderer
 	// is actually doing.
 	rowHeights []int
+
+	// actionMenu is the overlay opened by `a` listing the focused
+	// widget's actions for the cursor row.
+	actionMenu actionMenuState
+
+	// sortOverlay is the dedicated sort picker opened by the
+	// "Sort by..." action (or the `s` direct keybind).
+	sortOverlay sortOverlayState
+
+	// filterInputActive is true while the user is typing into the
+	// focused widget's filter. While true, all keypresses are
+	// consumed by the filter input (no shortcuts fire) and
+	// IsTextInputActive returns true so the parent stays out of
+	// the way.
+	filterInputActive bool
 }
 
 // NewModelWithCache constructs a dashboard model wired to shared caches.
@@ -87,6 +111,8 @@ func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores DashStores
 		topicSubsByKey: make(map[string][]servicebus.TopicSubscription),
 		widgets:        widgets,
 		offsets:        make([]int, len(widgets)),
+		cursors:        make([]int, len(widgets)),
+		viewStates:     make([]widgetViewState, len(widgets)),
 	}
 	m.HydrateSubscriptionsFromCache(stores.Subscriptions)
 	if !m.HasSubscription {
@@ -150,9 +176,10 @@ func (m *Model) ApplyScheme(scheme ui.Scheme) {
 }
 
 // IsTextInputActive reports whether the tab is accepting free-form text.
-// The dashboard has no filters/search yet, so always false.
+// True while a filter input is open so the parent app doesn't snatch
+// keys for global shortcuts (single-letter quit, tab nav, etc.).
 func (m Model) IsTextInputActive() bool {
-	return false
+	return m.filterInputActive
 }
 
 // HelpSections returns the dashboard's keybindings for the parent
@@ -178,6 +205,15 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(km.HalfPageDown, "scroll half page down"),
 				keymap.HelpEntry(km.WidgetScrollTop, "jump to top (gg)"),
 				keymap.HelpEntry(km.WidgetScrollBottom, "jump to bottom"),
+			},
+		},
+		{
+			Title: "Widget actions",
+			Items: []string{
+				keymap.HelpEntry(km.ActionMenu, "open action menu (cursor row)"),
+				"o  open in Service Bus tab",
+				"s  sort picker (each direction is its own option)",
+				keymap.HelpEntry(km.FilterInput, "filter rows (esc clears, enter accepts)"),
 			},
 		},
 		{

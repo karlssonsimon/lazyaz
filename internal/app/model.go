@@ -233,6 +233,35 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 	m.activeIdx = len(m.tabs) - 1
 }
 
+// openSBTabWithNav creates a new Service Bus tab pre-positioned to a
+// pending navigation target (namespace, entity, DLQ pane). The dashboard
+// emits this when a widget action wants to drill into a specific entity.
+// The new tab inherits the requested subscription and runs the same
+// init flow as a tab opened via the picker.
+//
+// SetPendingNav fast-forwards through cached layers, so when the
+// dashboard has already warmed the brokers the user lands on the
+// destination immediately rather than watching three sequential fetches.
+func (m *Model) openSBTabWithNav(sub azure.Subscription, nav sbapp.PendingNav) (tea.Model, tea.Cmd) {
+	m.addTab(TabServiceBus, sub.ID)
+	tab := &m.tabs[m.activeIdx]
+	var ffCmd tea.Cmd
+	if sm, ok := tab.Model.(sbapp.Model); ok {
+		// SetSubscription explicitly so the tab is wired to the
+		// requested sub even if it isn't in the cached subscriptions
+		// list yet (preferredSub-based deferred apply wouldn't fire).
+		sm.SetSubscription(sub)
+		ffCmd = sm.SetPendingNav(nav)
+		tab.Model = sm
+	}
+	initCmd := wrapCmd(tab.ID, tab.Model.Init())
+	resizeCmd := m.forwardToActive(tea.WindowSizeMsg{
+		Width:  m.width,
+		Height: m.childHeight(),
+	})
+	return m, tea.Batch(initCmd, wrapCmd(tab.ID, ffCmd), resizeCmd)
+}
+
 // activeSubscription returns the current subscription from the active tab.
 func (m *Model) activeSubscription() (azure.Subscription, bool) {
 	if len(m.tabs) == 0 {
@@ -450,6 +479,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Height: m.childHeight(),
 		})
 		return m, tea.Batch(initCmd, resizeCmd)
+
+	case dashapp.OpenSBNamespaceMsg:
+		return m.openSBTabWithNav(msg.Subscription, sbapp.PendingNav{Namespace: msg.Namespace})
+
+	case dashapp.OpenSBEntityMsg:
+		return m.openSBTabWithNav(msg.Subscription, sbapp.PendingNav{
+			Namespace:  msg.Namespace,
+			EntityName: msg.EntityName,
+			SubName:    msg.SubName,
+			DeadLetter: msg.DeadLetter,
+		})
 
 	case nextTabMsg:
 		if len(m.tabs) > 1 {

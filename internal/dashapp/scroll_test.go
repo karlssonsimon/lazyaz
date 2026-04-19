@@ -6,32 +6,29 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 )
 
-// makeModel builds a Model wired with the minimum state the scroll
-// helpers need: registered widgets, row heights, focus index, and
-// data backing for whatever widget RowCount reads.
+// makeModel builds a Model wired with the minimum state the cursor +
+// scroll helpers need: registered widgets, row heights, focus index,
+// and data backing for whatever widget RowCount reads.
 func makeModel(focusedIdx, topH, botH, totalRows int) Model {
 	m := Model{
 		widgets:    dashboardWidgets(),
 		focusedIdx: focusedIdx,
-		// rowHeights are PANE heights including border. innerHeight is
-		// height - 2 inside the renderer; visible data rows are
-		// inner - 2 (title + header). So pane height H gives visible
-		// = H - 4 data rows, matching the previous focusedWidgetDims
-		// behaviour.
+		// rowHeights are PANE heights including border. Pane H gives
+		// visible = H - 4 data rows (1 title + 1 header + 2 border).
 		rowHeights: []int{topH, botH},
 	}
 	m.offsets = make([]int, len(m.widgets))
+	m.cursors = make([]int, len(m.widgets))
+	m.viewStates = make([]widgetViewState, len(m.widgets))
 
 	if focusedIdx == 0 {
-		// Top widget = namespaceCounts. Total = len(m.namespaces).
 		m.namespaces = make([]servicebus.Namespace, totalRows)
 		for i := range m.namespaces {
 			m.namespaces[i] = servicebus.Namespace{Name: "ns"}
 		}
 		return m
 	}
-	// Bottom widget = dlqAlerts. Total comes from m.dlqAlerts(): one
-	// queue with DLQ count > 0 per row.
+	// Bottom widget (DLQ alerts) — synthesise queue entries with DLQ > 0.
 	m.namespaces = []servicebus.Namespace{{Name: "ns0"}}
 	ents := make([]servicebus.Entity, totalRows)
 	for i := range ents {
@@ -47,7 +44,6 @@ func TestFocusedWidgetDimsTopWidget(t *testing.T) {
 	if total != 7 {
 		t.Errorf("total = %d, want 7", total)
 	}
-	// pane H = 10; visible data = 10 - 4 = 6.
 	if visible != 6 {
 		t.Errorf("visible = %d, want 6", visible)
 	}
@@ -59,7 +55,6 @@ func TestFocusedWidgetDimsBottomWidget(t *testing.T) {
 	if total != 5 {
 		t.Errorf("total = %d, want 5", total)
 	}
-	// pane H = 12; visible data = 12 - 4 = 8.
 	if visible != 8 {
 		t.Errorf("visible = %d, want 8", visible)
 	}
@@ -73,70 +68,106 @@ func TestFocusedWidgetDimsTinyHeightFlooredToOne(t *testing.T) {
 	}
 }
 
-func TestMaxFocusedOffsetWhenAllRowsFit(t *testing.T) {
-	m := makeModel(0, 20, 20, 5) // visible = 16, total = 5 → no overflow
-	if got := m.maxFocusedOffset(); got != 0 {
-		t.Errorf("maxFocusedOffset = %d, want 0 (no overflow)", got)
-	}
-}
-
-func TestMaxFocusedOffsetWhenOverflowing(t *testing.T) {
-	// pane H = 10 → visible = 6; total = 100 → maxOffset = 100 - 5 = 95
+func TestMoveCursorClampsAtZero(t *testing.T) {
 	m := makeModel(0, 10, 10, 100)
-	if got := m.maxFocusedOffset(); got != 95 {
-		t.Errorf("maxFocusedOffset = %d, want 95", got)
+	m.moveCursorFocused(-5)
+	if m.cursors[0] != 0 {
+		t.Errorf("cursors[0] = %d, want 0", m.cursors[0])
 	}
 }
 
-func TestScrollFocusedClampsAtZero(t *testing.T) {
+func TestMoveCursorClampsAtMax(t *testing.T) {
 	m := makeModel(0, 10, 10, 100)
-	m.scrollFocused(-5)
-	if m.offsets[0] != 0 {
-		t.Errorf("offsets[0] = %d, want 0", m.offsets[0])
+	m.moveCursorFocused(1000)
+	// Cursor max = total - 1 = 99
+	if m.cursors[0] != 99 {
+		t.Errorf("cursors[0] = %d, want 99", m.cursors[0])
 	}
 }
 
-func TestScrollFocusedClampsAtMax(t *testing.T) {
-	m := makeModel(0, 10, 10, 100) // maxOffset = 95
-	m.scrollFocused(1000)
-	if m.offsets[0] != 95 {
-		t.Errorf("offsets[0] = %d, want 95", m.offsets[0])
-	}
-}
-
-func TestScrollFocusedRoutesByFocus(t *testing.T) {
+func TestMoveCursorRoutesByFocus(t *testing.T) {
 	m := makeModel(1, 10, 10, 100)
-	m.scrollFocused(3)
-	if m.offsets[1] != 3 {
-		t.Errorf("offsets[1] = %d, want 3", m.offsets[1])
+	m.moveCursorFocused(3)
+	if m.cursors[1] != 3 {
+		t.Errorf("cursors[1] = %d, want 3", m.cursors[1])
 	}
-	if m.offsets[0] != 0 {
-		t.Errorf("offsets[0] = %d, want 0 (not focused)", m.offsets[0])
+	if m.cursors[0] != 0 {
+		t.Errorf("cursors[0] = %d, want 0 (not focused)", m.cursors[0])
 	}
 }
 
-func TestScrollFocusedToTopAndBottom(t *testing.T) {
+func TestCursorToTopAndBottom(t *testing.T) {
 	m := makeModel(0, 10, 10, 100)
-	m.offsets[0] = 50
-	m.scrollFocusedToTop()
-	if m.offsets[0] != 0 {
-		t.Errorf("after scrollFocusedToTop, offsets[0] = %d, want 0", m.offsets[0])
+	m.cursors[0] = 50
+	m.cursorToTop()
+	if m.cursors[0] != 0 {
+		t.Errorf("cursorToTop: cursors[0] = %d, want 0", m.cursors[0])
 	}
-	m.scrollFocusedToBottom()
-	if m.offsets[0] != 95 {
-		t.Errorf("after scrollFocusedToBottom, offsets[0] = %d, want 95", m.offsets[0])
+	m.cursorToBottom()
+	if m.cursors[0] != 99 {
+		t.Errorf("cursorToBottom: cursors[0] = %d, want 99", m.cursors[0])
+	}
+}
+
+func TestScrollFollowsCursorDownward(t *testing.T) {
+	// visible = 6; visibleData (hint reserved) = 5.
+	// Cursor at 0..4 fits in window [0, 5). Cursor at 5 forces a scroll.
+	m := makeModel(0, 10, 10, 100)
+	for i := 0; i < 4; i++ {
+		m.moveCursorFocused(1)
+	}
+	if m.cursors[0] != 4 {
+		t.Errorf("cursor = %d, want 4", m.cursors[0])
+	}
+	if m.offsets[0] != 0 {
+		t.Errorf("offset at cursor=4 = %d, want 0 (still in window)", m.offsets[0])
+	}
+	m.moveCursorFocused(1)
+	if m.cursors[0] != 5 {
+		t.Errorf("cursor = %d, want 5", m.cursors[0])
+	}
+	if m.offsets[0] != 1 {
+		t.Errorf("offset at cursor=5 = %d, want 1 (cursor pushed past window)", m.offsets[0])
+	}
+}
+
+func TestScrollFollowsCursorUpward(t *testing.T) {
+	m := makeModel(0, 10, 10, 100)
+	m.cursors[0] = 50
+	m.scrollToKeepCursorVisible() // brings offset up to 46
+	if m.offsets[0] != 46 {
+		t.Errorf("after seeking: offset = %d, want 46", m.offsets[0])
+	}
+	// Now cursor up — should drop offset to keep cursor in view.
+	m.moveCursorFocused(-10)
+	if m.cursors[0] != 40 {
+		t.Errorf("cursor = %d, want 40", m.cursors[0])
+	}
+	if m.offsets[0] != 40 {
+		t.Errorf("offset = %d, want 40 (cursor at top of window)", m.offsets[0])
+	}
+}
+
+func TestClampCursorsToDataShrinkage(t *testing.T) {
+	m := makeModel(0, 10, 10, 100)
+	m.cursors[0] = 80
+	// Data shrinks to 30 rows.
+	m.namespaces = m.namespaces[:30]
+	m.clampCursorsToData()
+	if m.cursors[0] != 29 {
+		t.Errorf("cursor = %d, want 29 (clamped to total-1)", m.cursors[0])
 	}
 }
 
 func TestHalfPageStepIsHalfOfVisible(t *testing.T) {
-	m := makeModel(0, 10, 10, 100) // visible = 6
+	m := makeModel(0, 10, 10, 100)
 	if got := m.halfPageStep(); got != 3 {
 		t.Errorf("halfPageStep = %d, want 3", got)
 	}
 }
 
 func TestHalfPageStepFloorsAtOne(t *testing.T) {
-	m := makeModel(0, 5, 5, 100) // visible = 1, step = 0 → floored to 1
+	m := makeModel(0, 5, 5, 100)
 	if got := m.halfPageStep(); got != 1 {
 		t.Errorf("halfPageStep = %d, want 1", got)
 	}
@@ -152,10 +183,10 @@ func TestMoveFocusGoesDown(t *testing.T) {
 func TestMoveFocusClampsAtEdge(t *testing.T) {
 	widgets := dashboardWidgets()
 	if got := moveFocus(widgets, 0, -1, 0); got != 0 {
-		t.Errorf("moveFocus up from top = %d, want 0 (no movement)", got)
+		t.Errorf("moveFocus up from top = %d, want 0", got)
 	}
 	if got := moveFocus(widgets, 1, 1, 0); got != 1 {
-		t.Errorf("moveFocus down from bottom = %d, want 1 (no movement)", got)
+		t.Errorf("moveFocus down from bottom = %d, want 1", got)
 	}
 }
 
@@ -168,9 +199,6 @@ func TestComputeRowHeightsEvenSplit(t *testing.T) {
 }
 
 func TestComputeRowHeightsRemainderToBottom(t *testing.T) {
-	// 23/2 = 11 base, rem 1. Remainder goes to the last row so the
-	// layout matches the previous "topH = body/2, botH = body - topH"
-	// behaviour where the bottom pane absorbed the extra row.
 	got := computeRowHeights(23, 2)
 	want := []int{11, 12}
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
