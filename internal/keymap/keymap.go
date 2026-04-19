@@ -95,6 +95,11 @@ type Keymap struct {
 	WidgetScrollDown   Binding `json:"widget_scroll_down"`
 	WidgetScrollTop    Binding `json:"widget_scroll_top"`    // gg
 	WidgetScrollBottom Binding `json:"widget_scroll_bottom"` // G
+
+	// App-wide vim-style jump list. Walks the cross-tab navigation
+	// history backward (JumpBack) and forward (JumpForward).
+	JumpBack    Binding `json:"jump_back"`
+	JumpForward Binding `json:"jump_forward"`
 }
 
 // JumpIndex returns the tab index (0-based) if key matches any Jump binding.

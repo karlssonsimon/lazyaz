@@ -145,6 +145,13 @@ func (m Model) activeHelpSections() []ui.HelpSection {
 			keymap.HelpEntry(km.Quit, "quit"),
 		},
 	}
-	return append([]ui.HelpSection{tabSection}, childSections...)
+	jumpSection := ui.HelpSection{
+		Title: "Cross-tab jump list",
+		Items: []string{
+			keymap.HelpEntry(km.JumpBack, "jump back"),
+			keymap.HelpEntry(km.JumpForward, "jump forward"),
+		},
+	}
+	return append([]ui.HelpSection{tabSection, jumpSection}, childSections...)
 }
 

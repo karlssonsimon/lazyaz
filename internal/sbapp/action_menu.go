@@ -327,7 +327,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 	case actionToggleMark:
 		if m.focus == messagesPane {
 			item, ok := m.messageList.SelectedItem().(messageItem)
-			if !ok || item.duplicate {
+			if !ok {
 				return m, nil
 			}
 			marks := m.ensureMarks()

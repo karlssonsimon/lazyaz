@@ -93,5 +93,12 @@ func Default() Keymap {
 		WidgetScrollDown:   New("j", "down"),
 		WidgetScrollTop:    New("g"),    // gg chord; first g primes, second jumps
 		WidgetScrollBottom: New("G", "end"),
+
+		// Cross-tab jump list. ctrl+o for back is universal; ctrl+i
+		// can't be reliably distinguished from Tab in many terminal
+		// + multiplexer combos, so JumpForward uses ctrl+n ("next")
+		// and ctrl+] (vim-style) instead.
+		JumpBack:    New("ctrl+o"),
+		JumpForward: New("ctrl+i", "ctrl+n", "ctrl+]"),
 	}
 }

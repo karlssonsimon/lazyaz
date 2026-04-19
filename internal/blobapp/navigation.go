@@ -245,7 +245,7 @@ func (m Model) selectAccount(account blob.Account) (Model, tea.Cmd) {
 
 	if m.hasAccount && sameAccount(m.currentAccount, account) {
 		m.transitionTo(containersPane, false)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	}
 
 	if m.hasAccount {
@@ -281,7 +281,7 @@ func (m Model) selectAccount(account blob.Account) (Model, tea.Cmd) {
 	m.blobsList.Title = "Blobs"
 
 	m.startLoading(containersPane, fmt.Sprintf("Loading containers in %s", account.Name))
-	return m, tea.Batch(m.Spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, account, m.containers))
+	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, account, m.containers)))
 }
 
 // selectContainer binds the explorer to a container under the active
@@ -293,7 +293,7 @@ func (m Model) selectContainer(container blob.ContainerInfo) (Model, tea.Cmd) {
 
 	if m.hasContainer && m.containerName == container.Name {
 		m.transitionTo(blobsPane, false)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	}
 
 	if m.hasContainer {
@@ -322,5 +322,5 @@ func (m Model) selectContainer(container blob.ContainerInfo) (Model, tea.Cmd) {
 	ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
 	m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName))
-	return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
+	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs)))
 }

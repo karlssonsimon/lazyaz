@@ -69,6 +69,8 @@
     "widget_scroll_up": ["k", "up"],
     "widget_scroll_down": ["j", "down"],
     "widget_scroll_top": ["g"],
-    "widget_scroll_bottom": ["G", "end"]
+    "widget_scroll_bottom": ["G", "end"],
+    "jump_back": ["ctrl+o"],
+    "jump_forward": ["ctrl+i", "ctrl+n", "ctrl+]"]
   }
 }

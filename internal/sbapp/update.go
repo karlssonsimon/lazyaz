@@ -287,7 +287,7 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	} else {
 		m.peekedMessages = msg.messages
 	}
-	items := messagesToItems(m.peekedMessages, m.currentDuplicates())
+	items := messagesToItems(m.peekedMessages)
 	if msg.repeek || msg.preserveCursor {
 		ui.SetItemsPreserveKey(&m.messageList, items, messageItemKey)
 	} else {
@@ -360,7 +360,7 @@ func (m Model) handleDLQReceived(msg dlqReceivedMsg) (Model, tea.Cmd) {
 	}
 
 	m.messageList.ResetFilter()
-	m.messageList.SetItems(messagesToItems(m.peekedMessages, nil))
+	m.messageList.SetItems(messagesToItems(m.peekedMessages))
 	if len(m.peekedMessages) > 0 {
 		m.messageList.Select(0)
 	}
@@ -456,7 +456,7 @@ func (m *Model) removeLockedMessage(messageID string) {
 		}
 	}
 	m.peekedMessages = peeked
-	m.messageList.SetItems(messagesToItems(m.peekedMessages, nil))
+	m.messageList.SetItems(messagesToItems(m.peekedMessages))
 	m.messageList.Title = fmt.Sprintf("DLQ Locked (%d)", len(m.peekedMessages))
 
 	// If no more locked messages, clean up the receiver.
@@ -648,7 +648,7 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 	case m.Keymap.ToggleMark.Matches(key):
 		if m.focus == messagesPane && m.hasPeekTarget {
 			item, ok := m.messageList.SelectedItem().(messageItem)
-			if !ok || item.duplicate {
+			if !ok {
 				return m, nil
 			}
 			marks := m.ensureMarks()

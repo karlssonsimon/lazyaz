@@ -119,8 +119,7 @@ type Model struct {
 	selectedMessage servicebus.PeekedMessage
 	textSelection   ui.TextSelection
 
-	markedMessages    map[string]map[string]struct{}
-	duplicateMessages map[string]map[string]struct{}
+	markedMessages map[string]map[string]struct{}
 
 	cache sbCache
 
@@ -144,6 +143,13 @@ type Model struct {
 	// to a shared SQLite table the dashboard reads to surface
 	// frequently-used resources. nil when the parent runs in-memory.
 	usage *cache.DB
+
+	// applyingNav is true while ApplyNav (jump-list restoration) is
+	// driving navigation. Suppresses RecordJumpMsg emission from the
+	// drill-in helpers — without this guard, restoring to position X
+	// re-records X, truncating the forward history and trapping the
+	// user in an oscillation between two adjacent jump entries.
+	applyingNav bool
 }
 
 type namespacesLoadedMsg struct {
@@ -179,17 +185,6 @@ type messagesLoadedMsg struct {
 	repeek         bool
 	preserveCursor bool
 	err            error
-}
-
-type requeueDoneMsg struct {
-	requeued int
-	total    int
-	err      error
-}
-
-type deleteDuplicateDoneMsg struct {
-	messageID string
-	err       error
 }
 
 type dlqReceivedMsg struct {
@@ -275,7 +270,6 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 		messageList:          messages,
 		focus:                namespacesPane,
 		markedMessages:       make(map[string]map[string]struct{}),
-		duplicateMessages:    make(map[string]map[string]struct{}),
 		cache:                newCache(db),
 		namespacesHistory:    make(map[string]ui.ListState),
 		entitiesHistory:      make(map[string]ui.ListState),

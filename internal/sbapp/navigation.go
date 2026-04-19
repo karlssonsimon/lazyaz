@@ -178,7 +178,7 @@ func (m Model) selectQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 		m.currentNS.Name+" / "+entity.Name)
 	if m.hasPeekTarget && m.currentSubName == "" && m.currentEntity.Name == entity.Name {
 		m.transitionTo(queueTypePane)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	}
 
 	m.closePreview()
@@ -194,7 +194,7 @@ func (m Model) selectQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(nil)
 
-	return m, nil
+	return m, appendJumpRecord(m, nil)
 }
 
 // selectTopic loads a topic's subscriptions.
@@ -204,7 +204,7 @@ func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
 		m.currentNS.Name+" / "+entity.Name)
 	if m.currentEntity.Name == entity.Name && m.isTopicSelected() {
 		m.transitionTo(subscriptionsPane)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	}
 
 	m.closePreview()
@@ -232,7 +232,7 @@ func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
 	m.messageList.SetItems(nil)
 
 	m.startLoading(m.focus, fmt.Sprintf("Loading subscriptions for topic %s", entity.Name))
-	return m, tea.Batch(m.Spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, entity.Name, cacheKey, m.subscriptions))
+	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, entity.Name, cacheKey, m.subscriptions)))
 }
 
 // selectSubscriptionSub binds the queue type picker to a topic subscription.
@@ -242,7 +242,7 @@ func (m Model) selectSubscriptionSub(topicName string, sub servicebus.TopicSubsc
 		m.currentNS.Name+" / "+topicName+"/"+sub.Name)
 	if m.hasPeekTarget && m.currentSubName == sub.Name && m.currentEntity.Name == topicName {
 		m.transitionTo(queueTypePane)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	}
 
 	var parent servicebus.Entity
@@ -265,7 +265,7 @@ func (m Model) selectSubscriptionSub(topicName string, sub servicebus.TopicSubsc
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(nil)
 
-	return m, nil
+	return m, appendJumpRecord(m, nil)
 }
 
 // peekMessages navigates to the messages pane for the given queue type.
@@ -274,7 +274,7 @@ func (m Model) selectSubscriptionSub(topicName string, sub servicebus.TopicSubsc
 func (m Model) peekMessages(deadLetter bool) (Model, tea.Cmd) {
 	if m.deadLetter == deadLetter && len(m.peekedMessages) > 0 {
 		m.transitionTo(messagesPane)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	}
 
 	m.deadLetter = deadLetter
@@ -294,7 +294,7 @@ func (m Model) peekMessages(deadLetter bool) (Model, tea.Cmd) {
 	m.messageList.SetItems(nil)
 	m.messageList.Title = m.messagesPaneTitle()
 
-	return m, nil
+	return m, appendJumpRecord(m, nil)
 }
 
 // recordUsage is a thin wrapper around the persistent cache's usage
@@ -316,7 +316,7 @@ func (m Model) selectNamespace(ns servicebus.Namespace) (Model, tea.Cmd) {
 	m.recordUsage("sb_namespace", m.CurrentSub.ID+"/"+ns.Name, ns.Name)
 	if m.hasNamespace && m.currentNS.Name == ns.Name {
 		m.transitionTo(entitiesPane)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	}
 
 	if m.hasNamespace {
@@ -350,5 +350,5 @@ func (m Model) selectNamespace(ns servicebus.Namespace) (Model, tea.Cmd) {
 	m.messageList.SetItems(nil)
 
 	m.startLoading(m.focus, fmt.Sprintf("Loading entities in %s", ns.Name))
-	return m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, ns, entityCacheKey, m.entities))
+	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, ns, entityCacheKey, m.entities)))
 }

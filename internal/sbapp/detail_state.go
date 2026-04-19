@@ -33,14 +33,6 @@ func (m Model) currentMarks() map[string]struct{} {
 	return m.markedMessages[scope]
 }
 
-func (m Model) currentDuplicates() map[string]struct{} {
-	scope := m.markScope()
-	if scope == "" {
-		return nil
-	}
-	return m.duplicateMessages[scope]
-}
-
 func (m *Model) ensureMarks() map[string]struct{} {
 	scope := m.markScope()
 	if scope == "" {
@@ -50,17 +42,6 @@ func (m *Model) ensureMarks() map[string]struct{} {
 		m.markedMessages[scope] = make(map[string]struct{})
 	}
 	return m.markedMessages[scope]
-}
-
-func (m *Model) ensureDuplicates() map[string]struct{} {
-	scope := m.markScope()
-	if scope == "" {
-		return nil
-	}
-	if m.duplicateMessages[scope] == nil {
-		m.duplicateMessages[scope] = make(map[string]struct{})
-	}
-	return m.duplicateMessages[scope]
 }
 
 func (m *Model) clearScopeMarks() {
@@ -208,36 +189,12 @@ func (m *Model) clearPeekState() {
 
 func (m *Model) clearAllMarks() {
 	m.markedMessages = make(map[string]map[string]struct{})
-	m.duplicateMessages = make(map[string]map[string]struct{})
 }
 
-func (m Model) collectRequeueIDs() []string {
-	marks := m.currentMarks()
-	dups := m.currentDuplicates()
-	if len(marks) > 0 {
-		var ids []string
-		for _, msg := range m.peekedMessages {
-			if _, ok := marks[msg.MessageID]; !ok {
-				continue
-			}
-			if _, isDup := dups[msg.MessageID]; isDup {
-				continue
-			}
-			ids = append(ids, msg.MessageID)
-		}
-		return ids
-	}
-	item, ok := m.messageList.SelectedItem().(messageItem)
-	if !ok || item.duplicate {
-		return nil
-	}
-	return []string{item.message.MessageID}
-}
-
-// refreshMessageItems rebuilds the message list items (for duplicate
-// flag changes). Mark/visual rendering is handled by the delegate.
+// refreshMessageItems rebuilds the message list items. Mark/visual
+// rendering is handled by the delegate.
 func (m *Model) refreshMessageItems() {
-	ui.SetItemsPreserveKey(&m.messageList, messagesToItems(m.peekedMessages, m.currentDuplicates()), messageItemKey)
+	ui.SetItemsPreserveKey(&m.messageList, messagesToItems(m.peekedMessages), messageItemKey)
 	m.refreshMessageSelectionDisplay()
 }
 

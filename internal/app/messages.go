@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/karlssonsimon/lazyaz/internal/dashapp"
+	"github.com/karlssonsimon/lazyaz/internal/jumplist"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -69,7 +70,8 @@ func wrapMsg(id int, msg tea.Msg) tea.Msg {
 	// handles them directly instead of routing them back to the
 	// emitting tab.
 	case dashapp.OpenSBNamespaceMsg, dashapp.OpenSBEntityMsg,
-		dashapp.OpenBlobAccountMsg, dashapp.OpenBlobContainerMsg:
+		dashapp.OpenBlobAccountMsg, dashapp.OpenBlobContainerMsg,
+		jumplist.RecordJumpMsg:
 		return msg
 	default:
 		return tabMsg{tabID: id, inner: msg}

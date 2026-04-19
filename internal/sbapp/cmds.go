@@ -165,35 +165,6 @@ func refreshEntitiesCmd(svc *servicebus.Service, ns servicebus.Namespace) tea.Cm
 	}
 }
 
-func requeueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, entity servicebus.Entity, subName string, messageIDs []string) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-		var requeued int
-		var err error
-		if subName == "" {
-			requeued, err = svc.RequeueFromDLQ(ctx, ns, entity.Name, messageIDs)
-		} else {
-			requeued, err = svc.RequeueFromSubscriptionDLQ(ctx, ns, entity.Name, subName, messageIDs)
-		}
-		return requeueDoneMsg{requeued: requeued, total: len(messageIDs), err: err}
-	}
-}
-
-func deleteDuplicateCmd(svc *servicebus.Service, ns servicebus.Namespace, entity servicebus.Entity, subName string, messageID string) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		var err error
-		if subName == "" {
-			err = svc.DeleteFromDLQ(ctx, ns, entity.Name, messageID)
-		} else {
-			err = svc.DeleteFromSubscriptionDLQ(ctx, ns, entity.Name, subName, messageID)
-		}
-		return deleteDuplicateDoneMsg{messageID: messageID, err: err}
-	}
-}
-
 // moveAllCmd receives all messages (from DLQ or active queue) and
 // sends them to a different target queue/topic, then completes the originals.
 func moveAllCmd(svc *servicebus.Service, sourceNS servicebus.Namespace, entityName, subName string, deadLetter bool, targetNS servicebus.Namespace, targetEntity string, count int) tea.Cmd {

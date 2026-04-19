@@ -13,6 +13,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/blobapp"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/dashapp"
+	"github.com/karlssonsimon/lazyaz/internal/jumplist"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/kvapp"
 	"github.com/karlssonsimon/lazyaz/internal/sbapp"
@@ -52,6 +53,13 @@ type Model struct {
 	// table so we only write when the active subscription actually
 	// changes. Compared after every Update.
 	lastPersistedSubID string
+
+	// jumps is the cross-tab navigation history walked by ctrl+o /
+	// ctrl+i. jumpIdx points at the entry the user is currently "on";
+	// -1 means no entries yet. See internal/app/jumplist.go for the
+	// full semantics.
+	jumps   []jumpEntry
+	jumpIdx int
 
 	// notifier is the single global notification log shared with every
 	// tab. The parent owns it and renders both the toast stack and the
@@ -106,6 +114,7 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		schemes:  cfg.Schemes,
 		notifier: appshell.NewNotifier(1000),
 		db:       db,
+		jumpIdx:  -1,
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
@@ -275,7 +284,15 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 // dashboard has already warmed the brokers the user lands on the
 // destination immediately rather than watching three sequential fetches.
 func (m *Model) openSBTabWithNav(sub azure.Subscription, nav sbapp.PendingNav) (tea.Model, tea.Cmd) {
+	oldIdx := m.activeIdx
 	m.addTab(TabServiceBus, sub.ID)
+	// Record the FROM tab so ctrl+o brings the user back from the
+	// SB tab they just got dropped into.
+	if oldIdx >= 0 && oldIdx < len(m.tabs) {
+		if snap := m.tabSnapshotForJump(oldIdx); snap != nil {
+			m.recordJump(m.tabs[oldIdx].ID, snap)
+		}
+	}
 	tab := &m.tabs[m.activeIdx]
 	var ffCmd tea.Cmd
 	if sm, ok := tab.Model.(sbapp.Model); ok {
@@ -286,6 +303,10 @@ func (m *Model) openSBTabWithNav(sub azure.Subscription, nav sbapp.PendingNav) (
 		ffCmd = sm.SetPendingNav(nav)
 		tab.Model = sm
 	}
+	// Record the destination as a jump entry so ctrl+o brings the
+	// user back to whatever they were doing before the dashboard
+	// drilled them in here.
+	m.recordJump(tab.ID, sbapp.NavSnapshotFromPending(nav))
 	initCmd := wrapCmd(tab.ID, tab.Model.Init())
 	resizeCmd := m.forwardToActive(tea.WindowSizeMsg{
 		Width:  m.width,
@@ -320,7 +341,13 @@ func (m *Model) persistActiveSubIfChanged() {
 // navigation target. The fast-forward path in SetPendingNav lands the
 // user directly on the destination when the cache is warm.
 func (m *Model) openBlobTabWithNav(sub azure.Subscription, nav blobapp.PendingNav) (tea.Model, tea.Cmd) {
+	oldIdx := m.activeIdx
 	m.addTab(TabBlob, sub.ID)
+	if oldIdx >= 0 && oldIdx < len(m.tabs) {
+		if snap := m.tabSnapshotForJump(oldIdx); snap != nil {
+			m.recordJump(m.tabs[oldIdx].ID, snap)
+		}
+	}
 	tab := &m.tabs[m.activeIdx]
 	var ffCmd tea.Cmd
 	if bm, ok := tab.Model.(blobapp.Model); ok {
@@ -328,6 +355,7 @@ func (m *Model) openBlobTabWithNav(sub azure.Subscription, nav blobapp.PendingNa
 		ffCmd = bm.SetPendingNav(nav)
 		tab.Model = bm
 	}
+	m.recordJump(tab.ID, blobapp.NavSnapshotFromPending(nav))
 	initCmd := wrapCmd(tab.ID, tab.Model.Init())
 	resizeCmd := m.forwardToActive(tea.WindowSizeMsg{
 		Width:  m.width,
@@ -379,6 +407,7 @@ func (m *Model) closeTab(idx int) {
 	if idx < 0 || idx >= len(m.tabs) {
 		return
 	}
+	closedID := m.tabs[idx].ID
 	m.tabs = append(m.tabs[:idx], m.tabs[idx+1:]...)
 	if m.activeIdx >= len(m.tabs) {
 		m.activeIdx = len(m.tabs) - 1
@@ -386,6 +415,10 @@ func (m *Model) closeTab(idx int) {
 	if m.activeIdx < 0 {
 		m.activeIdx = 0
 	}
+	// Drop jump-list entries pointing at the now-gone tab so ctrl+o
+	// doesn't end up at "random" surviving entries instead of the
+	// position the user expected.
+	m.cleanupJumpsForTab(closedID)
 }
 
 func (m *Model) closeTabByID(id int) {
@@ -557,7 +590,12 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tabPickerMsg:
 		m.tabPicker.active = false
+		oldIdx := m.activeIdx
 		m.addTab(msg.kind, "")
+		// Record both the previous tab's position (so ctrl+o returns
+		// the user there) and the new tab's home (so ctrl+i can come
+		// back forward).
+		m.recordTabChange(oldIdx, m.activeIdx)
 		// Init the new tab and send it a resize.
 		tab := &m.tabs[m.activeIdx]
 		initCmd := wrapCmd(tab.ID, tab.Model.Init())
@@ -566,6 +604,16 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Height: m.childHeight(),
 		})
 		return m, tea.Batch(initCmd, resizeCmd)
+
+	case jumplist.RecordJumpMsg:
+		// Snapshot is owned by the active tab — record it against
+		// that tab's ID. Cross-tab open paths record their own jumps
+		// after creating the new tab so the destination's tabID is
+		// captured correctly.
+		if len(m.tabs) > 0 {
+			m.recordJump(m.tabs[m.activeIdx].ID, msg.Snap)
+		}
+		return m, nil
 
 	case dashapp.OpenSBNamespaceMsg:
 		return m.openSBTabWithNav(msg.Subscription, sbapp.PendingNav{Namespace: msg.Namespace})
@@ -590,6 +638,9 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 
 	case nextTabMsg:
+		// Plain tab cycling (H/L) isn't a vim "jump" — it's :bnext.
+		// Don't record so the jump list stays focused on real
+		// drill-ins and tab opens.
 		if len(m.tabs) > 1 {
 			m.activeIdx = (m.activeIdx + 1) % len(m.tabs)
 			return m, m.resizeAndTickActive()
@@ -803,6 +854,7 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Height: m.childHeight(),
 			})
 		case m.keymap.NextTab.Matches(key):
+			// Plain tab cycle — not a "jump" in the vim sense.
 			if len(m.tabs) > 1 {
 				m.activeIdx = (m.activeIdx + 1) % len(m.tabs)
 				return m, m.resizeAndTickActive()
@@ -824,6 +876,10 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.Update(toggleNotificationsMsg{})
 		case m.keymap.ToggleStreams.Matches(key):
 			return m.Update(toggleStreamsMsg{})
+		case m.keymap.JumpBack.Matches(key):
+			return m, m.jumpBack()
+		case m.keymap.JumpForward.Matches(key):
+			return m, m.jumpForward()
 		}
 
 		if idx, ok := m.keymap.JumpIndex(key); ok {

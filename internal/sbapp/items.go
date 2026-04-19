@@ -91,8 +91,7 @@ func (i queueTypeItem) Description() string { return "" }
 func (i queueTypeItem) FilterValue() string { return i.label }
 
 type messageItem struct {
-	message   servicebus.PeekedMessage
-	duplicate bool
+	message servicebus.PeekedMessage
 }
 
 func (i messageItem) Title() string {
@@ -100,17 +99,11 @@ func (i messageItem) Title() string {
 	if id == "" {
 		id = "(no id)"
 	}
-	prefix := ""
-	if i.duplicate {
-		prefix = "[DUP] "
-	}
-
 	ts := "    -     "
 	if !i.message.EnqueuedAt.IsZero() {
 		ts = i.message.EnqueuedAt.Local().Format("2006-01-02 15:04")
 	}
-
-	return fmt.Sprintf("%s%-40s  %s", prefix, id, ts)
+	return fmt.Sprintf("%-40s  %s", id, ts)
 }
 
 func (i messageItem) Description() string {
@@ -170,11 +163,10 @@ func subscriptionsToItems(subs []servicebus.TopicSubscription) []list.Item {
 	return items
 }
 
-func messagesToItems(messages []servicebus.PeekedMessage, duplicates map[string]struct{}) []list.Item {
+func messagesToItems(messages []servicebus.PeekedMessage) []list.Item {
 	items := make([]list.Item, 0, len(messages))
 	for _, msg := range messages {
-		_, isDup := duplicates[msg.MessageID]
-		items = append(items, messageItem{message: msg, duplicate: isDup})
+		items = append(items, messageItem{message: msg})
 	}
 	return items
 }

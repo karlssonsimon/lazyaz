@@ -142,6 +142,11 @@ type Model struct {
 	// advancePendingNav drives the selection forward as fetches land.
 	pendingNav PendingNav
 
+	// applyingNav suppresses RecordJumpMsg emission while ApplyNav
+	// (jump-list restoration) is driving navigation. See sbapp's
+	// equivalent field for the full rationale.
+	applyingNav bool
+
 	// Per-pane inspect strip toggle. When inspectPanes[pane] is true, the
 	// pane renders an inline detail strip (via ui.RenderInspectStrip) under
 	// its list. The strip updates live as the cursor moves so the user can
