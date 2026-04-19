@@ -102,11 +102,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleTopicSubsLoaded(msg)
 
 	case refreshTickMsg:
-		// refreshAll is debounced via refreshInFlight, so a slow
-		// network can't cause overlapping refreshes. Always reschedule
-		// so the tick chain continues for the tab's lifetime.
-		updated, refreshCmd := m.refreshAll()
+		// refreshCounts uses Azure Monitor — one call per namespace
+		// gets fresh active/DLQ counts for all entities. Structure
+		// (entity names, kinds) is re-listed only on manual `r` or
+		// when switching subscriptions. Always reschedule the tick
+		// chain for the tab's lifetime.
+		updated, refreshCmd := m.refreshCounts()
 		return updated, tea.Batch(refreshCmd, scheduleRefreshTick())
+
+	case metricsLoadedMsg:
+		return m.handleMetricsLoaded(msg)
 
 	case clearUsageMsg:
 		if m.db != nil && m.HasSubscription {
@@ -213,20 +218,38 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (tea.Model, tea.Cmd) 
 	m.pendingFetches--
 	m.refreshDone()
 	m.clampCursorsToData()
-	// For any topics in this namespace, kick off a topic-subs fetch so
-	// the DLQ widget can see per-subscription DLQ counts.
-	var cmds []tea.Cmd
-	for _, e := range msg.entities {
-		if e.Kind != servicebus.EntityTopic {
-			continue
-		}
-		key := msg.namespace.Name + "/" + e.Name
-		if _, have := m.topicSubsByKey[key]; have {
-			continue
-		}
-		cmds = append(cmds, fetchTopicSubsCmd(m.service, m.stores.TopicSubs, msg.namespace, e.Name))
+	// Topic subscriptions are not proactively fetched. The DLQ widget
+	// shows topic-level rollups; per-sub detail is opportunistic (shown
+	// when sbapp has already populated the shared cache) and drilled
+	// into via sbapp for fresh data.
+	return m, nil
+}
+
+func (m Model) handleMetricsLoaded(msg metricsLoadedMsg) (tea.Model, tea.Cmd) {
+	m.refreshDone()
+	if msg.err != nil {
+		m.LastErr = msg.err.Error()
+		return m, nil
 	}
-	return m, tea.Batch(cmds...)
+	// Merge counts into the cached entities for this namespace. Unknown
+	// entity names (created after last structure fetch) are ignored
+	// silently — the next manual `r` will pick them up.
+	ents := m.entitiesByNS[msg.namespace.Name]
+	if len(ents) == 0 {
+		return m, nil
+	}
+	countsByName := make(map[string]servicebus.EntityCounts, len(msg.counts))
+	for _, c := range msg.counts {
+		countsByName[c.EntityName] = c
+	}
+	for i := range ents {
+		if c, ok := countsByName[ents[i].Name]; ok {
+			ents[i].ActiveMsgCount = c.ActiveMsgCount
+			ents[i].DeadLetterCount = c.DeadLetterCount
+		}
+	}
+	m.entitiesByNS[msg.namespace.Name] = ents
+	return m, nil
 }
 
 func (m Model) handleTopicSubsLoaded(msg topicSubsLoadedMsg) (tea.Model, tea.Cmd) {
@@ -431,22 +454,37 @@ func (m Model) handleFilterKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// refreshAll re-fires every fetch that powers the widgets: namespaces,
-// entities per namespace, and topic subscriptions per known topic.
-// Existing data stays on screen; each handler replaces its slice when
-// new pages arrive, so the refresh is silent from the user's side.
+// refreshCounts is the tick-based refresh path: one Azure Monitor
+// query per namespace returns fresh counts for all entities without
+// re-listing structure. Runs every dashboardRefreshInterval.
 //
-// Re-entry is blocked via refreshInFlight so rapid key presses don't
-// pile up broker subscribers — each extra subscriber would receive the
-// full sequence of pages, flooding the message loop.
+// Structure (namespaces, entity names, topic subs) is fetched once at
+// startup and on manual `r` (refreshAll). Metrics lag 1–3 minutes, but
+// for a dashboard overview that's fine — the user has sbapp for
+// real-time inspection.
+func (m Model) refreshCounts() (tea.Model, tea.Cmd) {
+	if !m.HasSubscription || m.refreshInFlight > 0 {
+		return m, nil
+	}
+	if len(m.namespaces) == 0 {
+		return m, nil
+	}
+	cmds := []tea.Cmd{m.Spinner.Tick}
+	for _, ns := range m.namespaces {
+		cmds = append(cmds, fetchMetricsCmd(m.service, ns))
+		m.refreshInFlight++
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// refreshAll is the full re-fetch, used on manual `r` and when
+// switching subscriptions. Re-lists namespaces and entities per
+// namespace so structure changes (new/deleted queues) are picked up.
 func (m Model) refreshAll() (tea.Model, tea.Cmd) {
 	if !m.HasSubscription || m.refreshInFlight > 0 {
 		return m, nil
 	}
 	cmds := []tea.Cmd{
-		// Wake the spinner so the widget-title indicator animates while
-		// the refresh fans out. The TickMsg handler stops when
-		// refreshInFlight returns to zero.
 		m.Spinner.Tick,
 		fetchNamespacesCmd(m.service, m.stores.Namespaces, m.CurrentSub.ID, m.namespaces),
 	}
@@ -454,12 +492,6 @@ func (m Model) refreshAll() (tea.Model, tea.Cmd) {
 	for _, ns := range m.namespaces {
 		cmds = append(cmds, fetchEntitiesCmd(m.service, m.stores.Entities, ns))
 		m.refreshInFlight++
-		for _, e := range m.entitiesByNS[ns.Name] {
-			if e.Kind == servicebus.EntityTopic {
-				cmds = append(cmds, fetchTopicSubsCmd(m.service, m.stores.TopicSubs, ns, e.Name))
-				m.refreshInFlight++
-			}
-		}
 	}
 	return m, tea.Batch(cmds...)
 }

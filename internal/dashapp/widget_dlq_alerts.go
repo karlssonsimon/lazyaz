@@ -117,6 +117,11 @@ func (a dlqAlert) matchesFilter(filter string) bool {
 
 // dlqAlerts builds the unsorted list. Render applies sort/filter on
 // top so the sort order isn't baked into the data layer.
+//
+// For topics, shows per-subscription rows when subscription data is
+// already cached (e.g. sbapp has browsed the topic). Otherwise shows a
+// topic-level rollup — the topic's own DeadLetterCount is the sum
+// across all its subscriptions.
 func (m Model) dlqAlerts() []dlqAlert {
 	var alerts []dlqAlert
 	for _, ns := range m.namespaces {
@@ -127,8 +132,16 @@ func (m Model) dlqAlerts() []dlqAlert {
 					alerts = append(alerts, dlqAlert{ns, e.Name, "", e.DeadLetterCount})
 				}
 			case servicebus.EntityTopic:
+				if e.DeadLetterCount <= 0 {
+					continue
+				}
 				key := ns.Name + "/" + e.Name
-				for _, s := range m.topicSubsByKey[key] {
+				subs := m.topicSubsByKey[key]
+				if len(subs) == 0 {
+					alerts = append(alerts, dlqAlert{ns, e.Name, "", e.DeadLetterCount})
+					continue
+				}
+				for _, s := range subs {
 					if s.DeadLetterCount > 0 {
 						alerts = append(alerts, dlqAlert{ns, e.Name, s.Name, s.DeadLetterCount})
 					}

@@ -2,6 +2,7 @@ package dashapp
 
 import (
 	"context"
+	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
@@ -79,4 +80,22 @@ func fetchTopicSubsCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.
 		return topicSubsLoadedMsg{namespace: ns, topicName: topicName, subs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 	return cmd
+}
+
+// metricsLoadedMsg carries Azure Monitor metric counts for all entities
+// in one namespace. Used on tick-based refresh to update counts without
+// re-listing entity structure.
+type metricsLoadedMsg struct {
+	namespace servicebus.Namespace
+	counts    []servicebus.EntityCounts
+	err       error
+}
+
+func fetchMetricsCmd(svc *servicebus.Service, ns servicebus.Namespace) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		counts, err := svc.GetNamespaceMetrics(ctx, ns)
+		return metricsLoadedMsg{namespace: ns, counts: counts, err: err}
+	}
 }

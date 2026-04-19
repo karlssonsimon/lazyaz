@@ -12,6 +12,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+	"github.com/Azure/azure-sdk-for-go/sdk/monitor/azquery"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/servicebus/armservicebus"
 )
 
@@ -62,6 +63,7 @@ type Service struct {
 	mu             sync.Mutex
 	clients        map[string]*azservicebus.Client
 	connStrClients map[string]*azservicebus.Client
+	metricsClient  *azquery.MetricsClient
 }
 
 func NewService(cred azcore.TokenCredential) *Service {
@@ -80,6 +82,7 @@ func (s *Service) SetCredential(cred azcore.TokenCredential) {
 	s.cred = cred
 	s.clients = make(map[string]*azservicebus.Client)
 	s.connStrClients = make(map[string]*azservicebus.Client)
+	s.metricsClient = nil
 }
 
 func (s *Service) getClient(fqdn string) (*azservicebus.Client, error) {
