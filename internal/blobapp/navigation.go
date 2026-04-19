@@ -12,6 +12,16 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// recordUsage is a thin wrapper around the persistent cache's usage
+// table — no-op if the parent didn't provide a DB. Resource keys are
+// "<sub>/..." so they sort cleanly per subscription.
+func (m Model) recordUsage(resourceType, resourceKey, display string) {
+	if m.usage == nil || !m.HasSubscription {
+		return
+	}
+	m.usage.RecordUsage(resourceType, resourceKey, m.CurrentSub.ID, display)
+}
+
 func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	// Re-selecting the same subscription: no-op.
 	if m.HasSubscription && m.CurrentSub.ID == sub.ID {
@@ -111,48 +121,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-
-		// Re-selecting the same account: just move focus.
-		if m.hasAccount && sameAccount(m.currentAccount, item.account) {
-			m.transitionTo(containersPane, false)
-			return m, nil
-		}
-
-		// Snapshot containers list under the outgoing account.
-		if m.hasAccount {
-			oldKey := cache.Key(m.CurrentSub.ID, m.currentAccount.Name)
-			m.containersHistory[oldKey] = ui.SnapshotListState(&m.containersList, containerItemKey)
-		}
-
-		m.currentAccount = item.account
-		m.hasAccount = true
-		m.hasContainer = false
-		m.containerName = ""
-		m.prefix = ""
-		m.clearBlobSelectionState()
-		m.resetBlobLoadState()
-		m.resetPreviewState()
-		m.transitionTo(containersPane, false)
-
-		containersScope := cache.Key(m.CurrentSub.ID, item.account.Name)
-		if cached, ok := m.cache.containers.Get(containersScope); ok {
-			m.containers = cached
-			m.containersList.SetItems(containersToItems(cached))
-			m.containersList.Title = fmt.Sprintf("Containers (%d)", len(cached))
-		} else {
-			m.containers = nil
-			m.containersList.SetItems(nil)
-			m.containersList.Title = "Containers"
-		}
-		ui.RestoreListState(&m.containersList, m.containersHistory[containersScope], containerItemKey)
-
-		m.blobs = nil
-		m.blobsList.ResetFilter()
-		m.blobsList.SetItems(nil)
-		m.blobsList.Title = "Blobs"
-
-		m.startLoading(containersPane, fmt.Sprintf("Loading containers in %s", item.account.Name))
-		return m, tea.Batch(m.Spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, item.account, m.containers))
+		return m.selectAccount(item.account)
 	}
 
 	if m.focus == containersPane {
@@ -160,42 +129,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-
-		// Re-selecting the same container: just move focus.
-		if m.hasContainer && m.containerName == item.container.Name {
-			m.transitionTo(blobsPane, false)
-			return m, nil
-		}
-
-		// Snapshot blobs list under outgoing container (including prefix
-		// and load-all flag).
-		if m.hasContainer {
-			oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, m.blobLoadAll)
-			m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
-		}
-
-		m.containerName = item.container.Name
-		m.hasContainer = true
-		m.prefix = ""
-		m.clearBlobSelectionState()
-		m.resetBlobLoadState()
-		m.resetPreviewState()
-		m.transitionTo(blobsPane, false)
-
-		blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, item.container.Name, "", false)
-		if cached, ok := m.cache.blobs.Get(blobsScope); ok {
-			m.blobs = cached
-			m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
-			m.refreshItems()
-		} else {
-			m.blobs = nil
-			m.blobsList.SetItems(nil)
-			m.blobsList.Title = "Blobs"
-		}
-		ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
-
-		m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName))
-		return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
+		return m.selectContainer(item.container)
 	}
 
 	if m.focus == blobsPane {
@@ -298,4 +232,95 @@ func paneName(pane int) string {
 
 func sameAccount(a, b blob.Account) bool {
 	return a.Name == b.Name && a.SubscriptionID == b.SubscriptionID
+}
+
+// selectAccount binds the explorer to a storage account, hydrates
+// containers from cache if available, and kicks off a fetch to refresh.
+// Extracted from handleEnter so programmatic navigation (the dashboard
+// usage widget's "open in Blob tab" action) can drive the same flow.
+func (m Model) selectAccount(account blob.Account) (Model, tea.Cmd) {
+	m.recordUsage("blob_account",
+		m.CurrentSub.ID+"/"+account.Name,
+		account.Name)
+
+	if m.hasAccount && sameAccount(m.currentAccount, account) {
+		m.transitionTo(containersPane, false)
+		return m, nil
+	}
+
+	if m.hasAccount {
+		oldKey := cache.Key(m.CurrentSub.ID, m.currentAccount.Name)
+		m.containersHistory[oldKey] = ui.SnapshotListState(&m.containersList, containerItemKey)
+	}
+
+	m.currentAccount = account
+	m.hasAccount = true
+	m.hasContainer = false
+	m.containerName = ""
+	m.prefix = ""
+	m.clearBlobSelectionState()
+	m.resetBlobLoadState()
+	m.resetPreviewState()
+	m.transitionTo(containersPane, false)
+
+	containersScope := cache.Key(m.CurrentSub.ID, account.Name)
+	if cached, ok := m.cache.containers.Get(containersScope); ok {
+		m.containers = cached
+		m.containersList.SetItems(containersToItems(cached))
+		m.containersList.Title = fmt.Sprintf("Containers (%d)", len(cached))
+	} else {
+		m.containers = nil
+		m.containersList.SetItems(nil)
+		m.containersList.Title = "Containers"
+	}
+	ui.RestoreListState(&m.containersList, m.containersHistory[containersScope], containerItemKey)
+
+	m.blobs = nil
+	m.blobsList.ResetFilter()
+	m.blobsList.SetItems(nil)
+	m.blobsList.Title = "Blobs"
+
+	m.startLoading(containersPane, fmt.Sprintf("Loading containers in %s", account.Name))
+	return m, tea.Batch(m.Spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, account, m.containers))
+}
+
+// selectContainer binds the explorer to a container under the active
+// account, hydrates blobs from cache, and kicks off a fetch.
+func (m Model) selectContainer(container blob.ContainerInfo) (Model, tea.Cmd) {
+	m.recordUsage("blob_container",
+		m.CurrentSub.ID+"/"+m.currentAccount.Name+"/"+container.Name,
+		m.currentAccount.Name+" / "+container.Name)
+
+	if m.hasContainer && m.containerName == container.Name {
+		m.transitionTo(blobsPane, false)
+		return m, nil
+	}
+
+	if m.hasContainer {
+		oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, m.blobLoadAll)
+		m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
+	}
+
+	m.containerName = container.Name
+	m.hasContainer = true
+	m.prefix = ""
+	m.clearBlobSelectionState()
+	m.resetBlobLoadState()
+	m.resetPreviewState()
+	m.transitionTo(blobsPane, false)
+
+	blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, container.Name, "", false)
+	if cached, ok := m.cache.blobs.Get(blobsScope); ok {
+		m.blobs = cached
+		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
+		m.refreshItems()
+	} else {
+		m.blobs = nil
+		m.blobsList.SetItems(nil)
+		m.blobsList.Title = "Blobs"
+	}
+	ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
+
+	m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName))
+	return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 }

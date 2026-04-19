@@ -106,6 +106,8 @@ func dashboardWidgets() []Widget {
 	return []Widget{
 		namespaceCountsWidget{},
 		dlqAlertsWidget{},
+		usedSBWidget{},
+		usedBlobWidget{},
 	}
 }
 
@@ -126,6 +128,25 @@ func computeRowHeights(bodyHeight, numRows int) []int {
 		}
 	}
 	return heights
+}
+
+// computeColWidths splits totalWidth across numCols cells. Remainder
+// columns go to the right-most cells (parallel to computeRowHeights).
+// Returns nil for numCols <= 0.
+func computeColWidths(totalWidth, numCols int) []int {
+	if numCols <= 0 {
+		return nil
+	}
+	base := totalWidth / numCols
+	rem := totalWidth - base*numCols
+	widths := make([]int, numCols)
+	for i := range widths {
+		widths[i] = base
+		if i >= numCols-rem {
+			widths[i]++
+		}
+	}
+	return widths
 }
 
 // gridDims returns the number of rows and columns occupied by widgets.

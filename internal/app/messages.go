@@ -68,7 +68,8 @@ func wrapMsg(id int, msg tea.Msg) tea.Msg {
 	// Cross-tab messages: bypass the tabMsg wrap so the parent
 	// handles them directly instead of routing them back to the
 	// emitting tab.
-	case dashapp.OpenSBNamespaceMsg, dashapp.OpenSBEntityMsg:
+	case dashapp.OpenSBNamespaceMsg, dashapp.OpenSBEntityMsg,
+		dashapp.OpenBlobAccountMsg, dashapp.OpenBlobContainerMsg:
 		return msg
 	default:
 		return tabMsg{tabID: id, inner: msg}

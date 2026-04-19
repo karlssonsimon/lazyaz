@@ -36,13 +36,16 @@ func newCache(db *cache.DB) blobCache {
 	}
 }
 
-// BlobStores holds the shared brokers for blob resources.
+// BlobStores holds the shared brokers for blob resources, plus the
+// persistent cache handle for usage tracking. Usage may be nil when
+// the parent is running in in-memory mode.
 // The parent tabapp owns these and passes them when creating tabs.
 type BlobStores struct {
 	Subscriptions *cache.Broker[azure.Subscription]
 	Accounts      *cache.Broker[blob.Account]
 	Containers    *cache.Broker[blob.ContainerInfo]
 	Blobs         *cache.Broker[blob.BlobEntry]
+	Usage         *cache.DB
 }
 
 // NewCacheWithStores creates a blobCache using pre-built shared brokers.

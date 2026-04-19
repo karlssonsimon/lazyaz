@@ -93,6 +93,108 @@ func (d *DB) ensurePreferences() {
 	)`, preferencesTable))
 }
 
+// UsageEntry is one row in the usage stats table — a resource the user
+// has touched, with how many times and when last.
+type UsageEntry struct {
+	ResourceType string
+	ResourceKey  string // stable identifier (e.g., "subID/nsName/queueName")
+	SubID        string
+	Display      string // human label shown in the dashboard widget
+	Count        int64
+	LastUsedAt   int64 // unix seconds
+}
+
+const usageTable = "usage_stats"
+
+// RecordUsage upserts a usage event: increments count, refreshes
+// last_used_at, updates the display label (in case it changed). Errors
+// are silently ignored — usage tracking is best-effort UX, not critical.
+func (d *DB) RecordUsage(resourceType, resourceKey, subID, display string) {
+	if d == nil || d.db == nil {
+		return
+	}
+	d.ensureUsage()
+	now := time.Now().Unix()
+	d.db.Exec(
+		fmt.Sprintf(`INSERT INTO %q (resource_type, resource_key, sub_id, display, count, last_used_at)
+			VALUES (?, ?, ?, ?, 1, ?)
+			ON CONFLICT(resource_type, resource_key) DO UPDATE SET
+				count = count + 1,
+				last_used_at = excluded.last_used_at,
+				display = excluded.display,
+				sub_id = excluded.sub_id`, usageTable),
+		resourceType, resourceKey, subID, display, now,
+	)
+}
+
+// TopUsage returns up to limit entries for the given subscription and
+// resource type, ordered by count desc with last_used_at as the
+// tiebreaker. Empty resourceType returns rows for all types in that
+// subscription (useful for combined widgets).
+func (d *DB) TopUsage(subID, resourceType string, limit int) []UsageEntry {
+	if d == nil || d.db == nil || limit <= 0 {
+		return nil
+	}
+	d.ensureUsage()
+	q := fmt.Sprintf(`SELECT resource_type, resource_key, sub_id, display, count, last_used_at
+		FROM %q WHERE sub_id = ?`, usageTable)
+	args := []any{subID}
+	if resourceType != "" {
+		q += ` AND resource_type = ?`
+		args = append(args, resourceType)
+	}
+	q += ` ORDER BY count DESC, last_used_at DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := d.db.Query(q, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var out []UsageEntry
+	for rows.Next() {
+		var e UsageEntry
+		if err := rows.Scan(&e.ResourceType, &e.ResourceKey, &e.SubID, &e.Display, &e.Count, &e.LastUsedAt); err != nil {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// ClearUsage removes all usage rows for a subscription, optionally
+// filtered to one resource type. Used by the dashboard's
+// "Clear usage stats" action.
+func (d *DB) ClearUsage(subID, resourceType string) {
+	if d == nil || d.db == nil {
+		return
+	}
+	d.ensureUsage()
+	if resourceType == "" {
+		d.db.Exec(fmt.Sprintf(`DELETE FROM %q WHERE sub_id = ?`, usageTable), subID)
+		return
+	}
+	d.db.Exec(
+		fmt.Sprintf(`DELETE FROM %q WHERE sub_id = ? AND resource_type = ?`, usageTable),
+		subID, resourceType,
+	)
+}
+
+func (d *DB) ensureUsage() {
+	d.db.Exec(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %q (
+		resource_type TEXT NOT NULL,
+		resource_key TEXT NOT NULL,
+		sub_id TEXT NOT NULL,
+		display TEXT NOT NULL,
+		count INTEGER NOT NULL DEFAULT 0,
+		last_used_at INTEGER NOT NULL,
+		PRIMARY KEY (resource_type, resource_key)
+	)`, usageTable))
+	d.db.Exec(fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %s_sub_idx ON %q (sub_id, resource_type, count DESC, last_used_at DESC)`,
+		usageTable, usageTable))
+}
+
 func (d *DB) createTable(name string) {
 	d.db.Exec(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %q (
 		key BLOB PRIMARY KEY,

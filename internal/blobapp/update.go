@@ -236,7 +236,8 @@ func (m Model) handleAccountsLoaded(msg accountsLoadedMsg) (Model, tea.Cmd) {
 		status := fmt.Sprintf("Loaded %d storage accounts from %s in %s", len(m.accounts), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
-		return m, nil
+		updated, navCmd := m.advancePendingNav()
+		return updated, navCmd
 	}
 
 	return m, msg.next
@@ -262,7 +263,8 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (Model, tea.Cmd) 
 		status := fmt.Sprintf("Loaded %d containers from %s in %s", len(m.containers), msg.account.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
-		return m, nil
+		updated, navCmd := m.advancePendingNav()
+		return updated, navCmd
 	}
 
 	return m, msg.next

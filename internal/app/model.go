@@ -218,6 +218,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 			Accounts:      m.brokers.blobAccounts,
 			Containers:    m.brokers.blobContainers,
 			Blobs:         m.brokers.blobs,
+			Usage:         m.db,
 		}, m.keymap)
 		bm.EmbeddedMode = true
 		bm.Notifier = m.notifier
@@ -229,6 +230,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 			Namespaces:    m.brokers.sbNamespaces,
 			Entities:      m.brokers.sbEntities,
 			TopicSubs:     m.brokers.sbTopicSubs,
+			Usage:         m.db,
 		}, m.keymap)
 		sm.EmbeddedMode = true
 		sm.Notifier = m.notifier
@@ -251,6 +253,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 			Namespaces:    m.brokers.sbNamespaces,
 			Entities:      m.brokers.sbEntities,
 			TopicSubs:     m.brokers.sbTopicSubs,
+			DB:            m.db,
 		}, m.keymap)
 		dm.EmbeddedMode = true
 		dm.Notifier = m.notifier
@@ -310,6 +313,27 @@ func (m *Model) persistActiveSubIfChanged() {
 	}
 	m.db.SetPreference(lastSubscriptionPrefKey, sub.ID)
 	m.lastPersistedSubID = sub.ID
+}
+
+// openBlobTabWithNav mirrors openSBTabWithNav for Blob storage. Creates
+// a blob tab on the requested subscription and stashes a pending
+// navigation target. The fast-forward path in SetPendingNav lands the
+// user directly on the destination when the cache is warm.
+func (m *Model) openBlobTabWithNav(sub azure.Subscription, nav blobapp.PendingNav) (tea.Model, tea.Cmd) {
+	m.addTab(TabBlob, sub.ID)
+	tab := &m.tabs[m.activeIdx]
+	var ffCmd tea.Cmd
+	if bm, ok := tab.Model.(blobapp.Model); ok {
+		bm.SetSubscription(sub)
+		ffCmd = bm.SetPendingNav(nav)
+		tab.Model = bm
+	}
+	initCmd := wrapCmd(tab.ID, tab.Model.Init())
+	resizeCmd := m.forwardToActive(tea.WindowSizeMsg{
+		Width:  m.width,
+		Height: m.childHeight(),
+	})
+	return m, tea.Batch(initCmd, wrapCmd(tab.ID, ffCmd), resizeCmd)
 }
 
 // activeSubscription returns the current subscription from the active tab.
@@ -552,6 +576,17 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			EntityName: msg.EntityName,
 			SubName:    msg.SubName,
 			DeadLetter: msg.DeadLetter,
+		})
+
+	case dashapp.OpenBlobAccountMsg:
+		return m.openBlobTabWithNav(msg.Subscription, blobapp.PendingNav{
+			AccountName: msg.AccountName,
+		})
+
+	case dashapp.OpenBlobContainerMsg:
+		return m.openBlobTabWithNav(msg.Subscription, blobapp.PendingNav{
+			AccountName:   msg.AccountName,
+			ContainerName: msg.ContainerName,
 		})
 
 	case nextTabMsg:

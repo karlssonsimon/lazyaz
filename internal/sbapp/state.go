@@ -139,6 +139,11 @@ type Model struct {
 	// state machine in advancePendingNav drives the selection forward
 	// each time a fetch completes.
 	pendingNav PendingNav
+
+	// usage records every drill-in (namespace / queue / topic / sub)
+	// to a shared SQLite table the dashboard reads to surface
+	// frequently-used resources. nil when the parent runs in-memory.
+	usage *cache.DB
 }
 
 type namespacesLoadedMsg struct {
@@ -290,6 +295,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores SBStores, km keymap.Keymap) Model {
 	m := NewModelWithKeyMap(svc, cfg, km, nil)
 	m.cache = NewCacheWithStores(stores)
+	m.usage = stores.Usage
 	m.HydrateSubscriptionsFromCache(m.cache.subscriptions)
 	return m
 }

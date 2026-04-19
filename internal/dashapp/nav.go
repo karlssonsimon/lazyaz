@@ -46,3 +46,31 @@ func openSBEntityCmd(sub azure.Subscription, ns servicebus.Namespace, entity, su
 		}
 	}
 }
+
+// OpenBlobAccountMsg asks the parent app to open a Blob tab on the
+// given subscription with the storage account pre-selected. Used by
+// the blob usage widget's "open" action.
+type OpenBlobAccountMsg struct {
+	Subscription azure.Subscription
+	AccountName  string
+}
+
+// OpenBlobContainerMsg asks the parent app to open a Blob tab and
+// drill all the way to a specific container under an account.
+type OpenBlobContainerMsg struct {
+	Subscription  azure.Subscription
+	AccountName   string
+	ContainerName string
+}
+
+func openBlobAccountCmd(sub azure.Subscription, account string) tea.Cmd {
+	return func() tea.Msg {
+		return OpenBlobAccountMsg{Subscription: sub, AccountName: account}
+	}
+}
+
+func openBlobContainerCmd(sub azure.Subscription, account, container string) tea.Cmd {
+	return func() tea.Msg {
+		return OpenBlobContainerMsg{Subscription: sub, AccountName: account, ContainerName: container}
+	}
+}

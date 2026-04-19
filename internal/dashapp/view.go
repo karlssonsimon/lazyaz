@@ -25,16 +25,47 @@ func (m Model) View() tea.View {
 		bodyHeight = 2
 	}
 
+	// Group widgets by row so we can lay out multiple columns within
+	// a single row. Per-row column count is taken from the highest
+	// col index of widgets in that row, so a sparse grid (e.g. 1
+	// widget in row 0, 2 in row 1) still tiles cleanly.
 	rows, _ := gridDims(m.widgets)
 	heights := computeRowHeights(bodyHeight, rows)
 
-	rowSlots := make([]string, rows)
+	rowWidgets := make([][]int, rows)
 	for i, w := range m.widgets {
 		row, _ := w.Position()
-		if row >= rows {
+		if row < 0 || row >= rows {
 			continue
 		}
-		rowSlots[row] = m.renderWidget(w, i, m.Width, heights[row])
+		rowWidgets[row] = append(rowWidgets[row], i)
+	}
+
+	rowSlots := make([]string, rows)
+	for r, idxs := range rowWidgets {
+		if len(idxs) == 0 {
+			continue
+		}
+		// Determine column count for this row from its widgets'
+		// positions.
+		maxCol := 0
+		for _, i := range idxs {
+			_, c := m.widgets[i].Position()
+			if c > maxCol {
+				maxCol = c
+			}
+		}
+		cols := maxCol + 1
+		colWidths := computeColWidths(m.Width, cols)
+		colSlots := make([]string, cols)
+		for _, i := range idxs {
+			_, c := m.widgets[i].Position()
+			if c < 0 || c >= cols {
+				continue
+			}
+			colSlots[c] = m.renderWidget(m.widgets[i], i, colWidths[c], heights[r])
+		}
+		rowSlots[r] = lipgloss.JoinHorizontal(lipgloss.Top, colSlots...)
 	}
 
 	body := lipgloss.JoinVertical(lipgloss.Left, rowSlots...)

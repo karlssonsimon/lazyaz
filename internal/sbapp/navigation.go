@@ -173,6 +173,9 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 // selectQueue binds the queue type picker to a queue.
 func (m Model) selectQueue(entity servicebus.Entity) (Model, tea.Cmd) {
+	m.recordUsage("sb_queue",
+		m.CurrentSub.ID+"/"+m.currentNS.Name+"/"+entity.Name,
+		m.currentNS.Name+" / "+entity.Name)
 	if m.hasPeekTarget && m.currentSubName == "" && m.currentEntity.Name == entity.Name {
 		m.transitionTo(queueTypePane)
 		return m, nil
@@ -196,6 +199,9 @@ func (m Model) selectQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 
 // selectTopic loads a topic's subscriptions.
 func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
+	m.recordUsage("sb_topic",
+		m.CurrentSub.ID+"/"+m.currentNS.Name+"/"+entity.Name,
+		m.currentNS.Name+" / "+entity.Name)
 	if m.currentEntity.Name == entity.Name && m.isTopicSelected() {
 		m.transitionTo(subscriptionsPane)
 		return m, nil
@@ -231,6 +237,9 @@ func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
 
 // selectSubscriptionSub binds the queue type picker to a topic subscription.
 func (m Model) selectSubscriptionSub(topicName string, sub servicebus.TopicSubscription) (Model, tea.Cmd) {
+	m.recordUsage("sb_topic_sub",
+		m.CurrentSub.ID+"/"+m.currentNS.Name+"/"+topicName+"/"+sub.Name,
+		m.currentNS.Name+" / "+topicName+"/"+sub.Name)
 	if m.hasPeekTarget && m.currentSubName == sub.Name && m.currentEntity.Name == topicName {
 		m.transitionTo(queueTypePane)
 		return m, nil
@@ -288,11 +297,23 @@ func (m Model) peekMessages(deadLetter bool) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// recordUsage is a thin wrapper around the persistent cache's usage
+// table — no-op if the parent didn't provide a DB. Resource keys are
+// "<sub>/..." so they sort cleanly per subscription and never collide
+// across namespaces.
+func (m Model) recordUsage(resourceType, resourceKey, display string) {
+	if m.usage == nil || !m.HasSubscription {
+		return
+	}
+	m.usage.RecordUsage(resourceType, resourceKey, m.CurrentSub.ID, display)
+}
+
 // selectNamespace binds the explorer to a namespace, hydrates entities
 // from cache if available, and kicks off a fetch to refresh. Extracted
 // from handleEnter so programmatic navigation (the dashboard's "open in
 // SB tab" action) can drive the same flow.
 func (m Model) selectNamespace(ns servicebus.Namespace) (Model, tea.Cmd) {
+	m.recordUsage("sb_namespace", m.CurrentSub.ID+"/"+ns.Name, ns.Name)
 	if m.hasNamespace && m.currentNS.Name == ns.Name {
 		m.transitionTo(entitiesPane)
 		return m, nil

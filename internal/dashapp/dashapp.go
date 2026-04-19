@@ -15,12 +15,14 @@ import (
 
 // DashStores bundles the caches the dashboard reads. Populated by the
 // parent tabapp from the shared broker set so widgets piggyback on the
-// same data the sbapp explorer uses.
+// same data the sbapp explorer uses. DB is also used for usage stats
+// the "Most used" widgets render.
 type DashStores struct {
 	Subscriptions *cache.Broker[azure.Subscription]
 	Namespaces    *cache.Broker[servicebus.Namespace]
 	Entities      *cache.Broker[servicebus.Entity]
 	TopicSubs     *cache.Broker[servicebus.TopicSubscription]
+	DB            *cache.DB
 }
 
 // Model is the dashboard tab's Bubble Tea model.
@@ -29,6 +31,7 @@ type Model struct {
 
 	service *servicebus.Service
 	stores  DashStores
+	db      *cache.DB
 
 	// namespaces in the current subscription.
 	namespaces []servicebus.Namespace
@@ -113,6 +116,7 @@ func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores DashStores
 		offsets:        make([]int, len(widgets)),
 		cursors:        make([]int, len(widgets)),
 		viewStates:     make([]widgetViewState, len(widgets)),
+		db:             stores.DB,
 	}
 	m.HydrateSubscriptionsFromCache(stores.Subscriptions)
 	if !m.HasSubscription {
@@ -214,6 +218,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 				"o  open in Service Bus tab",
 				"s  sort picker (each direction is its own option)",
 				keymap.HelpEntry(km.FilterInput, "filter rows (esc clears, enter accepts)"),
+				"x  clear usage stats (on usage widgets)",
 			},
 		},
 		{

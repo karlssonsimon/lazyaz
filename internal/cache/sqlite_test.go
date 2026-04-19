@@ -157,3 +157,64 @@ func TestDefaultDBPath(t *testing.T) {
 		t.Fatalf("expected absolute path, got %s", path)
 	}
 }
+
+func TestUsageRecordAndTopOrdering(t *testing.T) {
+	db := openTestDB(t)
+
+	// Touch "queue-a" three times, "queue-b" once.
+	db.RecordUsage("sb_queue", "sub1/ns/queue-a", "sub1", "ns / queue-a")
+	db.RecordUsage("sb_queue", "sub1/ns/queue-a", "sub1", "ns / queue-a")
+	db.RecordUsage("sb_queue", "sub1/ns/queue-a", "sub1", "ns / queue-a")
+	db.RecordUsage("sb_queue", "sub1/ns/queue-b", "sub1", "ns / queue-b")
+
+	got := db.TopUsage("sub1", "sb_queue", 10)
+	if len(got) != 2 {
+		t.Fatalf("got %d entries, want 2", len(got))
+	}
+	if got[0].ResourceKey != "sub1/ns/queue-a" || got[0].Count != 3 {
+		t.Errorf("first entry wrong: %+v", got[0])
+	}
+	if got[1].ResourceKey != "sub1/ns/queue-b" || got[1].Count != 1 {
+		t.Errorf("second entry wrong: %+v", got[1])
+	}
+}
+
+func TestUsageScopedBySubAndType(t *testing.T) {
+	db := openTestDB(t)
+	db.RecordUsage("sb_queue", "k1", "sub1", "d1")
+	db.RecordUsage("sb_queue", "k2", "sub2", "d2")
+	db.RecordUsage("blob_container", "k3", "sub1", "d3")
+
+	if got := db.TopUsage("sub1", "sb_queue", 10); len(got) != 1 || got[0].ResourceKey != "k1" {
+		t.Errorf("sub1 sb_queue: %+v", got)
+	}
+	if got := db.TopUsage("sub1", "", 10); len(got) != 2 {
+		t.Errorf("sub1 all types: %d entries, want 2", len(got))
+	}
+}
+
+func TestUsageClear(t *testing.T) {
+	db := openTestDB(t)
+	db.RecordUsage("sb_queue", "k", "sub1", "d")
+	db.ClearUsage("sub1", "sb_queue")
+	if got := db.TopUsage("sub1", "sb_queue", 10); len(got) != 0 {
+		t.Errorf("expected empty after clear, got %+v", got)
+	}
+}
+
+func TestPreferencesRoundTrip(t *testing.T) {
+	db := openTestDB(t)
+	if _, ok := db.GetPreference("missing"); ok {
+		t.Errorf("expected missing pref to return ok=false")
+	}
+	db.SetPreference("k", "v1")
+	v, ok := db.GetPreference("k")
+	if !ok || v != "v1" {
+		t.Errorf("got (%q, %v), want (v1, true)", v, ok)
+	}
+	db.SetPreference("k", "v2")
+	v, _ = db.GetPreference("k")
+	if v != "v2" {
+		t.Errorf("expected upsert to v2, got %q", v)
+	}
+}

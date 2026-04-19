@@ -35,12 +35,15 @@ func newCache(db *cache.DB) sbCache {
 	}
 }
 
-// SBStores holds the shared brokers for service bus resources.
+// SBStores holds the shared brokers for service bus resources, plus
+// the persistent cache handle for usage tracking. Usage may be nil
+// when the parent is running in in-memory mode.
 type SBStores struct {
 	Subscriptions *cache.Broker[azure.Subscription]
 	Namespaces    *cache.Broker[servicebus.Namespace]
 	Entities      *cache.Broker[servicebus.Entity]
 	TopicSubs     *cache.Broker[servicebus.TopicSubscription]
+	Usage         *cache.DB
 }
 
 // NewCacheWithStores creates an sbCache using pre-built shared brokers.

@@ -108,6 +108,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, refreshCmd := m.refreshAll()
 		return updated, tea.Batch(refreshCmd, scheduleRefreshTick())
 
+	case clearUsageMsg:
+		if m.db != nil && m.HasSubscription {
+			if len(msg.types) == 0 {
+				m.db.ClearUsage(m.CurrentSub.ID, "")
+			} else {
+				for _, t := range msg.types {
+					m.db.ClearUsage(m.CurrentSub.ID, t)
+				}
+			}
+		}
+		m.clampCursorsToData()
+		return m, nil
+
 	case openSortOverlayMsg:
 		if m.focusedIdx < 0 || m.focusedIdx >= len(m.widgets) {
 			return m, nil

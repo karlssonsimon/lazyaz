@@ -132,6 +132,16 @@ type Model struct {
 
 	cache blobCache
 
+	// usage records every drill-in (account / container) so the
+	// dashboard can surface frequently-used resources. nil when the
+	// parent runs in-memory.
+	usage *cache.DB
+
+	// pendingNav is set by the parent app (via SetPendingNav) when
+	// the dashboard wants this tab to navigate to a specific resource.
+	// advancePendingNav drives the selection forward as fetches land.
+	pendingNav PendingNav
+
 	// Per-pane inspect strip toggle. When inspectPanes[pane] is true, the
 	// pane renders an inline detail strip (via ui.RenderInspectStrip) under
 	// its list. The strip updates live as the cursor moves so the user can
@@ -278,6 +288,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores, km keymap.Keymap) Model {
 	m := NewModelWithKeyMap(svc, cfg, km, nil)
 	m.cache = NewCacheWithStores(stores)
+	m.usage = stores.Usage
 	// Re-hydrate subscriptions from the shared (SQLite-backed) store now
 	// that it's wired up. The constructor's hydration above ran against a
 	// temporary empty in-memory cache.
