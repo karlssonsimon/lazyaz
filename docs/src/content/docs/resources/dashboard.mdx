@@ -1,0 +1,132 @@
+---
+title: "Dashboard - At-a-glance Overview of Azure Resources"
+description: "The lazyaz dashboard shows queue depths, DLQ alerts, and your most-used Blob and Service Bus resources in a tiled view. Navigate directly from any row into the matching explorer tab."
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+The Dashboard is a tiled overview that surfaces the state of your Azure
+resources without drilling into individual explorer tabs. It's useful as a
+landing page when you open a subscription — check DLQ depths, spot unusual
+queue counts, and jump straight into whichever resource needs attention.
+
+## Opening the dashboard
+
+The dashboard is a tab kind, same as Blob / Service Bus / Key Vault. Add it to
+your startup config:
+
+```json
+{
+  "tabs": [
+    { "kind": "dashboard", "subscription": "your-subscription-id" }
+  ]
+}
+```
+
+Or open one at runtime with the command palette (`Ctrl+P`) → **New Dashboard
+Tab**.
+
+## Widgets
+
+The dashboard shows four widgets tiled in a grid:
+
+| Widget | Shows |
+|---|---|
+| **Namespace counts** | Message counts per Service Bus namespace — active and dead-letter totals across all entities |
+| **DLQ alerts** | Entities with dead-letter messages, sorted by count. Each row is a direct navigation target |
+| **Most used Blob** | Your frequently accessed blob containers — based on recent navigation history |
+| **Most used Service Bus** | Your frequently accessed queues and subscriptions — same heuristic |
+
+All widgets update automatically at a regular interval. They share a single
+cache broker so the data is also available instantly to the matching
+explorer tab.
+
+## Spatial navigation
+
+Unlike the resource tabs, which use a linear pane focus cycle, the dashboard
+uses **spatial navigation** — each widget is a tile and you move between them
+like moving around a grid.
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+| Key | Action |
+|---|---|
+| `Ctrl+H` / `Alt+H` | Focus widget to the left |
+| `Ctrl+J` / `Alt+J` | Focus widget below |
+| `Ctrl+K` / `Alt+K` | Focus widget above |
+| `Ctrl+L` / `Alt+L` | Focus widget to the right |
+</TabItem>
+<TabItem label="Standard">
+| Key | Action |
+|---|---|
+| `Alt+Left` / `Alt+H` | Focus widget to the left |
+| `Alt+Down` / `Alt+J` | Focus widget below |
+| `Alt+Up` / `Alt+K` | Focus widget above |
+| `Alt+Right` / `Alt+L` | Focus widget to the right |
+</TabItem>
+</Tabs>
+
+## Scrolling within a widget
+
+Each widget has its own internal scroll state. Use the same keys you'd use in
+a pager — scroll doesn't affect the focused widget position, just the content
+inside it.
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+| Key | Action |
+|---|---|
+| `j` / `Down` | Scroll down one row |
+| `k` / `Up` | Scroll up one row |
+| `gg` | Jump to top (chord — press `g` twice) |
+| `G` / `End` | Jump to bottom |
+| `Ctrl+D` / `PgDown` | Half-page down |
+| `Ctrl+U` / `PgUp` | Half-page up |
+</TabItem>
+<TabItem label="Standard">
+| Key | Action |
+|---|---|
+| `Down` / `j` | Scroll down one row |
+| `Up` / `k` | Scroll up one row |
+| `Home` | Jump to top |
+| `End` / `G` | Jump to bottom |
+| `PgDown` | Half-page down |
+| `PgUp` | Half-page up |
+</TabItem>
+</Tabs>
+
+## Drilling into a resource
+
+Press `Enter` on a row to open the matching explorer with that resource
+already selected. For example, pressing `Enter` on a DLQ alert row opens a
+Service Bus tab navigated directly to that entity's dead-letter pane.
+
+This works through the same pending-navigation path the jump list uses — if
+the target tab's cache is warm the switch is instant; otherwise it fetches
+just what's needed to land you on the right pane.
+
+## Widget actions
+
+Some widgets have context-aware actions — open the action menu with `a` while
+a widget is focused. For example, the **DLQ alerts** widget offers sort options
+(by namespace, by entity, by count).
+
+The action menu shows only the actions relevant to the focused widget. Press
+`a`, navigate with `j`/`k`, `Enter` to confirm.
+
+## Refresh
+
+<Aside type="note">
+The dashboard auto-refreshes its widgets on a timer, so you usually don't need
+to refresh manually. Press `r` to force an immediate refresh of the focused
+widget.
+</Aside>
+
+## Jump list
+
+Dashboard positions aren't individually recorded in the jump list (widgets
+don't have a deep navigational structure), but **opening** a dashboard tab
+and **drilling out** into a resource tab are both tracked. You can `Ctrl+O`
+back to the dashboard after drilling into an entity from a DLQ alert.
+
+See [Navigation](/lazyaz/navigation/#jump-list) for details.

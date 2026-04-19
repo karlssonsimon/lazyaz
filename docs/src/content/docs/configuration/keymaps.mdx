@@ -146,28 +146,35 @@ lazyaz ships with two keymaps. Set `keymap` in your `config.json` to switch:
 
 ## Service Bus
 
+Most Service Bus operations live in the action menu (`a`) rather than dedicated
+hotkeys. The shortcuts below are the ones with a direct binding.
+
 <Tabs syncKey="keymap">
 <TabItem label="Vim (default)">
 | Action | Keys |
 |---|---|
-| Active queue | `[` |
-| Dead-letter queue | `]` |
-| Requeue all DLQ | `R` |
-| Delete duplicates | `D` |
-| Sort / filter entities | `s` |
-| Close message | `h` / `Left` / `Backspace` / `Esc` |
+| Toggle mark (messages) | `Space` |
+| Visual-line mode (messages) | `v` / `V` |
+| Exit visual mode | `Esc` |
+| Swap visual anchor | `o` |
+| Toggle DLQ entity filter (entities pane) | `s` |
+| Close message preview | `h` / `Left` / `Backspace` / `Esc` |
 </TabItem>
 <TabItem label="Standard">
 | Action | Keys |
 |---|---|
-| Active queue | `[` |
-| Dead-letter queue | `]` |
-| Requeue all DLQ | `Ctrl+R` |
-| Delete duplicates | `Delete` |
-| DLQ entity filter | `Ctrl+L` |
-| Close message | `Left` / `Backspace` / `Esc` |
+| Toggle mark (messages) | `Space` |
+| Visual-line mode (messages) | `Shift+Down` / `Shift+Up` |
+| Exit visual mode | `Esc` |
+| Swap visual anchor | `o` |
+| Toggle DLQ entity filter (entities pane) | `Ctrl+L` |
+| Close message preview | `Left` / `Backspace` / `Esc` |
 </TabItem>
 </Tabs>
+
+DLQ operations (requeue, move, complete, abandon) are available through the
+action menu after either peeking or receiving-with-lock. See
+[Service Bus](/lazyaz/resources/service-bus/) for the full flow.
 
 ## Key Vault
 
@@ -183,6 +190,44 @@ lazyaz ships with two keymaps. Set `keymap` in your `config.json` to switch:
 | Yank secret value | `Ctrl+C` |
 </TabItem>
 </Tabs>
+
+## Dashboard
+
+<Tabs syncKey="keymap">
+<TabItem label="Vim (default)">
+| Action | Keys |
+|---|---|
+| Focus widget left | `Ctrl+H` / `Alt+H` |
+| Focus widget down | `Ctrl+J` / `Alt+J` |
+| Focus widget up | `Ctrl+K` / `Alt+K` |
+| Focus widget right | `Ctrl+L` / `Alt+L` |
+| Scroll widget up | `k` / `Up` |
+| Scroll widget down | `j` / `Down` |
+| Jump to top | `gg` |
+| Jump to bottom | `G` / `End` |
+</TabItem>
+<TabItem label="Standard">
+| Action | Keys |
+|---|---|
+| Focus widget left | `Alt+Left` / `Alt+H` |
+| Focus widget down | `Alt+Down` / `Alt+J` |
+| Focus widget up | `Alt+Up` / `Alt+K` |
+| Focus widget right | `Alt+Right` / `Alt+L` |
+| Scroll widget up | `Up` / `k` |
+| Scroll widget down | `Down` / `j` |
+| Jump to top | `Home` / `g` (chord) |
+| Jump to bottom | `End` / `G` |
+</TabItem>
+</Tabs>
+
+## Jump list
+
+Cross-tab navigation history (vim-style). Same in both keymaps:
+
+| Action | Keys |
+|---|---|
+| Jump back | `Ctrl+O` |
+| Jump forward | `Ctrl+I` / `Ctrl+N` / `Ctrl+]` |
 
 ## Overlay navigation
 
@@ -261,14 +306,20 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
     "preview_up": ["k", "up"],
     "preview_bottom": ["G", "end"],
     "preview_top_prefix": ["g", "home"],
-    "show_active_queue": ["["],
-    "show_dead_letter_queue": ["]"],
-    "requeue_dlq": ["R"],
-    "delete_duplicate": ["D"],
     "toggle_dlq_filter": ["s"],
     "message_back": ["h", "left", "backspace", "esc"],
     "yank_secret": ["y"],
-    "inspect": ["K"]
+    "inspect": ["K"],
+    "widget_left": ["ctrl+h", "alt+h"],
+    "widget_down": ["ctrl+j", "alt+j"],
+    "widget_up": ["ctrl+k", "alt+k"],
+    "widget_right": ["ctrl+l", "alt+l"],
+    "widget_scroll_up": ["k", "up"],
+    "widget_scroll_down": ["j", "down"],
+    "widget_scroll_top": ["g"],
+    "widget_scroll_bottom": ["G", "end"],
+    "jump_back": ["ctrl+o"],
+    "jump_forward": ["ctrl+i", "ctrl+n", "ctrl+]"]
   }
 }
 ```
@@ -332,14 +383,20 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
     "preview_up": ["up"],
     "preview_bottom": ["end"],
     "preview_top_prefix": ["home"],
-    "show_active_queue": ["["],
-    "show_dead_letter_queue": ["]"],
-    "requeue_dlq": ["ctrl+r"],
-    "delete_duplicate": ["delete"],
     "toggle_dlq_filter": ["ctrl+l"],
     "message_back": ["left", "backspace", "esc"],
     "yank_secret": ["ctrl+c"],
-    "inspect": ["ctrl+i"]
+    "inspect": ["ctrl+i"],
+    "widget_left": ["alt+left", "alt+h"],
+    "widget_down": ["alt+down", "alt+j"],
+    "widget_up": ["alt+up", "alt+k"],
+    "widget_right": ["alt+right", "alt+l"],
+    "widget_scroll_up": ["up", "k"],
+    "widget_scroll_down": ["down", "j"],
+    "widget_scroll_top": ["home", "g"],
+    "widget_scroll_bottom": ["end", "G"],
+    "jump_back": ["ctrl+o"],
+    "jump_forward": ["ctrl+i", "ctrl+n", "ctrl+]"]
   }
 }
 ```

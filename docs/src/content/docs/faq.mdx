@@ -74,9 +74,17 @@ No. Peeking is read-only — it does not lock or consume messages. You can peek 
 
 ### How do I requeue dead-letter messages?
 
-Navigate to a queue or topic subscription, select the dead-letter queue (`]`), then:
-- Press `R` to requeue **all** DLQ messages back to the active queue.
-- Or press `a` to open the action menu for single/marked message operations (requeue, move, complete).
+Navigate to a queue or topic subscription, drill into the Active/DLQ picker,
+and select **DLQ**. Then:
+
+- For **all** DLQ messages: while on the Active/DLQ picker, press `a` and choose
+  **Requeue all DLQ messages (N)**. This drains the DLQ in batches.
+- For **specific** messages: drill into the DLQ messages pane, press `a` and
+  choose **Peek messages** to see what's in the DLQ. To actually modify state,
+  open the action menu again and choose **Receive DLQ messages (with lock)** —
+  this locks messages so they can be requeued, moved, or completed safely.
+  Mark messages with `Space` or visual-line mode (`v`) before choosing
+  **Requeue**, **Move to...**, or **Complete**.
 
 See [Service Bus](/lazyaz/resources/service-bus/) for the full workflow.
 

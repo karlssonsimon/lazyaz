@@ -1,13 +1,14 @@
 ---
 title: "Service Bus - Peek Queues, Manage Dead-Letter Messages from Terminal"
-description: "Browse Azure Service Bus from your terminal with lazyaz. Peek active and dead-letter queues, requeue DLQ messages, delete duplicates, inspect topic subscriptions — all with keyboard shortcuts."
+description: "Browse Azure Service Bus from your terminal with lazyaz. Peek active and dead-letter queues, requeue DLQ messages, manage topic subscriptions — all with keyboard shortcuts."
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 The Service Bus view lets you browse namespaces, queues, and topics. You can
-peek messages from active and dead-letter queues, requeue or move DLQ messages,
-and manage topic subscriptions.
+peek messages (read-only) and then optionally lock and manipulate dead-letter
+messages — requeue them to the active queue, move them to a different target,
+or complete them outright.
 
 **Common tasks this replaces:**
 - `az servicebus` commands chained together to peek and parse messages
@@ -17,88 +18,146 @@ and manage topic subscriptions.
 
 ## Pane layout
 
-The pane structure adapts as you navigate deeper:
+The view uses miller-columns that grow as you drill in:
 
-**Namespaces** → **Entities** → **Subscriptions** (topics only) → **Queue Type** → **Messages** → **Message Preview**
+**Namespaces** → **Entities** → **Subscriptions** (topics only) → **Active/DLQ** → **Messages** → **Preview**
 
-Not all panes are visible at once — the view shows a parent, focused, and
-child pane in a miller-columns layout, and adjusts as you navigate.
+- **Entities** are queues and topics for the selected namespace.
+- **Subscriptions** only appears when you've selected a topic.
+- **Active/DLQ** is a two-item picker where you choose which queue type to browse.
+- **Messages** is empty by default — peek is a deliberate action, not automatic.
+- **Preview** opens when you press `Enter` on a message.
+
+Not all panes are visible at once — the view shows a parent, focused, and child
+pane and shifts as you navigate.
 
 ## Browsing entities
 
 Entities are queues and topics within a namespace. Press `Enter` on a namespace
 to load its entities.
 
-For **queues**, pressing `Enter` opens the queue type picker where you choose
-between the active queue and the dead-letter queue.
+For **queues**, pressing `Enter` takes you to the Active/DLQ picker.
 
 For **topics**, pressing `Enter` shows the topic's subscriptions. Select a
-subscription to reach the queue type picker.
+subscription to reach the Active/DLQ picker.
 
 ### Sorting and filtering entities
 
-Press `a` to open the action menu, then select "Sort entities" to sort by:
+Press `a` to open the action menu and select **Sort entities** to sort by:
 
 - Default order
 - Name (ascending / descending)
-- Active message count (ascending / descending)
-- Dead-letter count (ascending / descending)
+- Active messages (ascending / descending)
+- Dead letters (ascending / descending)
 
-Use `s` to open the sort/filter menu, which hides entities with zero dead-letter messages.
+The action menu also offers **Filter: only with dead letters** to hide entities
+with zero DLQ messages, and **Show all entities** to clear the filter. Press `s`
+as a shortcut to toggle the DLQ filter.
 
 ## Peeking messages
 
-Select "Active" or "DLQ" in the queue type picker, and messages are peeked
-automatically. Peeking is read-only — it does not consume or lock messages.
+After selecting Active or DLQ, the messages pane is empty. Peek is a deliberate
+action — no network round-trip happens until you ask for it.
 
-Press `Enter` on a message to open the detail preview with the full message
-body. You can select text in the preview with the mouse to copy it.
+Open the action menu (`a`) from the messages pane and choose one of:
+
+- **Peek messages** — fetch the first batch
+- **Peek more messages** — append another batch, continuing from where the
+  previous peek left off
+- **Peek messages (fresh)** — discard the current batch and peek from the start
+- **Clear messages** — drop the local snapshot without peeking
+
+<Aside type="note">
+Peeking is read-only. It does not lock or consume messages. You can peek the
+same DLQ repeatedly without affecting it.
+</Aside>
+
+Press `Enter` on a peeked message to open the preview pane with the full
+message body. You can select text in the preview with the mouse to copy it.
 
 | Key | Action |
 |---|---|
-| `[` | Switch to active queue |
-| `]` | Switch to dead-letter queue |
 | `Enter` | View message detail |
-| `h` / `Esc` | Close message preview |
+| `h` / `Esc` / `Backspace` | Close message preview |
+| `Space` | Mark / unmark message |
+| `v` / `V` | Enter visual-line mode to select a range |
+| `o` | Swap anchor while in visual mode |
+| `Esc` | Commit visual selection as marks |
 
 ## Dead-letter queue operations
 
 <Aside type="caution">
-DLQ operations modify messages. Requeue and move are non-destructive (messages
-are copied to the target, then completed from DLQ), but complete permanently
-removes messages.
+DLQ modifications happen in two modes: **peek** (read-only, default) and
+**receive-with-lock** (actions that remove or move messages). The
+lock-based flow uses Azure Service Bus's native peek-lock semantics so
+operations are transactional. Closing the messages pane or navigating away
+abandons any held locks automatically.
 </Aside>
 
-When viewing the dead-letter queue, you can operate on messages through the
-action menu (`a`):
+### Receive with lock
 
-**Single / marked messages:**
-- **Requeue** — move back to the active queue
-- **Move to...** — transfer to a different queue or subscription
-- **Complete** — permanently remove from the DLQ
+To actually change DLQ state, open the action menu and choose **Receive DLQ
+messages (with lock)**. This pulls up to 50 messages from the DLQ and holds
+locks on them. The pane title changes to `DLQ Locked (N)` to indicate the mode.
 
-**Bulk operations:**
-- **Requeue all** (`R`) — requeue every message in the DLQ
-- **Move all to...** — move all DLQ messages to another target
-- **Delete duplicates** (`D`) — remove messages with duplicate message IDs
+Once locked, the action menu offers:
 
-DLQ operations use receive-with-lock under the hood. The stream manager (`F`)
-shows progress for long-running operations, and you can cancel them mid-flight.
+- **Requeue N message(s) (send + complete)** — send each locked message to the
+  active queue, then complete it from the DLQ
+- **Move N message(s) to...** — send each locked message to a different target
+  queue or subscription (picker opens), then complete from DLQ
+- **Complete N message(s) (remove from DLQ)** — complete without re-sending
+- **Abandon all (release locks)** — release all locks, messages stay in DLQ
+
+`N` is the number of marked messages, or `1` (the cursor) if nothing is marked.
+Use `Space` or visual-line mode to mark messages before opening the action menu.
+
+### Bulk operations from the queue type pane
+
+For larger jobs, skip the per-message lock flow and use the action menu on the
+**queue type pane** (Active/DLQ picker):
+
+- **Requeue all DLQ messages (N)** — drains the entire DLQ to the active queue.
+  Receives in batches of 50, sends each, completes each, repeats until empty.
+- **Move all messages to...** — same but sends to a different target you pick.
+
+These are safer than looping locally because they lock each batch before
+processing, and recover if interrupted (unprocessed messages retain their
+original delivery count).
+
+### Operation progress
+
+Long-running bulk operations stream progress through the **stream manager**
+(`F`), which shows status and lets you cancel mid-flight. When a stream is
+active it appears in the notification bar.
 
 ## Selecting messages
 
 Mark individual messages with `Space`, or use visual-line mode (`v`) to select
 a range. Marked messages can be operated on in bulk through the action menu.
 
+Visual-line mode behaves like vim:
+
+1. Press `v` to anchor at the current message.
+2. Move the cursor to extend the selection; press `o` to extend from the other end.
+3. Press `v` again or `Esc` to commit the range to marks.
+
 ## Inspect panel
 
 Press `K` to toggle the inspect strip, which shows details for the selected
-namespace, entity, or message — including message counts, metadata, and
-properties.
+namespace, entity, subscription, or message — including message counts,
+metadata, and properties.
+
+## Jump list
+
+Service Bus tabs participate in the cross-tab jump list. Pressing `Ctrl+O`
+jumps back to your previous navigable position (including a different tab);
+`Ctrl+I` goes forward. See [Navigation](/lazyaz/navigation/#jump-list) for
+details.
 
 ## Actions
 
-Press `a` to open the action menu. Available actions depend on which pane is focused and what state you're in.
+Press `a` to open the action menu. Available actions depend on which pane is focused.
 
 ### Entities pane
 
@@ -114,17 +173,25 @@ Press `a` to open the action menu. Available actions depend on which pane is foc
 | Requeue all DLQ messages (N) | Requeue every dead-letter message back to the active queue |
 | Move all messages to... (N) | Move all active or DLQ messages to a different queue or subscription |
 
-### Messages pane
+### Messages pane — peek mode
 
 | Action | Description |
 |---|---|
-| Peek messages | Read-only peek of active or DLQ messages |
-| Peek more messages | Append more messages to the current list |
-| Clear messages | Remove peeked messages from the view |
-| Receive DLQ messages (with lock) | Lock DLQ messages for transactional operations |
-| Requeue N message(s) | Move locked messages back to the active queue |
-| Move N message(s) to... | Transfer locked messages to a different target |
-| Complete N message(s) | Permanently remove locked messages from the DLQ |
+| Peek messages | Fetch a batch of messages (read-only) |
+| Peek more messages | Append another batch |
+| Peek messages (fresh) | Discard current batch and re-peek |
+| Clear messages | Drop the local snapshot |
+| Receive DLQ messages (with lock) | Lock messages for transactional operations (DLQ only) |
+| Toggle mark | Mark or unmark the current message |
+| Toggle visual line selection | Enter or exit visual-line mode |
+
+### Messages pane — locked mode
+
+| Action | Description |
+|---|---|
+| Requeue N message(s) | Send marked messages to the active queue and complete from DLQ |
+| Move N message(s) to... | Send marked messages to a different target and complete from DLQ |
+| Complete N message(s) | Complete (remove) marked messages from the DLQ |
 | Abandon all (release locks) | Release all held locks without modifying messages |
 | Toggle mark | Mark or unmark the current message |
 | Toggle visual line selection | Enter or exit visual-line mode |
@@ -147,12 +214,13 @@ Press `a` to open the action menu. Available actions depend on which pane is foc
 | `/` | Filter focused pane |
 | `Ctrl+D` / `Ctrl+U` | Half-page scroll |
 | `a` | Action menu |
-| `[` / `]` | Switch active / DLQ |
-| `R` | Requeue all DLQ messages |
-| `D` | Delete duplicate messages |
-| `s` | Sort / filter entities |
-| `Space` | Toggle mark |
-| `v` | Visual-line selection |
+| `s` | Toggle DLQ entity filter (entities pane) |
+| `Space` | Toggle mark (messages pane) |
+| `v` / `V` | Visual-line selection |
+| `o` | Swap visual anchor |
+| `Esc` | Exit visual mode / close preview |
 | `K` | Toggle inspect panel |
 | `S` | Switch subscription |
 | `r` | Refresh current scope |
+| `F` | Stream manager (app-level) |
+| `Ctrl+O` / `Ctrl+I` | Jump back / forward in history |

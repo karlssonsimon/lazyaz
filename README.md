@@ -6,6 +6,8 @@ A keyboard-driven TUI for Azure — Blob Storage, Service Bus, and Key Vault.
 common Azure browse-and-inspect tasks into a few keystrokes. No more clicking
 through the Azure Portal to peek at a dead-letter queue or download a blob.
 
+📖 **Full documentation: [karlssonsimon.github.io/lazyaz](https://karlssonsimon.github.io/lazyaz)**
+
 <!-- TODO: add a GIF/screenshot here -->
 
 ## Install
@@ -73,13 +75,9 @@ All three run side by side in tabs with per-tab subscription selection.
 
 Config lives in `~/.config/lazyaz/`:
 
-- `config.yaml` — theme, download directory, startup tabs, keymap
+- `config.json` — theme, download directory, startup tabs, keymap
 - `themes/` — Base16 color schemes (switch at runtime with `T`)
 - `keymaps/` — JSON keybinding overrides
-
-## Documentation
-
-Full documentation: **[karlssonsimon.github.io/lazyaz](https://karlssonsimon.github.io/lazyaz)**
 
 ## Thanks
 

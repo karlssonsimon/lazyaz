@@ -84,3 +84,21 @@ execute.
 Press `Ctrl+P` to open the command palette. It lists all available commands —
 open tabs, switch themes, view notifications, and more. Type to filter,
 `Enter` to execute.
+
+## Jump list
+
+lazyaz keeps a vim-style jump list that tracks where you've been across tabs.
+Each time you drill into a namespace, container, or subscription, the position
+is recorded. Switching tabs and navigating into resources is also recorded.
+
+| Key | Action |
+|---|---|
+| `Ctrl+O` | Jump back to the previous position |
+| `Ctrl+I` / `Ctrl+N` / `Ctrl+]` | Jump forward |
+
+Jumps cross tab boundaries — pressing `Ctrl+O` can return you to a different
+tab you had open. The list holds up to 100 entries and is deduplicated so
+rapid back-and-forth doesn't bloat it.
+
+Some terminal + multiplexer combinations can't distinguish `Ctrl+I` from `Tab`,
+which is why `Ctrl+N` and `Ctrl+]` are also bound to jump forward.

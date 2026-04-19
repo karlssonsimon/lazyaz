@@ -54,6 +54,7 @@ export default defineConfig({
 				{
 					label: 'Resources',
 					items: [
+						{ label: 'Dashboard', slug: 'resources/dashboard' },
 						{ label: 'Blob Storage', slug: 'resources/blob-storage' },
 						{
 							label: 'Service Bus',
