@@ -311,81 +311,57 @@ func (s *Service) ListTopicSubscriptions(ctx context.Context, ns Namespace, topi
 	return nil
 }
 
-func (s *Service) PeekQueueMessages(ctx context.Context, ns Namespace, queueName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
-	client, err := s.getClient(ns.FQDN)
+// withFallback runs fn with an AAD client. If fn returns an auth error,
+// it retries with a connection-string client (fetched via the
+// control-plane ListKeys API). The label is used to contextualize the
+// final error if both paths fail.
+func (s *Service) withFallback(ctx context.Context, ns Namespace, label string, fn func(*azservicebus.Client) error) error {
+	aad, err := s.getClient(ns.FQDN)
 	if err != nil {
 		return err
 	}
-
-	err = s.peekQueue(ctx, client, queueName, maxCount, deadLetter, fromSequenceNumber, send)
+	err = fn(aad)
 	if err == nil || !isAuthError(err) {
 		return err
 	}
 
-	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
-	if fallbackErr != nil {
-		return fmt.Errorf("peek queue %s with AAD failed: %v; connection string fallback failed: %w", queueName, err, fallbackErr)
+	fb, fbErr := s.getConnStrClient(ctx, ns)
+	if fbErr != nil {
+		return fmt.Errorf("%s with AAD failed: %v; connection string fallback failed: %w", label, err, fbErr)
 	}
-
-	err = s.peekQueue(ctx, fallbackClient, queueName, maxCount, deadLetter, fromSequenceNumber, send)
-	if err != nil {
-		return fmt.Errorf("peek queue %s with connection string fallback: %w", queueName, err)
+	if err := fn(fb); err != nil {
+		return fmt.Errorf("%s with connection string fallback: %w", label, err)
 	}
 	return nil
 }
 
+func (s *Service) PeekQueueMessages(ctx context.Context, ns Namespace, queueName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
+	return s.withFallback(ctx, ns, "peek queue "+queueName, func(c *azservicebus.Client) error {
+		return s.peekQueue(ctx, c, queueName, maxCount, deadLetter, fromSequenceNumber, send)
+	})
+}
+
 func (s *Service) peekQueue(ctx context.Context, client *azservicebus.Client, queueName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
-	opts := &azservicebus.ReceiverOptions{
-		ReceiveMode: azservicebus.ReceiveModePeekLock,
-	}
-	if deadLetter {
-		opts.SubQueue = azservicebus.SubQueueDeadLetter
-	}
-	receiver, err := client.NewReceiverForQueue(queueName, opts)
+	receiver, err := newReceiver(client, queueName, "", deadLetter)
 	if err != nil {
 		return fmt.Errorf("create queue receiver for %s: %w", queueName, err)
 	}
 	defer receiver.Close(ctx)
-
 	return peekMessages(ctx, receiver, maxCount, fromSequenceNumber, send)
 }
 
 func (s *Service) PeekSubscriptionMessages(ctx context.Context, ns Namespace, topicName, subName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
-	client, err := s.getClient(ns.FQDN)
-	if err != nil {
-		return err
-	}
-
-	err = s.peekSubscription(ctx, client, topicName, subName, maxCount, deadLetter, fromSequenceNumber, send)
-	if err == nil || !isAuthError(err) {
-		return err
-	}
-
-	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
-	if fallbackErr != nil {
-		return fmt.Errorf("peek subscription %s/%s with AAD failed: %v; connection string fallback failed: %w", topicName, subName, err, fallbackErr)
-	}
-
-	err = s.peekSubscription(ctx, fallbackClient, topicName, subName, maxCount, deadLetter, fromSequenceNumber, send)
-	if err != nil {
-		return fmt.Errorf("peek subscription %s/%s with connection string fallback: %w", topicName, subName, err)
-	}
-	return nil
+	return s.withFallback(ctx, ns, fmt.Sprintf("peek subscription %s/%s", topicName, subName), func(c *azservicebus.Client) error {
+		return s.peekSubscription(ctx, c, topicName, subName, maxCount, deadLetter, fromSequenceNumber, send)
+	})
 }
 
 func (s *Service) peekSubscription(ctx context.Context, client *azservicebus.Client, topicName, subName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
-	opts := &azservicebus.ReceiverOptions{
-		ReceiveMode: azservicebus.ReceiveModePeekLock,
-	}
-	if deadLetter {
-		opts.SubQueue = azservicebus.SubQueueDeadLetter
-	}
-	receiver, err := client.NewReceiverForSubscription(topicName, subName, opts)
+	receiver, err := newReceiver(client, topicName, subName, deadLetter)
 	if err != nil {
 		return fmt.Errorf("create subscription receiver for %s/%s: %w", topicName, subName, err)
 	}
 	defer receiver.Close(ctx)
-
 	return peekMessages(ctx, receiver, maxCount, fromSequenceNumber, send)
 }
 
@@ -423,148 +399,55 @@ func (r *ReceivedMessages) Close(ctx context.Context) {
 	r.Receiver.Close(ctx)
 }
 
-// ReceiveFromQueue receives messages from the active queue with peek-lock.
-func (s *Service) ReceiveFromQueue(ctx context.Context, ns Namespace, queueName string, maxCount int) (*ReceivedMessages, error) {
-	client, err := s.getClient(ns.FQDN)
+// newReceiver creates a receiver for a queue (subName == "") or topic
+// subscription (subName != ""), optionally targeting the dead-letter
+// sub-queue.
+func newReceiver(client *azservicebus.Client, entityName, subName string, deadLetter bool) (*azservicebus.Receiver, error) {
+	opts := &azservicebus.ReceiverOptions{ReceiveMode: azservicebus.ReceiveModePeekLock}
+	if deadLetter {
+		opts.SubQueue = azservicebus.SubQueueDeadLetter
+	}
+	if subName == "" {
+		return client.NewReceiverForQueue(entityName, opts)
+	}
+	return client.NewReceiverForSubscription(entityName, subName, opts)
+}
+
+// Receive locks up to maxCount messages from a queue or subscription
+// with peek-lock semantics. Pass subName == "" to receive from a queue;
+// pass deadLetter == true to target the dead-letter sub-queue. The
+// caller owns the returned Receiver and must Close it when done.
+func (s *Service) Receive(ctx context.Context, ns Namespace, entityName, subName string, deadLetter bool, maxCount int) (*ReceivedMessages, error) {
+	var result *ReceivedMessages
+	err := s.withFallback(ctx, ns, receiveLabel(entityName, subName, deadLetter), func(c *azservicebus.Client) error {
+		receiver, err := newReceiver(c, entityName, subName, deadLetter)
+		if err != nil {
+			return fmt.Errorf("create receiver: %w", err)
+		}
+		messages, err := receiver.ReceiveMessages(ctx, maxCount, nil)
+		if err != nil {
+			receiver.Close(ctx)
+			return fmt.Errorf("receive messages: %w", err)
+		}
+		result = &ReceivedMessages{Messages: messages, Receiver: receiver}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	result, err := s.receiveFromQueue(ctx, client, queueName, maxCount)
-	if err == nil || !isAuthError(err) {
-		return result, err
-	}
-
-	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
-	if fallbackErr != nil {
-		return nil, fmt.Errorf("receive from queue %s with AAD failed: %v; fallback failed: %w", queueName, err, fallbackErr)
-	}
-	return s.receiveFromQueue(ctx, fallbackClient, queueName, maxCount)
+	return result, nil
 }
 
-func (s *Service) receiveFromQueue(ctx context.Context, client *azservicebus.Client, queueName string, maxCount int) (*ReceivedMessages, error) {
-	receiver, err := client.NewReceiverForQueue(queueName, &azservicebus.ReceiverOptions{
-		ReceiveMode: azservicebus.ReceiveModePeekLock,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create receiver for %s: %w", queueName, err)
+func receiveLabel(entityName, subName string, deadLetter bool) string {
+	target := entityName
+	if subName != "" {
+		target = entityName + "/" + subName
 	}
-
-	messages, err := receiver.ReceiveMessages(ctx, maxCount, nil)
-	if err != nil {
-		receiver.Close(ctx)
-		return nil, fmt.Errorf("receive from queue %s: %w", queueName, err)
+	kind := "receive from"
+	if deadLetter {
+		kind = "receive from DLQ"
 	}
-
-	return &ReceivedMessages{Messages: messages, Receiver: receiver}, nil
-}
-
-// ReceiveFromSubscription receives messages from a topic subscription with peek-lock.
-func (s *Service) ReceiveFromSubscription(ctx context.Context, ns Namespace, topicName, subName string, maxCount int) (*ReceivedMessages, error) {
-	client, err := s.getClient(ns.FQDN)
-	if err != nil {
-		return nil, err
-	}
-
-	result, err := s.receiveFromSub(ctx, client, topicName, subName, maxCount)
-	if err == nil || !isAuthError(err) {
-		return result, err
-	}
-
-	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
-	if fallbackErr != nil {
-		return nil, fmt.Errorf("receive from subscription %s/%s with AAD failed: %v; fallback failed: %w", topicName, subName, err, fallbackErr)
-	}
-	return s.receiveFromSub(ctx, fallbackClient, topicName, subName, maxCount)
-}
-
-func (s *Service) receiveFromSub(ctx context.Context, client *azservicebus.Client, topicName, subName string, maxCount int) (*ReceivedMessages, error) {
-	receiver, err := client.NewReceiverForSubscription(topicName, subName, &azservicebus.ReceiverOptions{
-		ReceiveMode: azservicebus.ReceiveModePeekLock,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create receiver for %s/%s: %w", topicName, subName, err)
-	}
-
-	messages, err := receiver.ReceiveMessages(ctx, maxCount, nil)
-	if err != nil {
-		receiver.Close(ctx)
-		return nil, fmt.Errorf("receive from subscription %s/%s: %w", topicName, subName, err)
-	}
-
-	return &ReceivedMessages{Messages: messages, Receiver: receiver}, nil
-}
-
-func (s *Service) ReceiveFromDLQ(ctx context.Context, ns Namespace, queueName string, maxCount int) (*ReceivedMessages, error) {
-	client, err := s.getClient(ns.FQDN)
-	if err != nil {
-		return nil, err
-	}
-
-	result, err := s.receiveFromQueueDLQ(ctx, client, queueName, maxCount)
-	if err == nil || !isAuthError(err) {
-		return result, err
-	}
-
-	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
-	if fallbackErr != nil {
-		return nil, fmt.Errorf("receive from DLQ %s with AAD failed: %v; fallback failed: %w", queueName, err, fallbackErr)
-	}
-	return s.receiveFromQueueDLQ(ctx, fallbackClient, queueName, maxCount)
-}
-
-func (s *Service) receiveFromQueueDLQ(ctx context.Context, client *azservicebus.Client, queueName string, maxCount int) (*ReceivedMessages, error) {
-	receiver, err := client.NewReceiverForQueue(queueName, &azservicebus.ReceiverOptions{
-		ReceiveMode: azservicebus.ReceiveModePeekLock,
-		SubQueue:    azservicebus.SubQueueDeadLetter,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create DLQ receiver for %s: %w", queueName, err)
-	}
-
-	messages, err := receiver.ReceiveMessages(ctx, maxCount, nil)
-	if err != nil {
-		receiver.Close(ctx)
-		return nil, fmt.Errorf("receive from DLQ %s: %w", queueName, err)
-	}
-
-	return &ReceivedMessages{Messages: messages, Receiver: receiver}, nil
-}
-
-func (s *Service) ReceiveFromSubscriptionDLQ(ctx context.Context, ns Namespace, topicName, subName string, maxCount int) (*ReceivedMessages, error) {
-	client, err := s.getClient(ns.FQDN)
-	if err != nil {
-		return nil, err
-	}
-
-	result, err := s.receiveFromSubDLQ(ctx, client, topicName, subName, maxCount)
-	if err == nil || !isAuthError(err) {
-		return result, err
-	}
-
-	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
-	if fallbackErr != nil {
-		return nil, fmt.Errorf("receive from subscription DLQ %s/%s with AAD failed: %v; fallback failed: %w", topicName, subName, err, fallbackErr)
-	}
-	return s.receiveFromSubDLQ(ctx, fallbackClient, topicName, subName, maxCount)
-}
-
-func (s *Service) receiveFromSubDLQ(ctx context.Context, client *azservicebus.Client, topicName, subName string, maxCount int) (*ReceivedMessages, error) {
-	receiver, err := client.NewReceiverForSubscription(topicName, subName, &azservicebus.ReceiverOptions{
-		ReceiveMode: azservicebus.ReceiveModePeekLock,
-		SubQueue:    azservicebus.SubQueueDeadLetter,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create DLQ receiver for %s/%s: %w", topicName, subName, err)
-	}
-
-	messages, err := receiver.ReceiveMessages(ctx, maxCount, nil)
-	if err != nil {
-		receiver.Close(ctx)
-		return nil, fmt.Errorf("receive from DLQ %s/%s: %w", topicName, subName, err)
-	}
-
-	return &ReceivedMessages{Messages: messages, Receiver: receiver}, nil
+	return fmt.Sprintf("%s %s", kind, target)
 }
 
 // toSendableMessage converts a received message to a sendable message,
@@ -589,21 +472,9 @@ func toSendableMessage(orig *azservicebus.ReceivedMessage) *azservicebus.Message
 
 // SendBatch sends multiple messages to a queue or topic using batched sends.
 func (s *Service) SendBatch(ctx context.Context, ns Namespace, queueOrTopicName string, messages []*azservicebus.ReceivedMessage) error {
-	client, err := s.getClient(ns.FQDN)
-	if err != nil {
-		return err
-	}
-
-	err = s.sendBatch(ctx, client, queueOrTopicName, messages)
-	if err == nil || !isAuthError(err) {
-		return err
-	}
-
-	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
-	if fallbackErr != nil {
-		return fmt.Errorf("send batch to %s with AAD failed: %v; fallback failed: %w", queueOrTopicName, err, fallbackErr)
-	}
-	return s.sendBatch(ctx, fallbackClient, queueOrTopicName, messages)
+	return s.withFallback(ctx, ns, "send batch to "+queueOrTopicName, func(c *azservicebus.Client) error {
+		return s.sendBatch(ctx, c, queueOrTopicName, messages)
+	})
 }
 
 func (s *Service) sendBatch(ctx context.Context, client *azservicebus.Client, name string, messages []*azservicebus.ReceivedMessage) error {
@@ -612,26 +483,31 @@ func (s *Service) sendBatch(ctx context.Context, client *azservicebus.Client, na
 		return fmt.Errorf("create sender for %s: %w", name, err)
 	}
 	defer sender.Close(ctx)
+	return sendMessagesBatched(ctx, sender, messages)
+}
 
+// sendMessagesBatched sends messages through sender using message
+// batching. When a batch fills up it's flushed and a new one started.
+// A single message that's too large for an empty batch is returned as
+// an error rather than silently dropped.
+func sendMessagesBatched(ctx context.Context, sender *azservicebus.Sender, messages []*azservicebus.ReceivedMessage) error {
 	batch, err := sender.NewMessageBatch(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("create message batch for %s: %w", name, err)
+		return fmt.Errorf("create message batch: %w", err)
 	}
 
 	for _, orig := range messages {
-		err := batch.AddMessage(toSendableMessage(orig), nil)
-		if err == nil {
+		if err := batch.AddMessage(toSendableMessage(orig), nil); err == nil {
 			continue
 		}
-		// Batch is full — send what we have and start a new one.
+		// Batch full — flush and start a new one, then retry.
 		if err := sender.SendMessageBatch(ctx, batch, nil); err != nil {
-			return fmt.Errorf("send batch to %s: %w", name, err)
+			return fmt.Errorf("send batch: %w", err)
 		}
 		batch, err = sender.NewMessageBatch(ctx, nil)
 		if err != nil {
-			return fmt.Errorf("create message batch for %s: %w", name, err)
+			return fmt.Errorf("create message batch: %w", err)
 		}
-		// Retry adding the message that didn't fit.
 		if err := batch.AddMessage(toSendableMessage(orig), nil); err != nil {
 			return fmt.Errorf("message %s too large for batch: %w", orig.MessageID, err)
 		}
@@ -639,7 +515,7 @@ func (s *Service) sendBatch(ctx context.Context, client *azservicebus.Client, na
 
 	if batch.NumMessages() > 0 {
 		if err := sender.SendMessageBatch(ctx, batch, nil); err != nil {
-			return fmt.Errorf("send batch to %s: %w", name, err)
+			return fmt.Errorf("send batch: %w", err)
 		}
 	}
 	return nil
@@ -689,30 +565,8 @@ func (s *Service) resendAll(ctx context.Context, client *azservicebus.Client, re
 		}
 		consecutiveZero = 0
 
-		// Batch-send all received messages.
-		batch, err := sender.NewMessageBatch(ctx, nil)
-		if err != nil {
-			return total, fmt.Errorf("create message batch: %w", err)
-		}
-		for _, msg := range messages {
-			if err := batch.AddMessage(toSendableMessage(msg), nil); err != nil {
-				// Batch full — flush and start a new one.
-				if err := sender.SendMessageBatch(ctx, batch, nil); err != nil {
-					return total, fmt.Errorf("send batch: %w", err)
-				}
-				batch, err = sender.NewMessageBatch(ctx, nil)
-				if err != nil {
-					return total, fmt.Errorf("create message batch: %w", err)
-				}
-				if err := batch.AddMessage(toSendableMessage(msg), nil); err != nil {
-					return total, fmt.Errorf("message %s too large for batch: %w", msg.MessageID, err)
-				}
-			}
-		}
-		if batch.NumMessages() > 0 {
-			if err := sender.SendMessageBatch(ctx, batch, nil); err != nil {
-				return total, fmt.Errorf("send batch: %w", err)
-			}
+		if err := sendMessagesBatched(ctx, sender, messages); err != nil {
+			return total, err
 		}
 
 		// Complete originals.
@@ -734,37 +588,17 @@ func (s *Service) resendAll(ctx context.Context, client *azservicebus.Client, re
 // entity using a single receiver and sender for the entire operation.
 // expectedCount is used to clamp the receive batch size when known (pass 0 to use the default).
 func (s *Service) ResendAllFromDLQ(ctx context.Context, ns Namespace, entityName, subName, targetName string, expectedCount int) (int, error) {
-	client, err := s.getClient(ns.FQDN)
-	if err != nil {
-		return 0, err
-	}
-
-	n, err := s.resendAllFromDLQ(ctx, client, entityName, subName, targetName, expectedCount)
-	if err == nil || !isAuthError(err) {
-		return n, err
-	}
-
-	fallbackClient, fallbackErr := s.getConnStrClient(ctx, ns)
-	if fallbackErr != nil {
-		return n, fmt.Errorf("resend DLQ with AAD failed: %v; fallback failed: %w", err, fallbackErr)
-	}
-	return s.resendAllFromDLQ(ctx, fallbackClient, entityName, subName, targetName, expectedCount)
+	var total int
+	err := s.withFallback(ctx, ns, "resend DLQ", func(c *azservicebus.Client) error {
+		n, err := s.resendAllFromDLQ(ctx, c, entityName, subName, targetName, expectedCount)
+		total = n
+		return err
+	})
+	return total, err
 }
 
 func (s *Service) resendAllFromDLQ(ctx context.Context, client *azservicebus.Client, entityName, subName, targetName string, expectedCount int) (int, error) {
-	var receiver *azservicebus.Receiver
-	var err error
-	if subName == "" {
-		receiver, err = client.NewReceiverForQueue(entityName, &azservicebus.ReceiverOptions{
-			ReceiveMode: azservicebus.ReceiveModePeekLock,
-			SubQueue:    azservicebus.SubQueueDeadLetter,
-		})
-	} else {
-		receiver, err = client.NewReceiverForSubscription(entityName, subName, &azservicebus.ReceiverOptions{
-			ReceiveMode: azservicebus.ReceiveModePeekLock,
-			SubQueue:    azservicebus.SubQueueDeadLetter,
-		})
-	}
+	receiver, err := newReceiver(client, entityName, subName, true)
 	if err != nil {
 		return 0, fmt.Errorf("create DLQ receiver: %w", err)
 	}
@@ -780,36 +614,28 @@ func (s *Service) resendAllFromDLQ(ctx context.Context, client *azservicebus.Cli
 // ResendAllFromSource receives all messages from a source (active or DLQ) and
 // resends them to a target entity using a single receiver and sender.
 func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityName, subName string, deadLetter bool, targetNS Namespace, targetName string, expectedCount int) (int, error) {
-	client, err := s.getClient(ns.FQDN)
-	if err != nil {
-		return 0, err
-	}
-
 	targetClient, err := s.getClient(targetNS.FQDN)
 	if err != nil {
 		return 0, err
 	}
 
-	var receiver *azservicebus.Receiver
-	opts := &azservicebus.ReceiverOptions{ReceiveMode: azservicebus.ReceiveModePeekLock}
-	if deadLetter {
-		opts.SubQueue = azservicebus.SubQueueDeadLetter
-	}
-	if subName == "" {
-		receiver, err = client.NewReceiverForQueue(entityName, opts)
-	} else {
-		receiver, err = client.NewReceiverForSubscription(entityName, subName, opts)
-	}
-	if err != nil {
-		return 0, fmt.Errorf("create receiver: %w", err)
-	}
-	defer receiver.Close(ctx)
+	var total int
+	err = s.withFallback(ctx, ns, "resend from source", func(c *azservicebus.Client) error {
+		receiver, err := newReceiver(c, entityName, subName, deadLetter)
+		if err != nil {
+			return fmt.Errorf("create receiver: %w", err)
+		}
+		defer receiver.Close(ctx)
 
-	batchSize := 50
-	if expectedCount > 0 && expectedCount < batchSize {
-		batchSize = expectedCount
-	}
-	return s.resendAll(ctx, targetClient, receiver, targetName, batchSize, expectedCount)
+		batchSize := 50
+		if expectedCount > 0 && expectedCount < batchSize {
+			batchSize = expectedCount
+		}
+		n, err := s.resendAll(ctx, targetClient, receiver, targetName, batchSize, expectedCount)
+		total = n
+		return err
+	})
+	return total, err
 }
 
 func isAuthError(err error) bool {

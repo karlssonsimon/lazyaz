@@ -150,31 +150,34 @@ func (s *Service) DiscoverAccountsForSubscription(ctx context.Context, subscript
 	return nil
 }
 
-func (s *Service) ListContainers(ctx context.Context, account Account, send func([]ContainerInfo)) error {
-	serviceClient, err := s.getAADServiceClient(account.BlobEndpoint)
+// withFallback runs fn with an AAD client. If fn returns a data-plane
+// auth error, it retries with a shared-key client (fetched via the
+// control-plane ListKeys API). The label is used to contextualize the
+// final error if both paths fail.
+func (s *Service) withFallback(ctx context.Context, account Account, label string, fn func(*service.Client) error) error {
+	aad, err := s.getAADServiceClient(account.BlobEndpoint)
 	if err != nil {
 		return err
 	}
-
-	err = s.listContainersWithClient(ctx, serviceClient, account, send)
-	if err == nil {
-		return nil
-	}
-	if !isDataPlaneAuthError(err) {
+	err = fn(aad)
+	if err == nil || !isDataPlaneAuthError(err) {
 		return err
 	}
 
-	fallbackClient, fallbackErr := s.getSharedKeyServiceClient(ctx, account)
-	if fallbackErr != nil {
-		return fmt.Errorf("list containers for %s with AAD failed: %v; shared key fallback failed: %w", account.Name, err, fallbackErr)
+	shared, fbErr := s.getSharedKeyServiceClient(ctx, account)
+	if fbErr != nil {
+		return fmt.Errorf("%s with AAD failed: %v; shared key fallback failed: %w", label, err, fbErr)
 	}
-
-	err = s.listContainersWithClient(ctx, fallbackClient, account, send)
-	if err != nil {
-		return fmt.Errorf("list containers for %s with shared key fallback: %w", account.Name, err)
+	if err := fn(shared); err != nil {
+		return fmt.Errorf("%s with shared key fallback: %w", label, err)
 	}
-
 	return nil
+}
+
+func (s *Service) ListContainers(ctx context.Context, account Account, send func([]ContainerInfo)) error {
+	return s.withFallback(ctx, account, "list containers for "+account.Name, func(c *service.Client) error {
+		return s.listContainersWithClient(ctx, c, account, send)
+	})
 }
 
 func (s *Service) listContainersWithClient(ctx context.Context, serviceClient *service.Client, account Account, send func([]ContainerInfo)) error {
@@ -211,30 +214,9 @@ func (s *Service) ListBlobs(ctx context.Context, account Account, containerName,
 }
 
 func (s *Service) ListBlobsLimited(ctx context.Context, account Account, containerName, prefix string, limit int, send func([]BlobEntry)) error {
-	serviceClient, err := s.getAADServiceClient(account.BlobEndpoint)
-	if err != nil {
-		return err
-	}
-
-	err = s.listBlobsWithClient(ctx, serviceClient, account, containerName, prefix, limit, send)
-	if err == nil {
-		return nil
-	}
-	if !isDataPlaneAuthError(err) {
-		return err
-	}
-
-	fallbackClient, fallbackErr := s.getSharedKeyServiceClient(ctx, account)
-	if fallbackErr != nil {
-		return fmt.Errorf("list blobs for %s/%s with AAD failed: %v; shared key fallback failed: %w", account.Name, containerName, err, fallbackErr)
-	}
-
-	err = s.listBlobsWithClient(ctx, fallbackClient, account, containerName, prefix, limit, send)
-	if err != nil {
-		return fmt.Errorf("list blobs for %s/%s with shared key fallback: %w", account.Name, containerName, err)
-	}
-
-	return nil
+	return s.withFallback(ctx, account, fmt.Sprintf("list blobs for %s/%s", account.Name, containerName), func(c *service.Client) error {
+		return s.listBlobsWithClient(ctx, c, account, containerName, prefix, limit, send)
+	})
 }
 
 func (s *Service) listBlobsWithClient(ctx context.Context, serviceClient *service.Client, account Account, containerName, prefix string, limit int, send func([]BlobEntry)) error {
@@ -276,29 +258,10 @@ func (s *Service) listBlobsWithClient(ctx context.Context, serviceClient *servic
 			if limit > 0 && total+len(batch) >= limit {
 				break
 			}
-			if blobItem.Name == nil {
+			entry, ok := blobItemToEntry(blobItem)
+			if !ok {
 				continue
 			}
-
-			entry := BlobEntry{
-				Name: *blobItem.Name,
-			}
-			if blobItem.Properties != nil {
-				if blobItem.Properties.ContentLength != nil {
-					entry.Size = *blobItem.Properties.ContentLength
-				}
-				if blobItem.Properties.ContentType != nil {
-					entry.ContentType = *blobItem.Properties.ContentType
-				}
-				if blobItem.Properties.LastModified != nil {
-					entry.LastModified = *blobItem.Properties.LastModified
-				}
-				if blobItem.Properties.AccessTier != nil {
-					entry.AccessTier = string(*blobItem.Properties.AccessTier)
-				}
-			}
-			entry.MetadataCount = len(blobItem.Metadata)
-
 			batch = append(batch, entry)
 		}
 
@@ -312,61 +275,18 @@ func (s *Service) listBlobsWithClient(ctx context.Context, serviceClient *servic
 }
 
 func (s *Service) ListAllBlobs(ctx context.Context, account Account, containerName string, send func([]BlobEntry)) error {
-	serviceClient, err := s.getAADServiceClient(account.BlobEndpoint)
-	if err != nil {
-		return err
-	}
-
-	err = s.listBlobsFlatWithClient(ctx, serviceClient, account, containerName, "", 0, send)
-	if err == nil {
-		return nil
-	}
-	if !isDataPlaneAuthError(err) {
-		return err
-	}
-
-	fallbackClient, fallbackErr := s.getSharedKeyServiceClient(ctx, account)
-	if fallbackErr != nil {
-		return fmt.Errorf("list all blobs for %s/%s with AAD failed: %v; shared key fallback failed: %w", account.Name, containerName, err, fallbackErr)
-	}
-
-	err = s.listBlobsFlatWithClient(ctx, fallbackClient, account, containerName, "", 0, send)
-	if err != nil {
-		return fmt.Errorf("list all blobs for %s/%s with shared key fallback: %w", account.Name, containerName, err)
-	}
-
-	return nil
+	return s.withFallback(ctx, account, fmt.Sprintf("list all blobs for %s/%s", account.Name, containerName), func(c *service.Client) error {
+		return s.listBlobsFlatWithClient(ctx, c, account, containerName, "", 0, send)
+	})
 }
 
 func (s *Service) SearchBlobsByPrefix(ctx context.Context, account Account, containerName, prefix string, limit int, send func([]BlobEntry)) error {
 	if strings.TrimSpace(prefix) == "" {
 		return nil
 	}
-
-	serviceClient, err := s.getAADServiceClient(account.BlobEndpoint)
-	if err != nil {
-		return err
-	}
-
-	err = s.listBlobsFlatWithClient(ctx, serviceClient, account, containerName, prefix, limit, send)
-	if err == nil {
-		return nil
-	}
-	if !isDataPlaneAuthError(err) {
-		return err
-	}
-
-	fallbackClient, fallbackErr := s.getSharedKeyServiceClient(ctx, account)
-	if fallbackErr != nil {
-		return fmt.Errorf("search blobs in %s/%s with AAD failed: %v; shared key fallback failed: %w", account.Name, containerName, err, fallbackErr)
-	}
-
-	err = s.listBlobsFlatWithClient(ctx, fallbackClient, account, containerName, prefix, limit, send)
-	if err != nil {
-		return fmt.Errorf("search blobs in %s/%s with shared key fallback: %w", account.Name, containerName, err)
-	}
-
-	return nil
+	return s.withFallback(ctx, account, fmt.Sprintf("search blobs in %s/%s", account.Name, containerName), func(c *service.Client) error {
+		return s.listBlobsFlatWithClient(ctx, c, account, containerName, prefix, limit, send)
+	})
 }
 
 func (s *Service) listBlobsFlatWithClient(ctx context.Context, serviceClient *service.Client, account Account, containerName, prefix string, limit int, send func([]BlobEntry)) error {
@@ -392,27 +312,10 @@ func (s *Service) listBlobsFlatWithClient(ctx context.Context, serviceClient *se
 
 		var batch []BlobEntry
 		for _, blobItem := range page.Segment.BlobItems {
-			if blobItem == nil || blobItem.Name == nil {
+			entry, ok := blobItemToEntry(blobItem)
+			if !ok {
 				continue
 			}
-
-			entry := BlobEntry{Name: *blobItem.Name}
-			if blobItem.Properties != nil {
-				if blobItem.Properties.ContentLength != nil {
-					entry.Size = *blobItem.Properties.ContentLength
-				}
-				if blobItem.Properties.ContentType != nil {
-					entry.ContentType = *blobItem.Properties.ContentType
-				}
-				if blobItem.Properties.LastModified != nil {
-					entry.LastModified = *blobItem.Properties.LastModified
-				}
-				if blobItem.Properties.AccessTier != nil {
-					entry.AccessTier = string(*blobItem.Properties.AccessTier)
-				}
-			}
-			entry.MetadataCount = len(blobItem.Metadata)
-
 			batch = append(batch, entry)
 			if limit > 0 && total+len(batch) >= limit {
 				break
@@ -432,31 +335,9 @@ func (s *Service) SearchBlobsContains(ctx context.Context, account Account, cont
 	if strings.TrimSpace(query) == "" {
 		return nil
 	}
-
-	serviceClient, err := s.getAADServiceClient(account.BlobEndpoint)
-	if err != nil {
-		return err
-	}
-
-	err = s.searchBlobsContainsWithClient(ctx, serviceClient, account, containerName, query, limit, send)
-	if err == nil {
-		return nil
-	}
-	if !isDataPlaneAuthError(err) {
-		return err
-	}
-
-	fallbackClient, fallbackErr := s.getSharedKeyServiceClient(ctx, account)
-	if fallbackErr != nil {
-		return fmt.Errorf("search blobs in %s/%s with AAD failed: %v; shared key fallback failed: %w", account.Name, containerName, err, fallbackErr)
-	}
-
-	err = s.searchBlobsContainsWithClient(ctx, fallbackClient, account, containerName, query, limit, send)
-	if err != nil {
-		return fmt.Errorf("search blobs in %s/%s with shared key fallback: %w", account.Name, containerName, err)
-	}
-
-	return nil
+	return s.withFallback(ctx, account, fmt.Sprintf("search blobs in %s/%s", account.Name, containerName), func(c *service.Client) error {
+		return s.searchBlobsContainsWithClient(ctx, c, account, containerName, query, limit, send)
+	})
 }
 
 func (s *Service) searchBlobsContainsWithClient(ctx context.Context, serviceClient *service.Client, account Account, containerName, query string, limit int, send func([]BlobEntry)) error {
@@ -477,37 +358,17 @@ func (s *Service) searchBlobsContainsWithClient(ctx context.Context, serviceClie
 
 		var batch []BlobEntry
 		for _, blobItem := range page.Segment.BlobItems {
-			if blobItem.Name == nil {
-				continue
-			}
-
-			if !strings.Contains(strings.ToLower(*blobItem.Name), needle) {
-				continue
-			}
-
 			if blobItem == nil || blobItem.Name == nil {
 				continue
 			}
-
-			entry := BlobEntry{Name: *blobItem.Name}
-			if blobItem.Properties != nil {
-				if blobItem.Properties.ContentLength != nil {
-					entry.Size = *blobItem.Properties.ContentLength
-				}
-				if blobItem.Properties.ContentType != nil {
-					entry.ContentType = *blobItem.Properties.ContentType
-				}
-				if blobItem.Properties.LastModified != nil {
-					entry.LastModified = *blobItem.Properties.LastModified
-				}
-				if blobItem.Properties.AccessTier != nil {
-					entry.AccessTier = string(*blobItem.Properties.AccessTier)
-				}
+			if !strings.Contains(strings.ToLower(*blobItem.Name), needle) {
+				continue
 			}
-			entry.MetadataCount = len(blobItem.Metadata)
-
+			entry, ok := blobItemToEntry(blobItem)
+			if !ok {
+				continue
+			}
 			batch = append(batch, entry)
-
 			if limit > 0 && total+len(batch) >= limit {
 				break
 			}
@@ -613,6 +474,31 @@ func (s *Service) downloadBlobWithClient(ctx context.Context, serviceClient *ser
 	}
 
 	return nil
+}
+
+// blobItemToEntry extracts a BlobEntry from a BlobItem returned by the
+// SDK. Returns zero value + ok=false when the item lacks a name.
+func blobItemToEntry(item *container.BlobItem) (BlobEntry, bool) {
+	if item == nil || item.Name == nil {
+		return BlobEntry{}, false
+	}
+	entry := BlobEntry{Name: *item.Name}
+	if item.Properties != nil {
+		if item.Properties.ContentLength != nil {
+			entry.Size = *item.Properties.ContentLength
+		}
+		if item.Properties.ContentType != nil {
+			entry.ContentType = *item.Properties.ContentType
+		}
+		if item.Properties.LastModified != nil {
+			entry.LastModified = *item.Properties.LastModified
+		}
+		if item.Properties.AccessTier != nil {
+			entry.AccessTier = string(*item.Properties.AccessTier)
+		}
+	}
+	entry.MetadataCount = len(item.Metadata)
+	return entry, true
 }
 
 func dedupeAndSortBlobNames(blobNames []string) []string {

@@ -77,13 +77,7 @@ func receiveDLQCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName,
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		var result *servicebus.ReceivedMessages
-		var err error
-		if subName == "" {
-			result, err = svc.ReceiveFromDLQ(ctx, ns, entityName, maxCount)
-		} else {
-			result, err = svc.ReceiveFromSubscriptionDLQ(ctx, ns, entityName, subName, maxCount)
-		}
+		result, err := svc.Receive(ctx, ns, entityName, subName, true, maxCount)
 		return dlqReceivedMsg{result: result, err: err}
 	}
 }
