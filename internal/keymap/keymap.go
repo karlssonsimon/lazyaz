@@ -81,6 +81,20 @@ type Keymap struct {
 
 	// Shared — inspect selected item.
 	Inspect Binding `json:"inspect"`
+
+	// Dashboard app — spatial widget navigation (ctrl+hjkl primary,
+	// alt+hjkl fallback for terminals where ctrl+h is swallowed as
+	// backspace).
+	WidgetLeft  Binding `json:"widget_left"`
+	WidgetDown  Binding `json:"widget_down"`
+	WidgetUp    Binding `json:"widget_up"`
+	WidgetRight Binding `json:"widget_right"`
+
+	// Dashboard — scroll the currently focused widget's rows.
+	WidgetScrollUp     Binding `json:"widget_scroll_up"`
+	WidgetScrollDown   Binding `json:"widget_scroll_down"`
+	WidgetScrollTop    Binding `json:"widget_scroll_top"`    // gg
+	WidgetScrollBottom Binding `json:"widget_scroll_bottom"` // G
 }
 
 // JumpIndex returns the tab index (0-based) if key matches any Jump binding.

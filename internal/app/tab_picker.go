@@ -12,6 +12,7 @@ var tabKinds = []struct {
 	{TabBlob, "Blob Storage"},
 	{TabServiceBus, "Service Bus"},
 	{TabKeyVault, "Key Vault"},
+	{TabDashboard, "Dashboard"},
 }
 
 type tabPickerState struct {

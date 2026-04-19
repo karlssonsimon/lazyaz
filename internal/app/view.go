@@ -5,6 +5,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/blobapp"
+	"github.com/karlssonsimon/lazyaz/internal/dashapp"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/kvapp"
 	"github.com/karlssonsimon/lazyaz/internal/sbapp"
@@ -123,6 +124,8 @@ func (m Model) activeHelpSections() []ui.HelpSection {
 		case sbapp.Model:
 			childSections = child.HelpSections()
 		case kvapp.Model:
+			childSections = child.HelpSections()
+		case dashapp.Model:
 			childSections = child.HelpSections()
 		}
 	}

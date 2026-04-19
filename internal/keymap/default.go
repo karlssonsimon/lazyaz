@@ -81,5 +81,17 @@ func Default() Keymap {
 
 		// Shared.
 		Inspect: New("K"),
+
+		// Dashboard — spatial widget nav.
+		WidgetLeft:  New("ctrl+h", "alt+h"),
+		WidgetDown:  New("ctrl+j", "alt+j"),
+		WidgetUp:    New("ctrl+k", "alt+k"),
+		WidgetRight: New("ctrl+l", "alt+l"),
+
+		// Dashboard — scroll focused widget.
+		WidgetScrollUp:     New("k", "up"),
+		WidgetScrollDown:   New("j", "down"),
+		WidgetScrollTop:    New("g"),    // gg chord; first g primes, second jumps
+		WidgetScrollBottom: New("G", "end"),
 	}
 }

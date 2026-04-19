@@ -12,6 +12,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/blobapp"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/dashapp"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/kvapp"
 	"github.com/karlssonsimon/lazyaz/internal/sbapp"
@@ -137,6 +138,9 @@ func (m *Model) setTabStatus(idx int, status string) {
 	case kvapp.Model:
 		child.Notify(appshell.LevelWarn, status)
 		m.tabs[idx].Model = child
+	case dashapp.Model:
+		child.Notify(appshell.LevelWarn, status)
+		m.tabs[idx].Model = child
 	}
 }
 
@@ -212,6 +216,17 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		kvm.Notifier = m.notifier
 		applyInitialSub(&kvm)
 		child = kvm
+	case TabDashboard:
+		dm := dashapp.NewModelWithCache(m.sbSvc, m.cfg, dashapp.DashStores{
+			Subscriptions: m.brokers.subscriptions,
+			Namespaces:    m.brokers.sbNamespaces,
+			Entities:      m.brokers.sbEntities,
+			TopicSubs:     m.brokers.sbTopicSubs,
+		}, m.keymap)
+		dm.EmbeddedMode = true
+		dm.Notifier = m.notifier
+		applyInitialSub(&dm)
+		child = dm
 	}
 
 	m.tabs = append(m.tabs, Tab{ID: id, Kind: kind, Model: child})
@@ -229,6 +244,8 @@ func (m *Model) activeSubscription() (azure.Subscription, bool) {
 	case sbapp.Model:
 		return child.CurrentSubscription()
 	case kvapp.Model:
+		return child.CurrentSubscription()
+	case dashapp.Model:
 		return child.CurrentSubscription()
 	}
 	return azure.Subscription{}, false
@@ -248,6 +265,8 @@ func (m *Model) activeChildTextInput() bool {
 	case sbapp.Model:
 		return child.IsTextInputActive()
 	case kvapp.Model:
+		return child.IsTextInputActive()
+	case dashapp.Model:
 		return child.IsTextInputActive()
 	}
 	return false
@@ -298,6 +317,9 @@ func (m *Model) applySchemeToAll(scheme ui.Scheme) {
 			child.ApplyScheme(scheme)
 			m.tabs[i].Model = child
 		case kvapp.Model:
+			child.ApplyScheme(scheme)
+			m.tabs[i].Model = child
+		case dashapp.Model:
 			child.ApplyScheme(scheme)
 			m.tabs[i].Model = child
 		}
@@ -738,6 +760,9 @@ func (m *Model) buildCommands() []command {
 		}},
 		{name: "New Tab: Key Vault", hint: "ctrl+t", action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabKeyVault}}
+		}},
+		{name: "New Tab: Dashboard", hint: "ctrl+t", action: func() commandAction {
+			return commandAction{msg: tabPickerMsg{kind: TabDashboard}}
 		}},
 		{name: "Close Tab", hint: "ctrl+w", action: func() commandAction {
 			if len(m.tabs) <= 1 {

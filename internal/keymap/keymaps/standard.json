@@ -61,6 +61,14 @@
     "toggle_dlq_filter": ["ctrl+l"],
     "message_back": ["left", "backspace", "esc"],
     "yank_secret": ["ctrl+c"],
-    "inspect": ["ctrl+i"]
+    "inspect": ["ctrl+i"],
+    "widget_left": ["alt+left", "alt+h"],
+    "widget_down": ["alt+down", "alt+j"],
+    "widget_up": ["alt+up", "alt+k"],
+    "widget_right": ["alt+right", "alt+l"],
+    "widget_scroll_up": ["up", "k"],
+    "widget_scroll_down": ["down", "j"],
+    "widget_scroll_top": ["home", "g"],
+    "widget_scroll_bottom": ["end", "G"]
   }
 }

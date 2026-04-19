@@ -19,6 +19,7 @@ const (
 	TabBlob TabKind = iota
 	TabServiceBus
 	TabKeyVault
+	TabDashboard
 )
 
 func (k TabKind) String() string {
@@ -29,6 +30,8 @@ func (k TabKind) String() string {
 		return "Service Bus"
 	case TabKeyVault:
 		return "Key Vault"
+	case TabDashboard:
+		return "Dashboard"
 	default:
 		return "Unknown"
 	}
@@ -36,7 +39,8 @@ func (k TabKind) String() string {
 
 // TabKindFromString parses a config-supplied tab kind name into a
 // TabKind. Recognized values (case-insensitive): "blob", "servicebus",
-// "keyvault". Returns ok=false on anything else so the caller can warn.
+// "keyvault", "dashboard". Returns ok=false on anything else so the
+// caller can warn.
 func TabKindFromString(s string) (TabKind, bool) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "blob":
@@ -45,6 +49,8 @@ func TabKindFromString(s string) (TabKind, bool) {
 		return TabServiceBus, true
 	case "keyvault", "key-vault", "key_vault":
 		return TabKeyVault, true
+	case "dashboard":
+		return TabDashboard, true
 	default:
 		return 0, false
 	}
