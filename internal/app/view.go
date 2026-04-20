@@ -3,6 +3,7 @@ package app
 import (
 	"time"
 
+	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/blobapp"
 	"github.com/karlssonsimon/lazyaz/internal/dashapp"
@@ -69,8 +70,23 @@ func (m Model) View() tea.View {
 	if m.notificationsOverlay.Active {
 		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, closeHint, notifierToEntries(m.notifier.Snapshot()), m.styles, m.width, m.height, view)
 	}
-	if m.streamOverlay.Active {
-		view = ui.RenderStreamOverlay(m.streamOverlay, closeHint, m.collectStreams(), m.styles, m.width, m.height, view)
+	if m.activityOverlay.Active {
+		m.activityTick++
+		rows := activityRowsFromRegistry(m.sharedActivities)
+		cfg := ui.ActivityOverlayConfig{
+			Tick:      m.activityTick,
+			CloseHint: closeHint,
+		}
+		view = ui.RenderActivityOverlay(&m.activityOverlay, rows, cfg, m.styles, m.width, m.height, view)
+	}
+
+	// The upload conflict prompt is rendered LAST so it sits above
+	// every other overlay including the activity overlay — it's a blocking
+	// modal that must always be answerable.
+	if len(m.tabs) > 0 {
+		if bm, ok := m.tabs[m.activeIdx].Model.(blobapp.Model); ok && bm.HasPendingUploadConflict() {
+			view = bm.RenderUploadConflictPrompt(view, m.width, m.height)
+		}
 	}
 
 	out := tea.NewView(ui.RenderCanvas(view, m.width, m.height, m.styles.Bg))
@@ -140,7 +156,7 @@ func (m Model) activeHelpSections() []ui.HelpSection {
 			keymap.HelpEntry(km.NextTab, "next tab"),
 			"alt+1..9  jump to tab",
 			keymap.HelpEntry(km.ToggleThemePicker, "theme picker"),
-			keymap.HelpEntry(km.ToggleStreams, "stream manager"),
+			keymap.HelpEntry(km.ToggleActivity, "activity"),
 			keymap.HelpEntry(km.ToggleHelp, "help"),
 			keymap.HelpEntry(km.Quit, "quit"),
 		},
@@ -153,5 +169,25 @@ func (m Model) activeHelpSections() []ui.HelpSection {
 		},
 	}
 	return append([]ui.HelpSection{tabSection, jumpSection}, childSections...)
+}
+
+// activityRowsFromRegistry converts the registry's snapshot into the
+// ui-package-friendly ActivityRow slice.
+func activityRowsFromRegistry(r *activity.Registry) []ui.ActivityRow {
+	if r == nil {
+		return nil
+	}
+	views := r.Snapshot()
+	rows := make([]ui.ActivityRow, 0, len(views))
+	for _, v := range views {
+		rows = append(rows, ui.ActivityRow{
+			ID:       v.Activity.ID(),
+			Kind:     v.Activity.Kind(),
+			Title:    v.Activity.Title(),
+			Status:   v.Snapshot.Status,
+			Snapshot: v.Snapshot,
+		})
+	}
+	return rows
 }
 

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/karlssonsimon/lazyaz/internal/blobapp"
 	"github.com/karlssonsimon/lazyaz/internal/dashapp"
 	"github.com/karlssonsimon/lazyaz/internal/jumplist"
 
@@ -32,7 +33,22 @@ type jumpTabMsg struct{ index int }
 type openThemePickerMsg struct{}
 type toggleHelpMsg struct{}
 type toggleNotificationsMsg struct{}
-type toggleStreamsMsg struct{}
+type toggleActivityMsg struct{}
+
+// activityAutoOpenMsg is dispatched when an upload starts to pop the
+// activity overlay into detail view for that activity. Ignored if the overlay
+// is already open.
+type activityAutoOpenMsg struct {
+	ActivityID string
+}
+
+// activityEventMsg is emitted by the registry-observer goroutine each
+// time the registry fires an Event. Receiving it is the signal to
+// re-render. The msg carries a next cmd that re-enters the observer
+// loop, mirroring the broker recv pattern.
+type activityEventMsg struct {
+	next tea.Cmd
+}
 
 // toastTickMsg drives the periodic re-render that lets toasts expire
 // off-screen. It self-extinguishes once no toasts are active. See
@@ -71,7 +87,8 @@ func wrapMsg(id int, msg tea.Msg) tea.Msg {
 	// emitting tab.
 	case dashapp.OpenSBNamespaceMsg, dashapp.OpenSBEntityMsg,
 		dashapp.OpenBlobAccountMsg, dashapp.OpenBlobContainerMsg,
-		jumplist.RecordJumpMsg:
+		jumplist.RecordJumpMsg,
+		blobapp.ActivityAutoOpenRequestMsg:
 		return msg
 	default:
 		return tabMsg{tabID: id, inner: msg}

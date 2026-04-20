@@ -85,6 +85,33 @@ Downloads are saved to `<download_dir>/<account>/<container>/...`, preserving
 the blob path structure. Configure `download_dir` in `config.json` (defaults
 to `~/Downloads`).
 
+## Uploading
+
+Press `a` on the blobs pane and choose **Upload files...** to open the file
+browser. Navigate with `j`/`k`/`h`/`l`, mark files or folders with `space` (or
+`v` for visual-line range), and press `enter` to confirm.
+
+Uploads go to the virtual folder you're currently browsing — navigate to the
+target location in blob storage first, then start the upload.
+
+Folder picks are recursive: `./data/2026/q1/report.csv` becomes
+`<currentFolder>/data/2026/q1/report.csv`. Symlinks are not followed.
+
+**Conflicts.** When a blob already exists, a prompt appears:
+
+- `y` — overwrite this one
+- `n` — skip this one
+- `a` — overwrite all remaining
+- `s` — skip all remaining
+- `c` — cancel the whole operation
+
+**Progress.** A panel shows overall byte progress, the current filename, and
+the `(N of M)` counter. The upload continues while you navigate — the panel is
+non-modal.
+
+**Errors.** Failures don't abort the whole batch — they're collected and shown
+in the completion summary alongside the success count.
+
 ## Sorting
 
 Press `s` on the blobs pane to open the sort picker:

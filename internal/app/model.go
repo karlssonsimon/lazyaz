@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
@@ -40,8 +41,9 @@ type Model struct {
 	sbSvc   *servicebus.Service
 	kvSvc   *keyvault.Service
 
-	brokers sharedBrokers
-	cfg    ui.Config
+	brokers          sharedBrokers
+	sharedActivities *activity.Registry
+	cfg              ui.Config
 	keymap keymap.Keymap
 
 	// db is the persistent cache handle, also used for app-level
@@ -76,7 +78,8 @@ type Model struct {
 	themeOverlay         ui.ThemeOverlayState
 	helpOverlay          ui.HelpOverlayState
 	notificationsOverlay ui.NotificationsOverlayState
-	streamOverlay        ui.StreamOverlayState
+	activityOverlay ui.ActivityOverlayState
+	activityTick    int // render-frame counter for fetch-spinner rotation
 
 	cursor       cursor.Model
 	tabPicker    tabPickerState
@@ -104,22 +107,24 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 	cur.SetChar(" ")
 	cur.Focus() // pre-focus; Init() returns the blink cmd
 	m := Model{
-		blobSvc:  blobSvc,
-		sbSvc:    sbSvc,
-		kvSvc:    kvSvc,
-		brokers:  newSharedBrokers(db),
-		cfg:      cfg,
-		keymap:   km,
-		cursor:   cur,
-		schemes:  cfg.Schemes,
-		notifier: appshell.NewNotifier(1000),
-		db:       db,
-		jumpIdx:  -1,
+		blobSvc:          blobSvc,
+		sbSvc:            sbSvc,
+		kvSvc:            kvSvc,
+		brokers:          newSharedBrokers(db),
+		sharedActivities: activity.NewRegistry(activity.RealClock{}),
+		cfg:              cfg,
+		keymap:           km,
+		cursor:           cur,
+		schemes:          cfg.Schemes,
+		notifier:         appshell.NewNotifier(1000),
+		db:               db,
+		jumpIdx:          -1,
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
 	}
 	m.styles = ui.NewStyles(cfg.ActiveScheme())
+	m.brokers.bindRegistry(m.sharedActivities)
 
 	// Last subscription used in a previous session (best-effort read,
 	// missing or empty → no preferred sub). Used for any tab whose
@@ -231,6 +236,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		}, m.keymap)
 		bm.EmbeddedMode = true
 		bm.Notifier = m.notifier
+		bm.Activities = m.sharedActivities
 		applyInitialSub(&bm)
 		child = bm
 	case TabServiceBus:
@@ -243,6 +249,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		}, m.keymap)
 		sm.EmbeddedMode = true
 		sm.Notifier = m.notifier
+		sm.Activities = m.sharedActivities
 		applyInitialSub(&sm)
 		child = sm
 	case TabKeyVault:
@@ -254,6 +261,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		}, m.keymap)
 		kvm.EmbeddedMode = true
 		kvm.Notifier = m.notifier
+		kvm.Activities = m.sharedActivities
 		applyInitialSub(&kvm)
 		child = kvm
 	case TabDashboard:
@@ -266,6 +274,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		}, m.keymap)
 		dm.EmbeddedMode = true
 		dm.Notifier = m.notifier
+		dm.Activities = m.sharedActivities
 		applyInitialSub(&dm)
 		child = dm
 	}
@@ -463,20 +472,53 @@ func (m *Model) applySchemeToAll(scheme ui.Scheme) {
 }
 
 func (m Model) Init() tea.Cmd {
-	if len(m.tabs) == 0 {
-		return cursor.Blink
+	cmds := []tea.Cmd{cursor.Blink}
+	// Start the activity registry event observer so re-renders fire
+	// whenever a tracked activity changes. The subscription lives for
+	// the app's lifetime; process exit closes it via GC.
+	if m.sharedActivities != nil {
+		events, _ := m.sharedActivities.Events()
+		cmds = append(cmds, observeActivitiesCmd(events))
 	}
 	// Init every tab so configured startup tabs all kick off their
 	// initial fetches in the background — not just the active one.
 	// Each tab's commands are wrapped so their results route back to
 	// the correct tab via tabMsg.
-	cmds := []tea.Cmd{cursor.Blink}
 	for _, tab := range m.tabs {
 		if c := tab.Model.Init(); c != nil {
 			cmds = append(cmds, wrapCmd(tab.ID, c))
 		}
 	}
 	return tea.Batch(cmds...)
+}
+
+// observeActivitiesCmd returns a tea.Cmd that blocks on the next event
+// from the registry's Events channel and emits an activityEventMsg. The
+// msg carries a `next` cmd that re-enters the loop, mirroring the
+// broker recv pattern. The loop terminates when the channel closes.
+func observeActivitiesCmd(events <-chan activity.Event) tea.Cmd {
+	var loop tea.Cmd
+	loop = func() tea.Msg {
+		_, ok := <-events
+		if !ok {
+			return nil
+		}
+		return activityEventMsg{next: loop}
+	}
+	return loop
+}
+
+// cancelActivity cancels the activity with the given ID, if still present.
+func (m *Model) cancelActivity(id string) {
+	if m.sharedActivities == nil {
+		return
+	}
+	for _, v := range m.sharedActivities.Snapshot() {
+		if v.Activity.ID() == id {
+			v.Activity.Cancel()
+			return
+		}
+	}
 }
 
 // Update runs the inner dispatcher and then persists the active
@@ -681,13 +723,28 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case toggleStreamsMsg:
-		if m.streamOverlay.Active {
-			m.streamOverlay.Close()
+	case toggleActivityMsg:
+		if m.activityOverlay.Active {
+			m.activityOverlay.Close()
 		} else {
-			m.streamOverlay.Open()
+			m.activityOverlay.Open()
 		}
 		return m, nil
+
+	case activityAutoOpenMsg:
+		if !m.activityOverlay.Active {
+			m.activityOverlay.OpenDetail(msg.ActivityID)
+		}
+		return m, nil
+
+	case activityEventMsg:
+		// Each event causes a re-render by virtue of Update returning.
+		return m, msg.next
+
+	case blobapp.ActivityAutoOpenRequestMsg:
+		return m, func() tea.Msg {
+			return activityAutoOpenMsg{ActivityID: msg.ActivityID}
+		}
 
 	case openAzLoginMsg:
 		updated, cmd := m.handleOpenAzLogin()
@@ -781,20 +838,21 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Stream management overlay.
-		if m.streamOverlay.Active {
-			streams := m.collectStreams()
-			cancelIdx, didCancel := m.streamOverlay.HandleKey(key, ui.StreamKeyBindings{
-				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
-				Close:        m.keymap.ToggleStreams,
-				Cancel:       m.keymap.Cancel,
-				CancelStream: cancelStreamBinding{},
-			}, len(streams))
-			if didCancel && cancelIdx >= 0 && cancelIdx < len(streams) {
-				entry := streams[cancelIdx]
-				if entry.Status == "active" {
-					m.cancelStream(entry)
-				}
+		// Upload conflict prompt takes precedence over every other
+		// overlay — it's a blocking modal that needs an answer before
+		// the upload can resume. Forward to the active tab so its
+		// handleKey can dispatch to resolveConflict.
+		if len(m.tabs) > 0 {
+			if bm, ok := m.tabs[m.activeIdx].Model.(blobapp.Model); ok && bm.HasPendingUploadConflict() {
+				return m, m.forwardToActive(msg)
+			}
+		}
+
+		// Activity overlay overlay.
+		if m.activityOverlay.Active {
+			res := m.activityOverlay.HandleKey(key)
+			if res.Action == ui.ActivityActionCancel && res.TargetID != "" {
+				m.cancelActivity(res.TargetID)
 			}
 			return m, nil
 		}
@@ -874,8 +932,8 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case m.keymap.ToggleNotifications.Matches(key):
 			return m.Update(toggleNotificationsMsg{})
-		case m.keymap.ToggleStreams.Matches(key):
-			return m.Update(toggleStreamsMsg{})
+		case m.keymap.ToggleActivity.Matches(key):
+			return m.Update(toggleActivityMsg{})
 		case m.keymap.JumpBack.Matches(key):
 			return m, m.jumpBack()
 		case m.keymap.JumpForward.Matches(key):
@@ -993,8 +1051,8 @@ func (m *Model) buildCommands() []command {
 		command{name: "Notifications History", hint: "N", action: func() commandAction {
 			return commandAction{msg: toggleNotificationsMsg{}}
 		}},
-		command{name: "Stream Manager", hint: "F", action: func() commandAction {
-			return commandAction{msg: toggleStreamsMsg{}}
+		command{name: "Activity", hint: "F", action: func() commandAction {
+			return commandAction{msg: toggleActivityMsg{}}
 		}},
 		command{name: "Help", hint: "?", action: func() commandAction {
 			return commandAction{msg: toggleHelpMsg{}}

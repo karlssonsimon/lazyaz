@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -172,6 +173,9 @@ func (m Model) View() tea.View {
 
 	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
 
+	if value, ok := activity.StatusBarItem(m.Activities, "F"); ok {
+		sbItems = append(sbItems, ui.StatusBarItem{Value: value})
+	}
 	statusBar := ui.RenderStatusBar(m.Styles, sbItems, "", false, m.Width)
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)
@@ -184,6 +188,15 @@ func (m Model) View() tea.View {
 	if m.filter.inputOpen {
 		view = m.renderPrefixSearchOverlay(view)
 	}
+
+	if m.uploadBrowserActive {
+		view = ui.RenderFileBrowser(m.uploadBrowser, m.Styles, m.Width, m.Height, view)
+	}
+
+	// The conflict prompt is rendered by the parent app AFTER its ops
+	// center overlay, so the prompt stays at the top of the Z-stack.
+	// See (*app.Model).View and blobapp.Model.RenderUploadConflictPrompt.
+
 	out := tea.NewView(m.RenderOverlays(view))
 	out.AltScreen = true
 	out.MouseMode = tea.MouseModeCellMotion
@@ -270,9 +283,9 @@ func (m Model) renderSortOverlay(base string) string {
 
 func humanSize(bytes int64) string {
 	const (
-		kb = 1024
-		mb = kb * 1024
-		gb = mb * 1024
+		kb = 1000
+		mb = kb * 1000
+		gb = mb * 1000
 	)
 
 	switch {

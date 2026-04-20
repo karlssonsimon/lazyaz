@@ -11,6 +11,7 @@ package appshell
 import (
 	"time"
 
+	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
@@ -67,6 +68,12 @@ type Model struct {
 	// from appshell.New so calls never hit nil.
 	Notifier *Notifier
 
+	// Activities is the shared registry of in-flight activities (fetches,
+	// uploads). Installed by the parent tabapp at construction time so
+	// the activity overlay can render cross-tab state. Standalone single-app
+	// binaries get a per-process registry from appshell.New.
+	Activities *activity.Registry
+
 	// Cursor is the shared blinking cursor used by all text inputs.
 	Cursor cursor.Model
 
@@ -93,6 +100,7 @@ func New(cfg ui.Config, km keymap.Keymap) Model {
 		Schemes:     cfg.Schemes,
 		LoadingPane: -1,
 		Notifier:    NewNotifier(1000),
+		Activities:  activity.NewRegistry(activity.RealClock{}),
 		ThemeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},

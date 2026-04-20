@@ -3,6 +3,7 @@ package sbapp
 import (
 	"fmt"
 
+	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -149,6 +150,9 @@ func (m Model) View() tea.View {
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, paneParts...)
 
 	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
+	if value, ok := activity.StatusBarItem(m.Activities, "F"); ok {
+		sbItems = append(sbItems, ui.StatusBarItem{Value: value})
+	}
 	statusBar := ui.RenderStatusBar(m.Styles, sbItems, "", false, m.Width)
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)

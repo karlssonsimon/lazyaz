@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -18,7 +19,11 @@ func (m Model) View() tea.View {
 	}
 
 	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
-	statusBar := ui.RenderStatusBar(m.Styles, m.statusBarItems(), "", false, m.Width)
+	sbItems := m.statusBarItems()
+	if value, ok := activity.StatusBarItem(m.Activities, "F"); ok {
+		sbItems = append(sbItems, ui.StatusBarItem{Value: value})
+	}
+	statusBar := ui.RenderStatusBar(m.Styles, sbItems, "", false, m.Width)
 
 	bodyHeight := m.Height - lipgloss.Height(subBar) - lipgloss.Height(statusBar)
 	if bodyHeight < 2 {

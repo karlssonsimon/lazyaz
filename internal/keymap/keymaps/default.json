@@ -18,7 +18,7 @@
     "toggle_theme_picker": ["T"],
     "toggle_help": ["?", "f1"],
     "toggle_notifications": ["N"],
-    "toggle_streams": ["F"],
+    "toggle_activity": ["F"],
     "theme_up": ["up", "ctrl+k"],
     "theme_down": ["down", "ctrl+j"],
     "theme_apply": ["enter"],

@@ -154,3 +154,79 @@ func downloadBlobsCmd(svc *blob.Service, account blob.Account, containerName str
 		return msg
 	}
 }
+
+// uploadStartedMsg marks the transition from "preparing" to "uploading"
+// inside a batch upload. Emitted once after enumeration and the
+// pre-flight existence check.
+type uploadStartedMsg struct {
+	totalBytes int64
+	fileCount  int
+	conflicts  map[string]struct{}
+	next       tea.Cmd // receive-next cmd
+}
+
+// uploadProgressMsg fires periodically during upload, per block
+// uploaded. bytesDelta is the bytes since the previous progress event.
+type uploadProgressMsg struct {
+	currentFile  string
+	currentIndex int
+	bytesDelta   int64
+	next         tea.Cmd
+}
+
+// uploadConflictMsg fires when an existing blob is hit and a decision
+// is needed. The worker blocks on reply until the model sends an answer.
+type uploadConflictMsg struct {
+	blobName string
+	reply    chan<- conflictAnswer
+	next     tea.Cmd
+}
+
+// uploadDoneMsg is the final message of a batch.
+type uploadDoneMsg struct {
+	uploaded      int
+	skipped       int
+	failed        []uploadError
+	cancelled     bool
+	totalBytes    int64
+	uploadedBytes int64
+	destPrefix    string
+}
+
+type conflictAnswer int
+
+const (
+	conflictSkip conflictAnswer = iota
+	conflictOverwrite
+	conflictSkipAll
+	conflictOverwriteAll
+	conflictCancel
+)
+
+type uploadError struct {
+	blobName string
+	err      error
+}
+
+// uploadConfirmedMsg is the synthesized message when the user confirms
+// the file browser. Carries the selected paths + final destination prefix.
+type uploadConfirmedMsg struct {
+	selected   []string // absolute paths (files or dirs)
+	destPrefix string
+}
+
+// ActivityAutoOpenRequestMsg bubbles up from a blobapp tab to the
+// parent app to request opening the activity overlay into an activity's
+// detail view. Parent ignores it if the overlay is already open.
+type ActivityAutoOpenRequestMsg struct {
+	ActivityID string
+}
+
+func requestActivityAutoOpen(id string) tea.Cmd {
+	if id == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return ActivityAutoOpenRequestMsg{ActivityID: id}
+	}
+}

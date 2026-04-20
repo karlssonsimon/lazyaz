@@ -1,6 +1,7 @@
 package blobapp
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
@@ -156,6 +157,16 @@ type Model struct {
 	clickTracker ui.ClickTracker
 	paneWidths   [4]int // acc, con, blob, preview — set by resize
 	paneHeight   int
+
+	// Upload state. The browser, conflict prompt, and progress panel are
+	// all driven from these fields. nil/false when no upload is in flight.
+	uploadBrowser        ui.FileBrowserState
+	uploadBrowserActive  bool
+	uploadProgress       *uploadProgress
+	uploadActivityUnreg  func() // nil when no upload is tracked
+	uploadConflict       *pendingConflict
+	uploadConflictPolicy conflictAnswer
+	uploadCancelFn       context.CancelFunc
 }
 
 type accountsLoadedMsg struct {

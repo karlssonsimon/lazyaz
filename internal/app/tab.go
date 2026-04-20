@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 
+	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
@@ -81,6 +82,21 @@ type sharedBrokers struct {
 	kvVaults   *cache.Broker[keyvault.Vault]
 	kvSecrets  *cache.Broker[keyvault.Secret]
 	kvVersions *cache.Broker[keyvault.SecretVersion]
+}
+
+// bindRegistry wires r into every broker so activity tracking is
+// automatic. Called once at app startup.
+func (b *sharedBrokers) bindRegistry(r *activity.Registry) {
+	b.subscriptions.SetRegistry(r)
+	b.blobAccounts.SetRegistry(r)
+	b.blobContainers.SetRegistry(r)
+	b.blobs.SetRegistry(r)
+	b.sbNamespaces.SetRegistry(r)
+	b.sbEntities.SetRegistry(r)
+	b.sbTopicSubs.SetRegistry(r)
+	b.kvVaults.SetRegistry(r)
+	b.kvSecrets.SetRegistry(r)
+	b.kvVersions.SetRegistry(r)
 }
 
 // resetAll cancels all active streams and clears all cached data.

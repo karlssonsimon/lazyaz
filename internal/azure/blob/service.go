@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 )
@@ -447,12 +447,6 @@ func (s *Service) downloadBlobWithClient(ctx context.Context, serviceClient *ser
 	containerClient := serviceClient.NewContainerClient(containerName)
 	blobClient := containerClient.NewBlobClient(blobName)
 
-	downloadResponse, err := blobClient.DownloadStream(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("download blob %s: %w", blobName, err)
-	}
-	defer downloadResponse.Body.Close()
-
 	if err := os.MkdirAll(filepath.Dir(destinationPath), 0o755); err != nil {
 		return fmt.Errorf("create destination directory for %s: %w", destinationPath, err)
 	}
@@ -462,10 +456,16 @@ func (s *Service) downloadBlobWithClient(ctx context.Context, serviceClient *ser
 		return fmt.Errorf("create destination file %s: %w", destinationPath, err)
 	}
 
-	if _, err := io.Copy(file, downloadResponse.Body); err != nil {
+	// Parallel ranged GETs. BlockSize/Concurrency chosen to saturate typical
+	// home/office links without blowing memory; see transferConcurrency in upload.go.
+	_, err = blobClient.DownloadFile(ctx, file, &blob.DownloadFileOptions{
+		BlockSize:   8 * 1024 * 1024,
+		Concurrency: uint16(transferConcurrency()),
+	})
+	if err != nil {
 		file.Close()
 		_ = os.Remove(destinationPath)
-		return fmt.Errorf("write blob %s to %s: %w", blobName, destinationPath, err)
+		return fmt.Errorf("download blob %s: %w", blobName, err)
 	}
 
 	if err := file.Close(); err != nil {

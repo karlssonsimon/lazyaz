@@ -7,6 +7,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/karlssonsimon/lazyaz/internal/activity"
 )
 
 // StreamStatus describes the lifecycle of a broker stream.
@@ -57,6 +59,11 @@ type stream[T any] struct {
 	startedAt time.Time
 	endedAt   time.Time
 	err       error
+
+	// activityUnreg removes the broker-adapter activity from the
+	// registry. Set when a new stream is created if a registry is
+	// configured; nil otherwise. Called once when the stream ends.
+	activityUnreg func()
 }
 
 // Broker coordinates shared, streaming fetches across multiple
@@ -68,11 +75,12 @@ type stream[T any] struct {
 // accessed from the worker goroutine (writes) and under the mutex
 // (reads via Get), matching the same safety model as Loader.
 type Broker[T any] struct {
-	store   Store[T]
-	keyOf   func(T) string
-	mu      sync.Mutex
-	streams map[string]*stream[T]
-	nextSub atomic.Int64
+	store    Store[T]
+	keyOf    func(T) string
+	mu       sync.Mutex
+	streams  map[string]*stream[T]
+	nextSub  atomic.Int64
+	registry *activity.Registry
 }
 
 // NewBroker creates a Broker backed by the given Store. keyOf returns
@@ -84,6 +92,16 @@ func NewBroker[T any](store Store[T], keyOf func(T) string) *Broker[T] {
 		keyOf:   keyOf,
 		streams: make(map[string]*stream[T]),
 	}
+}
+
+// SetRegistry wires this broker to an activity.Registry. Once set,
+// every new stream gets a BrokerActivityAdapter registered on Subscribe
+// and unregistered when the stream terminates. Safe to call more than
+// once but typically called once at app startup.
+func (b *Broker[T]) SetRegistry(r *activity.Registry) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.registry = r
 }
 
 // Get returns cached items from the underlying store.
@@ -132,6 +150,8 @@ func (b *Broker[T]) Cancel(key string) {
 	s.status = StreamCancelled
 	s.endedAt = time.Now()
 	b.mu.Unlock()
+	// Do not unregister the activity; the registry's 60s cleanup keeps
+	// the cancelled row visible so the user sees what they just cancelled.
 	s.cancel()
 }
 
@@ -181,7 +201,15 @@ func (b *Broker[T]) Subscribe(
 		startedAt: time.Now(),
 	}
 	b.streams[key] = s
+	registry := b.registry
 	b.mu.Unlock()
+
+	// Register with the activity registry (if configured) so the ops
+	// center can see this fetch.
+	if registry != nil {
+		adapter := NewBrokerActivityAdapter(b, StreamInfo{Key: key, Status: StreamActive, StartedAt: s.startedAt})
+		s.activityUnreg = registry.Register(adapter)
+	}
 
 	go b.worker(ctx, key, seed, fetchFn, s)
 
@@ -245,6 +273,10 @@ func (b *Broker[T]) worker(
 				s.status = StreamDone
 			}
 			s.endedAt = time.Now()
+			// Do NOT unregister the activity here. The registry keeps
+			// terminal activities for its own 60s cleanup window so
+			// finished fetches stay visible in the Activity overlay,
+			// matching how upload activities linger.
 		}
 		// Copy subscriber map under lock — iterate outside.
 		subs := make(map[int64]chan Page[T], len(s.subs))
@@ -337,16 +369,24 @@ func (b *Broker[T]) recv(
 // invalidate everything.
 func (b *Broker[T]) Reset() {
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	unregs := make([]func(), 0, len(b.streams))
 	for _, s := range b.streams {
 		if s.status == StreamActive {
 			s.status = StreamCancelled
 			s.endedAt = time.Now()
 			s.cancel()
 		}
+		if s.activityUnreg != nil {
+			unregs = append(unregs, s.activityUnreg)
+			s.activityUnreg = nil
+		}
 	}
 	b.streams = make(map[string]*stream[T])
 	b.store.Clear()
+	b.mu.Unlock()
+	for _, u := range unregs {
+		u()
+	}
 }
 
 // ClearStream removes a completed/cancelled/errored stream from the

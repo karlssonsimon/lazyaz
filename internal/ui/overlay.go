@@ -293,6 +293,7 @@ func PlaceOverlay(width, height int, overlay, base string) string {
 	return strings.Join(baseLines[:height], "\n")
 }
 
+
 func skipAnsi(s string, skipWidth int) string {
 	runes := []rune(s)
 	for i := 0; i <= len(runes); i++ {

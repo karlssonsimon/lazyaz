@@ -121,6 +121,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case uploadStartedMsg:
+		if m.uploadProgress != nil {
+			m.uploadProgress.total = msg.fileCount
+			m.uploadProgress.totalBytes = msg.totalBytes
+		}
+		return m, msg.next
+
+	case uploadProgressMsg:
+		if m.uploadProgress != nil {
+			m.uploadProgress.uploadedBytes += msg.bytesDelta
+			m.uploadProgress.currentFile = msg.currentFile
+			m.uploadProgress.currentIndex = msg.currentIndex
+			m.updateUploadThroughput()
+		}
+		return m, msg.next
+
+	case uploadConflictMsg:
+		m.uploadConflict = &pendingConflict{blobName: msg.blobName, reply: msg.reply}
+		if m.uploadProgress != nil {
+			m.uploadProgress.waitingInput = true
+			m.uploadProgress.waitingInputSince = time.Now()
+		}
+		return m, msg.next
+
+	case uploadDoneMsg:
+		return m.finishUpload(msg)
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
@@ -340,6 +367,42 @@ func (m Model) handleBlobsDownloaded(msg blobsDownloadedMsg) (Model, tea.Cmd) {
 
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
+
+	if m.uploadConflict != nil {
+		switch key {
+		case "y":
+			m.resolveConflict(conflictOverwrite)
+		case "n":
+			m.resolveConflict(conflictSkip)
+		case "a":
+			m.resolveConflict(conflictOverwriteAll)
+			m.uploadConflictPolicy = conflictOverwriteAll
+		case "s":
+			m.resolveConflict(conflictSkipAll)
+			m.uploadConflictPolicy = conflictSkipAll
+		case "c", "esc":
+			m.resolveConflict(conflictCancel)
+			if m.uploadCancelFn != nil {
+				m.uploadCancelFn()
+			}
+		}
+		return m, nil
+	}
+
+	if m.uploadBrowserActive {
+		res := m.uploadBrowser.HandleKey(key)
+		switch res.Action {
+		case ui.FBActionNone:
+			return m, nil
+		case ui.FBActionCancel:
+			m.uploadBrowserActive = false
+			return m, nil
+		case ui.FBActionConfirm:
+			m.uploadBrowserActive = false
+			return m.startUpload(res.Selected, m.prefix)
+		}
+		return m, nil
+	}
 
 	switch m.inputMode() {
 	case ModeOverlay:

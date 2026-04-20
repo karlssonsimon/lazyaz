@@ -34,6 +34,7 @@ const (
 	actionSubscriptionPicker
 	actionThemePicker
 	actionHelp
+	actionUpload
 )
 
 // action describes one entry in the action menu.
@@ -149,6 +150,8 @@ func (m Model) buildActions() []action {
 	var actions []action
 
 	if m.hasContainer && m.focus == blobsPane {
+		actions = append(actions, action{actionUpload, "Upload files...", ""})
+
 		// Load mode toggle.
 		if m.blobLoadAll {
 			actions = append(actions, action{actionHierarchy, "Browse by folder", km.ToggleLoadAll.Short()})
@@ -298,6 +301,9 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+
+	case actionUpload:
+		return m.openUploadBrowser()
 	}
 
 	return m, nil
