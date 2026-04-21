@@ -102,8 +102,8 @@ func TestMergePartialOverride(t *testing.T) {
 
 func TestJumpIndex(t *testing.T) {
 	km := Default()
-	if idx, ok := km.JumpIndex("alt+3"); !ok || idx != 2 {
-		t.Fatalf("expected alt+3 → index 2, got %d, %v", idx, ok)
+	if idx, ok := km.JumpIndex("3"); !ok || idx != 2 {
+		t.Fatalf("expected 3 → index 2, got %d, %v", idx, ok)
 	}
 	if _, ok := km.JumpIndex("x"); ok {
 		t.Fatal("expected no match for x")
