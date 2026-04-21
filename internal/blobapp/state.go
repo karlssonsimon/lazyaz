@@ -167,6 +167,14 @@ type Model struct {
 	uploadConflict       *pendingConflict
 	uploadConflictPolicy conflictAnswer
 	uploadCancelFn       context.CancelFunc
+
+	// CRUD modal state. Only one of these is ever active at a time.
+	// On Confirm/Submit, the pending closure runs and emits a tea.Cmd
+	// that results in a crudDoneMsg.
+	confirmModal    ui.ConfirmModalState
+	confirmAction   func() tea.Cmd
+	textInput       ui.TextInputState
+	textInputAction func(value string) tea.Cmd
 }
 
 type accountsLoadedMsg struct {

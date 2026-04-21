@@ -34,6 +34,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.filter.inputOpen && m.focus == blobsPane:
 			m.filter.prefixQuery += text
 			return m, nil
+		case m.textInput.Active:
+			m.textInput.Value += text
+			return m, nil
 		case m.actionMenu.active:
 			m.actionMenu.query += text
 			m.actionMenu.refilter()
@@ -147,6 +150,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case uploadDoneMsg:
 		return m.finishUpload(msg)
+
+	case crudDoneMsg:
+		m.Notify(msg.level, msg.message)
+		updated, cmd := m.refresh()
+		return updated, cmd
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -367,6 +375,39 @@ func (m Model) handleBlobsDownloaded(msg blobsDownloadedMsg) (Model, tea.Cmd) {
 
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
+
+	// CRUD modals take precedence over every other handler.
+	if m.confirmModal.Active {
+		switch m.confirmModal.HandleKey(key) {
+		case ui.ConfirmActionConfirm:
+			act := m.confirmAction
+			m.confirmAction = nil
+			if act != nil {
+				return m, act()
+			}
+			return m, nil
+		case ui.ConfirmActionCancel:
+			m.confirmAction = nil
+			return m, nil
+		}
+		return m, nil
+	}
+	if m.textInput.Active {
+		res := m.textInput.HandleKey(key)
+		switch res.Action {
+		case ui.TextInputActionSubmit:
+			act := m.textInputAction
+			m.textInputAction = nil
+			if act != nil {
+				return m, act(res.Value)
+			}
+			return m, nil
+		case ui.TextInputActionCancel:
+			m.textInputAction = nil
+			return m, nil
+		}
+		return m, nil
+	}
 
 	if m.uploadConflict != nil {
 		switch key {

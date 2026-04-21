@@ -197,6 +197,13 @@ func (m Model) View() tea.View {
 	// center overlay, so the prompt stays at the top of the Z-stack.
 	// See (*app.Model).View and blobapp.Model.RenderUploadConflictPrompt.
 
+	if m.confirmModal.Active {
+		view = ui.RenderConfirmModal(m.confirmModal, m.Styles, m.Width, m.Height, view)
+	}
+	if m.textInput.Active {
+		view = ui.RenderTextInputOverlay(m.textInput, m.Cursor.View(), m.Styles, m.Width, m.Height, view)
+	}
+
 	out := tea.NewView(m.RenderOverlays(view))
 	out.AltScreen = true
 	out.MouseMode = tea.MouseModeCellMotion

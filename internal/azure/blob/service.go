@@ -28,6 +28,7 @@ type Account struct {
 	SubscriptionID string
 	ResourceGroup  string
 	BlobEndpoint   string
+	IsHnsEnabled   bool // true when Azure Data Lake Storage Gen2 hierarchical namespace is enabled
 }
 
 type ContainerInfo struct {
@@ -140,6 +141,7 @@ func (s *Service) DiscoverAccountsForSubscription(ctx context.Context, subscript
 				SubscriptionID: id,
 				ResourceGroup:  parseResourceGroup(account.ID),
 				BlobEndpoint:   strings.TrimRight(*account.Properties.PrimaryEndpoints.Blob, "/"),
+				IsHnsEnabled:   account.Properties.IsHnsEnabled != nil && *account.Properties.IsHnsEnabled,
 			})
 		}
 		if len(batch) > 0 {
