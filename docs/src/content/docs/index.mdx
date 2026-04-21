@@ -14,7 +14,7 @@ hero:
       icon: external
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## What is lazyaz?
 
@@ -57,17 +57,31 @@ If [lazygit](https://github.com/jesseduffield/lazygit) is to `git` what lazyaz i
 
 ## Quick start
 
+Install:
+
+<Tabs>
+<TabItem label="macOS / Linux">
 ```bash
-# Install (macOS / Linux)
 curl -sSfL https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.sh | sh
+```
+</TabItem>
+<TabItem label="Windows (PowerShell)">
+```powershell
+iwr -useb https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.ps1 | iex
+```
+</TabItem>
+<TabItem label="Go">
+```bash
+go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest
+```
+</TabItem>
+</Tabs>
 
-# Log in to Azure (if you haven't already)
+Then log in to Azure and launch:
+
+```bash
 az login
-
-# Launch
 lazyaz
 ```
-
-Windows: `iwr -useb https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.ps1 | iex`. With Go: `go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest`.
 
 Pick a subscription and start browsing. Press `?` for help, `a` for context-aware actions, `Ctrl+P` for the command palette.

@@ -7,13 +7,6 @@ import sitemap from '@astrojs/sitemap';
 export default defineConfig({
 	site: 'https://karlssonsimon.github.io',
 	base: '/lazyaz',
-	// Disable the typographic auto-transforms that convert ASCII hyphens
-	// to en-dashes and straight quotes to curly quotes. These break
-	// copy-paste of shell commands in prose code references (e.g.
-	// `curl -sSfL …`) — the rendered `-` is no longer an ASCII byte.
-	markdown: {
-		smartypants: false,
-	},
 	integrations: [
 		sitemap(),
 		starlight({
