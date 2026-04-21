@@ -34,8 +34,8 @@ func Default() Keymap {
 		// Tabs.
 		NewTab:         New("ctrl+t"),
 		CloseTab:       New("ctrl+w"),
-		NextTab:        New("L", "ctrl+right"),
-		PrevTab:        New("H", "ctrl+left"),
+		NextTab:        New("L"),
+		PrevTab:        New("H"),
 		CommandPalette: New("ctrl+p"),
 		Jump1:          New("alt+1"),
 		Jump2:          New("alt+2"),
