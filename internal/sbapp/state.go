@@ -304,6 +304,8 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 	d.marked = m.currentMarks()
 	d.visual = m.visualSelectionSet()
 	m.messageList.SetDelegate(d)
+	m.entitiesList.SetDelegate(newEntityDelegate(m.Styles.Delegate, m.Styles))
+	m.subscriptionsList.SetDelegate(newSubscriptionDelegate(m.Styles.Delegate, m.Styles))
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.
