@@ -19,6 +19,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake"
 )
 
 const hierarchyDelimiter = "/"
@@ -62,6 +63,11 @@ type Service struct {
 	mu               sync.Mutex
 	aadClients       map[string]*service.Client
 	sharedKeyClients map[string]*service.Client
+	// accountKeys caches the raw shared-key string per account name so
+	// that both azblob (via getSharedKeyServiceClient) and azdatalake
+	// (via getDFSSharedKeyCredential) fallback paths avoid re-hitting
+	// ARM ListKeys on every operation.
+	accountKeys map[string]string
 }
 
 func NewService(cred azcore.TokenCredential) *Service {
@@ -69,6 +75,7 @@ func NewService(cred azcore.TokenCredential) *Service {
 		cred:             cred,
 		aadClients:       make(map[string]*service.Client),
 		sharedKeyClients: make(map[string]*service.Client),
+		accountKeys:      make(map[string]string),
 	}
 }
 
@@ -87,6 +94,7 @@ func (s *Service) SetCredential(cred azcore.TokenCredential) {
 	s.cred = cred
 	s.aadClients = make(map[string]*service.Client)
 	s.sharedKeyClients = make(map[string]*service.Client)
+	s.accountKeys = make(map[string]string)
 }
 
 func (s *Service) ListSubscriptions(ctx context.Context, send func([]azure.Subscription)) error {
@@ -575,11 +583,44 @@ func (s *Service) getAADServiceClient(blobEndpoint string) (*service.Client, err
 	return client, nil
 }
 
-func (s *Service) getSharedKeyServiceClient(ctx context.Context, account Account) (*service.Client, error) {
+// fetchAccountKey returns a usable storage-account key for `account`,
+// caching it on the Service keyed by account name. Backs both the
+// azblob and azdatalake shared-key fallback paths so ARM ListKeys is
+// called at most once per account.
+func (s *Service) fetchAccountKey(ctx context.Context, account Account) (string, error) {
 	if strings.TrimSpace(account.SubscriptionID) == "" || strings.TrimSpace(account.ResourceGroup) == "" || strings.TrimSpace(account.Name) == "" {
-		return nil, fmt.Errorf("insufficient account metadata for shared key fallback")
+		return "", fmt.Errorf("insufficient account metadata for shared key fallback")
 	}
 
+	s.mu.Lock()
+	if key, ok := s.accountKeys[account.Name]; ok {
+		s.mu.Unlock()
+		return key, nil
+	}
+	s.mu.Unlock()
+
+	accountsClient, err := armstorage.NewAccountsClient(account.SubscriptionID, s.cred, nil)
+	if err != nil {
+		return "", fmt.Errorf("create ARM accounts client for subscription %s: %w", account.SubscriptionID, err)
+	}
+
+	listKeysResponse, err := accountsClient.ListKeys(ctx, account.ResourceGroup, account.Name, nil)
+	if err != nil {
+		return "", fmt.Errorf("list keys for %s/%s: %w", account.ResourceGroup, account.Name, err)
+	}
+
+	keyValue, err := pickAccountKey(listKeysResponse.Keys)
+	if err != nil {
+		return "", fmt.Errorf("select key for %s: %w", account.Name, err)
+	}
+
+	s.mu.Lock()
+	s.accountKeys[account.Name] = keyValue
+	s.mu.Unlock()
+	return keyValue, nil
+}
+
+func (s *Service) getSharedKeyServiceClient(ctx context.Context, account Account) (*service.Client, error) {
 	endpoint := strings.TrimRight(strings.TrimSpace(account.BlobEndpoint), "/")
 	if endpoint == "" {
 		return nil, fmt.Errorf("empty blob endpoint")
@@ -592,19 +633,9 @@ func (s *Service) getSharedKeyServiceClient(ctx context.Context, account Account
 	}
 	s.mu.Unlock()
 
-	accountsClient, err := armstorage.NewAccountsClient(account.SubscriptionID, s.cred, nil)
+	keyValue, err := s.fetchAccountKey(ctx, account)
 	if err != nil {
-		return nil, fmt.Errorf("create ARM accounts client for subscription %s: %w", account.SubscriptionID, err)
-	}
-
-	listKeysResponse, err := accountsClient.ListKeys(ctx, account.ResourceGroup, account.Name, nil)
-	if err != nil {
-		return nil, fmt.Errorf("list keys for %s/%s: %w", account.ResourceGroup, account.Name, err)
-	}
-
-	keyValue, err := pickAccountKey(listKeysResponse.Keys)
-	if err != nil {
-		return nil, fmt.Errorf("select key for %s: %w", account.Name, err)
+		return nil, err
 	}
 
 	sharedKeyCredential, err := service.NewSharedKeyCredential(account.Name, keyValue)
@@ -626,6 +657,23 @@ func (s *Service) getSharedKeyServiceClient(ctx context.Context, account Account
 
 	s.sharedKeyClients[endpoint] = sharedKeyClient
 	return sharedKeyClient, nil
+}
+
+// getDFSSharedKeyCredential returns an azdatalake SharedKeyCredential
+// for `account`. Unlike the azblob path, the credential itself (not a
+// service client) is what HNS per-path clients (file.Client,
+// directory.Client) take, so we return the credential directly and let
+// each caller construct its own typed client.
+func (s *Service) getDFSSharedKeyCredential(ctx context.Context, account Account) (*azdatalake.SharedKeyCredential, error) {
+	keyValue, err := s.fetchAccountKey(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	cred, err := azdatalake.NewSharedKeyCredential(account.Name, keyValue)
+	if err != nil {
+		return nil, fmt.Errorf("create DFS shared key credential for %s: %w", account.Name, err)
+	}
+	return cred, nil
 }
 
 func pickAccountKey(keys []*armstorage.AccountKey) (string, error) {

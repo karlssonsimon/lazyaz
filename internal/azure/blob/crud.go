@@ -86,15 +86,12 @@ func (s *Service) renameBlobHNS(ctx context.Context, account Account, containerN
 		return fmt.Errorf("cannot derive DFS endpoint for account %s", account.Name)
 	}
 	srcURL := fmt.Sprintf("%s/%s/%s", dfs, containerName, strings.TrimPrefix(oldName, "/"))
-	client, err := file.NewClient(srcURL, s.cred, nil)
-	if err != nil {
-		return fmt.Errorf("create file client: %w", err)
-	}
 	dest := containerName + "/" + strings.TrimPrefix(newName, "/")
-	if _, err := client.Rename(ctx, dest, nil); err != nil {
-		return fmt.Errorf("rename %s → %s in %s/%s: %w", oldName, newName, account.Name, containerName, err)
-	}
-	return nil
+	label := fmt.Sprintf("rename %s → %s in %s/%s", oldName, newName, account.Name, containerName)
+	return s.withHNSFileFallback(ctx, account, srcURL, label, func(c *file.Client) error {
+		_, err := c.Rename(ctx, dest, nil)
+		return err
+	})
 }
 
 // renameBlobCopyDelete copies the source blob to newName within the same
@@ -103,8 +100,11 @@ func (s *Service) renameBlobHNS(ctx context.Context, account Account, containerN
 // API. Same-account / same-container rename only — cross-container or
 // cross-account rename would need a wizard in the UI.
 func (s *Service) renameBlobCopyDelete(ctx context.Context, account Account, containerName, oldName, newName string) error {
+	if account.BlobEndpoint == "" {
+		return fmt.Errorf("blob endpoint not set for account %s", account.Name)
+	}
 	return s.withFallback(ctx, account, fmt.Sprintf("rename %s → %s in %s/%s", oldName, newName, account.Name, containerName), func(c *service.Client) error {
-		srcURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s/%s", account.Name, containerName, oldName)
+		srcURL := fmt.Sprintf("%s/%s/%s", account.BlobEndpoint, containerName, oldName)
 		dst := c.NewContainerClient(containerName).NewBlobClient(newName)
 		if _, err := dst.StartCopyFromURL(ctx, srcURL, nil); err != nil {
 			return fmt.Errorf("start copy: %w", err)
@@ -228,15 +228,12 @@ func (s *Service) DeleteDirectory(ctx context.Context, account Account, containe
 		return fmt.Errorf("cannot derive DFS endpoint for account %s", account.Name)
 	}
 	dirURL := fmt.Sprintf("%s/%s/%s", dfs, containerName, directoryPath)
-	client, err := directory.NewClient(dirURL, s.cred, nil)
-	if err != nil {
-		return fmt.Errorf("create directory client: %w", err)
-	}
+	label := fmt.Sprintf("delete directory %s in %s/%s", directoryPath, account.Name, containerName)
 	// directory.Client.Delete always recurses (the SDK hardcodes recursive=true internally).
-	if _, err := client.Delete(ctx, nil); err != nil {
-		return fmt.Errorf("delete directory %s in %s/%s: %w", directoryPath, account.Name, containerName, err)
-	}
-	return nil
+	return s.withHNSDirFallback(ctx, account, dirURL, label, func(c *directory.Client) error {
+		_, err := c.Delete(ctx, nil)
+		return err
+	})
 }
 
 // RenameDirectory atomically renames (or moves) a directory on an
@@ -262,16 +259,13 @@ func (s *Service) RenameDirectory(ctx context.Context, account Account, containe
 		return fmt.Errorf("cannot derive DFS endpoint for account %s", account.Name)
 	}
 	srcURL := fmt.Sprintf("%s/%s/%s", dfs, containerName, oldPath)
-	client, err := directory.NewClient(srcURL, s.cred, nil)
-	if err != nil {
-		return fmt.Errorf("create directory client: %w", err)
-	}
 	// destinationPath is filesystem-relative (container/path).
 	dest := containerName + "/" + newPath
-	if _, err := client.Rename(ctx, dest, nil); err != nil {
-		return fmt.Errorf("rename directory %s → %s in %s: %w", oldPath, newPath, account.Name, err)
-	}
-	return nil
+	label := fmt.Sprintf("rename directory %s → %s in %s", oldPath, newPath, account.Name)
+	return s.withHNSDirFallback(ctx, account, srcURL, label, func(c *directory.Client) error {
+		_, err := c.Rename(ctx, dest, nil)
+		return err
+	})
 }
 
 // dfsEndpoint returns the Data Lake (DFS) endpoint derived from the
@@ -290,10 +284,6 @@ func dfsEndpoint(account Account) string {
 //
 // directoryPath is relative to the container root — forward-slash
 // separators, no leading slash, no trailing slash.
-//
-// Uses AAD only for this first pass. Shared-key fallback can be added
-// later if callers hit 403s; most operators with enough permission to
-// browse a container can also create directories.
 func (s *Service) CreateDirectory(ctx context.Context, account Account, containerName, directoryPath string) error {
 	if strings.TrimSpace(containerName) == "" {
 		return fmt.Errorf("container name is required")
@@ -311,12 +301,70 @@ func (s *Service) CreateDirectory(ctx context.Context, account Account, containe
 	}
 
 	dirURL := fmt.Sprintf("%s/%s/%s", dfs, containerName, directoryPath)
-	client, err := directory.NewClient(dirURL, s.cred, nil)
+	label := fmt.Sprintf("create directory %s in %s/%s", directoryPath, account.Name, containerName)
+	return s.withHNSDirFallback(ctx, account, dirURL, label, func(c *directory.Client) error {
+		_, err := c.Create(ctx, nil)
+		return err
+	})
+}
+
+// withHNSFileFallback runs op with an AAD-authenticated file.Client;
+// on a data-plane auth error it retries with a shared-key-authenticated
+// client whose credential is fetched via ARM ListKeys. Mirrors the
+// flat-namespace withFallback but for azdatalake file clients, which
+// don't share a common type with azblob service clients.
+func (s *Service) withHNSFileFallback(ctx context.Context, account Account, url, label string, op func(*file.Client) error) error {
+	aad, err := file.NewClient(url, s.cred, nil)
+	if err != nil {
+		return fmt.Errorf("create file client: %w", err)
+	}
+	err = op(aad)
+	if err == nil || !isDataPlaneAuthError(err) {
+		if err != nil {
+			return fmt.Errorf("%s: %w", label, err)
+		}
+		return nil
+	}
+
+	sk, fbErr := s.getDFSSharedKeyCredential(ctx, account)
+	if fbErr != nil {
+		return fmt.Errorf("%s with AAD failed: %v; shared key fallback failed: %w", label, err, fbErr)
+	}
+	shared, skErr := file.NewClientWithSharedKeyCredential(url, sk, nil)
+	if skErr != nil {
+		return fmt.Errorf("create shared-key file client: %w", skErr)
+	}
+	if err := op(shared); err != nil {
+		return fmt.Errorf("%s with shared key fallback: %w", label, err)
+	}
+	return nil
+}
+
+// withHNSDirFallback is the directory.Client analogue of
+// withHNSFileFallback.
+func (s *Service) withHNSDirFallback(ctx context.Context, account Account, url, label string, op func(*directory.Client) error) error {
+	aad, err := directory.NewClient(url, s.cred, nil)
 	if err != nil {
 		return fmt.Errorf("create directory client: %w", err)
 	}
-	if _, err := client.Create(ctx, nil); err != nil {
-		return fmt.Errorf("create directory %s in %s/%s: %w", directoryPath, account.Name, containerName, err)
+	err = op(aad)
+	if err == nil || !isDataPlaneAuthError(err) {
+		if err != nil {
+			return fmt.Errorf("%s: %w", label, err)
+		}
+		return nil
+	}
+
+	sk, fbErr := s.getDFSSharedKeyCredential(ctx, account)
+	if fbErr != nil {
+		return fmt.Errorf("%s with AAD failed: %v; shared key fallback failed: %w", label, err, fbErr)
+	}
+	shared, skErr := directory.NewClientWithSharedKeyCredential(url, sk, nil)
+	if skErr != nil {
+		return fmt.Errorf("create shared-key directory client: %w", skErr)
+	}
+	if err := op(shared); err != nil {
+		return fmt.Errorf("%s with shared key fallback: %w", label, err)
 	}
 	return nil
 }
