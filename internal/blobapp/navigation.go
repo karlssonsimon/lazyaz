@@ -73,16 +73,16 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case previewPane:
 		m.transitionTo(blobsPane, false)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	case blobsPane:
 		if m.hasContainer && !m.blobLoadAll && m.prefix != "" {
 			return m.prefixUp()
 		}
 		m.transitionTo(containersPane, false)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	case containersPane:
 		m.transitionTo(accountsPane, false)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	case accountsPane:
 		return m, nil
 	default:
@@ -262,6 +262,10 @@ func (m Model) selectAccount(account blob.Account) (Model, tea.Cmd) {
 	m.resetBlobLoadState()
 	m.resetPreviewState()
 	m.transitionTo(containersPane, false)
+	// Move the accounts list cursor onto the newly-selected account so
+	// that when the user navigates back (h) or jumps here via ctrl+o,
+	// the left Miller column highlights the right row.
+	ui.SelectByKey(&m.accountsList, account.Name, accountItemKey)
 
 	containersScope := cache.Key(m.CurrentSub.ID, account.Name)
 	if cached, ok := m.cache.containers.Get(containersScope); ok {
@@ -308,6 +312,10 @@ func (m Model) selectContainer(container blob.ContainerInfo) (Model, tea.Cmd) {
 	m.resetBlobLoadState()
 	m.resetPreviewState()
 	m.transitionTo(blobsPane, false)
+	// Move the containers list cursor to the newly-selected container
+	// so the left Miller column (shown while focus is on blobsPane)
+	// highlights the row we're actually viewing.
+	ui.SelectByKey(&m.containersList, container.Name, containerItemKey)
 
 	blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, container.Name, "", false)
 	if cached, ok := m.cache.blobs.Get(blobsScope); ok {

@@ -16,25 +16,25 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case messagePreviewPane:
 		m.transitionTo(messagesPane)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	case messagesPane:
 		m.closePreview()
 		cmd := m.abandonLockedIfHeld()
 		m.transitionTo(queueTypePane)
-		return m, cmd
+		return m, appendJumpRecord(m, cmd)
 	case queueTypePane:
 		if m.isTopicSelected() {
 			m.transitionTo(subscriptionsPane)
 		} else {
 			m.transitionTo(entitiesPane)
 		}
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	case subscriptionsPane:
 		m.transitionTo(entitiesPane)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	case entitiesPane:
 		m.transitionTo(namespacesPane)
-		return m, nil
+		return m, appendJumpRecord(m, nil)
 	default:
 		return m, nil
 	}
@@ -190,6 +190,8 @@ func (m Model) selectQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 	m.subscriptions = nil
 	m.buildQueueTypeItems()
 	m.transitionTo(queueTypePane)
+	// Align the entities list cursor so the left column highlights this queue.
+	ui.SelectByKey(&m.entitiesList, entity.Name, entityItemKey)
 
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(nil)
@@ -214,6 +216,8 @@ func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
 	m.peekedMessages = nil
 	m.deadLetter = false
 	m.transitionTo(subscriptionsPane)
+	// Align the entities list cursor so the left column highlights this topic.
+	ui.SelectByKey(&m.entitiesList, entity.Name, entityItemKey)
 
 	cacheKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name, entity.Name)
 	if cached, ok := m.cache.topicSubs.Get(cacheKey); ok {
@@ -261,6 +265,9 @@ func (m Model) selectSubscriptionSub(topicName string, sub servicebus.TopicSubsc
 	m.deadLetter = false
 	m.buildQueueTypeItems()
 	m.transitionTo(queueTypePane)
+	// Align the subscriptions list cursor so the left column highlights
+	// the subscription the user is now viewing.
+	ui.SelectByKey(&m.subscriptionsList, sub.Name, subscriptionItemKey)
 
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(nil)
@@ -330,6 +337,10 @@ func (m Model) selectNamespace(ns servicebus.Namespace) (Model, tea.Cmd) {
 	m.clearAllMarks()
 	m.subscriptions = nil
 	m.transitionTo(entitiesPane)
+	// Align the namespaces list cursor so the left Miller column
+	// highlights the namespace the user is actually viewing (matters
+	// for programmatic drill-ins and ctrl+o restore).
+	ui.SelectByKey(&m.namespacesList, ns.Name, namespaceItemKey)
 
 	entityCacheKey := cache.Key(m.CurrentSub.ID, ns.Name)
 	if cached, ok := m.cache.entities.Get(entityCacheKey); ok {

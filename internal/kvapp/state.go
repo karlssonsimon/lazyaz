@@ -84,6 +84,14 @@ type Model struct {
 	hasSecret     bool
 	currentSecret keyvault.Secret
 
+	// Pending navigation drives eager/advance drill-in from programmatic
+	// openers (today only ctrl+o restore via ApplyNav). See pending_nav.go.
+	pendingNav PendingNav
+
+	// applyingNav suppresses RecordJumpMsg emission while ApplyNav is
+	// driving navigation. See jump.go.
+	applyingNav bool
+
 	actionMenu actionMenuState
 	cache      kvCache
 

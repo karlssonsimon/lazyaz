@@ -162,8 +162,12 @@ func (m *Model) applyNavToTab(idx int, snap jumplist.NavSnapshot) tea.Cmd {
 		cmd := child.ApplyNav(snap)
 		m.tabs[idx].Model = child
 		return cmd
-	case dashapp.Model, kvapp.Model:
-		// Not jump-targets in this round.
+	case kvapp.Model:
+		cmd := child.ApplyNav(snap)
+		m.tabs[idx].Model = child
+		return cmd
+	case dashapp.Model:
+		// Not a jump target (no drill-down).
 	}
 	return nil
 }
@@ -179,6 +183,8 @@ func (m *Model) activeTabSnapshot() jumplist.NavSnapshot {
 	case sbapp.Model:
 		return child.CurrentNav()
 	case blobapp.Model:
+		return child.CurrentNav()
+	case kvapp.Model:
 		return child.CurrentNav()
 	}
 	return nil
@@ -200,6 +206,10 @@ func (m *Model) tabSnapshotForJump(idx int) jumplist.NavSnapshot {
 			return snap
 		}
 	case blobapp.Model:
+		if snap := child.CurrentNav(); snap != nil {
+			return snap
+		}
+	case kvapp.Model:
 		if snap := child.CurrentNav(); snap != nil {
 			return snap
 		}

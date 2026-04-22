@@ -190,6 +190,11 @@ func (m Model) handleVaultsLoaded(msg vaultsLoadedMsg) (Model, tea.Cmd) {
 		status := fmt.Sprintf("Loaded %d vaults in %s", len(m.vaults), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		if m.pendingNav.hasTarget() {
+			updated, cmd := m.advancePendingNav()
+			m = updated
+			return m, cmd
+		}
 		return m, nil
 	}
 
@@ -215,6 +220,11 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 		status := fmt.Sprintf("Loaded %d secrets from %s in %s", len(m.secrets), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		if m.pendingNav.hasTarget() {
+			updated, cmd := m.advancePendingNav()
+			m = updated
+			return m, cmd
+		}
 		return m, nil
 	}
 

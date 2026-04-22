@@ -11,17 +11,22 @@ import (
 
 // sbNavSnapshot captures the user's position in the Service Bus
 // explorer: namespace + (optionally) entity + (for topics) subscription
-// + DLQ pane flag. ApplyNav restores this via the existing PendingNav
-// fast-forward path so cache-warmed jumps are instant.
+// + DLQ pane flag + which Miller pane is focused. ApplyNav restores this
+// via the existing PendingNav fast-forward path so cache-warmed jumps
+// are instant.
 type sbNavSnapshot struct {
-	namespace  servicebus.Namespace
-	entityName string
-	subName    string
-	deadLetter bool
+	namespace   servicebus.Namespace
+	entityName  string
+	subName     string
+	deadLetter  bool
+	focusedPane int
 }
 
 func (s sbNavSnapshot) Description() string {
-	parts := []string{"sb", s.namespace.Name}
+	parts := []string{"sb"}
+	if s.namespace.Name != "" {
+		parts = append(parts, s.namespace.Name)
+	}
 	if s.entityName != "" {
 		parts = append(parts, s.entityName)
 	}
@@ -31,22 +36,45 @@ func (s sbNavSnapshot) Description() string {
 	if s.deadLetter {
 		parts = append(parts, "DLQ")
 	}
+	parts = append(parts, paneLabel(s.focusedPane))
 	return strings.Join(parts, " / ")
 }
 
-// CurrentNav captures the active position. Returns nil before a
-// namespace is selected — the explorer at the namespace-list view
-// isn't a meaningful jump target.
+func paneLabel(pane int) string {
+	switch pane {
+	case namespacesPane:
+		return "namespaces"
+	case entitiesPane:
+		return "entities"
+	case subscriptionsPane:
+		return "subscriptions"
+	case queueTypePane:
+		return "queuetype"
+	case messagesPane:
+		return "messages"
+	case messagePreviewPane:
+		return "preview"
+	default:
+		return "?"
+	}
+}
+
+// CurrentNav captures the active position. Returns nil only when no
+// subscription is set — the namespaces-list view (focus=namespacesPane,
+// hasNamespace=false) is a meaningful jump target so ctrl+o can walk
+// back to it after the user drills into a namespace.
 func (m Model) CurrentNav() jumplist.NavSnapshot {
-	if !m.HasSubscription || !m.hasNamespace {
+	if !m.HasSubscription {
 		return nil
 	}
-	return sbNavSnapshot{
-		namespace:  m.currentNS,
-		entityName: m.currentEntity.Name,
-		subName:    m.currentSubName,
-		deadLetter: m.deadLetter,
+	snap := sbNavSnapshot{focusedPane: m.focus}
+	if m.hasNamespace {
+		snap.namespace = m.currentNS
+		snap.entityName = m.currentEntity.Name
+		snap.subName = m.currentSubName
+		snap.deadLetter = m.deadLetter
 	}
+	return snap
 }
 
 // ApplyNav restores a captured position. Type-asserts the opaque
@@ -59,6 +87,10 @@ func (m Model) CurrentNav() jumplist.NavSnapshot {
 // the destination as a fresh jump entry (that would truncate forward
 // history and trap the user in an oscillation between two adjacent
 // entries).
+//
+// A snapshot with empty namespace.Name represents the pre-drill state
+// (user was on the namespaces list itself); restoring is just a focus
+// change.
 func (m *Model) ApplyNav(snap jumplist.NavSnapshot) tea.Cmd {
 	s, ok := snap.(sbNavSnapshot)
 	if !ok {
@@ -66,12 +98,23 @@ func (m *Model) ApplyNav(snap jumplist.NavSnapshot) tea.Cmd {
 	}
 	m.applyingNav = true
 	defer func() { m.applyingNav = false }()
-	return m.SetPendingNav(PendingNav{
+	if s.namespace.Name == "" {
+		if s.focusedPane >= namespacesPane && s.focusedPane <= messagePreviewPane {
+			m.transitionTo(s.focusedPane)
+		}
+		return nil
+	}
+	cmd := m.SetPendingNav(PendingNav{
 		Namespace:  s.namespace,
 		EntityName: s.entityName,
 		SubName:    s.subName,
 		DeadLetter: s.deadLetter,
 	})
+	// Restore pane focus after the drill-in lands.
+	if s.focusedPane >= namespacesPane && s.focusedPane <= messagePreviewPane {
+		m.transitionTo(s.focusedPane)
+	}
+	return cmd
 }
 
 // NavSnapshotFromPending builds a snapshot directly from a PendingNav
@@ -83,11 +126,21 @@ func NavSnapshotFromPending(p PendingNav) jumplist.NavSnapshot {
 	if p.Namespace.Name == "" {
 		return nil
 	}
+	// Pick the deepest pane the nav implies so the snapshot records
+	// the same focus the drill-in will land on.
+	pane := entitiesPane
+	switch {
+	case p.SubName != "" && p.DeadLetter, p.SubName != "" && !p.DeadLetter:
+		pane = messagesPane
+	case p.EntityName != "":
+		pane = entitiesPane
+	}
 	return sbNavSnapshot{
-		namespace:  p.Namespace,
-		entityName: p.EntityName,
-		subName:    p.SubName,
-		deadLetter: p.DeadLetter,
+		namespace:   p.Namespace,
+		entityName:  p.EntityName,
+		subName:     p.SubName,
+		deadLetter:  p.DeadLetter,
+		focusedPane: pane,
 	}
 }
 
@@ -99,6 +152,13 @@ func NavSnapshotFromPending(p PendingNav) jumplist.NavSnapshot {
 // jump-list walks don't re-record the entries they're traversing.
 func recordJumpForCurrent(m Model) tea.Cmd {
 	if m.applyingNav {
+		return nil
+	}
+	// Suppress records while a PendingNav is in flight — the parent
+	// records the destination directly in openSBTabWithNav, so the
+	// intermediate hops emitted by selectNamespace / selectEntity would
+	// just pollute ctrl+o history with phantom stops.
+	if m.pendingNav.hasTarget() {
 		return nil
 	}
 	snap := m.CurrentNav()

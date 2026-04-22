@@ -3,6 +3,7 @@ package kvapp
 import (
 	"testing"
 
+	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -83,4 +84,49 @@ func isQuitCmd(cmd tea.Cmd) bool {
 	}
 	_, ok := cmd().(tea.QuitMsg)
 	return ok
+}
+
+// TestCurrentNavCapturesRootPane ensures the vaults-list view is a
+// recordable jump target (ctrl+o must be able to walk back here after
+// the user drills into a vault).
+func TestCurrentNavCapturesRootPane(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SetSubscription(azure.Subscription{ID: "sub-1", Name: "Test"})
+	m.focus = vaultsPane
+
+	snap := m.CurrentNav()
+	if snap == nil {
+		t.Fatal("expected non-nil snapshot on vaults pane with subscription set")
+	}
+	kv, ok := snap.(kvNavSnapshot)
+	if !ok {
+		t.Fatalf("expected kvNavSnapshot, got %T", snap)
+	}
+	if kv.vaultName != "" {
+		t.Errorf("expected empty vaultName, got %q", kv.vaultName)
+	}
+	if kv.focusedPane != vaultsPane {
+		t.Errorf("expected focusedPane=vaultsPane, got %d", kv.focusedPane)
+	}
+}
+
+// TestApplyNavEmptyVaultRestoresFocus ensures the root-pane snapshot
+// restores focus without dispatching a PendingNav drill-in.
+func TestApplyNavEmptyVaultRestoresFocus(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SetSubscription(azure.Subscription{ID: "sub-1", Name: "Test"})
+	m.focus = secretsPane
+	m.hasVault = true
+
+	cmd := m.ApplyNav(kvNavSnapshot{focusedPane: vaultsPane})
+
+	if cmd != nil {
+		t.Errorf("expected no cmd for root-pane restore, got %v", cmd)
+	}
+	if m.focus != vaultsPane {
+		t.Errorf("expected focus=vaultsPane after restore, got %d", m.focus)
+	}
+	if m.pendingNav.hasTarget() {
+		t.Error("expected no pending nav target after root-pane restore")
+	}
 }

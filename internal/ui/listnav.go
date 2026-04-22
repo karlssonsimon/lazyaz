@@ -130,6 +130,23 @@ func RestoreListState(l *list.Model, state ListState, keyOf func(list.Item) stri
 	l.Select(0)
 }
 
+// SelectByKey moves the list cursor to the item whose keyOf matches
+// the given key. Returns true if a match was found. Used by programmatic
+// navigation (jump list restore, dashboard drill-ins) to align the
+// parent Miller column's cursor with the newly-selected child.
+func SelectByKey(l *list.Model, key string, keyOf func(list.Item) string) bool {
+	if key == "" {
+		return false
+	}
+	for i, it := range l.VisibleItems() {
+		if keyOf(it) == key {
+			l.Select(i)
+			return true
+		}
+	}
+	return false
+}
+
 // SetItemsPreserveKey replaces list items while keeping the cursor
 // pointed at the same item by identity (via keyOf), not by numeric index.
 // If the previously selected item is no longer present, the cursor clamps
