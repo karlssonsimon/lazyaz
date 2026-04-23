@@ -110,6 +110,52 @@ func TestCurrentNavCapturesRootPane(t *testing.T) {
 	}
 }
 
+// TestValidateSecretName covers Azure's naming rules so client-side
+// feedback matches what SetSecret would return.
+func TestValidateSecretName(t *testing.T) {
+	tests := []struct {
+		in      string
+		wantErr bool
+	}{
+		{"", true},
+		{"ok-name", false},
+		{"OKName123", false},
+		{"has_underscore", true},
+		{"has space", true},
+		{"has.dot", true},
+	}
+	for _, tc := range tests {
+		got := validateSecretName(tc.in)
+		if tc.wantErr && got == "" {
+			t.Errorf("validateSecretName(%q) = empty, want error", tc.in)
+		}
+		if !tc.wantErr && got != "" {
+			t.Errorf("validateSecretName(%q) = %q, want empty", tc.in, got)
+		}
+	}
+}
+
+// TestOpenCreateSecretFormGatesOnVault ensures opening the form
+// without a selected vault is a no-op — executeAction relies on this.
+func TestOpenCreateSecretFormGatesOnVault(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.hasVault = false
+	m.openCreateSecretForm()
+	if m.createSecret.Active {
+		t.Fatal("expected form to stay inactive with no vault selected")
+	}
+
+	m.hasVault = true
+	m.currentVault.Name = "vault-a"
+	m.openCreateSecretForm()
+	if !m.createSecret.Active {
+		t.Fatal("expected form to open with vault selected")
+	}
+	if len(m.createSecret.Fields) != 2 {
+		t.Fatalf("expected 2 fields, got %d", len(m.createSecret.Fields))
+	}
+}
+
 // TestApplyNavEmptyVaultRestoresFocus ensures the root-pane snapshot
 // restores focus without dispatching a PendingNav drill-in.
 func TestApplyNavEmptyVaultRestoresFocus(t *testing.T) {

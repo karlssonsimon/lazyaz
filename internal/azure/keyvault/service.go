@@ -252,6 +252,22 @@ func (s *Service) GetSecretValue(ctx context.Context, vault Vault, secretName st
 	return *resp.Value, nil
 }
 
+// SetSecret creates a new secret (or a new version of an existing one)
+// with the given value. Azure Key Vault treats create-vs-update as the
+// same operation — SetSecret returns a 200 in both cases, producing a
+// new version row either way. The caller is responsible for any
+// confirm-before-overwrite UX.
+func (s *Service) SetSecret(ctx context.Context, vault Vault, name, value string) error {
+	client, err := s.getClient(vault.VaultURI)
+	if err != nil {
+		return err
+	}
+	if _, err := client.SetSecret(ctx, name, azsecrets.SetSecretParameters{Value: &value}, nil); err != nil {
+		return fmt.Errorf("set secret %s in %s: %w", name, vault.Name, err)
+	}
+	return nil
+}
+
 func parseResourceGroup(id *string) string {
 	if id == nil {
 		return ""

@@ -32,6 +32,7 @@ const (
 	ModeOverlay                     // Sub/Theme/Help overlay open
 	ModeListFilter                  // User is typing a list filter
 	ModeVisualLine                  // Visual line selection active
+	ModeForm                        // Multi-field form overlay open (e.g., create secret)
 )
 
 // inputMode returns the current interaction mode by checking state
@@ -39,6 +40,8 @@ const (
 // and how data handlers should behave.
 func (m Model) inputMode() InputMode {
 	switch {
+	case m.createSecret.Active:
+		return ModeForm
 	case m.actionMenu.active:
 		return ModeActionMenu
 	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
@@ -92,8 +95,9 @@ type Model struct {
 	// driving navigation. See jump.go.
 	applyingNav bool
 
-	actionMenu actionMenuState
-	cache      kvCache
+	actionMenu   actionMenuState
+	createSecret ui.FormOverlayState
+	cache        kvCache
 
 	loadingSpinnerID int
 

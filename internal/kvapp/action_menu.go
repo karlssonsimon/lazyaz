@@ -32,6 +32,7 @@ const (
 	actionSubscriptionPicker
 	actionThemePicker
 	actionHelp
+	actionCreateSecret
 )
 
 type action struct {
@@ -147,6 +148,8 @@ func (m Model) buildActions() []action {
 			actions = append(actions, action{actionYankSecretName, "Yank secret name", ""})
 			actions = append(actions, action{actionYankSecretValue, fmt.Sprintf("Yank secret value (%s)", item.secret.Name), km.YankSecret.Short()})
 		}
+
+		actions = append(actions, action{actionCreateSecret, "Create secret...", ""})
 
 		// Selection.
 		actions = append(actions,
@@ -271,6 +274,10 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 				m.HelpOverlay.Open("Key Vault Explorer Help", m.HelpSections())
 			}
 		}
+		return m, nil
+
+	case actionCreateSecret:
+		m.openCreateSecretForm()
 		return m, nil
 	}
 

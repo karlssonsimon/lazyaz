@@ -31,6 +31,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.actionMenu.query += text
 			m.actionMenu.refilter()
 			return m, nil
+		case m.createSecret.Active:
+			if f := m.createSecret.FocusedField(); f != nil {
+				f.Value += text
+				f.Error = ""
+			}
+			return m, nil
 		default:
 			var cmd tea.Cmd
 			switch m.focus {
@@ -105,6 +111,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Yanked %d secrets as JSON to clipboard", msg.count))
 		}
 		return m, nil
+
+	case secretCreatedMsg:
+		return m.handleSecretCreated(msg)
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -282,6 +291,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
 	switch m.inputMode() {
+	case ModeForm:
+		return m.handleFormKey(key)
+
 	case ModeActionMenu:
 		if selected, act := m.actionMenu.handleKey(key, m.Keymap); selected {
 			return m.executeAction(act)
