@@ -616,14 +616,33 @@ func (s *Service) resendAllFromDLQ(ctx context.Context, client *azservicebus.Cli
 
 // ResendAllFromSource receives all messages from a source (active or DLQ) and
 // resends them to a target entity using a single receiver and sender.
+//
+// The send side needs its own credential. For same-namespace moves
+// (the dominant DLQ→main-queue case) we reuse whichever client the
+// receiver successfully authenticated with — the conn-string fallback
+// uses RootManageSharedAccessKey, which carries Send rights, so a source
+// that authenticated via fallback can also send. AAD-only target clients
+// silently fail with "Send claim required" when the caller has data-plane
+// Receiver but not Sender role on the target.
+//
+// Cross-namespace moves still build the target client via AAD only; if
+// the target rejects on auth, the operation fails. A second-level
+// fallback for cross-NS would need a per-target conn-string lookup —
+// added when there's a real use case for it.
 func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityName, subName string, deadLetter bool, targetNS Namespace, targetName string, expectedCount int) (int, error) {
-	targetClient, err := s.getClient(targetNS.FQDN)
-	if err != nil {
-		return 0, err
+	sameNS := strings.EqualFold(ns.FQDN, targetNS.FQDN)
+
+	var crossNSTarget *azservicebus.Client
+	if !sameNS {
+		c, err := s.getClient(targetNS.FQDN)
+		if err != nil {
+			return 0, err
+		}
+		crossNSTarget = c
 	}
 
 	var total int
-	err = s.withFallback(ctx, ns, "resend from source", func(c *azservicebus.Client) error {
+	err := s.withFallback(ctx, ns, "resend from source", func(c *azservicebus.Client) error {
 		receiver, err := newReceiver(c, entityName, subName, deadLetter)
 		if err != nil {
 			return fmt.Errorf("create receiver: %w", err)
@@ -633,6 +652,10 @@ func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityN
 		batchSize := 50
 		if expectedCount > 0 && expectedCount < batchSize {
 			batchSize = expectedCount
+		}
+		targetClient := crossNSTarget
+		if sameNS {
+			targetClient = c
 		}
 		n, err := s.resendAll(ctx, targetClient, receiver, targetName, batchSize, expectedCount)
 		total = n
