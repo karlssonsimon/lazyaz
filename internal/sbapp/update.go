@@ -486,14 +486,18 @@ func (m Model) handleDLQRequeueAll(msg dlqRequeueAllMsg) (Model, tea.Cmd) {
 
 func (m Model) handleMoveAllDone(msg moveAllDoneMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
+	kind := "active"
+	if msg.deadLetter {
+		kind = "DLQ"
+	}
 	if msg.err != nil {
 		partial := ""
 		if msg.moved > 0 {
 			partial = fmt.Sprintf(" (%d moved before error)", msg.moved)
 		}
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to move DLQ messages%s: %s", partial, msg.err.Error()))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to move %s messages%s: %s", kind, partial, msg.err.Error()))
 	} else {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Moved all %d DLQ messages", msg.moved))
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Moved all %d %s messages", msg.moved, kind))
 	}
 	if m.hasNamespace {
 		return m, refreshEntitiesCmd(m.service, m.currentNS)

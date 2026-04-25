@@ -217,8 +217,9 @@ type entitiesRefreshedMsg struct {
 }
 
 type moveAllDoneMsg struct {
-	moved int
-	err   error
+	moved      int
+	deadLetter bool // echoes the cmd input so the handler labels the result correctly
+	err        error
 }
 
 type moveMarkedDoneMsg struct {

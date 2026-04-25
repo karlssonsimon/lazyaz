@@ -167,7 +167,7 @@ func moveAllCmd(svc *servicebus.Service, sourceNS servicebus.Namespace, entityNa
 		defer cancel()
 
 		total, err := svc.ResendAllFromSource(ctx, sourceNS, entityName, subName, deadLetter, targetNS, targetEntity, count)
-		return moveAllDoneMsg{moved: total, err: err}
+		return moveAllDoneMsg{moved: total, deadLetter: deadLetter, err: err}
 	}
 }
 
