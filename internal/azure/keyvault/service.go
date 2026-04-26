@@ -57,6 +57,12 @@ func NewService(cred azcore.TokenCredential) *Service {
 	}
 }
 
+func (s *Service) Credential() azcore.TokenCredential {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cred
+}
+
 // SetCredential swaps the credential and clears all cached clients so
 // they are re-created with the new identity on next use.
 func (s *Service) SetCredential(cred azcore.TokenCredential) {

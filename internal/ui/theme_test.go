@@ -187,7 +187,6 @@ palette:
 	}
 }
 
-
 type testKey string
 
 func (k testKey) Matches(key string) bool { return string(k) == key }

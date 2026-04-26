@@ -44,7 +44,7 @@ type Model struct {
 	brokers          sharedBrokers
 	sharedActivities *activity.Registry
 	cfg              ui.Config
-	keymap keymap.Keymap
+	keymap           keymap.Keymap
 
 	// db is the persistent cache handle, also used for app-level
 	// preferences (last selected subscription, etc.). May be nil if
@@ -78,8 +78,8 @@ type Model struct {
 	themeOverlay         ui.ThemeOverlayState
 	helpOverlay          ui.HelpOverlayState
 	notificationsOverlay ui.NotificationsOverlayState
-	activityOverlay ui.ActivityOverlayState
-	activityTick    int // render-frame counter for fetch-spinner rotation
+	activityOverlay      ui.ActivityOverlayState
+	activityTick         int // render-frame counter for fetch-spinner rotation
 
 	cursor       cursor.Model
 	tabPicker    tabPickerState
@@ -130,7 +130,10 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 	// missing or empty → no preferred sub). Used for any tab whose
 	// config doesn't pin a specific subscription, including the
 	// fallback default tab when no tabs are configured at all.
-	lastSub, _ := db.GetPreference(lastSubscriptionPrefKey)
+	lastSub := ""
+	if db != nil {
+		lastSub, _ = db.GetPreference(lastSubscriptionPrefKey)
+	}
 	m.lastPersistedSubID = lastSub
 
 	// Resolve configured startup tabs. Invalid kinds are skipped and
@@ -164,6 +167,27 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 	return m
 }
 
+func (m *Model) newBlobService() *blob.Service {
+	if m.blobSvc == nil {
+		return blob.NewService(nil)
+	}
+	return blob.NewService(m.blobSvc.Credential())
+}
+
+func (m *Model) newServiceBusService() *servicebus.Service {
+	if m.sbSvc == nil {
+		return servicebus.NewService(nil)
+	}
+	return servicebus.NewService(m.sbSvc.Credential())
+}
+
+func (m *Model) newKeyVaultService() *keyvault.Service {
+	if m.kvSvc == nil {
+		return keyvault.NewService(nil)
+	}
+	return keyvault.NewService(m.kvSvc.Credential())
+}
+
 // setTabStatus pokes a status string into the given tab's appshell so
 // the user sees parent-level warnings (e.g. unknown tab kinds) on the
 // child's status bar — the parent has no status bar of its own.
@@ -171,19 +195,8 @@ func (m *Model) setTabStatus(idx int, status string) {
 	if idx < 0 || idx >= len(m.tabs) {
 		return
 	}
-	switch child := m.tabs[idx].Model.(type) {
-	case blobapp.Model:
-		child.Notify(appshell.LevelWarn, status)
-		m.tabs[idx].Model = child
-	case sbapp.Model:
-		child.Notify(appshell.LevelWarn, status)
-		m.tabs[idx].Model = child
-	case kvapp.Model:
-		child.Notify(appshell.LevelWarn, status)
-		m.tabs[idx].Model = child
-	case dashapp.Model:
-		child.Notify(appshell.LevelWarn, status)
-		m.tabs[idx].Model = child
+	if child, ok := m.tabs[idx].Model.(notifyingTab); ok {
+		m.tabs[idx].Model = child.WithNotification(appshell.LevelWarn, status)
 	}
 }
 
@@ -227,7 +240,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 	var child tea.Model
 	switch kind {
 	case TabBlob:
-		bm := blobapp.NewModelWithCache(m.blobSvc, m.cfg, blobapp.BlobStores{
+		bm := blobapp.NewModelWithCache(m.newBlobService(), m.cfg, blobapp.BlobStores{
 			Subscriptions: m.brokers.subscriptions,
 			Accounts:      m.brokers.blobAccounts,
 			Containers:    m.brokers.blobContainers,
@@ -240,7 +253,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		applyInitialSub(&bm)
 		child = bm
 	case TabServiceBus:
-		sm := sbapp.NewModelWithCache(m.sbSvc, m.cfg, sbapp.SBStores{
+		sm := sbapp.NewModelWithCache(m.newServiceBusService(), m.cfg, sbapp.SBStores{
 			Subscriptions: m.brokers.subscriptions,
 			Namespaces:    m.brokers.sbNamespaces,
 			Entities:      m.brokers.sbEntities,
@@ -253,7 +266,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		applyInitialSub(&sm)
 		child = sm
 	case TabKeyVault:
-		kvm := kvapp.NewModelWithCache(m.kvSvc, m.cfg, kvapp.KVStores{
+		kvm := kvapp.NewModelWithCache(m.newKeyVaultService(), m.cfg, kvapp.KVStores{
 			Subscriptions: m.brokers.subscriptions,
 			Vaults:        m.brokers.kvVaults,
 			Secrets:       m.brokers.kvSecrets,
@@ -265,7 +278,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		applyInitialSub(&kvm)
 		child = kvm
 	case TabDashboard:
-		dm := dashapp.NewModelWithCache(m.sbSvc, m.cfg, dashapp.DashStores{
+		dm := dashapp.NewModelWithCache(m.newServiceBusService(), m.cfg, dashapp.DashStores{
 			Subscriptions: m.brokers.subscriptions,
 			Namespaces:    m.brokers.sbNamespaces,
 			Entities:      m.brokers.sbEntities,
@@ -378,14 +391,7 @@ func (m *Model) activeSubscription() (azure.Subscription, bool) {
 	if len(m.tabs) == 0 {
 		return azure.Subscription{}, false
 	}
-	switch child := m.tabs[m.activeIdx].Model.(type) {
-	case blobapp.Model:
-		return child.CurrentSubscription()
-	case sbapp.Model:
-		return child.CurrentSubscription()
-	case kvapp.Model:
-		return child.CurrentSubscription()
-	case dashapp.Model:
+	if child, ok := m.tabs[m.activeIdx].Model.(subscriptionTab); ok {
 		return child.CurrentSubscription()
 	}
 	return azure.Subscription{}, false
@@ -399,14 +405,7 @@ func (m *Model) activeChildTextInput() bool {
 	if len(m.tabs) == 0 {
 		return false
 	}
-	switch child := m.tabs[m.activeIdx].Model.(type) {
-	case blobapp.Model:
-		return child.IsTextInputActive()
-	case sbapp.Model:
-		return child.IsTextInputActive()
-	case kvapp.Model:
-		return child.IsTextInputActive()
-	case dashapp.Model:
+	if child, ok := m.tabs[m.activeIdx].Model.(textInputTab); ok {
 		return child.IsTextInputActive()
 	}
 	return false
@@ -454,19 +453,8 @@ func (m *Model) applySchemeToAll(scheme ui.Scheme) {
 	// instead of the one that was active at program start.
 	m.cfg.ThemeName = scheme.Name
 	for i := range m.tabs {
-		switch child := m.tabs[i].Model.(type) {
-		case blobapp.Model:
-			child.ApplyScheme(scheme)
-			m.tabs[i].Model = child
-		case sbapp.Model:
-			child.ApplyScheme(scheme)
-			m.tabs[i].Model = child
-		case kvapp.Model:
-			child.ApplyScheme(scheme)
-			m.tabs[i].Model = child
-		case dashapp.Model:
-			child.ApplyScheme(scheme)
-			m.tabs[i].Model = child
+		if child, ok := m.tabs[i].Model.(themedTab); ok {
+			m.tabs[i].Model = child.WithScheme(scheme)
 		}
 	}
 }
@@ -843,7 +831,7 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the upload can resume. Forward to the active tab so its
 		// handleKey can dispatch to resolveConflict.
 		if len(m.tabs) > 0 {
-			if bm, ok := m.tabs[m.activeIdx].Model.(blobapp.Model); ok && bm.HasPendingUploadConflict() {
+			if child, ok := m.tabs[m.activeIdx].Model.(uploadConflictTab); ok && child.HasPendingUploadConflict() {
 				return m, m.forwardToActive(msg)
 			}
 		}
@@ -1082,4 +1070,3 @@ func (m Model) handleCommandPalette(key string) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
-

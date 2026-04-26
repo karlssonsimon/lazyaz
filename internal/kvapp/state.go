@@ -3,6 +3,7 @@ package kvapp
 import (
 	"fmt"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
@@ -42,7 +43,7 @@ func (m Model) inputMode() InputMode {
 	switch {
 	case m.createSecret.Active:
 		return ModeForm
-	case m.actionMenu.active:
+	case m.actionMenu.Active:
 		return ModeActionMenu
 	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
 		return ModeOverlay
@@ -66,10 +67,10 @@ type Model struct {
 
 	focus int
 
-	vaults        []keyvault.Vault
-	secrets       []keyvault.Secret
-	versions      []keyvault.SecretVersion
-	markedSecrets map[string]keyvault.Secret
+	vaults         []keyvault.Vault
+	secrets        []keyvault.Secret
+	versions       []keyvault.SecretVersion
+	markedSecrets  map[string]keyvault.Secret
 	visualLineMode bool
 	visualAnchor   string
 
@@ -148,6 +149,9 @@ func NewModel(svc *keyvault.Service, cfg ui.Config, db *cache.DB) Model {
 }
 
 func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, db *cache.DB) Model {
+	if svc == nil {
+		svc = keyvault.NewService(nil)
+	}
 	delegate := list.NewDefaultDelegate()
 
 	vaults := list.New([]list.Item{}, delegate, 24, 10)
@@ -210,6 +214,22 @@ func NewModelWithCache(svc *keyvault.Service, cfg ui.Config, stores KVStores, km
 	return m
 }
 
+func (m *Model) SetCredential(cred azcore.TokenCredential) {
+	if m.service != nil {
+		m.service.SetCredential(cred)
+	}
+}
+
+func (m Model) WithCredential(cred azcore.TokenCredential) tea.Model {
+	m.SetCredential(cred)
+	return m
+}
+
+func (m Model) WithNotification(level appshell.NotificationLevel, message string) tea.Model {
+	m.Notify(level, message)
+	return m
+}
+
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.SetScheme(scheme)
 	m.Styles.ApplyToLists([]*list.Model{
@@ -224,6 +244,11 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 // ApplyScheme applies the given scheme to all lists and spinner.
 func (m *Model) ApplyScheme(scheme ui.Scheme) {
 	m.applyScheme(scheme)
+}
+
+func (m Model) WithScheme(scheme ui.Scheme) tea.Model {
+	m.ApplyScheme(scheme)
+	return m
 }
 
 // HelpSections returns the help sections for the key vault explorer.
@@ -273,7 +298,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 // cached vaults instantly while the network call runs in the background.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
-	if sub.TenantID != "" {
+	if m.service != nil && sub.TenantID != "" {
 		if cred, err := azure.NewCredentialForTenant(sub.TenantID); err == nil {
 			m.service.SetCredential(cred)
 		}
@@ -283,6 +308,24 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 		m.vaultsList.Title = fmt.Sprintf("Vaults (%d)", len(cached))
 		ui.SetItemsPreserveKey(&m.vaultsList, vaultsToItems(cached), vaultItemKey)
 	}
+}
+
+func (m Model) WithSubscription(sub azure.Subscription) tea.Model {
+	m.SetSubscription(sub)
+	return m
+}
+
+func (m Model) WithSubscriptions(subs []azure.Subscription) tea.Model {
+	m.Subscriptions = subs
+	return m
+}
+
+func (m Model) WithoutSubscription(subs []azure.Subscription) tea.Model {
+	m.HasSubscription = false
+	m.CurrentSub = azure.Subscription{}
+	m.Subscriptions = subs
+	m.SubOverlay.Open()
+	return m
 }
 
 func (m Model) Init() tea.Cmd {

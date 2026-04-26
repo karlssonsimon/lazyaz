@@ -14,7 +14,7 @@ import (
 // key share a single in-flight fetch.
 type blobCache struct {
 	subscriptions *cache.Broker[azure.Subscription]
-	accounts      *cache.Broker[blob.Account]      // key: subscriptionID
+	accounts      *cache.Broker[blob.Account]       // key: subscriptionID
 	containers    *cache.Broker[blob.ContainerInfo] // key: subscriptionID, accountName
 	blobs         *cache.Broker[blob.BlobEntry]     // key: subscriptionID, accountName, container, prefix, loadAll
 }

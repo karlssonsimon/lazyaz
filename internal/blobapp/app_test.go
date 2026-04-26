@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -56,6 +57,20 @@ func TestTrimPrefixForDisplay(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSetSubscriptionAllowsNilServiceWithTenant(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	if m.service == nil {
+		t.Fatalf("NewModel(nil) left service nil")
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("SetSubscription panicked with nil service: %v", r)
+		}
+	}()
+	m.SetSubscription(azure.Subscription{ID: "sub", TenantID: "tenant"})
 }
 
 func TestBlobSearchPrefix(t *testing.T) {

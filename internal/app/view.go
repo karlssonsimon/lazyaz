@@ -5,11 +5,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
-	"github.com/karlssonsimon/lazyaz/internal/blobapp"
-	"github.com/karlssonsimon/lazyaz/internal/dashapp"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
-	"github.com/karlssonsimon/lazyaz/internal/kvapp"
-	"github.com/karlssonsimon/lazyaz/internal/sbapp"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -84,8 +80,8 @@ func (m Model) View() tea.View {
 	// every other overlay including the activity overlay — it's a blocking
 	// modal that must always be answerable.
 	if len(m.tabs) > 0 {
-		if bm, ok := m.tabs[m.activeIdx].Model.(blobapp.Model); ok && bm.HasPendingUploadConflict() {
-			view = bm.RenderUploadConflictPrompt(view, m.width, m.height)
+		if child, ok := m.tabs[m.activeIdx].Model.(uploadConflictTab); ok && child.HasPendingUploadConflict() {
+			view = child.RenderUploadConflictPrompt(view, m.width, m.height)
 		}
 	}
 
@@ -134,14 +130,7 @@ func notifierLevelToToast(l appshell.NotificationLevel) ui.ToastLevel {
 func (m Model) activeHelpSections() []ui.HelpSection {
 	var childSections []ui.HelpSection
 	if len(m.tabs) > 0 {
-		switch child := m.tabs[m.activeIdx].Model.(type) {
-		case blobapp.Model:
-			childSections = child.HelpSections()
-		case sbapp.Model:
-			childSections = child.HelpSections()
-		case kvapp.Model:
-			childSections = child.HelpSections()
-		case dashapp.Model:
+		if child, ok := m.tabs[m.activeIdx].Model.(helpTab); ok {
 			childSections = child.HelpSections()
 		}
 	}
@@ -190,4 +179,3 @@ func activityRowsFromRegistry(r *activity.Registry) []ui.ActivityRow {
 	}
 	return rows
 }
-

@@ -98,6 +98,11 @@ func (m *Model) ApplyNav(snap jumplist.NavSnapshot) tea.Cmd {
 	return cmd
 }
 
+func (m Model) WithAppliedNav(snap jumplist.NavSnapshot) (tea.Model, tea.Cmd) {
+	cmd := m.ApplyNav(snap)
+	return m, cmd
+}
+
 // NavSnapshotFromPending mirrors sbapp's helper — lets the parent
 // record a destination snapshot when opening a Blob tab with a
 // pending navigation, even before the eager fast-forward applies.

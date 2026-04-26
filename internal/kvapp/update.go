@@ -27,9 +27,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.HelpOverlay.Active:
 			m.HelpOverlay.PasteText(text)
 			return m, nil
-		case m.actionMenu.active:
-			m.actionMenu.query += text
-			m.actionMenu.refilter()
+		case m.actionMenu.Active:
+			m.actionMenu.TypeText(text)
 			return m, nil
 		case m.createSecret.Active:
 			if f := m.createSecret.FocusedField(); f != nil {

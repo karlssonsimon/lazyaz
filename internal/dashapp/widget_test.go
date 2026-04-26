@@ -3,8 +3,31 @@ package dashapp
 import (
 	"testing"
 
+	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
+
+func TestSetSubscriptionAllowsNilServiceWithTenant(t *testing.T) {
+	m := NewModelWithCache(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, DashStores{
+		Subscriptions: cache.NewBroker(cache.NewMap[azure.Subscription](), func(s azure.Subscription) string { return s.ID }),
+		Namespaces:    cache.NewBroker(cache.NewMap[servicebus.Namespace](), servicebus.NamespaceKey),
+		Entities:      cache.NewBroker(cache.NewMap[servicebus.Entity](), servicebus.EntityKey),
+		TopicSubs:     cache.NewBroker(cache.NewMap[servicebus.TopicSubscription](), servicebus.TopicSubscriptionKey),
+	}, keymap.Default())
+	if m.service == nil {
+		t.Fatalf("NewModelWithCache(nil) left service nil")
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("SetSubscription panicked with nil service: %v", r)
+		}
+	}()
+	m.SetSubscription(azure.Subscription{ID: "sub", TenantID: "tenant"})
+}
 
 func TestSortNamespaceStatsByName(t *testing.T) {
 	stats := []nsStats{

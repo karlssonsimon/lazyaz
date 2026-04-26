@@ -147,3 +147,35 @@ func TestPaneInnerHeight(t *testing.T) {
 		}
 	}
 }
+
+func TestPaneListBodyHeightSubtractsChrome(t *testing.T) {
+	style := testPaneStyle() // vFrame = 2
+	chrome := PaneListChrome{
+		HeaderHeight: 2,
+		PrefixHeight: 3,
+		FooterHeight: 4,
+		Title:        true,
+		Hints:        true,
+	}
+
+	got := PaneListBodyHeight(style, 30, chrome)
+	want := 30 - 2 - PaneTitleHeight - PaneHintHeight - 2 - 3 - 4
+	if got != want {
+		t.Fatalf("PaneListBodyHeight() = %d, want %d", got, want)
+	}
+}
+
+func TestPaneListBodyHeightHasMinimumOneRow(t *testing.T) {
+	style := testPaneStyle()
+	chrome := PaneListChrome{
+		HeaderHeight: 10,
+		PrefixHeight: 10,
+		FooterHeight: 10,
+		Title:        true,
+		Hints:        true,
+	}
+
+	if got := PaneListBodyHeight(style, 5, chrome); got != 1 {
+		t.Fatalf("PaneListBodyHeight() = %d, want 1", got)
+	}
+}

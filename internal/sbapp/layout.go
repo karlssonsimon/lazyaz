@@ -48,11 +48,7 @@ func (m *Model) resize() {
 	}
 	m.paneHeight = height
 
-	innerH := ui.PaneInnerHeight(pane, height)
-	baseListHeight := innerH - ui.PaneTitleHeight - ui.PaneHintHeight
-	if baseListHeight < 1 {
-		baseListHeight = 1
-	}
+	baseListHeight := ui.PaneListBodyHeight(pane, height, ui.PaneListChrome{Title: true, Hints: true})
 
 	if w := m.paneWidths[namespacesPane]; w > 0 {
 		m.namespacesList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight-m.inspectFooterHeight(namespacesPane))

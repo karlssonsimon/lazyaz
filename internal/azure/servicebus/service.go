@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure"
@@ -17,6 +18,8 @@ import (
 )
 
 const maxBodyPreview = 512
+
+var lockedMessageSessionCounter uint64
 
 type EntityKind int
 
@@ -46,12 +49,13 @@ type TopicSubscription struct {
 }
 
 // Key functions for cache deduplication.
-func NamespaceKey(ns Namespace) string          { return ns.Name }
-func EntityKey(e Entity) string                 { return e.Name }
+func NamespaceKey(ns Namespace) string                { return ns.Name }
+func EntityKey(e Entity) string                       { return e.Name }
 func TopicSubscriptionKey(s TopicSubscription) string { return s.Name }
 
 type PeekedMessage struct {
 	MessageID      string
+	LockID         string
 	SequenceNumber int64
 	EnqueuedAt     time.Time
 	BodyPreview    string
@@ -64,6 +68,7 @@ type Service struct {
 	clients        map[string]*azservicebus.Client
 	connStrClients map[string]*azservicebus.Client
 	metricsClient  *azquery.MetricsClient
+	generation     uint64
 }
 
 func NewService(cred azcore.TokenCredential) *Service {
@@ -74,15 +79,33 @@ func NewService(cred azcore.TokenCredential) *Service {
 	}
 }
 
+func (s *Service) Credential() azcore.TokenCredential {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cred
+}
+
 // SetCredential swaps the credential and clears all cached clients so
 // they are re-created with the new identity on next use.
 func (s *Service) SetCredential(cred azcore.TokenCredential) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	oldClients := s.clients
+	oldConnStrClients := s.connStrClients
 	s.cred = cred
 	s.clients = make(map[string]*azservicebus.Client)
 	s.connStrClients = make(map[string]*azservicebus.Client)
 	s.metricsClient = nil
+	s.generation++
+	s.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, c := range oldClients {
+		_ = c.Close(ctx)
+	}
+	for _, c := range oldConnStrClients {
+		_ = c.Close(ctx)
+	}
 }
 
 func (s *Service) getClient(fqdn string) (*azservicebus.Client, error) {
@@ -108,13 +131,15 @@ func (s *Service) getConnStrClient(ctx context.Context, ns Namespace) (*azservic
 		s.mu.Unlock()
 		return c, nil
 	}
+	cred := s.cred
+	generation := s.generation
 	s.mu.Unlock()
 
 	if strings.TrimSpace(ns.SubscriptionID) == "" || strings.TrimSpace(ns.ResourceGroup) == "" || strings.TrimSpace(ns.Name) == "" {
 		return nil, fmt.Errorf("insufficient namespace metadata for connection string fallback")
 	}
 
-	nsClient, err := armservicebus.NewNamespacesClient(ns.SubscriptionID, s.cred, nil)
+	nsClient, err := armservicebus.NewNamespacesClient(ns.SubscriptionID, cred, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create namespaces client for keys: %w", err)
 	}
@@ -154,9 +179,15 @@ func (s *Service) getConnStrClient(ctx context.Context, ns Namespace) (*azservic
 	}
 
 	s.mu.Lock()
+	if s.generation != generation {
+		s.mu.Unlock()
+		_ = c.Close(ctx)
+		return s.getConnStrClient(ctx, ns)
+	}
 	// Re-check under lock: another goroutine may have raced us.
 	if existing, ok := s.connStrClients[ns.FQDN]; ok {
 		s.mu.Unlock()
+		_ = c.Close(ctx)
 		return existing, nil
 	}
 	s.connStrClients[ns.FQDN] = c
@@ -166,11 +197,11 @@ func (s *Service) getConnStrClient(ctx context.Context, ns Namespace) (*azservic
 }
 
 func (s *Service) ListSubscriptions(ctx context.Context, send func([]azure.Subscription)) error {
-	return azure.ListSubscriptions(ctx, s.cred, send)
+	return azure.ListSubscriptions(ctx, s.Credential(), send)
 }
 
 func (s *Service) ListNamespaces(ctx context.Context, subscriptionID string, send func([]Namespace)) error {
-	client, err := armservicebus.NewNamespacesClient(subscriptionID, s.cred, nil)
+	client, err := armservicebus.NewNamespacesClient(subscriptionID, s.Credential(), nil)
 	if err != nil {
 		return fmt.Errorf("create namespaces client: %w", err)
 	}
@@ -211,7 +242,8 @@ func (s *Service) ListNamespaces(ctx context.Context, subscriptionID string, sen
 }
 
 func (s *Service) ListEntities(ctx context.Context, ns Namespace, send func([]Entity)) error {
-	client, err := armservicebus.NewQueuesClient(ns.SubscriptionID, s.cred, nil)
+	cred := s.Credential()
+	client, err := armservicebus.NewQueuesClient(ns.SubscriptionID, cred, nil)
 	if err != nil {
 		return fmt.Errorf("create queues client: %w", err)
 	}
@@ -243,7 +275,7 @@ func (s *Service) ListEntities(ctx context.Context, ns Namespace, send func([]En
 		}
 	}
 
-	topicsClient, err := armservicebus.NewTopicsClient(ns.SubscriptionID, s.cred, nil)
+	topicsClient, err := armservicebus.NewTopicsClient(ns.SubscriptionID, cred, nil)
 	if err != nil {
 		return fmt.Errorf("create topics client: %w", err)
 	}
@@ -279,7 +311,7 @@ func (s *Service) ListEntities(ctx context.Context, ns Namespace, send func([]En
 }
 
 func (s *Service) ListTopicSubscriptions(ctx context.Context, ns Namespace, topicName string, send func([]TopicSubscription)) error {
-	client, err := armservicebus.NewSubscriptionsClient(ns.SubscriptionID, s.cred, nil)
+	client, err := armservicebus.NewSubscriptionsClient(ns.SubscriptionID, s.Credential(), nil)
 	if err != nil {
 		return fmt.Errorf("create subscriptions client: %w", err)
 	}
@@ -369,37 +401,202 @@ func (s *Service) peekSubscription(ctx context.Context, client *azservicebus.Cli
 }
 
 // ReceivedMessages holds the result of a receive-with-lock operation.
-// The caller owns the Receiver and must Close it when done. While open,
+// The caller owns the receiver and must Close it when done. While open,
 // messages can be completed (removed) or abandoned (lock released).
+type LockedMessage struct {
+	ID     string
+	LockID string
+	raw    *azservicebus.ReceivedMessage
+}
+
 type ReceivedMessages struct {
-	Messages []*azservicebus.ReceivedMessage
-	Receiver *azservicebus.Receiver
+	mu       sync.Mutex
+	messages []LockedMessage
+	receiver *azservicebus.Receiver
 }
 
-// Complete removes a locked message from the queue.
-func (r *ReceivedMessages) Complete(ctx context.Context, msg *azservicebus.ReceivedMessage) error {
-	return r.Receiver.CompleteMessage(ctx, msg, nil)
+func lockReceivedMessages(messages []*azservicebus.ReceivedMessage) []LockedMessage {
+	session := atomic.AddUint64(&lockedMessageSessionCounter, 1)
+	locked := make([]LockedMessage, len(messages))
+	for i, msg := range messages {
+		locked[i] = LockedMessage{ID: msg.MessageID, LockID: fmt.Sprintf("%d:%d", session, i), raw: msg}
+	}
+	return locked
 }
 
-// Abandon releases the lock on a message so it becomes available again.
-func (r *ReceivedMessages) Abandon(ctx context.Context, msg *azservicebus.ReceivedMessage) error {
-	return r.Receiver.AbandonMessage(ctx, msg, nil)
+func (r *ReceivedMessages) CompleteByID(ctx context.Context, id string) error {
+	if r == nil {
+		return fmt.Errorf("complete locked message %q: no locked messages", id)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.hasAvailableMessageLocked(id) {
+		return fmt.Errorf("complete locked message %q: message ID not found", id)
+	}
+	if r.receiver == nil {
+		return fmt.Errorf("complete locked message %q: receiver is nil", id)
+	}
+	return r.completeByIDLocked(ctx, id, func(ctx context.Context, msg *azservicebus.ReceivedMessage) error {
+		return r.receiver.CompleteMessage(ctx, msg, nil)
+	})
+}
+
+func (r *ReceivedMessages) hasAvailableMessageLocked(id string) bool {
+	for _, msg := range r.messages {
+		if msg.matchesOperationID(id) && msg.raw != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *ReceivedMessages) completeByID(ctx context.Context, id string, complete func(context.Context, *azservicebus.ReceivedMessage) error) error {
+	if r == nil {
+		return fmt.Errorf("complete locked message %q: no locked messages", id)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.completeByIDLocked(ctx, id, complete)
+}
+
+func (r *ReceivedMessages) completeByIDLocked(ctx context.Context, id string, complete func(context.Context, *azservicebus.ReceivedMessage) error) error {
+	for i := range r.messages {
+		msg := &r.messages[i]
+		if !msg.matchesOperationID(id) || msg.raw == nil {
+			continue
+		}
+		raw := msg.raw
+		if err := complete(ctx, raw); err != nil {
+			return err
+		}
+		msg.raw = nil
+		return nil
+	}
+	return fmt.Errorf("complete locked message %q: message ID not found", id)
+}
+
+func (m LockedMessage) matchesOperationID(id string) bool {
+	if m.LockID != "" {
+		return m.LockID == id
+	}
+	return m.ID == id
+}
+
+func (m LockedMessage) operationID() string {
+	if m.LockID != "" {
+		return m.LockID
+	}
+	return m.ID
+}
+
+func (m LockedMessage) OperationID() string {
+	return m.operationID()
+}
+
+func (r *ReceivedMessages) MessagesSnapshot() []LockedMessage {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]LockedMessage, len(r.messages))
+	copy(out, r.messages)
+	return out
+}
+
+func (r *ReceivedMessages) RemoveByID(id string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, msg := range r.messages {
+		if !msg.matchesOperationID(id) {
+			continue
+		}
+		copy(r.messages[i:], r.messages[i+1:])
+		r.messages[len(r.messages)-1] = LockedMessage{}
+		r.messages = r.messages[:len(r.messages)-1]
+		return true
+	}
+	return false
+}
+
+func (r *ReceivedMessages) Len() int {
+	if r == nil {
+		return 0
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.messages)
 }
 
 // AbandonAll releases locks on all messages.
 func (r *ReceivedMessages) AbandonAll(ctx context.Context) {
-	for _, msg := range r.Messages {
-		_ = r.Receiver.AbandonMessage(ctx, msg, nil)
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.abandonAllLocked(ctx)
+}
+
+func (r *ReceivedMessages) abandonAllLocked(ctx context.Context) {
+	if r.receiver == nil {
+		return
+	}
+	for i := range r.messages {
+		msg := &r.messages[i]
+		if msg.raw != nil {
+			_ = r.receiver.AbandonMessage(ctx, msg.raw, nil)
+			msg.raw = nil
+		}
 	}
 }
 
 // Close abandons all messages and closes the receiver.
 func (r *ReceivedMessages) Close(ctx context.Context) {
-	if r == nil || r.Receiver == nil {
+	if r == nil {
 		return
 	}
-	r.AbandonAll(ctx)
-	r.Receiver.Close(ctx)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.receiver == nil {
+		return
+	}
+	r.abandonAllLocked(ctx)
+	r.receiver.Close(ctx)
+	r.receiver = nil
+}
+
+func (r *ReceivedMessages) PeekedMessages() []PeekedMessage {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	peeked := make([]PeekedMessage, 0, len(r.messages))
+	for _, locked := range r.messages {
+		if locked.raw == nil {
+			peeked = append(peeked, PeekedMessage{MessageID: locked.ID, LockID: locked.LockID})
+			continue
+		}
+		msg := locked.raw
+		entry := PeekedMessage{
+			MessageID:   locked.ID,
+			LockID:      locked.LockID,
+			FullBody:    string(msg.Body),
+			BodyPreview: truncateBody(msg.Body, maxBodyPreview),
+		}
+		if msg.SequenceNumber != nil {
+			entry.SequenceNumber = *msg.SequenceNumber
+		}
+		if msg.EnqueuedTime != nil {
+			entry.EnqueuedAt = *msg.EnqueuedTime
+		}
+		peeked = append(peeked, entry)
+	}
+	return peeked
 }
 
 // newReceiver creates a receiver for a queue (subName == "") or topic
@@ -432,7 +629,7 @@ func (s *Service) Receive(ctx context.Context, ns Namespace, entityName, subName
 			receiver.Close(ctx)
 			return fmt.Errorf("receive messages: %w", err)
 		}
-		result = &ReceivedMessages{Messages: messages, Receiver: receiver}
+		result = &ReceivedMessages{messages: lockReceivedMessages(messages), receiver: receiver}
 		return nil
 	})
 	if err != nil {
@@ -478,6 +675,46 @@ func (s *Service) SendBatch(ctx context.Context, ns Namespace, queueOrTopicName 
 	return s.withFallback(ctx, ns, "send batch to "+queueOrTopicName, func(c *azservicebus.Client) error {
 		return s.sendBatch(ctx, c, queueOrTopicName, messages)
 	})
+}
+
+func (s *Service) RequeueLockedByID(ctx context.Context, ns Namespace, queueOrTopicName string, locked *ReceivedMessages, ids map[string]struct{}) ([]string, error) {
+	if locked == nil {
+		return nil, fmt.Errorf("requeue locked messages: no locked messages")
+	}
+	locked.mu.Lock()
+	defer locked.mu.Unlock()
+
+	toRequeue := make([]*azservicebus.ReceivedMessage, 0, len(ids))
+	selectedIDs := make([]string, 0, len(ids))
+	for _, msg := range locked.messages {
+		operationID := msg.operationID()
+		if _, ok := ids[operationID]; !ok {
+			continue
+		}
+		if msg.raw == nil {
+			return nil, fmt.Errorf("requeue locked message %q: raw message is nil", operationID)
+		}
+		toRequeue = append(toRequeue, msg.raw)
+		selectedIDs = append(selectedIDs, operationID)
+	}
+	if len(selectedIDs) > 0 && locked.receiver == nil {
+		return nil, fmt.Errorf("complete locked message %q: receiver is nil", selectedIDs[0])
+	}
+
+	if err := s.SendBatch(ctx, ns, queueOrTopicName, toRequeue); err != nil {
+		return nil, err
+	}
+
+	completed := make([]string, 0, len(selectedIDs))
+	for _, id := range selectedIDs {
+		if err := locked.completeByIDLocked(ctx, id, func(ctx context.Context, msg *azservicebus.ReceivedMessage) error {
+			return locked.receiver.CompleteMessage(ctx, msg, nil)
+		}); err != nil {
+			return completed, err
+		}
+		completed = append(completed, id)
+	}
+	return completed, nil
 }
 
 func (s *Service) sendBatch(ctx context.Context, client *azservicebus.Client, name string, messages []*azservicebus.ReceivedMessage) error {

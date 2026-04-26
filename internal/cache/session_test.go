@@ -213,4 +213,3 @@ func TestFetchSession_LargeStreamCompletesQuickly(t *testing.T) {
 	}
 	t.Logf("streamed %d items in %d pages in %s", totalItems, totalItems/pageSize, elapsed)
 }
-

@@ -200,15 +200,24 @@ func (b *Broker[T]) Subscribe(
 		subs:      map[int64]chan Page[T]{subID: ch},
 		startedAt: time.Now(),
 	}
-	b.streams[key] = s
 	registry := b.registry
+	b.streams[key] = s
 	b.mu.Unlock()
 
-	// Register with the activity registry (if configured) so the ops
-	// center can see this fetch.
+	var unreg func()
 	if registry != nil {
 		adapter := NewBrokerActivityAdapter(b, StreamInfo{Key: key, Status: StreamActive, StartedAt: s.startedAt})
-		s.activityUnreg = registry.Register(adapter)
+		unreg = registry.Register(adapter)
+	}
+
+	b.mu.Lock()
+	if b.streams[key] == s {
+		s.activityUnreg = unreg
+		unreg = nil
+	}
+	b.mu.Unlock()
+	if unreg != nil {
+		unreg()
 	}
 
 	go b.worker(ctx, key, seed, fetchFn, s)

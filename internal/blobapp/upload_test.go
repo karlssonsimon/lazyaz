@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/karlssonsimon/lazyaz/internal/activity"
 	tea "charm.land/bubbletea/v2"
+	"github.com/karlssonsimon/lazyaz/internal/activity"
 )
 
 // fakeWalker is a synthetic fs for upload plan tests.

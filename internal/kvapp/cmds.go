@@ -9,8 +9,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 
-	"github.com/atotto/clipboard"
 	tea "charm.land/bubbletea/v2"
+	"github.com/atotto/clipboard"
 )
 
 func fetchSubscriptionsCmd(svc *keyvault.Service, broker *cache.Broker[azure.Subscription], seed []azure.Subscription) tea.Cmd {

@@ -41,6 +41,29 @@ func PaneInnerHeight(paneStyle lipgloss.Style, totalHeight int) int {
 	return inner
 }
 
+type PaneListChrome struct {
+	HeaderHeight int
+	PrefixHeight int
+	FooterHeight int
+	Title        bool
+	Hints        bool
+}
+
+func PaneListBodyHeight(paneStyle lipgloss.Style, totalHeight int, chrome PaneListChrome) int {
+	height := PaneInnerHeight(paneStyle, totalHeight)
+	if chrome.Title {
+		height -= PaneTitleHeight
+	}
+	if chrome.Hints {
+		height -= PaneHintHeight
+	}
+	height -= chrome.HeaderHeight + chrome.PrefixHeight + chrome.FooterHeight
+	if height < 1 {
+		return 1
+	}
+	return height
+}
+
 // fitContent clips and pads content to exactly innerH rows of innerW
 // columns each. We do this **before** handing content to lipgloss so
 // the border is preserved and the resulting block size is deterministic.

@@ -153,4 +153,3 @@ func saveThemeNameToFile(path, name string) {
 	os.MkdirAll(filepath.Dir(path), 0o755)
 	os.WriteFile(path, append(data, '\n'), 0o644)
 }
-

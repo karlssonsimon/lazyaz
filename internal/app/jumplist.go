@@ -1,11 +1,7 @@
 package app
 
 import (
-	"github.com/karlssonsimon/lazyaz/internal/blobapp"
-	"github.com/karlssonsimon/lazyaz/internal/dashapp"
 	"github.com/karlssonsimon/lazyaz/internal/jumplist"
-	"github.com/karlssonsimon/lazyaz/internal/kvapp"
-	"github.com/karlssonsimon/lazyaz/internal/sbapp"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -145,29 +141,15 @@ func (m *Model) applyJumpEntry(idx int, e jumpEntry) tea.Cmd {
 	return tea.Batch(wrapCmd(m.tabs[idx].ID, cmd), resizeCmd)
 }
 
-// applyNavToTab type-switches to the right child and forwards the
-// snapshot. Only sbapp / blobapp implement ApplyNav today; dashapp /
-// kvapp ignore it (their CurrentNav returns nil so they shouldn't
-// appear in the jump list anyway).
+// applyNavToTab forwards the snapshot to tabs that own navigation state.
 func (m *Model) applyNavToTab(idx int, snap jumplist.NavSnapshot) tea.Cmd {
 	if idx < 0 || idx >= len(m.tabs) {
 		return nil
 	}
-	switch child := m.tabs[idx].Model.(type) {
-	case sbapp.Model:
-		cmd := child.ApplyNav(snap)
-		m.tabs[idx].Model = child
+	if child, ok := m.tabs[idx].Model.(navigationTab); ok {
+		updated, cmd := child.WithAppliedNav(snap)
+		m.tabs[idx].Model = updated
 		return cmd
-	case blobapp.Model:
-		cmd := child.ApplyNav(snap)
-		m.tabs[idx].Model = child
-		return cmd
-	case kvapp.Model:
-		cmd := child.ApplyNav(snap)
-		m.tabs[idx].Model = child
-		return cmd
-	case dashapp.Model:
-		// Not a jump target (no drill-down).
 	}
 	return nil
 }
@@ -179,12 +161,7 @@ func (m *Model) activeTabSnapshot() jumplist.NavSnapshot {
 	if len(m.tabs) == 0 {
 		return nil
 	}
-	switch child := m.tabs[m.activeIdx].Model.(type) {
-	case sbapp.Model:
-		return child.CurrentNav()
-	case blobapp.Model:
-		return child.CurrentNav()
-	case kvapp.Model:
+	if child, ok := m.tabs[m.activeIdx].Model.(navigationTab); ok {
 		return child.CurrentNav()
 	}
 	return nil
@@ -200,16 +177,7 @@ func (m *Model) tabSnapshotForJump(idx int) jumplist.NavSnapshot {
 	if idx < 0 || idx >= len(m.tabs) {
 		return nil
 	}
-	switch child := m.tabs[idx].Model.(type) {
-	case sbapp.Model:
-		if snap := child.CurrentNav(); snap != nil {
-			return snap
-		}
-	case blobapp.Model:
-		if snap := child.CurrentNav(); snap != nil {
-			return snap
-		}
-	case kvapp.Model:
+	if child, ok := m.tabs[idx].Model.(navigationTab); ok {
 		if snap := child.CurrentNav(); snap != nil {
 			return snap
 		}

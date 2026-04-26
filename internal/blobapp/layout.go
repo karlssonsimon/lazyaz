@@ -49,11 +49,7 @@ func (m *Model) resize() {
 	}
 	m.paneHeight = height
 
-	innerH := ui.PaneInnerHeight(pane, height)
-	baseListHeight := innerH - ui.PaneTitleHeight - ui.PaneHintHeight
-	if baseListHeight < 1 {
-		baseListHeight = 1
-	}
+	baseListHeight := ui.PaneListBodyHeight(pane, height, ui.PaneListChrome{Title: true, Hints: true})
 
 	// Size each visible list to its pane width.
 	if w := m.paneWidths[accountsPane]; w > 0 {

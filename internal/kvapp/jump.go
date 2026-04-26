@@ -90,6 +90,11 @@ func (m *Model) ApplyNav(snap jumplist.NavSnapshot) tea.Cmd {
 	return cmd
 }
 
+func (m Model) WithAppliedNav(snap jumplist.NavSnapshot) (tea.Model, tea.Cmd) {
+	cmd := m.ApplyNav(snap)
+	return m, cmd
+}
+
 // NavSnapshotFromPending builds a snapshot from a PendingNav target.
 // Mirrors the blobapp/sbapp helper so external openers can record a
 // destination snapshot even before the eager fast-forward applies.

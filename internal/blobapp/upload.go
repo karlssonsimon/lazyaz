@@ -268,19 +268,19 @@ func (s serviceUploader) UploadBlob(ctx context.Context, blobName, localPath str
 // uploadProgress captures the live state of an in-flight upload. Lives
 // on the Model while the upload runs and drives the progress panel.
 type uploadProgress struct {
-	totalBytes    int64
-	uploadedBytes int64
-	currentFile   string
-	currentIndex  int
-	total         int
-	cancelled     bool
-	done          bool
+	totalBytes        int64
+	uploadedBytes     int64
+	currentFile       string
+	currentIndex      int
+	total             int
+	cancelled         bool
+	done              bool
 	waitingInput      bool      // true while a conflict prompt is shown
 	waitingInputSince time.Time // stamped when waitingInput flips to true; zero otherwise
-	errors        []uploadError
-	skipped       int
-	destPrefix    string
-	bar           progress.Model
+	errors            []uploadError
+	skipped           int
+	destPrefix        string
+	bar               progress.Model
 
 	// Throughput tracking. lastSampleAt / lastSampleBytes anchor the
 	// instantaneous rate computation; bytesPerSec is an EMA so the

@@ -102,7 +102,7 @@ func (m Model) View() tea.View {
 	statusBar := ui.RenderStatusBar(m.Styles, sbItems, "", false, m.Width)
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)
-	if m.actionMenu.active {
+	if m.actionMenu.Active {
 		view = m.renderActionMenu(view)
 	}
 	if m.createSecret.Active {

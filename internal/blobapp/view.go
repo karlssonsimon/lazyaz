@@ -87,11 +87,11 @@ func (m Model) View() tea.View {
 	}
 
 	blobsPaneParams := ui.ListPane{
-		List:  &m.blobsList,
-		Title: m.blobsPaneTitle(),
-		Hints:    blobsHintSet,
-		Footer:   m.inspectFooter(blobsPane, ui.PaneContentWidth(paneStyle, pw[2])),
-		Frame:    ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == blobsPane},
+		List:   &m.blobsList,
+		Title:  m.blobsPaneTitle(),
+		Hints:  blobsHintSet,
+		Footer: m.inspectFooter(blobsPane, ui.PaneContentWidth(paneStyle, pw[2])),
+		Frame:  ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == blobsPane},
 	}
 	// When a filter is active (but overlay closed), show a banner in the pane.
 	if !m.filter.inputOpen && m.hasActiveFilter() {
@@ -182,7 +182,7 @@ func (m Model) View() tea.View {
 	if m.sortOverlay.active {
 		view = m.renderSortOverlay(view)
 	}
-	if m.actionMenu.active {
+	if m.actionMenu.Active {
 		view = m.renderActionMenu(view)
 	}
 	if m.filter.inputOpen {

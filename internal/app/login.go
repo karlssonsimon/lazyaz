@@ -9,10 +9,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
-	"github.com/karlssonsimon/lazyaz/internal/blobapp"
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
-	"github.com/karlssonsimon/lazyaz/internal/kvapp"
-	"github.com/karlssonsimon/lazyaz/internal/sbapp"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -190,6 +187,11 @@ type openAzLoginMsg struct{}
 
 // handleOpenAzLogin opens the tenant picker and starts fetching tenants.
 func (m *Model) handleOpenAzLogin() (Model, tea.Cmd) {
+	if m.blobSvc == nil {
+		m.tenantPicker.close()
+		m.notifier.Push(appshell.LevelError, "Azure credential unavailable")
+		return *m, nil
+	}
 	m.tenantPicker.open()
 	return *m, listTenantsCmd(m.blobSvc.Credential())
 }
@@ -244,9 +246,15 @@ func (m *Model) handleAzLoginFinished(msg azLoginFinishedMsg) (Model, tea.Cmd) {
 // and starts a subscription fetch. Tabs are not touched yet — that happens
 // in handlePostLoginSubs once we know which subscriptions are available.
 func (m *Model) applyNewCredential(cred azcore.TokenCredential, successMsg string) (Model, tea.Cmd) {
-	m.blobSvc.SetCredential(cred)
-	m.sbSvc.SetCredential(cred)
-	m.kvSvc.SetCredential(cred)
+	if m.blobSvc != nil {
+		m.blobSvc.SetCredential(cred)
+	}
+	if m.sbSvc != nil {
+		m.sbSvc.SetCredential(cred)
+	}
+	if m.kvSvc != nil {
+		m.kvSvc.SetCredential(cred)
+	}
 
 	m.brokers.resetAll()
 	m.pendingLoginMsg = successMsg
@@ -279,55 +287,29 @@ func (m *Model) handlePostLoginSubs(msg postLoginSubsMsg) (Model, tea.Cmd) {
 
 	var cmds []tea.Cmd
 	for i := range m.tabs {
-		var prevSubID string
-		switch child := m.tabs[i].Model.(type) {
-		case blobapp.Model:
-			prevSubID = child.CurrentSub.ID
-		case sbapp.Model:
-			prevSubID = child.CurrentSub.ID
-		case kvapp.Model:
-			prevSubID = child.CurrentSub.ID
+		if child, ok := m.tabs[i].Model.(credentialTab); ok {
+			m.tabs[i].Model = child.WithCredential(m.credentialForTabKind(m.tabs[i].Kind))
 		}
 
-		if _, ok := subsByID[prevSubID]; ok {
+		child, ok := m.tabs[i].Model.(subscriptionTab)
+		if !ok {
+			continue
+		}
+		prevSub, _ := child.CurrentSubscription()
+
+		if matched, ok := subsByID[prevSub.ID]; ok {
 			// The tab's subscription still exists in the new tenant.
-			// The credential is already swapped on the services, so
-			// just update the subscription list. The tab keeps its
-			// current view — no flash, no disruption.
-			switch child := m.tabs[i].Model.(type) {
-			case blobapp.Model:
-				child.Subscriptions = msg.subs
-				m.tabs[i].Model = child
-			case sbapp.Model:
-				child.Subscriptions = msg.subs
-				m.tabs[i].Model = child
-			case kvapp.Model:
-				child.Subscriptions = msg.subs
-				m.tabs[i].Model = child
+			// Re-apply the matched subscription so the tab's private
+			// service is scoped to that subscription's tenant.
+			updated := child.WithSubscriptions(msg.subs)
+			if subChild, ok := updated.(subscriptionTab); ok {
+				updated = subChild.WithSubscription(matched)
 			}
+			m.tabs[i].Model = updated
 		} else {
 			// Subscription gone — clear it and open the picker
 			// with data already populated.
-			switch child := m.tabs[i].Model.(type) {
-			case blobapp.Model:
-				child.HasSubscription = false
-				child.CurrentSub = azure.Subscription{}
-				child.Subscriptions = msg.subs
-				child.SubOverlay.Open()
-				m.tabs[i].Model = child
-			case sbapp.Model:
-				child.HasSubscription = false
-				child.CurrentSub = azure.Subscription{}
-				child.Subscriptions = msg.subs
-				child.SubOverlay.Open()
-				m.tabs[i].Model = child
-			case kvapp.Model:
-				child.HasSubscription = false
-				child.CurrentSub = azure.Subscription{}
-				child.Subscriptions = msg.subs
-				child.SubOverlay.Open()
-				m.tabs[i].Model = child
-			}
+			m.tabs[i].Model = child.WithoutSubscription(msg.subs)
 			if c := m.tabs[i].Model.Init(); c != nil {
 				cmds = append(cmds, wrapCmd(m.tabs[i].ID, c))
 			}
@@ -341,4 +323,22 @@ func (m *Model) handlePostLoginSubs(msg postLoginSubsMsg) (Model, tea.Cmd) {
 
 	m.notifier.Push(appshell.LevelSuccess, successMsg)
 	return *m, tea.Batch(cmds...)
+}
+
+func (m *Model) credentialForTabKind(kind TabKind) azcore.TokenCredential {
+	switch kind {
+	case TabBlob:
+		if m.blobSvc != nil {
+			return m.blobSvc.Credential()
+		}
+	case TabServiceBus, TabDashboard:
+		if m.sbSvc != nil {
+			return m.sbSvc.Credential()
+		}
+	case TabKeyVault:
+		if m.kvSvc != nil {
+			return m.kvSvc.Credential()
+		}
+	}
+	return nil
 }

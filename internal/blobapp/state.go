@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
@@ -44,7 +45,7 @@ func (m Model) inputMode() InputMode {
 	switch {
 	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
 		return ModeOverlay
-	case m.actionMenu.active:
+	case m.actionMenu.Active:
 		return ModeActionMenu
 	case m.sortOverlay.active:
 		return ModeSortOverlay
@@ -107,21 +108,21 @@ type Model struct {
 	containersHistory map[string]ui.ListState // keyed by sub+account
 	blobsHistory      map[string]ui.ListState // keyed by sub+account+container+prefix+loadAll
 
-	hasAccount     bool
-	currentAccount blob.Account
-	hasContainer   bool
-	containerName  string
-	prefix         string
-	blobLoadAll     bool
-	blobSortField  blobSortField
-	blobSortDesc   bool
+	hasAccount       bool
+	currentAccount   blob.Account
+	hasContainer     bool
+	containerName    string
+	prefix           string
+	blobLoadAll      bool
+	blobSortField    blobSortField
+	blobSortDesc     bool
 	filter           blobFilter
 	sortOverlay      sortOverlayState
 	actionMenu       actionMenuState
 	loadingSpinnerID int
-	preview         previewState
-	pendingPreviewG bool
-	textSelection   ui.TextSelection
+	preview          previewState
+	pendingPreviewG  bool
+	textSelection    ui.TextSelection
 
 	// downloadDir is the resolved root directory under which marked
 	// blobs are saved. Set once at construction time from
@@ -238,6 +239,9 @@ func NewModel(svc *blob.Service, cfg ui.Config, db *cache.DB) Model {
 }
 
 func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *cache.DB) Model {
+	if svc == nil {
+		svc = blob.NewService(nil)
+	}
 	delegate := list.NewDefaultDelegate()
 
 	accounts := list.New([]list.Item{}, delegate, 24, 10)
@@ -320,6 +324,22 @@ func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores, km k
 	return m
 }
 
+func (m *Model) SetCredential(cred azcore.TokenCredential) {
+	if m.service != nil {
+		m.service.SetCredential(cred)
+	}
+}
+
+func (m Model) WithCredential(cred azcore.TokenCredential) tea.Model {
+	m.SetCredential(cred)
+	return m
+}
+
+func (m Model) WithNotification(level appshell.NotificationLevel, message string) tea.Model {
+	m.Notify(level, message)
+	return m
+}
+
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.SetScheme(scheme)
 	m.Styles.ApplyToLists([]*list.Model{
@@ -336,6 +356,11 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 // ApplyScheme applies the given scheme to all lists and spinner.
 func (m *Model) ApplyScheme(scheme ui.Scheme) {
 	m.applyScheme(scheme)
+}
+
+func (m Model) WithScheme(scheme ui.Scheme) tea.Model {
+	m.ApplyScheme(scheme)
+	return m
 }
 
 // HelpSections returns the help sections for the blob explorer.
@@ -401,7 +426,7 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
 	// Scope the credential to the subscription's tenant so ARM and data
 	// plane calls authenticate against the correct directory.
-	if sub.TenantID != "" {
+	if m.service != nil && sub.TenantID != "" {
 		if cred, err := azure.NewCredentialForTenant(sub.TenantID); err == nil {
 			m.service.SetCredential(cred)
 		}
@@ -411,6 +436,24 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 		m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(cached))
 		ui.SetItemsPreserveKey(&m.accountsList, accountsToItems(cached), accountItemKey)
 	}
+}
+
+func (m Model) WithSubscription(sub azure.Subscription) tea.Model {
+	m.SetSubscription(sub)
+	return m
+}
+
+func (m Model) WithSubscriptions(subs []azure.Subscription) tea.Model {
+	m.Subscriptions = subs
+	return m
+}
+
+func (m Model) WithoutSubscription(subs []azure.Subscription) tea.Model {
+	m.HasSubscription = false
+	m.CurrentSub = azure.Subscription{}
+	m.Subscriptions = subs
+	m.SubOverlay.Open()
+	return m
 }
 
 func (m Model) Init() tea.Cmd {

@@ -137,7 +137,7 @@ type ActivityRow struct {
 
 // ActivityOverlayConfig bundles the overlay's render-time settings.
 type ActivityOverlayConfig struct {
-	Tick      int    // render-frame counter, used to rotate the fetch spinner
+	Tick      int // render-frame counter, used to rotate the fetch spinner
 	CloseHint string
 }
 

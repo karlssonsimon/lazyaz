@@ -5,12 +5,15 @@
 package dashapp
 
 import (
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // DashStores bundles the caches the dashboard reads. Populated by the
@@ -105,6 +108,9 @@ type Model struct {
 
 // NewModelWithCache constructs a dashboard model wired to shared caches.
 func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores DashStores, km keymap.Keymap) Model {
+	if svc == nil {
+		svc = servicebus.NewService(nil)
+	}
 	widgets := dashboardWidgets()
 	m := Model{
 		Model:          appshell.New(cfg, km),
@@ -127,6 +133,22 @@ func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores DashStores
 	return m
 }
 
+func (m *Model) SetCredential(cred azcore.TokenCredential) {
+	if m.service != nil {
+		m.service.SetCredential(cred)
+	}
+}
+
+func (m Model) WithCredential(cred azcore.TokenCredential) tea.Model {
+	m.SetCredential(cred)
+	return m
+}
+
+func (m Model) WithNotification(level appshell.NotificationLevel, message string) tea.Model {
+	m.Notify(level, message)
+	return m
+}
+
 // SetSubscription overrides the embedded appshell.Model method to reset
 // per-subscription state and re-swap the credential for tenant-scoped
 // access (mirrors sbapp's pattern). Hydrates every cached layer the
@@ -134,7 +156,7 @@ func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores DashStores
 // same subscription) lights up instantly instead of flashing placeholders.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
-	if sub.TenantID != "" {
+	if m.service != nil && sub.TenantID != "" {
 		if cred, err := azure.NewCredentialForTenant(sub.TenantID); err == nil {
 			m.service.SetCredential(cred)
 		}
@@ -144,6 +166,24 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.topicSubsByKey = make(map[string][]servicebus.TopicSubscription)
 	m.pendingFetches = 0
 	m.hydrateFromCache(sub)
+}
+
+func (m Model) WithSubscription(sub azure.Subscription) tea.Model {
+	m.SetSubscription(sub)
+	return m
+}
+
+func (m Model) WithSubscriptions(subs []azure.Subscription) tea.Model {
+	m.Subscriptions = subs
+	return m
+}
+
+func (m Model) WithoutSubscription(subs []azure.Subscription) tea.Model {
+	m.HasSubscription = false
+	m.CurrentSub = azure.Subscription{}
+	m.Subscriptions = subs
+	m.SubOverlay.Open()
+	return m
 }
 
 // hydrateFromCache fills namespaces, entitiesByNS, and topicSubsByKey
@@ -177,6 +217,11 @@ func (m *Model) hydrateFromCache(sub azure.Subscription) {
 // ApplyScheme repaints styles; no list delegates to update.
 func (m *Model) ApplyScheme(scheme ui.Scheme) {
 	m.SetScheme(scheme)
+}
+
+func (m Model) WithScheme(scheme ui.Scheme) tea.Model {
+	m.ApplyScheme(scheme)
+	return m
 }
 
 // IsTextInputActive reports whether the tab is accepting free-form text.

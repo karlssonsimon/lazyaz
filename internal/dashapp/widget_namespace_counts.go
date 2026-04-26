@@ -67,9 +67,9 @@ func (w namespaceCountsWidget) Actions(m *Model, cursorRow int) []Action {
 // then sorts. Computing in a single pass means sort comparators don't
 // re-walk entitiesByNS for every comparison.
 type nsStats struct {
-	namespace                       servicebus.Namespace
-	queues, topics, active, dlq     int64
-	entitiesLoaded                  bool // false → render placeholder dots
+	namespace                   servicebus.Namespace
+	queues, topics, active, dlq int64
+	entitiesLoaded              bool // false → render placeholder dots
 }
 
 func (w namespaceCountsWidget) Render(m *Model, width, innerHeight, offset, cursor int, view widgetViewState) string {

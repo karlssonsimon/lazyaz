@@ -81,7 +81,7 @@ func TestRecordJumpIgnoresNil(t *testing.T) {
 func TestRecordJumpCapsAtMax(t *testing.T) {
 	m := newJumpModel()
 	for i := 0; i < maxJumps+10; i++ {
-		m.recordJump(1, fakeSnap{desc: string(rune('a' + i%26)) + string(rune('0'+i/26))})
+		m.recordJump(1, fakeSnap{desc: string(rune('a'+i%26)) + string(rune('0'+i/26))})
 	}
 	if len(m.jumps) != maxJumps {
 		t.Errorf("len(jumps) = %d, want %d", len(m.jumps), maxJumps)
@@ -95,7 +95,7 @@ func TestRecordJumpAfterCapKeepsLatest(t *testing.T) {
 	m := newJumpModel()
 	for i := 0; i < maxJumps+5; i++ {
 		// Distinct descriptions so dedup doesn't interfere.
-		m.recordJump(1, fakeSnap{desc: string(rune('a' + i%26)) + string(rune('0'+i/26))})
+		m.recordJump(1, fakeSnap{desc: string(rune('a'+i%26)) + string(rune('0'+i/26))})
 	}
 	// First entry should be the 6th original (5 evicted).
 	if m.jumps[0].snap.Description() == "a0" {
@@ -186,7 +186,7 @@ func TestCleanupJumpsForTabAdjustsJumpIdx(t *testing.T) {
 	m.recordJump(2, fakeSnap{"b"}) // idx 1
 	m.recordJump(1, fakeSnap{"c"}) // idx 2
 	m.recordJump(2, fakeSnap{"d"}) // idx 3
-	m.jumpIdx = 2 // simulate user walked back
+	m.jumpIdx = 2                  // simulate user walked back
 	// Removing tab 1 should drop entries at idx 0 and 2. jumpIdx
 	// was at idx 2 (one of the removed) — should clamp to len-1 of
 	// remaining (which is 1, with surviving entries [b, d]).

@@ -37,9 +37,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.textInput.Active:
 			m.textInput.Value += text
 			return m, nil
-		case m.actionMenu.active:
-			m.actionMenu.query += text
-			m.actionMenu.refilter()
+		case m.actionMenu.Active:
+			m.actionMenu.TypeText(text)
 			return m, nil
 		case m.sortOverlay.active:
 			m.sortOverlay.query += text
@@ -218,7 +217,6 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 		return m, nil
 	}
 
-
 	m.Subscriptions = msg.Subscriptions
 	// Keep the overlay's filtered view in sync with streaming results
 	// so new subscriptions matching the user's query appear immediately.
@@ -262,7 +260,6 @@ func (m Model) handleAccountsLoaded(msg accountsLoadedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-
 	m.accounts = msg.accounts
 	m.accountsList.Title = fmt.Sprintf("Storage Accounts (%d)", len(m.accounts))
 	ui.SetItemsPreserveKey(&m.accountsList, accountsToItems(m.accounts), accountItemKey)
@@ -288,7 +285,6 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (Model, tea.Cmd) 
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load containers for %s: %s", msg.account.Name, msg.err.Error()))
 		return m, nil
 	}
-
 
 	m.containers = msg.containers
 	m.containersList.Title = fmt.Sprintf("Containers (%d)", len(m.containers))
@@ -334,7 +330,6 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load blobs in %s/%s: %s", msg.account.Name, msg.container, msg.err.Error()))
 		return m, nil
 	}
-
 
 	m.blobs = msg.blobs
 	m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(m.blobs))

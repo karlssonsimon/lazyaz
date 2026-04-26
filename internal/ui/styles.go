@@ -42,20 +42,20 @@ type Styles struct {
 	DelegateTwoRow list.DefaultDelegate // two-line variant (title + description)
 	List           ListStyles
 	Spinner        lipgloss.Style
-	Syntax   SyntaxStyles
-	Overlay  OverlayStyles
-	TabBar   TabBarStyles
+	Syntax         SyntaxStyles
+	Overlay        OverlayStyles
+	TabBar         TabBarStyles
 
 	// Bg is the Base00 background color for RenderCanvas.
 	Bg icolor.Color
 
 	// Semantic convenience styles for ad-hoc usage in views.
-	Accent      lipgloss.Style // Bold accent (base0D)
-	Accent2     lipgloss.Style // Bold secondary accent (base09 orange)
-	Muted       lipgloss.Style // Muted text (base03)
-	Danger      lipgloss.Style // Danger text (base08)
-	DangerBold  lipgloss.Style // Bold danger (base08)
-	Warning     lipgloss.Style // Warning/filter match (base0A)
+	Accent             lipgloss.Style // Bold accent (base0D)
+	Accent2            lipgloss.Style // Bold secondary accent (base09 orange)
+	Muted              lipgloss.Style // Muted text (base03)
+	Danger             lipgloss.Style // Danger text (base08)
+	DangerBold         lipgloss.Style // Bold danger (base08)
+	Warning            lipgloss.Style // Warning/filter match (base0A)
 	FocusBorder        lipgloss.Style // Focused border color (base0B)
 	SelectionHighlight lipgloss.Style // Mouse text selection highlight (base02 bg + base06 fg)
 
@@ -94,7 +94,7 @@ type OverlayStyles struct {
 	NoMatch      lipgloss.Style
 	Hint         lipgloss.Style
 	HintFull     lipgloss.Style // hint with full width
-	BoxBg        icolor.Color // background color for custom box construction
+	BoxBg        icolor.Color   // background color for custom box construction
 	Box          lipgloss.Style
 }
 
@@ -130,8 +130,8 @@ func colorRGB(hex string) icolor.Color {
 
 // NewStyles resolves a Scheme into a complete Styles struct.
 func NewStyles(s Scheme) Styles {
-	bg := color(s.Base00)       // main background
-	surface := color(s.Base01)  // chrome/surface background + border foreground
+	bg := color(s.Base00)      // main background
+	surface := color(s.Base01) // chrome/surface background + border foreground
 	selBg := color(s.Base02)
 	muted := color(s.Base03)
 	statusFg := color(s.Base04)
@@ -361,22 +361,22 @@ func NewStyles(s Scheme) Styles {
 	}
 
 	return Styles{
-		Chrome:   chrome,
+		Chrome:         chrome,
 		Delegate:       delegate,
 		DelegateTwoRow: delegateTwoRow,
 		List:           ls,
-		Spinner:  spinStyle,
-		Syntax:   syntax,
-		Overlay:  overlay,
-		TabBar:   tabBar,
+		Spinner:        spinStyle,
+		Syntax:         syntax,
+		Overlay:        overlay,
+		TabBar:         tabBar,
 
-		Bg:          colorRGB(s.Base00),
-		Accent:      lipgloss.NewStyle().Bold(true).Foreground(blue),
-		Accent2:     lipgloss.NewStyle().Bold(true).Foreground(orange),
-		Muted:       lipgloss.NewStyle().Foreground(muted),
-		Danger:      lipgloss.NewStyle().Foreground(danger),
-		DangerBold:  lipgloss.NewStyle().Foreground(danger).Bold(true),
-		Warning:     lipgloss.NewStyle().Foreground(warning),
+		Bg:                 colorRGB(s.Base00),
+		Accent:             lipgloss.NewStyle().Bold(true).Foreground(blue),
+		Accent2:            lipgloss.NewStyle().Bold(true).Foreground(orange),
+		Muted:              lipgloss.NewStyle().Foreground(muted),
+		Danger:             lipgloss.NewStyle().Foreground(danger),
+		DangerBold:         lipgloss.NewStyle().Foreground(danger).Bold(true),
+		Warning:            lipgloss.NewStyle().Foreground(warning),
 		FocusBorder:        lipgloss.NewStyle().BorderForeground(green),
 		SelectionHighlight: lipgloss.NewStyle().Foreground(selText).Background(selBg).Reverse(true),
 

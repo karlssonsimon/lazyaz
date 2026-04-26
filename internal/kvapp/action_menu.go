@@ -9,12 +9,11 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
-	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/atotto/clipboard"
 	tea "charm.land/bubbletea/v2"
+	"github.com/atotto/clipboard"
 )
 
 type actionID int
@@ -42,98 +41,39 @@ type action struct {
 }
 
 type actionMenuState struct {
-	active    bool
-	cursorIdx int
-	query     string
-	filtered  []int
-	actions   []action
+	ui.SearchableOverlay[action]
 }
 
 func (s *actionMenuState) open(actions []action) {
-	s.active = true
-	s.cursorIdx = 0
-	s.query = ""
-	s.filtered = nil
-	s.actions = actions
+	s.Open(actions, func(a action) string { return a.label })
 }
 
 func (s *actionMenuState) close() {
-	*s = actionMenuState{}
-}
-
-func (s *actionMenuState) refilter() {
-	if s.query == "" {
-		s.filtered = nil
-		s.cursorIdx = 0
-		return
-	}
-	s.filtered = fuzzy.Filter(s.query, s.actions, func(a action) string {
-		return a.label
-	})
-	if s.cursorIdx >= len(s.filtered) {
-		s.cursorIdx = max(0, len(s.filtered)-1)
-	}
-}
-
-func (s *actionMenuState) selectedAction() (action, bool) {
-	list := s.actions
-	if s.filtered != nil {
-		if len(s.filtered) == 0 {
-			return action{}, false
-		}
-		idx := s.filtered[s.cursorIdx]
-		return list[idx], true
-	}
-	if s.cursorIdx < len(list) {
-		return list[s.cursorIdx], true
-	}
-	return action{}, false
-}
-
-func (s *actionMenuState) visibleCount() int {
-	if s.filtered != nil {
-		return len(s.filtered)
-	}
-	return len(s.actions)
+	s.Close()
 }
 
 func (s *actionMenuState) handleKey(key string, km keymap.Keymap) (selected bool, act action) {
 	switch {
 	case km.ThemeUp.Matches(key):
-		if s.cursorIdx > 0 {
-			s.cursorIdx--
-		}
+		s.Move(-1)
 	case km.ThemeDown.Matches(key):
-		if s.cursorIdx < s.visibleCount()-1 {
-			s.cursorIdx++
-		}
+		s.Move(1)
 	case km.ThemeApply.Matches(key):
-		if a, ok := s.selectedAction(); ok {
+		if a, ok := s.Selected(); ok {
 			s.close()
 			return true, a
 		}
 	case km.ThemeCancel.Matches(key):
-		if s.query != "" {
-			s.query = ""
-			s.filtered = nil
-			s.cursorIdx = 0
-		} else {
-			s.close()
-		}
+		s.Cancel()
 	case km.BackspaceUp.Matches(key):
-		if len(s.query) > 0 {
-			s.query = s.query[:len(s.query)-1]
-			s.refilter()
-		}
+		s.Backspace()
 	case key == "ctrl+v":
 		if text := ui.ReadClipboard(); text != "" {
-			s.query += text
-			s.refilter()
+			s.TypeText(text)
 		}
 	default:
 		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			s.query += key
-			s.refilter()
+			s.TypeText(key)
 		}
 	}
 	return false, action{}
@@ -286,29 +226,23 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 
 func (m Model) renderActionMenu(base string) string {
 	s := &m.actionMenu
-	indices := s.filtered
-	if indices == nil {
-		indices = make([]int, len(s.actions))
-		for i := range s.actions {
-			indices[i] = i
-		}
-	}
-	items := make([]ui.OverlayItem, len(indices))
-	for ci, si := range indices {
-		items[ci] = ui.OverlayItem{
-			Label: s.actions[si].label,
-			Hint:  s.actions[si].hint,
+	visible := s.Visible()
+	items := make([]ui.OverlayItem, len(visible))
+	for i, action := range visible {
+		items[i] = ui.OverlayItem{
+			Label: action.label,
+			Hint:  action.hint,
 		}
 	}
 	cfg := ui.OverlayListConfig{
 		Title:      "Actions",
-		Query:      s.query,
+		Query:      s.Query,
 		CursorView: m.Cursor.View(),
 		CloseHint:  m.Keymap.Cancel.Short(),
 		MaxVisible: 10,
 		Center:     true,
 	}
-	return ui.RenderOverlayList(cfg, items, s.cursorIdx, m.Styles.Overlay, m.Width, m.Height, base)
+	return ui.RenderOverlayList(cfg, items, s.CursorIdx, m.Styles.Overlay, m.Width, m.Height, base)
 }
 
 type clipboardMsg struct {

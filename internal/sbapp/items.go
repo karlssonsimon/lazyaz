@@ -114,6 +114,13 @@ func (i messageItem) FilterValue() string {
 	return i.message.MessageID + " " + i.message.BodyPreview
 }
 
+func messageOperationKey(msg servicebus.PeekedMessage) string {
+	if msg.LockID != "" {
+		return msg.LockID
+	}
+	return msg.MessageID
+}
+
 func compactPreview(s string, max int) string {
 	var b strings.Builder
 	inSpace := false
@@ -180,7 +187,7 @@ func topicSubKey(s servicebus.TopicSubscription) string { return s.Name }
 
 func messageItemKey(it list.Item) string {
 	if mi, ok := it.(messageItem); ok {
-		return mi.message.MessageID
+		return messageOperationKey(mi.message)
 	}
 	return ""
 }

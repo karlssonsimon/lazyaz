@@ -117,6 +117,11 @@ func (m *Model) ApplyNav(snap jumplist.NavSnapshot) tea.Cmd {
 	return cmd
 }
 
+func (m Model) WithAppliedNav(snap jumplist.NavSnapshot) (tea.Model, tea.Cmd) {
+	cmd := m.ApplyNav(snap)
+	return m, cmd
+}
+
 // NavSnapshotFromPending builds a snapshot directly from a PendingNav
 // target. The parent app uses this when creating a tab with pending
 // navigation: the destination snapshot can be recorded immediately

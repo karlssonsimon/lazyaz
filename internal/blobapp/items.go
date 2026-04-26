@@ -195,9 +195,9 @@ func parentPrefix(prefix string) string {
 // hierarchy mode) use the same Name field as real blobs, so a single
 // keyer handles both cases.
 
-func accountKey(a blob.Account) string       { return a.Name }
+func accountKey(a blob.Account) string         { return a.Name }
 func containerKey(c blob.ContainerInfo) string { return c.Name }
-func blobEntryKey(b blob.BlobEntry) string   { return b.Name }
+func blobEntryKey(b blob.BlobEntry) string     { return b.Name }
 
 func accountItemKey(it list.Item) string {
 	if ai, ok := it.(accountItem); ok {

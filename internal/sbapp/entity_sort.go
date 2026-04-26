@@ -12,10 +12,10 @@ import (
 type entitySortField int
 
 const (
-	entitySortNone    entitySortField = iota
-	entitySortName                    // alphabetical
-	entitySortActive                  // by ActiveMsgCount
-	entitySortDLQ                     // by DeadLetterCount
+	entitySortNone   entitySortField = iota
+	entitySortName                   // alphabetical
+	entitySortActive                 // by ActiveMsgCount
+	entitySortDLQ                    // by DeadLetterCount
 )
 
 type entitySortOption struct {

@@ -14,6 +14,20 @@ var testConfig = ui.Config{
 	Schemes:   []ui.Scheme{ui.FallbackScheme()},
 }
 
+func TestSetSubscriptionAllowsNilServiceWithTenant(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	if m.service == nil {
+		t.Fatalf("NewModel(nil) left service nil")
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("SetSubscription panicked with nil service: %v", r)
+		}
+	}()
+	m.SetSubscription(azure.Subscription{ID: "sub", TenantID: "tenant"})
+}
+
 func TestPaneName(t *testing.T) {
 	tests := []struct {
 		pane int

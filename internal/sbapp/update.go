@@ -9,8 +9,6 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
-
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 )
@@ -36,6 +34,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.targetPicker.active:
 			m.targetPicker.query += text
 			m.targetPicker.refilter()
+			return m, nil
+		case m.actionMenu.Active:
+			m.actionMenu.TypeText(text)
 			return m, nil
 		default:
 			return m.updateFocusedList(msg)
@@ -312,7 +313,6 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-
 func (m Model) handleEntitiesRefreshed(msg entitiesRefreshedMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		return m, nil
@@ -340,24 +340,7 @@ func (m Model) handleDLQReceived(msg dlqReceivedMsg) (Model, tea.Cmd) {
 	}
 
 	m.lockedMessages = msg.result
-
-	// Convert received messages to peeked format for display.
-	m.peekedMessages = make([]servicebus.PeekedMessage, len(msg.result.Messages))
-	for i, raw := range msg.result.Messages {
-		pm := servicebus.PeekedMessage{
-			MessageID: raw.MessageID,
-			FullBody:  string(raw.Body),
-		}
-		if raw.EnqueuedTime != nil {
-			pm.EnqueuedAt = *raw.EnqueuedTime
-		}
-		if len(raw.Body) > 512 {
-			pm.BodyPreview = string(raw.Body[:512]) + "..."
-		} else {
-			pm.BodyPreview = string(raw.Body)
-		}
-		m.peekedMessages[i] = pm
-	}
+	m.peekedMessages = msg.result.PeekedMessages()
 
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(messagesToItems(m.peekedMessages))
@@ -434,24 +417,17 @@ func (m Model) handleDLQAbandon(msg dlqAbandonMsg) (Model, tea.Cmd) {
 
 // removeLockedMessage removes a processed message from both the locked
 // set and the display list.
-func (m *Model) removeLockedMessage(messageID string) {
+func (m *Model) removeLockedMessage(messageKey string) {
 	if m.lockedMessages == nil {
 		return
 	}
 
-	// Remove from locked messages slice.
-	remaining := make([]*azservicebus.ReceivedMessage, 0, len(m.lockedMessages.Messages))
-	for _, msg := range m.lockedMessages.Messages {
-		if msg.MessageID != messageID {
-			remaining = append(remaining, msg)
-		}
-	}
-	m.lockedMessages.Messages = remaining
+	m.lockedMessages.RemoveByID(messageKey)
 
 	// Remove from peeked display.
 	var peeked []servicebus.PeekedMessage
 	for _, pm := range m.peekedMessages {
-		if pm.MessageID != messageID {
+		if messageOperationKey(pm) != messageKey {
 			peeked = append(peeked, pm)
 		}
 	}
@@ -460,8 +436,8 @@ func (m *Model) removeLockedMessage(messageID string) {
 	m.messageList.Title = fmt.Sprintf("DLQ Locked (%d)", len(m.peekedMessages))
 
 	// If no more locked messages, clean up the receiver.
-	if len(m.lockedMessages.Messages) == 0 {
-		m.lockedMessages.Receiver.Close(context.Background())
+	if m.lockedMessages.Len() == 0 {
+		m.lockedMessages.Close(context.Background())
 		m.lockedMessages = nil
 	}
 }
@@ -656,13 +632,13 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 				return m, nil
 			}
 			marks := m.ensureMarks()
-			id := item.message.MessageID
+			id := messageOperationKey(item.message)
 			if _, marked := marks[id]; marked {
 				delete(marks, id)
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", id, len(marks)))
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", ui.EmptyToDash(item.message.MessageID), len(marks)))
 			} else {
 				marks[id] = struct{}{}
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", id, len(marks)))
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", ui.EmptyToDash(item.message.MessageID), len(marks)))
 			}
 			m.refreshMessageSelectionDisplay()
 			return m, nil
@@ -714,7 +690,7 @@ func (m *Model) syncPreviewToSelection() {
 		m.messageViewport.GotoTop()
 		return
 	}
-	if item.message.MessageID == m.selectedMessage.MessageID && item.message.MessageID != "" {
+	if messageOperationKey(item.message) == messageOperationKey(m.selectedMessage) && messageOperationKey(item.message) != "" {
 		return
 	}
 	m.selectedMessage = item.message

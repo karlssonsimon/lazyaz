@@ -13,9 +13,14 @@ type fakeDirEntry struct {
 	isDir bool
 }
 
-func (f fakeDirEntry) Name() string               { return f.name }
-func (f fakeDirEntry) IsDir() bool                { return f.isDir }
-func (f fakeDirEntry) Type() os.FileMode          { if f.isDir { return os.ModeDir }; return 0 }
+func (f fakeDirEntry) Name() string { return f.name }
+func (f fakeDirEntry) IsDir() bool  { return f.isDir }
+func (f fakeDirEntry) Type() os.FileMode {
+	if f.isDir {
+		return os.ModeDir
+	}
+	return 0
+}
 func (f fakeDirEntry) Info() (os.FileInfo, error) { return fakeFileInfo{f}, nil }
 
 type fakeFileInfo struct{ fakeDirEntry }

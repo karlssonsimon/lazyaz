@@ -17,18 +17,38 @@ type EntityCounts struct {
 	DeadLetterCount int64
 }
 
+var newMetricsClient = azquery.NewMetricsClient
+
 func (s *Service) getMetricsClient() (*azquery.MetricsClient, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.metricsClient != nil {
-		return s.metricsClient, nil
+	for {
+		s.mu.Lock()
+		if s.metricsClient != nil {
+			s.mu.Unlock()
+			return s.metricsClient, nil
+		}
+		cred := s.cred
+		generation := s.generation
+		s.mu.Unlock()
+
+		client, err := newMetricsClient(cred, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create metrics client: %w", err)
+		}
+
+		s.mu.Lock()
+		if s.generation != generation {
+			s.mu.Unlock()
+			continue
+		}
+		if s.metricsClient != nil {
+			cached := s.metricsClient
+			s.mu.Unlock()
+			return cached, nil
+		}
+		s.metricsClient = client
+		s.mu.Unlock()
+		return client, nil
 	}
-	client, err := azquery.NewMetricsClient(s.cred, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create metrics client: %w", err)
-	}
-	s.metricsClient = client
-	return client, nil
 }
 
 // GetNamespaceMetrics queries Azure Monitor for per-entity active and

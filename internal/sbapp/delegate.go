@@ -45,9 +45,10 @@ func (d messageDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 func (d messageDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	if mi, ok := item.(messageItem); ok {
 		var prefix string
-		if _, isMarked := d.marked[mi.message.MessageID]; isMarked {
+		key := messageOperationKey(mi.message)
+		if _, isMarked := d.marked[key]; isMarked {
 			prefix = d.markedBar
-		} else if _, isVisual := d.visual[mi.message.MessageID]; isVisual {
+		} else if _, isVisual := d.visual[key]; isVisual {
 			prefix = d.visualBar
 		}
 		if prefix != "" {

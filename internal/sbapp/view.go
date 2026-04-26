@@ -160,7 +160,7 @@ func (m Model) View() tea.View {
 		view = m.renderEntitySortOverlay(view)
 	} else if m.targetPicker.active {
 		view = m.renderTargetPicker(view)
-	} else if m.actionMenu.active {
+	} else if m.actionMenu.Active {
 		view = m.renderActionMenu(view)
 	}
 	out := tea.NewView(m.RenderOverlays(view))

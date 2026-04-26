@@ -63,7 +63,7 @@ func (m *Model) toggleVisualLineMode() {
 	}
 
 	m.visualLineMode = true
-	m.visualAnchor = m.currentMessageID()
+	m.visualAnchor = m.currentMessageKey()
 	m.refreshMessageSelectionDisplay()
 	if m.visualAnchor == "" {
 		m.Notify(appshell.LevelInfo, "Visual mode on. Move up/down to select a range.")
@@ -90,12 +90,12 @@ func (m *Model) swapVisualAnchor() {
 		return
 	}
 	oldAnchor := m.visualAnchor
-	oldCursor := m.currentMessageID()
+	oldCursor := m.currentMessageKey()
 	if oldCursor == "" || oldCursor == oldAnchor {
 		return
 	}
 	for i, it := range m.messageList.VisibleItems() {
-		if mi, ok := it.(messageItem); ok && mi.message.MessageID == oldAnchor {
+		if mi, ok := it.(messageItem); ok && messageOperationKey(mi.message) == oldAnchor {
 			m.messageList.Select(i)
 			m.visualAnchor = oldCursor
 			return
@@ -103,12 +103,12 @@ func (m *Model) swapVisualAnchor() {
 	}
 }
 
-func (m Model) currentMessageID() string {
+func (m Model) currentMessageKey() string {
 	item, ok := m.messageList.SelectedItem().(messageItem)
 	if !ok {
 		return ""
 	}
-	return item.message.MessageID
+	return messageOperationKey(item.message)
 }
 
 func (m Model) visualSelectionIDs() []string {
@@ -116,7 +116,7 @@ func (m Model) visualSelectionIDs() []string {
 		return nil
 	}
 
-	current := m.currentMessageID()
+	current := m.currentMessageKey()
 	if current == "" {
 		return nil
 	}
@@ -136,10 +136,11 @@ func (m Model) visualSelectionIDs() []string {
 	anchorIdx := -1
 	currentIdx := -1
 	for i, msg := range msgs {
-		if anchorIdx < 0 && msg.MessageID == anchor {
+		key := messageOperationKey(msg)
+		if anchorIdx < 0 && key == anchor {
 			anchorIdx = i
 		}
-		if currentIdx < 0 && msg.MessageID == current {
+		if currentIdx < 0 && key == current {
 			currentIdx = i
 		}
 	}
@@ -157,7 +158,7 @@ func (m Model) visualSelectionIDs() []string {
 
 	ids := make([]string, 0, end-start+1)
 	for _, msg := range msgs[start : end+1] {
-		ids = append(ids, msg.MessageID)
+		ids = append(ids, messageOperationKey(msg))
 	}
 	return ids
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
@@ -87,14 +86,15 @@ func completeDLQMarkedCmd(locked *servicebus.ReceivedMessages, markedIDs map[str
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 		var completed []string
-		for _, msg := range locked.Messages {
-			if _, ok := markedIDs[msg.MessageID]; !ok {
+		for _, msg := range locked.MessagesSnapshot() {
+			key := msg.OperationID()
+			if _, ok := markedIDs[key]; !ok {
 				continue
 			}
-			if err := locked.Complete(ctx, msg); err != nil {
+			if err := locked.CompleteByID(ctx, key); err != nil {
 				return dlqCompleteMsg{completed: completed, err: err}
 			}
-			completed = append(completed, msg.MessageID)
+			completed = append(completed, key)
 		}
 		return dlqCompleteMsg{completed: completed}
 	}
@@ -105,26 +105,8 @@ func requeueDLQMarkedCmd(svc *servicebus.Service, ns servicebus.Namespace, entit
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		// Collect messages to requeue.
-		var toRequeue []*azservicebus.ReceivedMessage
-		for _, msg := range locked.Messages {
-			if _, ok := markedIDs[msg.MessageID]; ok {
-				toRequeue = append(toRequeue, msg)
-			}
-		}
-
-		if err := svc.SendBatch(ctx, ns, entityName, toRequeue); err != nil {
-			return dlqRequeueMsg{err: err}
-		}
-
-		var requeued []string
-		for _, msg := range toRequeue {
-			if err := locked.Complete(ctx, msg); err != nil {
-				return dlqRequeueMsg{requeued: requeued, err: err}
-			}
-			requeued = append(requeued, msg.MessageID)
-		}
-		return dlqRequeueMsg{requeued: requeued}
+		requeued, err := svc.RequeueLockedByID(ctx, ns, entityName, locked, markedIDs)
+		return dlqRequeueMsg{requeued: requeued, err: err}
 	}
 }
 
@@ -178,26 +160,8 @@ func moveMarkedCmd(svc *servicebus.Service, targetNS servicebus.Namespace, targe
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		// Collect messages to move.
-		var toMove []*azservicebus.ReceivedMessage
-		for _, msg := range locked.Messages {
-			if _, ok := markedIDs[msg.MessageID]; ok {
-				toMove = append(toMove, msg)
-			}
-		}
-
-		if err := svc.SendBatch(ctx, targetNS, targetEntity, toMove); err != nil {
-			return moveMarkedDoneMsg{err: err}
-		}
-
-		var moved []string
-		for _, msg := range toMove {
-			if err := locked.Complete(ctx, msg); err != nil {
-				return moveMarkedDoneMsg{moved: moved, err: err}
-			}
-			moved = append(moved, msg.MessageID)
-		}
-		return moveMarkedDoneMsg{moved: moved}
+		moved, err := svc.RequeueLockedByID(ctx, targetNS, targetEntity, locked, markedIDs)
+		return moveMarkedDoneMsg{moved: moved, err: err}
 	}
 }
 

@@ -3,6 +3,7 @@ package sbapp
 import (
 	"fmt"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
@@ -49,7 +50,7 @@ func (m Model) inputMode() InputMode {
 		return ModeSortOverlay
 	case m.targetPicker.active:
 		return ModeTargetPicker
-	case m.actionMenu.active:
+	case m.actionMenu.Active:
 		return ModeActionMenu
 	case m.viewingMessage && m.focus == messagePreviewPane:
 		return ModeMessagePreview
@@ -91,7 +92,7 @@ type Model struct {
 
 	// hasPeekTarget is true when the queue type picker is bound to
 	// a queue or topic-subscription.
-	hasPeekTarget bool
+	hasPeekTarget  bool
 	currentEntity  servicebus.Entity
 	currentSubName string
 
@@ -250,6 +251,9 @@ func NewModel(svc *servicebus.Service, cfg ui.Config, db *cache.DB) Model {
 }
 
 func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap, db *cache.DB) Model {
+	if svc == nil {
+		svc = servicebus.NewService(nil)
+	}
 	delegate := list.NewDefaultDelegate()
 
 	namespaces := newList(delegate, "namespace", "namespaces")
@@ -295,6 +299,22 @@ func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores SBStores, 
 	return m
 }
 
+func (m *Model) SetCredential(cred azcore.TokenCredential) {
+	if m.service != nil {
+		m.service.SetCredential(cred)
+	}
+}
+
+func (m Model) WithCredential(cred azcore.TokenCredential) tea.Model {
+	m.SetCredential(cred)
+	return m
+}
+
+func (m Model) WithNotification(level appshell.NotificationLevel, message string) tea.Model {
+	m.Notify(level, message)
+	return m
+}
+
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.SetScheme(scheme)
 	m.Styles.ApplyToLists([]*list.Model{
@@ -312,6 +332,11 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 // ApplyScheme applies the given scheme to all lists and spinner.
 func (m *Model) ApplyScheme(scheme ui.Scheme) {
 	m.applyScheme(scheme)
+}
+
+func (m Model) WithScheme(scheme ui.Scheme) tea.Model {
+	m.ApplyScheme(scheme)
+	return m
 }
 
 // isTopicSelected reports whether the currently selected entity is a topic.
@@ -361,7 +386,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 // SetSubscription overrides the embedded appshell.Model method.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
-	if sub.TenantID != "" {
+	if m.service != nil && sub.TenantID != "" {
 		if cred, err := azure.NewCredentialForTenant(sub.TenantID); err == nil {
 			m.service.SetCredential(cred)
 		}
@@ -371,6 +396,24 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 		m.namespacesList.Title = fmt.Sprintf("Namespaces (%d)", len(cached))
 		ui.SetItemsPreserveKey(&m.namespacesList, namespacesToItems(cached), namespaceItemKey)
 	}
+}
+
+func (m Model) WithSubscription(sub azure.Subscription) tea.Model {
+	m.SetSubscription(sub)
+	return m
+}
+
+func (m Model) WithSubscriptions(subs []azure.Subscription) tea.Model {
+	m.Subscriptions = subs
+	return m
+}
+
+func (m Model) WithoutSubscription(subs []azure.Subscription) tea.Model {
+	m.HasSubscription = false
+	m.CurrentSub = azure.Subscription{}
+	m.Subscriptions = subs
+	m.SubOverlay.Open()
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
