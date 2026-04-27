@@ -178,9 +178,13 @@ func (m Model) focusedListSettingFilter() bool {
 
 // IsTextInputActive reports whether the model is currently accepting
 // free-form text input.
+//
+// Modes that just consume key shortcuts (message preview, action menu,
+// sort overlay, target picker) are NOT text input — they should still
+// let `q` quit at the parent level.
 func (m Model) IsTextInputActive() bool {
 	switch m.inputMode() {
-	case ModeNormal, ModeVisualLine:
+	case ModeNormal, ModeVisualLine, ModeMessagePreview, ModeActionMenu, ModeSortOverlay, ModeTargetPicker:
 		return false
 	default:
 		return true
