@@ -286,7 +286,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			return m, nil
 		}
 		name := item.blob.Name
-		m.confirmModal.Open("Delete blob?", name+" will be permanently removed.", "delete", "cancel", true)
+		m.confirmModal.OpenWithBreadcrumb("Delete blob", []string{m.containerName, name}, name+" will be permanently removed.", "delete", "cancel", true)
 		m.confirmAction = func() tea.Cmd {
 			return deleteBlobCmd(m.service, m.currentAccount, m.containerName, name)
 		}
@@ -301,7 +301,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			return m, nil
 		}
 		msg := fmt.Sprintf("%d blobs will be permanently removed.", len(names))
-		m.confirmModal.Open(fmt.Sprintf("Delete %d blobs?", len(names)), msg, "delete", "cancel", true)
+		m.confirmModal.OpenWithBreadcrumb(fmt.Sprintf("Delete %d blobs", len(names)), []string{m.containerName}, msg, "delete", "cancel", true)
 		m.confirmAction = func() tea.Cmd {
 			return deleteMarkedBlobsCmd(m.service, m.currentAccount, m.containerName, names)
 		}
@@ -313,7 +313,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			return m, nil
 		}
 		old := item.blob.Name
-		m.textInput.Open("Rename blob", "new blob name", old, func(v string) string {
+		m.textInput.OpenWithBreadcrumb("Rename blob", []string{m.containerName, old}, "new blob name", old, func(v string) string {
 			if strings.TrimSpace(v) == "" {
 				return "name required"
 			}
@@ -328,7 +328,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m, nil
 
 	case actionCreateContainer:
-		m.textInput.Open("Create container", "container name (3-63 lowercase, digits, hyphens)", "", func(v string) string {
+		m.textInput.OpenWithBreadcrumb("Create container", []string{m.currentAccount.Name}, "container name", "", func(v string) string {
 			return blob.ValidateContainerName(v)
 		})
 		account := m.currentAccount
@@ -343,8 +343,9 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			return m, nil
 		}
 		name := item.container.Name
-		m.confirmModal.Open(
-			"Delete container?",
+		m.confirmModal.OpenWithBreadcrumb(
+			"Delete container",
+			[]string{m.currentAccount.Name, name},
 			fmt.Sprintf("%s and every blob it contains will be permanently removed.", name),
 			"delete", "cancel", true)
 		account := m.currentAccount
@@ -355,7 +356,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 
 	case actionCreateDirectory:
 		prefix := m.prefix
-		m.textInput.Open("Create folder", "folder name", "", func(v string) string {
+		m.textInput.OpenWithBreadcrumb("Create folder", []string{m.containerName, m.prefix}, "folder name", "", func(v string) string {
 			v = strings.TrimSpace(v)
 			if v == "" {
 				return "name required"
@@ -380,8 +381,9 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			return m, nil
 		}
 		fullPath := strings.TrimSuffix(item.blob.Name, "/")
-		m.confirmModal.Open(
-			"Delete folder?",
+		m.confirmModal.OpenWithBreadcrumb(
+			"Delete folder",
+			[]string{m.containerName, fullPath},
 			fmt.Sprintf("%s and every file inside will be permanently removed.", fullPath),
 			"delete", "cancel", true)
 		account := m.currentAccount
@@ -397,7 +399,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			return m, nil
 		}
 		oldPath := strings.TrimSuffix(item.blob.Name, "/")
-		m.textInput.Open("Rename folder", "new folder path", oldPath, func(v string) string {
+		m.textInput.OpenWithBreadcrumb("Rename folder", []string{m.containerName, oldPath}, "new folder path", oldPath, func(v string) string {
 			v = strings.TrimSpace(v)
 			if v == "" {
 				return "path required"

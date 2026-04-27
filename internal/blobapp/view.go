@@ -202,7 +202,7 @@ func (m Model) View() tea.View {
 		view = ui.RenderConfirmModal(m.confirmModal, m.Styles, m.Width, m.Height, view)
 	}
 	if m.textInput.Active {
-		view = ui.RenderTextInputOverlay(m.textInput, m.Cursor.View(), m.Styles, m.Width, m.Height, view)
+		view = ui.RenderTextInputOverlay(m.textInput, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
 
 	out := tea.NewView(m.RenderOverlays(view))

@@ -130,7 +130,7 @@ func (m Model) View() tea.View {
 		view = m.renderActionMenu(view)
 	}
 	if m.createSecret.Active {
-		view = ui.RenderFormOverlay(m.createSecret, m.Cursor.View(), m.Styles, m.Width, m.Height, view)
+		view = ui.RenderFormOverlay(m.createSecret, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
 	out := tea.NewView(m.RenderOverlays(view))
 	out.AltScreen = true

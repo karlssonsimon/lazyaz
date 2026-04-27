@@ -48,11 +48,24 @@ func (m *Model) openCreateSecretForm() {
 	if !m.hasVault {
 		return
 	}
-	m.createSecret.Open(
-		fmt.Sprintf("Create secret in %s", m.currentVault.Name),
+	m.createSecret.OpenWithBreadcrumb(
+		"Create secret",
+		[]string{m.currentVault.Name},
 		[]ui.FormField{
-			{Label: "Name", Placeholder: "db-password", Validate: validateSecretName},
-			{Label: "Value", Placeholder: "secret value", Validate: validateSecretValue},
+			{
+				Label:       "Name",
+				Placeholder: "db-password",
+				Section:     "required",
+				MaxChars:    127,
+				Validate:    validateSecretName,
+			},
+			{
+				Label:       "Value",
+				Placeholder: "paste secret value",
+				Hint:        "ctrl+r reveal",
+				Mask:        true,
+				Validate:    validateSecretValue,
+			},
 		},
 	)
 }
