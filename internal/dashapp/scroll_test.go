@@ -1,9 +1,12 @@
 package dashapp
 
 import (
+	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
 // makeModel builds a Model wired with the minimum state the cursor +
@@ -13,8 +16,9 @@ func makeModel(focusedIdx, topH, botH, totalRows int) Model {
 	m := Model{
 		widgets:    dashboardWidgets(),
 		focusedIdx: focusedIdx,
-		// rowHeights are PANE heights including border. Pane H gives
-		// visible = H - 4 data rows (1 title + 1 header + 2 border).
+		// rowHeights are Miller column heights including title/footer.
+		// Column H gives body height H - 2; the table header and overflow
+		// hint live inside that body.
 		rowHeights: []int{topH, botH},
 	}
 	m.offsets = make([]int, len(m.widgets))
@@ -44,8 +48,8 @@ func TestFocusedWidgetDimsTopWidget(t *testing.T) {
 	if total != 7 {
 		t.Errorf("total = %d, want 7", total)
 	}
-	if visible != 6 {
-		t.Errorf("visible = %d, want 6", visible)
+	if visible != 7 {
+		t.Errorf("visible = %d, want 7", visible)
 	}
 }
 
@@ -55,8 +59,25 @@ func TestFocusedWidgetDimsBottomWidget(t *testing.T) {
 	if total != 5 {
 		t.Errorf("total = %d, want 5", total)
 	}
-	if visible != 8 {
-		t.Errorf("visible = %d, want 8", visible)
+	if visible != 9 {
+		t.Errorf("visible = %d, want 9", visible)
+	}
+}
+
+func TestInnerHeightToVisibleDataMatchesMillerBodySpace(t *testing.T) {
+	innerHeight := 8
+	visible := innerHeightToVisibleData(innerHeight)
+	if visible != 7 {
+		t.Fatalf("visible = %d, want 7", visible)
+	}
+
+	cells := [][]string{{"name"}}
+	for i := 0; i < 20; i++ {
+		cells = append(cells, []string{"row"})
+	}
+	out := renderScrollableTable(cells, []lipgloss.Position{lipgloss.Left}, ui.Styles{}, 0, visible, -1)
+	if got := strings.Count(out, "\n") + 1; got != innerHeight {
+		t.Fatalf("rendered lines = %d, want %d", got, innerHeight)
 	}
 }
 
@@ -110,33 +131,33 @@ func TestCursorToTopAndBottom(t *testing.T) {
 }
 
 func TestScrollFollowsCursorDownward(t *testing.T) {
-	// visible = 6; visibleData (hint reserved) = 5.
-	// Cursor at 0..4 fits in window [0, 5). Cursor at 5 forces a scroll.
+	// visible = 7; visibleData (hint reserved) = 6.
+	// Cursor at 0..5 fits in window [0, 6). Cursor at 6 forces a scroll.
 	m := makeModel(0, 10, 10, 100)
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 5; i++ {
 		m.moveCursorFocused(1)
 	}
-	if m.cursors[0] != 4 {
-		t.Errorf("cursor = %d, want 4", m.cursors[0])
-	}
-	if m.offsets[0] != 0 {
-		t.Errorf("offset at cursor=4 = %d, want 0 (still in window)", m.offsets[0])
-	}
-	m.moveCursorFocused(1)
 	if m.cursors[0] != 5 {
 		t.Errorf("cursor = %d, want 5", m.cursors[0])
 	}
+	if m.offsets[0] != 0 {
+		t.Errorf("offset at cursor=5 = %d, want 0 (still in window)", m.offsets[0])
+	}
+	m.moveCursorFocused(1)
+	if m.cursors[0] != 6 {
+		t.Errorf("cursor = %d, want 6", m.cursors[0])
+	}
 	if m.offsets[0] != 1 {
-		t.Errorf("offset at cursor=5 = %d, want 1 (cursor pushed past window)", m.offsets[0])
+		t.Errorf("offset at cursor=6 = %d, want 1 (cursor pushed past window)", m.offsets[0])
 	}
 }
 
 func TestScrollFollowsCursorUpward(t *testing.T) {
 	m := makeModel(0, 10, 10, 100)
 	m.cursors[0] = 50
-	m.scrollToKeepCursorVisible() // brings offset up to 46
-	if m.offsets[0] != 46 {
-		t.Errorf("after seeking: offset = %d, want 46", m.offsets[0])
+	m.scrollToKeepCursorVisible() // brings offset up to 45
+	if m.offsets[0] != 45 {
+		t.Errorf("after seeking: offset = %d, want 45", m.offsets[0])
 	}
 	// Now cursor up — should drop offset to keep cursor in view.
 	m.moveCursorFocused(-10)
@@ -203,6 +224,23 @@ func TestComputeRowHeightsRemainderToBottom(t *testing.T) {
 	want := []int{11, 12}
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("computeRowHeights(23, 2) = %v, want %v", got, want)
+	}
+}
+
+func TestRecomputeWidgetHeightsMatchesViewTinyHeightMinimum(t *testing.T) {
+	m := makeModel(0, 10, 10, 1)
+	m.Width = 80
+	m.Height = 3
+	m.recomputeWidgetHeights()
+	rows, _ := gridDims(m.widgets)
+	want := computeRowHeights(2, rows)
+	if len(m.rowHeights) != len(want) {
+		t.Fatalf("rowHeights = %v, want %v", m.rowHeights, want)
+	}
+	for i := range want {
+		if m.rowHeights[i] != want[i] {
+			t.Fatalf("rowHeights = %v, want %v", m.rowHeights, want)
+		}
 	}
 }
 

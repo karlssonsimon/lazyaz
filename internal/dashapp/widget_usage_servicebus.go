@@ -40,10 +40,7 @@ func (w usedSBWidget) Render(m *Model, width, innerHeight, offset, cursor int, v
 	if !m.HasSubscription {
 		return "Pick a subscription with " + m.Keymap.SubscriptionPicker.Short() + "."
 	}
-	entries := m.usedSBEntries(view.filter)
-	if view.hasSort {
-		sortUsageEntries(entries, view.sortField, view.sortDesc)
-	}
+	entries := m.usedSBRows(view)
 	if len(entries) == 0 {
 		if view.filter != "" {
 			return "No matches for filter: " + view.filter
@@ -69,7 +66,7 @@ func (usedSBWidget) SortFields() []SortField {
 
 func (w usedSBWidget) Actions(m *Model, cursorRow int) []Action {
 	var actions []Action
-	entries := m.usedSBEntries(m.viewStates[m.focusedIdx].filter)
+	entries := m.usedSBRows(focusedWidgetView(m))
 	if cursorRow >= 0 && cursorRow < len(entries) {
 		e := entries[cursorRow]
 		if cmd := openUsageEntryInSBCmd(m.CurrentSub, e); cmd != nil {
@@ -83,6 +80,14 @@ func (w usedSBWidget) Actions(m *Model, cursorRow int) []Action {
 	actions = append(actions, sortAction())
 	actions = append(actions, clearUsageAction(sbUsageTypes...))
 	return actions
+}
+
+func (m Model) usedSBRows(view widgetViewState) []cache.UsageEntry {
+	entries := m.usedSBEntries(view.filter)
+	if view.hasSort {
+		sortUsageEntries(entries, view.sortField, view.sortDesc)
+	}
+	return entries
 }
 
 // usedSBEntries pulls usage rows for every SB resource type, merges

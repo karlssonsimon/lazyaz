@@ -57,6 +57,7 @@ type PeekedMessage struct {
 	MessageID      string
 	LockID         string
 	SequenceNumber int64
+	DeliveryCount  uint32
 	EnqueuedAt     time.Time
 	BodyPreview    string
 	FullBody       string
@@ -583,10 +584,11 @@ func (r *ReceivedMessages) PeekedMessages() []PeekedMessage {
 		}
 		msg := locked.raw
 		entry := PeekedMessage{
-			MessageID:   locked.ID,
-			LockID:      locked.LockID,
-			FullBody:    string(msg.Body),
-			BodyPreview: truncateBody(msg.Body, maxBodyPreview),
+			MessageID:     locked.ID,
+			LockID:        locked.LockID,
+			DeliveryCount: msg.DeliveryCount,
+			FullBody:      string(msg.Body),
+			BodyPreview:   truncateBody(msg.Body, maxBodyPreview),
 		}
 		if msg.SequenceNumber != nil {
 			entry.SequenceNumber = *msg.SequenceNumber
@@ -924,7 +926,8 @@ func peekMessages(ctx context.Context, receiver *azservicebus.Receiver, maxCount
 	messages := make([]PeekedMessage, 0, len(peeked))
 	for _, msg := range peeked {
 		entry := PeekedMessage{
-			MessageID: msg.MessageID,
+			MessageID:     msg.MessageID,
+			DeliveryCount: msg.DeliveryCount,
 		}
 		if msg.SequenceNumber != nil {
 			entry.SequenceNumber = *msg.SequenceNumber

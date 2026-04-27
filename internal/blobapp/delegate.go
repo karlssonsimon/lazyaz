@@ -29,7 +29,7 @@ type blobDelegate struct {
 }
 
 func newBlobDelegate(base list.DefaultDelegate, styles ui.Styles) blobDelegate {
-	bar := "┃ "
+	bar := "▌ "
 	markedBar := lipgloss.NewStyle().
 		Foreground(styles.Accent2.GetForeground()).
 		Render(bar)

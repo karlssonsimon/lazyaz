@@ -8,7 +8,10 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 
 	"charm.land/bubbles/v2/list"
+	"github.com/charmbracelet/x/ansi"
 )
+
+const defaultMessageTitleWidth = 80
 
 type namespaceItem struct {
 	namespace servicebus.Namespace
@@ -91,7 +94,8 @@ func (i queueTypeItem) Description() string { return "" }
 func (i queueTypeItem) FilterValue() string { return i.label }
 
 type messageItem struct {
-	message servicebus.PeekedMessage
+	message      servicebus.PeekedMessage
+	contentWidth int
 }
 
 func (i messageItem) Title() string {
@@ -99,11 +103,37 @@ func (i messageItem) Title() string {
 	if id == "" {
 		id = "(no id)"
 	}
-	ts := "    -     "
+	ts := "-"
 	if !i.message.EnqueuedAt.IsZero() {
 		ts = i.message.EnqueuedAt.Local().Format("2006-01-02 15:04")
 	}
-	return fmt.Sprintf("%-40s  %s", id, ts)
+	seq := "-"
+	if i.message.SequenceNumber > 0 {
+		seq = fmt.Sprintf("%d", i.message.SequenceNumber)
+	}
+	delivery := "-"
+	if i.message.DeliveryCount > 0 {
+		delivery = fmt.Sprintf("%dx", i.message.DeliveryCount)
+	}
+	lock := "peek"
+	if i.message.LockID != "" {
+		lock = "lock"
+	}
+	meta := fmt.Sprintf("  seq:%-8s  del:%-4s  %-16s  %s", seq, delivery, ts, lock)
+	width := i.contentWidth
+	if width <= 0 {
+		width = defaultMessageTitleWidth
+	}
+	idWidth := width - ansi.StringWidth(meta)
+	if idWidth <= 0 {
+		return ansi.Truncate(meta, width, "")
+	}
+	tail := "..."
+	if idWidth < ansi.StringWidth(tail) {
+		tail = ""
+	}
+	id = ansi.Truncate(id, idWidth, tail)
+	return fmt.Sprintf("%-*s%s", idWidth, id, meta)
 }
 
 func (i messageItem) Description() string {
@@ -170,10 +200,10 @@ func subscriptionsToItems(subs []servicebus.TopicSubscription) []list.Item {
 	return items
 }
 
-func messagesToItems(messages []servicebus.PeekedMessage) []list.Item {
+func messagesToItems(messages []servicebus.PeekedMessage, contentWidth int) []list.Item {
 	items := make([]list.Item, 0, len(messages))
 	for _, msg := range messages {
-		items = append(items, messageItem{message: msg})
+		items = append(items, messageItem{message: msg, contentWidth: contentWidth})
 	}
 	return items
 }

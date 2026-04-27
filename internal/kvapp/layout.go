@@ -7,52 +7,41 @@ func (m *Model) resize() {
 		return
 	}
 
-	pane := m.Styles.Chrome.Pane
+	// hasParent=false at the topmost column lets focus absorb the
+	// parent slot (~80%); drilled levels keep three slots so focus
+	// stays stable at ~60%.
+	hasParent := m.focus > vaultsPane
+	cols := ui.MillerLayout(m.Styles.Chrome.Pane, m.Width, hasParent, true)
 
-	// Determine parent/child visibility based on focus.
-	// Always reserve parent space — when vaults is focused, a spacer
-	// fills the left column to keep the focused pane centered.
-	hasParent := true
-	hasChild := false
-	switch m.focus {
-	case vaultsPane:
-		hasChild = m.hasVault // show secrets preview
-	case secretsPane:
-		hasChild = m.hasSecret // show versions preview
-	case versionsPane:
-		hasChild = false // rightmost pane, no child
-	}
-
-	cols := ui.MillerLayout(pane, m.Width, hasParent, hasChild)
-
-	// Map roles → pane indices. The focused pane is always center.
-	// Parent is the pane before focus, child is the pane after.
-	m.paneWidths = [3]int{} // reset all to 0
+	m.paneWidths = [3]int{}
 	m.paneWidths[m.focus] = cols.Focused
 	if m.focus > vaultsPane {
 		m.paneWidths[m.focus-1] = cols.Parent
 	}
-	if hasChild {
+	if m.focus < versionsPane {
 		m.paneWidths[m.focus+1] = cols.Child
 	}
 
-	// Height.
-	height := m.Height - ui.StatusBarHeight - ui.SubscriptionBarHeight
+	height := ui.AppBodyHeight(m.Height)
 	if height < 10 {
 		height = 10
 	}
 	m.paneHeight = height
 
-	baseListHeight := ui.PaneListBodyHeight(pane, height, ui.PaneListChrome{Title: true, Hints: true})
+	baseListHeight := ui.MillerListBodyHeight(height, true)
+	rightmost := m.focus
+	if visible := m.visiblePanes(); len(visible) > 0 {
+		rightmost = visible[len(visible)-1].Index
+	}
 
 	// Size each visible list to its pane width.
 	if w := m.paneWidths[vaultsPane]; w > 0 {
-		m.vaultsList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight-m.inspectFooterHeight(vaultsPane))
+		m.vaultsList.SetSize(ui.MillerContentWidth(ui.MillerColumnFrame{Width: w, RightRule: vaultsPane != rightmost}), baseListHeight-m.inspectFooterHeight(vaultsPane))
 	}
 	if w := m.paneWidths[secretsPane]; w > 0 {
-		m.secretsList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight-m.inspectFooterHeight(secretsPane))
+		m.secretsList.SetSize(ui.MillerContentWidth(ui.MillerColumnFrame{Width: w, RightRule: secretsPane != rightmost}), baseListHeight-m.inspectFooterHeight(secretsPane))
 	}
 	if w := m.paneWidths[versionsPane]; w > 0 {
-		m.versionsList.SetSize(ui.PaneContentWidth(pane, w), baseListHeight-m.inspectFooterHeight(versionsPane))
+		m.versionsList.SetSize(ui.MillerContentWidth(ui.MillerColumnFrame{Width: w, RightRule: versionsPane != rightmost}), baseListHeight-m.inspectFooterHeight(versionsPane))
 	}
 }

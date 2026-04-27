@@ -40,6 +40,10 @@ func TestDefaultHasAllFields(t *testing.T) {
 	for i := 0; i < tt.NumField(); i++ {
 		f := v.Field(i)
 		b := f.Interface().(Binding)
+		switch tt.Field(i).Name {
+		case "OpenFocusedAlt", "NavigateLeft":
+			continue
+		}
 		if len(b.Keys) == 0 {
 			t.Errorf("Default() field %s has no keys", tt.Field(i).Name)
 		}
@@ -96,7 +100,84 @@ func TestMergePartialOverride(t *testing.T) {
 	}
 	// Other bindings should be unchanged.
 	if !km.NextFocus.Matches("tab") {
-		t.Fatal("expected next_focus to remain tab")
+		t.Fatal("expected next_focus to remain \"tab\"")
+	}
+	for _, key := range []string{"l", "right"} {
+		if !km.OpenFocusedAlt.Matches(key) {
+			t.Fatalf("expected open_focused_alt to remain %q", key)
+		}
+	}
+}
+
+func TestDefaultMillerColumnFocusKeys(t *testing.T) {
+	km := Default()
+	assertMillerColumnFocusKeys(t, km)
+}
+
+func TestLoadStockDefaultMillerColumnFocusKeys(t *testing.T) {
+	km := Load(t.TempDir())
+	assertMillerColumnFocusKeys(t, km)
+}
+
+func TestDefaultDashboardWidgetFocusKeys(t *testing.T) {
+	km := Default()
+	assertDashboardWidgetFocusKeys(t, km)
+}
+
+func TestLoadStockDefaultDashboardWidgetFocusKeys(t *testing.T) {
+	km := Load(t.TempDir())
+	assertDashboardWidgetFocusKeys(t, km)
+}
+
+func assertDashboardWidgetFocusKeys(t *testing.T, km Keymap) {
+	t.Helper()
+	// Dashboard reserves ctrl+h/j/k/l (and alt+) for spatial widget
+	// navigation. Bare h/l/j/k stay free for explorer-style drill-in
+	// inside scrollable widgets so the chord doesn't double-fire.
+	for _, key := range []string{"ctrl+h", "alt+h"} {
+		if !km.WidgetLeft.Matches(key) {
+			t.Fatalf("widget_left should match %q", key)
+		}
+	}
+	for _, key := range []string{"ctrl+l", "alt+l"} {
+		if !km.WidgetRight.Matches(key) {
+			t.Fatalf("widget_right should match %q", key)
+		}
+	}
+	if km.WidgetLeft.Matches("h") || km.WidgetRight.Matches("l") {
+		t.Fatalf("widget left/right must not consume bare h/l (reserved for drill-in)")
+	}
+	if km.WidgetUp.Matches("k") || km.WidgetDown.Matches("j") {
+		t.Fatalf("widget row focus must not consume j/k row movement")
+	}
+}
+
+func assertMillerColumnFocusKeys(t *testing.T, km Keymap) {
+	t.Helper()
+	// In Miller-column UIs (yazi, ranger), the focused column is always
+	// the deepest one with data — moving "right" means drilling into
+	// the selected row, not just shifting focus to a pre-rendered column.
+	// h/l therefore map to drill-in / back, while tab / shift+tab keep
+	// the conventional next/previous-focus role for the few non-Miller
+	// places (overlays, preview pane).
+	for _, key := range []string{"l", "right"} {
+		if !km.OpenFocusedAlt.Matches(key) {
+			t.Fatalf("open_focused_alt should match %q (drill-in)", key)
+		}
+	}
+	for _, key := range []string{"h", "left"} {
+		if !km.NavigateLeft.Matches(key) {
+			t.Fatalf("navigate_left should match %q (back)", key)
+		}
+	}
+	if !km.NextFocus.Matches("tab") || !km.PreviousFocus.Matches("shift+tab") {
+		t.Fatalf("tab / shift+tab must keep next/previous-focus role")
+	}
+	if km.NextFocus.Matches("l") || km.PreviousFocus.Matches("h") {
+		t.Fatalf("next/previous_focus must not steal h/l from drill-in")
+	}
+	if !km.BackspaceUp.Matches("backspace") {
+		t.Fatalf("backspace should handle go up/back")
 	}
 }
 
@@ -137,7 +218,12 @@ func TestLoadFromDir(t *testing.T) {
 	}
 	// Non-overridden binding should use default.
 	if !km.NextFocus.Matches("tab") {
-		t.Fatal("expected default next_focus")
+		t.Fatalf("expected default next_focus to match \"tab\"")
+	}
+	for _, key := range []string{"l", "right"} {
+		if !km.OpenFocusedAlt.Matches(key) {
+			t.Fatalf("expected default open_focused_alt to match %q", key)
+		}
 	}
 }
 

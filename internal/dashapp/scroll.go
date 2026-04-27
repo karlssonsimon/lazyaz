@@ -13,16 +13,16 @@ func (m Model) focusedWidgetDims() (total, visible int) {
 	if row >= 0 && row < len(m.rowHeights) {
 		widgetH = m.rowHeights[row]
 	}
-	visible = innerHeightToVisibleData(widgetH - 2) // pane border is 2 rows
+	visible = innerHeightToVisibleData(widgetH - 2) // Miller title + footer are 2 rows
 	total = w.RowCount(&m, m.viewStates[m.focusedIdx])
 	return
 }
 
-// innerHeightToVisibleData converts a widget's inner content area
-// (height excluding pane border) to the number of data rows that fit:
-// inner has 1 row of title + 1 row of header + N data rows.
+// innerHeightToVisibleData converts a Miller column body height to the
+// number of data rows the table renderer can budget. The widget title
+// and footer are outside this body; only the table header is inside it.
 func innerHeightToVisibleData(innerHeight int) int {
-	visible := innerHeight - 2 // 1 title + 1 column header
+	visible := innerHeight - 1 // 1 column header
 	if visible < 1 {
 		visible = 1
 	}

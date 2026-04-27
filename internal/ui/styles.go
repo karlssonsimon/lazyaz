@@ -183,6 +183,66 @@ func NewStyles(s Scheme) Styles {
 			Foreground(blue).
 			Background(surface).
 			Padding(0, 1),
+		HeaderBrand: lipgloss.NewStyle().
+			Foreground(purple).
+			Background(bg).
+			Bold(true),
+		HeaderPath: lipgloss.NewStyle().
+			Foreground(text).
+			Background(bg),
+		HeaderPathMuted: lipgloss.NewStyle().
+			Foreground(muted).
+			Background(bg),
+		HeaderMeta: lipgloss.NewStyle().
+			Foreground(muted).
+			Background(bg),
+		HeaderStatusOK: lipgloss.NewStyle().
+			Foreground(green).
+			Background(bg).
+			Bold(true),
+		HeaderStatusBad: lipgloss.NewStyle().
+			Foreground(danger).
+			Background(bg).
+			Bold(true),
+		ColumnTitle: lipgloss.NewStyle().
+			Foreground(purple).
+			Background(bg).
+			Bold(true),
+		ColumnTitleFocus: lipgloss.NewStyle().
+			Foreground(selText).
+			Background(bg).
+			Bold(true),
+		ColumnRule: lipgloss.NewStyle().
+			// Base03 (muted) reads as a real mid-gray on every base16
+			// theme; Base01 (surface) is intentionally near-bg in dark
+			// schemes, which made the rule glyphs nearly invisible.
+			Foreground(muted).
+			Background(bg),
+		ColumnFooter: lipgloss.NewStyle().
+			Foreground(muted).
+			Background(bg),
+		ColumnFooterFocus: lipgloss.NewStyle().
+			Foreground(text).
+			Background(bg),
+		SelectionGutter: lipgloss.NewStyle().
+			Foreground(purple).
+			Background(bg).
+			Bold(true),
+		RowMeta: lipgloss.NewStyle().
+			Foreground(muted).
+			Background(bg),
+		StatusMode: lipgloss.NewStyle().
+			Foreground(bg).
+			Background(purple).
+			Bold(true).
+			Padding(0, 1),
+		StatusKey: lipgloss.NewStyle().
+			Foreground(purple).
+			Background(surface).
+			Bold(true),
+		Loading: lipgloss.NewStyle().
+			Foreground(cyan).
+			Background(bg),
 	}
 
 	// --- List Delegate ---
@@ -200,18 +260,18 @@ func NewStyles(s Scheme) Styles {
 		Padding(0, 0, 0, 2)
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle().
 		Foreground(selText).
-		Background(selBg).
+		Background(bg).
 		Bold(true).
 		Border(lipgloss.ThickBorder(), false, false, false, true).
-		BorderForeground(green).
-		BorderBackground(selBg).
+		BorderForeground(purple).
+		BorderBackground(bg).
 		Padding(0, 0, 0, 1)
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().
 		Foreground(selText).
-		Background(selBg).
+		Background(bg).
 		Border(lipgloss.ThickBorder(), false, false, false, true).
-		BorderForeground(green).
-		BorderBackground(selBg).
+		BorderForeground(purple).
+		BorderBackground(bg).
 		Padding(0, 0, 0, 1)
 	delegate.Styles.DimmedTitle = lipgloss.NewStyle().
 		Foreground(muted).

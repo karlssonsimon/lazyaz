@@ -4,10 +4,10 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
-// StatusBarHeight is the total height of the status bar: 3 content lines + 2 padding (Padding(1,1)).
-const StatusBarHeight = 5
+const StatusBarHeight = 1
 
 // StatusBarItem is a label/value pair displayed in the status bar.
 type StatusBarItem struct {
@@ -17,72 +17,112 @@ type StatusBarItem struct {
 
 // StatusBarStyles contains all styles for the status bar.
 type StatusBarStyles struct {
-	Box   lipgloss.Style // Container with background and padding
-	Label lipgloss.Style // Gray label text
-	Value lipgloss.Style // Bold white value text
-	Error lipgloss.Style // Bold red error text
-	Gap   lipgloss.Style // Background-only style for spaces between segments
+	Box   lipgloss.Style
+	Label lipgloss.Style
+	Value lipgloss.Style
+	Error lipgloss.Style
+	Gap   lipgloss.Style
 }
 
-// RenderStatusBar renders a fixed-height status bar with label/value
-// pairs on the left and a status message on the right. It always
-// renders exactly 3 content lines. The isErr flag controls whether
-// the status text is rendered with the Error style.
-func RenderStatusBar(styles Styles, items []StatusBarItem, status string, isErr bool, width int) string {
-	s := styles.StatusBar
-	innerWidth := width - 2 // account for box horizontal padding
+// pathSeparator is the breadcrumb glyph between brand/path segments.
+// Chosen to match the visual mockup; falls back gracefully on terminals
+// that lack the glyph since lipgloss treats it as a single-cell rune.
+const pathSeparator = " › "
 
-	// Build item lines.
-	var lines []string
+func RenderAppHeader(cfg HeaderConfig, styles Styles, width int) string {
+	if width <= 0 {
+		return ""
+	}
+
+	chrome := styles.Chrome
+	sep := chrome.HeaderPathMuted.Render(pathSeparator)
+
+	parts := make([]string, 0, len(cfg.Path)+1)
+	if cfg.Brand != "" {
+		parts = append(parts, chrome.HeaderBrand.Render(cfg.Brand))
+	}
+	for _, segment := range cfg.Path {
+		if segment == "" {
+			continue
+		}
+		parts = append(parts, chrome.HeaderPath.Render(segment))
+	}
+
+	left := strings.Join(parts, sep)
+	return fitStatusLine(left, cfg.Meta, width, chrome.HeaderPathMuted)
+}
+
+func RenderStatusLine(cfg StatusLineConfig, styles Styles, width int) string {
+	if width <= 0 {
+		return ""
+	}
+
+	chrome := styles.Chrome
+	parts := make([]string, 0, len(cfg.Actions)+1)
+	if cfg.Mode != "" {
+		parts = append(parts, chrome.StatusMode.Render(cfg.Mode))
+	}
+	for _, action := range cfg.Actions {
+		if action.Key == "" {
+			continue
+		}
+		label := action.Label
+		if label != "" {
+			label = " " + label
+		}
+		parts = append(parts, chrome.StatusKey.Render(action.Key)+chrome.Help.Render(label))
+	}
+
+	left := strings.Join(parts, chrome.Help.Render("  "))
+	right := ""
+	switch {
+	case cfg.Message != "" && cfg.IsError:
+		right = chrome.Error.Render(cfg.Message)
+	case cfg.Message != "":
+		right = chrome.Help.Render(cfg.Message)
+	}
+	return fitStatusLine(left, right, width, chrome.Help)
+}
+
+// RenderStatusBar keeps the existing call sites working while rendering the new one-line status.
+func RenderStatusBar(styles Styles, items []StatusBarItem, status string, isErr bool, width int) string {
+	actions := make([]StatusAction, 0, len(items))
 	for _, item := range items {
 		if item.Value == "" {
 			continue
 		}
-		label := s.Label.Render(item.Label)
-		gap := s.Gap.Render(" ")
-		value := s.Value.Render(item.Value)
-		line := label + gap + value
-		lines = append(lines, line)
-	}
-
-	// Right-align status on the first line.
-	if status != "" {
-		var styledStatus string
-		if isErr {
-			styledStatus = s.Error.Render(status)
-		} else {
-			styledStatus = s.Label.Render(status)
+		key := item.Label
+		label := item.Value
+		if key == "" {
+			key = item.Value
+			label = ""
 		}
+		actions = append(actions, StatusAction{Key: key, Label: label})
+	}
+	return RenderStatusLine(StatusLineConfig{Actions: actions, Message: status, IsError: isErr}, styles, width)
+}
 
-		if len(lines) > 0 {
-			first := lines[0]
-			gap := innerWidth - lipgloss.Width(first) - lipgloss.Width(styledStatus)
-			if gap < 1 {
-				gap = 1
-			}
-			lines[0] = first + s.Gap.Render(strings.Repeat(" ", gap)) + styledStatus
-		} else {
-			gap := innerWidth - lipgloss.Width(styledStatus)
-			if gap < 0 {
-				gap = 0
-			}
-			lines = append(lines, s.Gap.Render(strings.Repeat(" ", gap))+styledStatus)
+func fitStatusLine(left, right string, width int, fill lipgloss.Style) string {
+	if width <= 0 {
+		return ""
+	}
+	gap := width - ansi.StringWidth(left) - ansi.StringWidth(right)
+	if right == "" {
+		gap = width - ansi.StringWidth(left)
+	}
+	if gap < 1 && right != "" {
+		line := left + " " + right
+		if ansi.StringWidth(line) > width {
+			return ansi.Truncate(line, width, "")
 		}
+		return line
 	}
-
-	// Pad each line to full width so the background is solid.
-	for i, line := range lines {
-		lineWidth := lipgloss.Width(line)
-		if lineWidth < innerWidth {
-			lines[i] = line + s.Gap.Render(strings.Repeat(" ", innerWidth-lineWidth))
-		}
+	if gap < 0 {
+		gap = 0
 	}
-
-	// Always render exactly 3 content lines.
-	for len(lines) < 3 {
-		lines = append(lines, s.Gap.Render(strings.Repeat(" ", innerWidth)))
+	line := left + fill.Render(strings.Repeat(" ", gap)) + right
+	if ansi.StringWidth(line) > width {
+		return ansi.Truncate(line, width, "")
 	}
-
-	content := strings.Join(lines[:3], "\n")
-	return s.Box.Width(width).Render(content)
+	return line
 }

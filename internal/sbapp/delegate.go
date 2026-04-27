@@ -22,7 +22,7 @@ type messageDelegate struct {
 }
 
 func newMessageDelegate(base list.DefaultDelegate, styles ui.Styles) messageDelegate {
-	bar := "┃ "
+	bar := "▌ "
 	markedBar := lipgloss.NewStyle().
 		Foreground(styles.Accent2.GetForeground()).
 		Render(bar)

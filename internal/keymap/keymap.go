@@ -7,6 +7,8 @@ type Keymap struct {
 	// Shared — used by all apps.
 	Quit                Binding `json:"quit"`
 	Cancel              Binding `json:"cancel"`
+	CursorUp            Binding `json:"cursor_up"`
+	CursorDown          Binding `json:"cursor_down"`
 	HalfPageDown        Binding `json:"half_page_down"`
 	HalfPageUp          Binding `json:"half_page_up"`
 	NextFocus           Binding `json:"next_focus"`
@@ -22,7 +24,7 @@ type Keymap struct {
 	ToggleThemePicker   Binding `json:"toggle_theme_picker"`
 	ToggleHelp          Binding `json:"toggle_help"`
 	ToggleNotifications Binding `json:"toggle_notifications"`
-	ToggleActivity     Binding `json:"toggle_activity"`
+	ToggleActivity      Binding `json:"toggle_activity"`
 
 	// Overlay navigation — reused by theme, subscription, tab pickers.
 	ThemeUp     Binding `json:"theme_up"`

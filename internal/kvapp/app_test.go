@@ -1,9 +1,12 @@
 package kvapp
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,6 +15,29 @@ import (
 var testConfig = ui.Config{
 	ThemeName: "fallback",
 	Schemes:   []ui.Scheme{ui.FallbackScheme()},
+}
+
+func TestKeyVaultHelpDescribesMillerColumns(t *testing.T) {
+	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
+	sections := m.HelpSections()
+	joined := fmt.Sprint(sections)
+	if !strings.Contains(joined, "column") || !strings.Contains(joined, "filter focused column") {
+		t.Fatalf("help does not describe Miller column navigation: %v", sections)
+	}
+	if helpHasBlankGoUpBack(sections) || !strings.Contains(joined, "backspace  go up/back") {
+		t.Fatalf("help must bind go up/back to backspace without blank entries: %v", sections)
+	}
+}
+
+func helpHasBlankGoUpBack(sections []ui.HelpSection) bool {
+	for _, section := range sections {
+		for _, item := range section.Items {
+			if strings.HasPrefix(item, "  go up/back") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestSetSubscriptionAllowsNilServiceWithTenant(t *testing.T) {
@@ -89,6 +115,78 @@ func TestViewShowsStatusBar(t *testing.T) {
 	view := m.View()
 	if view.Content == "" {
 		t.Fatal("expected view to render content")
+	}
+}
+
+func TestKeyVaultViewUsesMillerChrome(t *testing.T) {
+	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
+	m.Width = 100
+	m.Height = 30
+	m.resize()
+	out := m.View().Content
+	// "Key Vault" no longer appears in the breadcrumb — the tab bar
+	// labels the explorer; the in-tab breadcrumb starts at the
+	// subscription. The brand is still rendered.
+	if !strings.Contains(out, "lazyaz") {
+		t.Fatalf("compact Key Vault header missing brand: %q", out)
+	}
+	if !strings.Contains(out, "VAULTS") {
+		t.Fatalf("vault column badge missing: %q", out)
+	}
+}
+
+func TestSecretAndVersionRowsShowState(t *testing.T) {
+	secret := secretItem{secret: keyvault.Secret{Name: "api-key", ContentType: "text/plain", Enabled: false}}
+	if title := secret.Title(); !strings.Contains(title, "api-key") || !strings.Contains(secret.Description(), "disabled") {
+		t.Fatalf("secret row missing state: title=%q desc=%q", title, secret.Description())
+	}
+	version := versionItem{version: keyvault.SecretVersion{Version: "1234567890abcdef", Enabled: false}}
+	if !strings.Contains(version.Description(), "disabled") {
+		t.Fatalf("version description missing disabled state: %q", version.Description())
+	}
+}
+
+func TestMouseClickFirstMillerRowSelectsFirstVault(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.Width = 100
+	m.Height = 30
+	m.focus = vaultsPane
+	m.vaultsList.SetItems(vaultsToItems([]keyvault.Vault{{Name: "first"}, {Name: "second"}}))
+	m.resize()
+	m.vaultsList.Select(1)
+
+	consumed, _ := m.handleMouseClick(tea.MouseClickMsg{
+		Button: tea.MouseLeft,
+		X:      m.Width*20/100 + 1,
+		Y:      m.paneAreaY() + 2,
+	})
+
+	if !consumed {
+		t.Fatal("expected click in vault pane to be consumed")
+	}
+	if got := m.vaultsList.Index(); got != 0 {
+		t.Fatalf("expected first rendered row click to select index 0, got %d", got)
+	}
+}
+
+func TestKeyVaultMillerColumnRendersInspectFooter(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.Width = 120
+	m.Height = 40
+	m.SubOverlay.Close()
+	m.focus = vaultsPane
+	m.inspectPanes[vaultsPane] = true
+	m.vaultsList.SetItems(vaultsToItems([]keyvault.Vault{{
+		Name:           "vault-one",
+		SubscriptionID: "sub-1",
+		ResourceGroup:  "rg-one",
+		VaultURI:       "https://vault-one.vault.azure.net/",
+	}}))
+	m.resize()
+
+	out := m.View().Content
+	if !strings.Contains(out, "Resource Group") || !strings.Contains(out, "rg-one") {
+		t.Fatalf("inspect footer missing selected vault details: %q", out)
 	}
 }
 

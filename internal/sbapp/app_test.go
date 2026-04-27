@@ -1,6 +1,7 @@
 package sbapp
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -59,6 +60,29 @@ func TestMessageItemKeyUsesLockedOperationKey(t *testing.T) {
 var testConfig = ui.Config{
 	ThemeName: "fallback",
 	Schemes:   []ui.Scheme{{Name: "fallback", Base00: "1e293b", Base01: "4B5563", Base02: "334155", Base03: "94A3B8", Base04: "94A3B8", Base05: "E5E7EB", Base06: "F8FAFC", Base07: "F8FAFC", Base08: "F87171", Base09: "F59E0B", Base0A: "F59E0B", Base0B: "22C55E", Base0C: "38BDF8", Base0D: "60A5FA", Base0E: "C084FC", Base0F: "94A3B8"}},
+}
+
+func TestServiceBusHelpDescribesMillerColumns(t *testing.T) {
+	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
+	sections := m.HelpSections()
+	joined := fmt.Sprint(sections)
+	if !strings.Contains(joined, "column") || !strings.Contains(joined, "filter focused column") {
+		t.Fatalf("help does not describe Miller column navigation: %v", sections)
+	}
+	if helpHasBlankGoUpBack(sections) || !strings.Contains(joined, "backspace  go up/back") {
+		t.Fatalf("help must bind go up/back to backspace without blank entries: %v", sections)
+	}
+}
+
+func helpHasBlankGoUpBack(sections []ui.HelpSection) bool {
+	for _, section := range sections {
+		for _, item := range section.Items {
+			if strings.HasPrefix(item, "  go up/back") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestSetSubscriptionAllowsNilServiceWithTenant(t *testing.T) {
@@ -227,6 +251,53 @@ func TestViewShowsStatusBar(t *testing.T) {
 	view := m.View()
 	if view.Content == "" {
 		t.Fatal("expected view to render content")
+	}
+}
+
+func TestServiceBusViewUsesMillerChrome(t *testing.T) {
+	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
+	m.Width = 100
+	m.Height = 30
+	m.resize()
+	out := m.View().Content
+	// "Service Bus" no longer appears in the breadcrumb — the tab bar
+	// labels the explorer. Brand stays.
+	if !strings.Contains(out, "lazyaz") {
+		t.Fatalf("compact Service Bus header missing brand: %q", out)
+	}
+	if !strings.Contains(out, "NAMESPACES") {
+		t.Fatalf("namespace column badge missing: %q", out)
+	}
+	if strings.Contains(out, "Namespaces ·") {
+		t.Fatalf("old namespace pane title rendered: %q", out)
+	}
+}
+
+func TestMessagePreviewViewportRegionMatchesFlatDetailsColumn(t *testing.T) {
+	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
+	m.Width = 120
+	m.Height = 30
+	m.EmbeddedMode = true
+	m.hasPeekTarget = true
+	m.focus = messagesPane
+	m.viewingMessage = true
+	m.selectedMessage = servicebus.PeekedMessage{MessageID: "msg-1"}
+	m.resize()
+
+	wantHeight := ui.MillerListBodyHeight(m.paneHeight, false) - 1
+	if got := m.messageViewport.Height(); got != wantHeight {
+		t.Fatalf("message viewport height = %d, want %d", got, wantHeight)
+	}
+
+	region := m.messageViewportRegion()
+	// Tab bar (1) + app header (1) + horizontal rule (1) +
+	// column title row (1) + preview-title row (1) = 5.
+	wantY := ui.AppHeaderHeight + ui.TabBarHeight + 1 + 2
+	if region.Y != wantY {
+		t.Fatalf("message viewport Y = %d, want %d", region.Y, wantY)
+	}
+	if region.Height != wantHeight {
+		t.Fatalf("message viewport region height = %d, want %d", region.Height, wantHeight)
 	}
 }
 

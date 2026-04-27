@@ -248,8 +248,8 @@ func (m Model) HelpSections() []ui.HelpSection {
 		{
 			Title: "Scroll focused widget",
 			Items: []string{
-				keymap.HelpEntry(km.WidgetScrollUp, "scroll up one row"),
-				keymap.HelpEntry(km.WidgetScrollDown, "scroll down one row"),
+				keymap.HelpEntry(km.WidgetScrollUp, "move row up"),
+				keymap.HelpEntry(km.WidgetScrollDown, "move row down"),
 				keymap.HelpEntry(km.HalfPageUp, "scroll half page up"),
 				keymap.HelpEntry(km.HalfPageDown, "scroll half page down"),
 				keymap.HelpEntry(km.WidgetScrollTop, "jump to top (gg)"),
@@ -262,7 +262,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(km.ActionMenu, "open action menu (cursor row)"),
 				"o  open in Service Bus tab",
 				"s  sort picker (each direction is its own option)",
-				keymap.HelpEntry(km.FilterInput, "filter rows (esc clears, enter accepts)"),
+				keymap.HelpEntry(km.FilterInput, "filter focused widget"),
 				"x  clear usage stats (on usage widgets)",
 			},
 		},

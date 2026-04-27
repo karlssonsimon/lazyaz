@@ -50,11 +50,17 @@ func (m *Model) listForPane(pane int) *list.Model {
 }
 
 // paneAreaY returns the absolute screen Y where the pane area starts.
+// Accounts for the tab bar (when embedded), app header, and the
+// full-width horizontal rule rendered between the header and columns.
 func (m Model) paneAreaY() int {
-	y := ui.SubscriptionBarHeight
+	y := ui.AppHeaderHeight
 	if m.EmbeddedMode {
 		y += ui.TabBarHeight
 	}
+	// +1 for the horizontal rule between the header and the columns;
+	// without it, mouse-click rows in the preview map one line below
+	// where the click actually landed.
+	y++
 	return y
 }
 
@@ -88,8 +94,7 @@ func (m *Model) handleMouseClick(msg tea.MouseClickMsg) (bool, bool) {
 		m.transitionTo(vp.Index, false)
 	}
 
-	paneStyle := m.Styles.Chrome.Pane
-	contentY := ui.PaneContentYStart(paneStyle, areaY)
+	contentY := ui.MillerColumnContentYStart(areaY)
 	localY := msg.Y - contentY
 	itemH := m.Styles.Delegate.Height() + m.Styles.Delegate.Spacing()
 	if l := m.listForPane(vp.Index); l != nil && localY >= 0 {

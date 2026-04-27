@@ -1,6 +1,7 @@
 package blobapp
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -14,6 +15,29 @@ import (
 var testConfig = ui.Config{
 	ThemeName: "fallback",
 	Schemes:   []ui.Scheme{ui.FallbackScheme()},
+}
+
+func TestBlobHelpDescribesMillerColumns(t *testing.T) {
+	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
+	sections := m.HelpSections()
+	joined := fmt.Sprint(sections)
+	if !strings.Contains(joined, "column") || !strings.Contains(joined, "filter focused column") {
+		t.Fatalf("help does not describe Miller column navigation: %v", sections)
+	}
+	if helpHasBlankGoUpBack(sections) || !strings.Contains(joined, "backspace  go up/back") {
+		t.Fatalf("help must bind go up/back to backspace without blank entries: %v", sections)
+	}
+}
+
+func helpHasBlankGoUpBack(sections []ui.HelpSection) bool {
+	for _, section := range sections {
+		for _, item := range section.Items {
+			if strings.HasPrefix(item, "  go up/back") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestParentPrefix(t *testing.T) {
@@ -169,6 +193,42 @@ func TestViewRenders(t *testing.T) {
 	}
 }
 
+func TestBlobViewUsesCompactHeaderAndStatus(t *testing.T) {
+	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
+	m.Width = 100
+	m.Height = 30
+	m.resize()
+	out := m.View().Content
+	if strings.Contains(out, "Storage Accounts") {
+		t.Fatalf("old mixed-case pane title rendered: %q", out)
+	}
+	// "Blob" no longer appears in the breadcrumb — the tab bar labels
+	// the explorer; the breadcrumb starts at the subscription. Brand stays.
+	if !strings.Contains(out, "lazyaz") {
+		t.Fatalf("compact app header missing brand: %q", out)
+	}
+	if !strings.Contains(out, "ACCOUNTS") {
+		t.Fatalf("column title badge missing: %q", out)
+	}
+}
+
+func TestPreviewViewportHeightMatchesFlatDetailsColumnBody(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.Width = 120
+	m.Height = 30
+	m.hasAccount = true
+	m.hasContainer = true
+	m.focus = blobsPane
+	m.preview.open = true
+
+	m.resize()
+
+	want := ui.MillerListBodyHeight(m.paneHeight, false)
+	if got := m.preview.viewport.Height(); got != want {
+		t.Fatalf("preview viewport height = %d, want flat details body height %d", got, want)
+	}
+}
+
 func isQuitCmd(cmd tea.Cmd) bool {
 	if cmd == nil {
 		return false
@@ -207,30 +267,10 @@ func TestPreviewPaneOverflowDoesNotEatStatusBar(t *testing.T) {
 		t.Errorf("rendered view: %d lines, want %d", got, m.Height)
 	}
 	stripped := ansi.Strip(view.Content)
-	if !strings.Contains(stripped, "Account:") {
-		t.Errorf("status bar 'Account:' missing from view (preview likely ate it)")
-	}
 	if !strings.Contains(stripped, "test-account") {
-		t.Errorf("status bar account value missing from view")
+		t.Errorf("header account value missing from view")
 	}
-	// Sanity: the bottom-border corner character should appear in every
-	// pane's bottom row. If the preview pane's bottom border is missing
-	// (because we let lipgloss MaxHeight clip from below), this fails.
-	lines := strings.Split(stripped, "\n")
-	// Find the last line containing border corner characters.
-	var lastBorderLine string
-	for i := len(lines) - 1; i >= 0; i-- {
-		if strings.Contains(lines[i], "╯") {
-			lastBorderLine = lines[i]
-			break
-		}
-	}
-	if lastBorderLine == "" {
-		t.Fatal("no pane bottom-border row found")
-	}
-	// Miller layout: containers (parent) + blobs (focused) + preview = 3 panes.
-	if got := strings.Count(lastBorderLine, "╯"); got < 2 {
-		t.Errorf("expected at least 2 bottom-border corners on the pane row, got %d in %q",
-			got, lastBorderLine)
+	if !strings.Contains(stripped, "DETAILS") {
+		t.Errorf("preview details column missing from view")
 	}
 }

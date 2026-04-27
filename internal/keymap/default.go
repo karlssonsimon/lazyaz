@@ -8,6 +8,8 @@ func Default() Keymap {
 		// Shared.
 		Quit:                New("ctrl+c", "q"),
 		Cancel:              New("esc", "ctrl+c"),
+		CursorUp:            New("k", "up"),
+		CursorDown:          New("j", "down"),
 		HalfPageDown:        New("ctrl+d", "pgdown"),
 		HalfPageUp:          New("ctrl+u", "pgup"),
 		NextFocus:           New("tab"),
@@ -23,7 +25,7 @@ func Default() Keymap {
 		ToggleThemePicker:   New("T"),
 		ToggleHelp:          New("?", "f1"),
 		ToggleNotifications: New("N"),
-		ToggleActivity:     New("F"),
+		ToggleActivity:      New("F"),
 
 		// Overlay navigation.
 		ThemeUp:     New("up", "ctrl+k"),
@@ -91,7 +93,7 @@ func Default() Keymap {
 		// Dashboard — scroll focused widget.
 		WidgetScrollUp:     New("k", "up"),
 		WidgetScrollDown:   New("j", "down"),
-		WidgetScrollTop:    New("g"),    // gg chord; first g primes, second jumps
+		WidgetScrollTop:    New("g"), // gg chord; first g primes, second jumps
 		WidgetScrollBottom: New("G", "end"),
 
 		// Cross-tab jump list. ctrl+o for back is universal; ctrl+i

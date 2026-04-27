@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -18,14 +17,7 @@ func (m Model) View() tea.View {
 		return v
 	}
 
-	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
-	sbItems := m.statusBarItems()
-	if value, ok := activity.StatusBarItem(m.Activities, "F"); ok {
-		sbItems = append(sbItems, ui.StatusBarItem{Value: value})
-	}
-	statusBar := ui.RenderStatusBar(m.Styles, sbItems, "", false, m.Width)
-
-	bodyHeight := m.Height - lipgloss.Height(subBar) - lipgloss.Height(statusBar)
+	bodyHeight := ui.AppBodyHeight(m.Height)
 	if bodyHeight < 2 {
 		bodyHeight = 2
 	}
@@ -35,7 +27,17 @@ func (m Model) View() tea.View {
 	// col index of widgets in that row, so a sparse grid (e.g. 1
 	// widget in row 0, 2 in row 1) still tiles cleanly.
 	rows, _ := gridDims(m.widgets)
-	heights := computeRowHeights(bodyHeight, rows)
+	// Reserve a row between every pair of widget rows for the
+	// horizontal separator rule.
+	rowGutter := 0
+	if rows > 1 {
+		rowGutter = rows - 1
+	}
+	widgetHeights := bodyHeight - rowGutter
+	if widgetHeights < rows {
+		widgetHeights = rows // 1 row per widget minimum
+	}
+	heights := computeRowHeights(widgetHeights, rows)
 
 	rowWidgets := make([][]int, rows)
 	for i, w := range m.widgets {
@@ -68,13 +70,44 @@ func (m Model) View() tea.View {
 			if c < 0 || c >= cols {
 				continue
 			}
-			colSlots[c] = m.renderWidget(m.widgets[i], i, colWidths[c], heights[r])
+			// Only non-last widgets get a right rule — the rightmost
+			// widget's right edge is the screen edge; a `│` there
+			// would dangle against the bg.
+			isLast := c == cols-1
+			colSlots[c] = m.renderWidget(m.widgets[i], i, colWidths[c], heights[r], !isLast)
 		}
 		rowSlots[r] = lipgloss.JoinHorizontal(lipgloss.Top, colSlots...)
 	}
 
-	body := lipgloss.JoinVertical(lipgloss.Left, rowSlots...)
-	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, body, statusBar), m.Width, m.Height, m.Styles.Bg)
+	// Stitch widget rows together with a full-width horizontal rule
+	// between them so stacked rows don't visually merge.
+	bodyParts := make([]string, 0, 2*rows)
+	for r, slot := range rowSlots {
+		if slot == "" {
+			continue
+		}
+		if len(bodyParts) > 0 {
+			bodyParts = append(bodyParts, ui.RenderHorizontalRule(m.Width, m.Styles, nil))
+		}
+		bodyParts = append(bodyParts, slot)
+		_ = r
+	}
+	body := lipgloss.JoinVertical(lipgloss.Left, bodyParts...)
+	header := ui.RenderAppHeader(ui.HeaderConfig{
+		Brand: "lazyaz",
+		Path:  m.headerPath(),
+		Meta:  ui.HeaderMeta(m.CurrentSub, m.HasSubscription, m.Styles),
+	}, m.Styles, m.Width)
+	statusBar := ui.RenderStatusLine(ui.StatusLineConfig{
+		Mode:    "NORMAL",
+		Actions: m.statusActions(),
+	}, m.Styles, m.Width)
+	// Dashboard's grid has multiple widgets per row with internal rules,
+	// so computing per-row tick positions correctly is more involved.
+	// Skip ticks for now — the rule still spans full width.
+	topRule := ui.RenderHorizontalRule(m.Width, m.Styles, nil)
+	bottomRule := ui.RenderHorizontalRuleBottom(m.Width, m.Styles, nil)
+	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, header, topRule, body, bottomRule, statusBar), m.Width, m.Height, m.Styles.Bg)
 
 	if m.sortOverlay.active {
 		view = m.renderSortOverlay(view)
@@ -88,9 +121,9 @@ func (m Model) View() tea.View {
 	return out
 }
 
-func (m Model) renderWidget(w Widget, idx, width, height int) string {
+func (m Model) renderWidget(w Widget, idx, width, height int, rightRule bool) string {
 	focused := idx == m.focusedIdx
-	innerHeight := height - 2 // pane border
+	innerHeight := height - 2 // title and footer
 	cursor := -1
 	// Only show the highlight on the focused widget so it's clear
 	// where keys land. Background cursor rows would compete visually.
@@ -98,7 +131,78 @@ func (m Model) renderWidget(w Widget, idx, width, height int) string {
 		cursor = m.cursors[idx]
 	}
 	body := w.Render(&m, width, innerHeight, m.offsets[idx], cursor, m.viewStates[idx])
-	return m.widgetFrame(m.widgetTitleFor(w, idx, focused), body, width, height, focused)
+	return m.widgetFrame(m.widgetTitleFor(w, idx, focused), body, width, height, focused, rightRule)
+}
+
+func (m Model) headerPath() []string {
+	// Dashboard's only "scope" is the active subscription — show it as
+	// the single breadcrumb when set, otherwise nothing (the meta slot
+	// already announces "no subscription").
+	if m.HasSubscription {
+		return []string{ui.SubscriptionDisplayName(m.CurrentSub)}
+	}
+	return nil
+}
+
+// compactDirections renders four h/j/k/l-style keys as a single
+// compact hint. When all four share a modifier prefix (e.g.
+// "ctrl+h", "ctrl+j", "ctrl+k", "ctrl+l") it collapses to
+// `ctrl+hjkl`. Falls back to slash-separated `a/b/c/d` if the
+// shapes don't match (custom keymaps, mixed modifiers).
+func compactDirections(left, down, up, right string) string {
+	parts := [4]string{left, down, up, right}
+	prefix := commonModifierPrefix(parts[:])
+	tails := [4]string{
+		strings.TrimPrefix(left, prefix),
+		strings.TrimPrefix(down, prefix),
+		strings.TrimPrefix(up, prefix),
+		strings.TrimPrefix(right, prefix),
+	}
+	allSingle := true
+	for _, t := range tails {
+		if len([]rune(t)) != 1 {
+			allSingle = false
+			break
+		}
+	}
+	if prefix != "" && allSingle {
+		return prefix + tails[0] + tails[1] + tails[2] + tails[3]
+	}
+	return left + "/" + down + "/" + up + "/" + right
+}
+
+// commonModifierPrefix returns the shared "<mod>+" prefix across the
+// keys, e.g. "ctrl+" for ["ctrl+h","ctrl+j","ctrl+k","ctrl+l"].
+// Returns "" if the keys don't all share the same single modifier.
+func commonModifierPrefix(keys []string) string {
+	if len(keys) == 0 {
+		return ""
+	}
+	idx := strings.LastIndex(keys[0], "+")
+	if idx < 0 {
+		return ""
+	}
+	prefix := keys[0][:idx+1]
+	for _, k := range keys[1:] {
+		if !strings.HasPrefix(k, prefix) {
+			return ""
+		}
+	}
+	return prefix
+}
+
+func (m Model) statusActions() []ui.StatusAction {
+	km := m.Keymap
+	actions := []ui.StatusAction{
+		{Key: compactDirections(km.WidgetLeft.Short(), km.WidgetDown.Short(), km.WidgetUp.Short(), km.WidgetRight.Short()), Label: "widgets"},
+		{Key: km.WidgetScrollDown.Short() + "/" + km.WidgetScrollUp.Short(), Label: "rows"},
+		{Key: km.ActionMenu.Short(), Label: "actions"},
+		{Key: km.FilterInput.Short(), Label: "filter"},
+		{Key: km.RefreshScope.Short(), Label: "refresh"},
+		{Key: km.SubscriptionPicker.Short(), Label: "sub"},
+		{Key: km.ToggleHelp.Short(), Label: "help"},
+	}
+	return actions
 }
 
 // widgetTitleFor returns the title shown in the pane header. While the
@@ -117,37 +221,18 @@ func (m Model) widgetTitleFor(w Widget, idx int, focused bool) string {
 	return title
 }
 
-func (m Model) statusBarItems() []ui.StatusBarItem {
-	var items []ui.StatusBarItem
-	items = append(items, ui.StatusBarItem{Label: "Namespaces:", Value: fmt.Sprintf("%d", len(m.namespaces))})
-	if m.pendingFetches > 0 {
-		items = append(items, ui.StatusBarItem{Label: "Loading:", Value: fmt.Sprintf("%d", m.pendingFetches)})
-	}
+func (m Model) widgetFrame(title, body string, width, height int, focused, rightRule bool) string {
 	km := m.Keymap
-	items = append(items,
-		ui.StatusBarItem{Label: km.RefreshScope.Short(), Value: "refresh"},
-		ui.StatusBarItem{Label: km.SubscriptionPicker.Short(), Value: "subscription"},
-	)
-	return items
-}
-
-// widgetFrame wraps content in a titled, bordered box sized to (width, height).
-// While a refresh is in flight, the title carries an inline spinner glyph
-// so the silent refresh is observable.
-func (m Model) widgetFrame(title, body string, width, height int, focused bool) string {
-	base := m.Styles.Chrome.Pane
-	if focused {
-		base = m.Styles.Chrome.FocusedPane
-	}
-	pane := base.
-		Width(width - 2).
-		Height(height - 2)
-	titleLine := m.Styles.Chrome.Header.Render(title)
+	footer := km.WidgetScrollDown.Short() + "/" + km.WidgetScrollUp.Short() + " rows"
 	if m.refreshInFlight > 0 {
-		spin := m.Styles.Chrome.Meta.Render(" " + m.Spinner.View())
-		titleLine = lipgloss.JoinHorizontal(lipgloss.Top, titleLine, spin)
+		footer = m.Styles.Chrome.Loading.Render(m.Spinner.View()) + " refreshing"
 	}
-	return pane.Render(lipgloss.JoinVertical(lipgloss.Left, titleLine, body))
+	return ui.RenderMillerColumn(ui.MillerColumn{
+		Title:  strings.ToUpper(title),
+		Body:   body,
+		Footer: footer,
+		Frame:  ui.MillerColumnFrame{Width: width, Height: height, Focused: focused, RightRule: rightRule},
+	}, m.Styles)
 }
 
 // loadingOrEmpty picks an empty-state hint. Avoids showing "no

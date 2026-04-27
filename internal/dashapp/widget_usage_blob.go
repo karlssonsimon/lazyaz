@@ -35,10 +35,7 @@ func (w usedBlobWidget) Render(m *Model, width, innerHeight, offset, cursor int,
 	if !m.HasSubscription {
 		return "Pick a subscription with " + m.Keymap.SubscriptionPicker.Short() + "."
 	}
-	entries := m.usedBlobEntries(view.filter)
-	if view.hasSort {
-		sortUsageEntries(entries, view.sortField, view.sortDesc)
-	}
+	entries := m.usedBlobRows(view)
 	if len(entries) == 0 {
 		if view.filter != "" {
 			return "No matches for filter: " + view.filter
@@ -64,7 +61,7 @@ func (usedBlobWidget) SortFields() []SortField {
 
 func (w usedBlobWidget) Actions(m *Model, cursorRow int) []Action {
 	var actions []Action
-	entries := m.usedBlobEntries(m.viewStates[m.focusedIdx].filter)
+	entries := m.usedBlobRows(focusedWidgetView(m))
 	if cursorRow >= 0 && cursorRow < len(entries) {
 		if cmd := openUsageEntryInBlobCmd(m.CurrentSub, entries[cursorRow]); cmd != nil {
 			actions = append(actions, Action{
@@ -77,6 +74,14 @@ func (w usedBlobWidget) Actions(m *Model, cursorRow int) []Action {
 	actions = append(actions, sortAction())
 	actions = append(actions, clearUsageAction(blobUsageTypes...))
 	return actions
+}
+
+func (m Model) usedBlobRows(view widgetViewState) []cache.UsageEntry {
+	entries := m.usedBlobEntries(view.filter)
+	if view.hasSort {
+		sortUsageEntries(entries, view.sortField, view.sortDesc)
+	}
+	return entries
 }
 
 // openUsageEntryInBlobCmd builds the right cross-tab nav msg for a

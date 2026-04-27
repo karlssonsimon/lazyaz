@@ -47,7 +47,7 @@ func (dlqAlertsWidget) SortFields() []SortField {
 
 func (w dlqAlertsWidget) Actions(m *Model, cursorRow int) []Action {
 	var actions []Action
-	alerts := m.dlqAlerts()
+	alerts := m.dlqAlertRows(focusedWidgetView(m))
 	if cursorRow >= 0 && cursorRow < len(alerts) {
 		a := alerts[cursorRow]
 		actions = append(actions, Action{
@@ -64,19 +64,7 @@ func (w dlqAlertsWidget) Render(m *Model, width, innerHeight, offset, cursor int
 	if !m.HasSubscription {
 		return "Pick a subscription with " + m.Keymap.SubscriptionPicker.Short() + "."
 	}
-	alerts := m.dlqAlerts()
-	if view.filter != "" {
-		filtered := alerts[:0]
-		for _, a := range alerts {
-			if a.matchesFilter(view.filter) {
-				filtered = append(filtered, a)
-			}
-		}
-		alerts = filtered
-	}
-	if view.hasSort {
-		sortDLQAlerts(alerts, view.sortField, view.sortDesc)
-	}
+	alerts := m.dlqAlertRows(view)
 	if len(alerts) == 0 {
 		if view.filter != "" {
 			return "No matches for filter: " + view.filter
@@ -90,6 +78,23 @@ func (w dlqAlertsWidget) Render(m *Model, width, innerHeight, offset, cursor int
 	}
 	aligns := []lipgloss.Position{lipgloss.Left, lipgloss.Left, lipgloss.Right}
 	return renderScrollableTable(cells, aligns, m.Styles, offset, innerHeightToVisibleData(innerHeight), cursor)
+}
+
+func (m Model) dlqAlertRows(view widgetViewState) []dlqAlert {
+	alerts := m.dlqAlerts()
+	if view.filter != "" {
+		filtered := alerts[:0]
+		for _, a := range alerts {
+			if a.matchesFilter(view.filter) {
+				filtered = append(filtered, a)
+			}
+		}
+		alerts = filtered
+	}
+	if view.hasSort {
+		sortDLQAlerts(alerts, view.sortField, view.sortDesc)
+	}
+	return alerts
 }
 
 // dlqAlert is a single row in the DLQ alerts widget.

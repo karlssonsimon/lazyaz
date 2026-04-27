@@ -49,7 +49,16 @@ func (m *Model) resetBlobLoadState() {
 
 func (m *Model) refreshItems() {
 	entries := m.displayBlobs()
-	w := ui.PaneContentWidth(m.Styles.Chrome.Pane, m.paneWidths[blobsPane])
+	// blobsPane is rightmost only when no child column is rendered;
+	// the layout always reserves the preview slot so RightRule=true.
+	w := ui.MillerContentWidth(ui.MillerColumnFrame{
+		Width:     m.paneWidths[blobsPane],
+		RightRule: m.paneWidths[previewPane] > 0,
+	})
+	m.refreshItemsWithWidth(entries, w)
+}
+
+func (m *Model) refreshItemsWithWidth(entries []blob.BlobEntry, w int) {
 	ui.SetItemsPreserveKey(&m.blobsList, blobsToItems(entries, m.prefix, w), blobItemKey)
 	m.refreshBlobSelectionDisplay()
 }

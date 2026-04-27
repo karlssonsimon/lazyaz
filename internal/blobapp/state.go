@@ -62,6 +62,17 @@ func (m Model) inputMode() InputMode {
 	}
 }
 
+func (mode InputMode) String() string {
+	switch mode {
+	case ModeVisualLine:
+		return "VISUAL"
+	case ModeListFilter, ModePrefixSearch:
+		return "FILTER"
+	default:
+		return "NORMAL"
+	}
+}
+
 type blobSortField int
 
 const (
@@ -245,28 +256,31 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	delegate := list.NewDefaultDelegate()
 
 	accounts := list.New([]list.Item{}, delegate, 24, 10)
-	accounts.SetShowTitle(false) // title is rendered by ui.RenderListPane
+	accounts.SetShowTitle(false) // title is rendered by ui.RenderMillerListColumn
+	accounts.SetShowFilter(false) // filter UI lives in our SubHeader
 	accounts.SetShowHelp(false)
 	accounts.SetShowPagination(false)
-	accounts.SetShowStatusBar(true)
+	accounts.SetShowStatusBar(false)
 	accounts.SetStatusBarItemName("account", "accounts")
 	accounts.SetFilteringEnabled(true)
 	accounts.DisableQuitKeybindings()
 
 	containers := list.New([]list.Item{}, delegate, 24, 10)
 	containers.SetShowTitle(false)
+	containers.SetShowFilter(false)
 	containers.SetShowHelp(false)
 	containers.SetShowPagination(false)
-	containers.SetShowStatusBar(true)
+	containers.SetShowStatusBar(false)
 	containers.SetStatusBarItemName("container", "containers")
 	containers.SetFilteringEnabled(true)
 	containers.DisableQuitKeybindings()
 
 	blobs := list.New([]list.Item{}, delegate, 40, 10)
 	blobs.SetShowTitle(false)
+	blobs.SetShowFilter(false)
 	blobs.SetShowHelp(false)
 	blobs.SetShowPagination(false)
-	blobs.SetShowStatusBar(true)
+	blobs.SetShowStatusBar(false)
 	blobs.SetStatusBarItemName("entry", "entries")
 	blobs.SetFilteringEnabled(true)
 	blobs.Filter = blobListFilter
@@ -279,6 +293,14 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	parentBlobs.SetShowStatusBar(false)
 	parentBlobs.SetFilteringEnabled(false)
 	parentBlobs.DisableQuitKeybindings()
+
+	// Override bubbles list cursor bindings so they follow the user's
+	// configured CursorUp/CursorDown keys instead of the bubbles
+	// defaults (k/up, j/down).
+	for _, l := range []*list.Model{&accounts, &containers, &blobs, &parentBlobs} {
+		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
+		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
+	}
 
 	m := Model{
 		Model:             appshell.New(cfg, km),
@@ -370,12 +392,11 @@ func (m Model) HelpSections() []ui.HelpSection {
 		{
 			Title: "Navigation",
 			Items: []string{
-				keymap.HelpEntry(km.NextFocus, "next focus"),
-				keymap.HelpEntry(km.PreviousFocus, "previous focus"),
-				keymap.HelpEntry(km.FilterInput, "filter focused pane"),
-				keymap.HelpEntry(keymap.New(km.OpenFocused.Label()+"/"+km.OpenFocusedAlt.Label()), "open and move right"),
-				keymap.HelpEntry(km.NavigateLeft, "go left/back"),
-				keymap.HelpEntry(km.BackspaceUp, "up one folder"),
+				keymap.HelpEntry(km.NextFocus, "focus next column"),
+				keymap.HelpEntry(km.PreviousFocus, "focus previous column"),
+				keymap.HelpEntry(km.FilterInput, "filter focused column"),
+				keymap.HelpEntry(km.OpenFocused, "open selected row"),
+				keymap.HelpEntry(km.BackspaceUp, "go up/back"),
 				keymap.HelpEntry(keymap.New(km.HalfPageDown.Label()+"/"+km.HalfPageUp.Label()), "half-page scroll"),
 			},
 		},

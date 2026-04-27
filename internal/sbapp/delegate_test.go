@@ -3,6 +3,7 @@ package sbapp
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
@@ -138,5 +139,68 @@ func TestSubscriptionDelegate_RendersCounts(t *testing.T) {
 	plain := ansi.Strip(l.View())
 	if !strings.Contains(plain, "orders-sub") || !strings.Contains(plain, "7 / 2") {
 		t.Errorf("subscription row missing name or counts: %s", plain)
+	}
+}
+
+func TestMessageItemTitleShowsSequenceDeliveryAndTime(t *testing.T) {
+	enqueued := time.Date(2026, 4, 26, 8, 15, 0, 0, time.Local)
+	it := messageItem{message: servicebus.PeekedMessage{
+		MessageID:      "order-created",
+		SequenceNumber: 42,
+		DeliveryCount:  3,
+		EnqueuedAt:     enqueued,
+	}}
+	title := it.Title()
+	for _, want := range []string{"order-created", "42", "3x", enqueued.Local().Format("2006-01-02")} {
+		if !strings.Contains(title, want) {
+			t.Fatalf("message title missing %q: %q", want, title)
+		}
+	}
+}
+
+func TestMessageItemTitleKeepsMetadataVisibleForLongMessageID(t *testing.T) {
+	enqueued := time.Date(2026, 4, 26, 8, 15, 0, 0, time.Local)
+	it := messageItem{message: servicebus.PeekedMessage{
+		MessageID:      strings.Repeat("order-created-", 20),
+		SequenceNumber: 42,
+		DeliveryCount:  3,
+		EnqueuedAt:     enqueued,
+		LockID:         "lock-1",
+	}}
+	title := it.Title()
+	if got, want := lipgloss.Width(title), 80; got > want {
+		t.Fatalf("message title width = %d, want <= %d: %q", got, want, title)
+	}
+	for _, want := range []string{"42", "3x", enqueued.Local().Format("2006-01-02"), "lock"} {
+		if !strings.Contains(title, want) {
+			t.Fatalf("message title missing %q: %q", want, title)
+		}
+	}
+}
+
+func TestMessagesToItemsAppliesContentWidth(t *testing.T) {
+	enqueued := time.Date(2026, 4, 26, 8, 15, 0, 0, time.Local)
+	items := messagesToItems([]servicebus.PeekedMessage{{
+		MessageID:      strings.Repeat("order-created-", 20),
+		SequenceNumber: 42,
+		DeliveryCount:  3,
+		EnqueuedAt:     enqueued,
+		LockID:         "lock-1",
+	}}, 60)
+	if len(items) != 1 {
+		t.Fatalf("messagesToItems length = %d, want 1", len(items))
+	}
+	it, ok := items[0].(messageItem)
+	if !ok {
+		t.Fatalf("messagesToItems item type = %T, want messageItem", items[0])
+	}
+	title := it.Title()
+	if got, want := lipgloss.Width(title), 60; got > want {
+		t.Fatalf("message title width = %d, want <= %d: %q", got, want, title)
+	}
+	for _, want := range []string{"42", "3x", enqueued.Local().Format("2006-01-02"), "lock"} {
+		if !strings.Contains(title, want) {
+			t.Fatalf("message title missing %q: %q", want, title)
+		}
 	}
 }

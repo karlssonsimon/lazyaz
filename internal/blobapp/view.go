@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
+	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -16,19 +16,6 @@ func (m Model) View() tea.View {
 		v := tea.NewView("loading...")
 		v.AltScreen = true
 		return v
-	}
-
-	// Build status bar items.
-	var sbItems []ui.StatusBarItem
-	if m.hasAccount {
-		sbItems = append(sbItems, ui.StatusBarItem{Label: "Account:", Value: m.currentAccount.Name})
-	}
-	if m.hasContainer {
-		label := m.containerName
-		if m.prefix != "" {
-			label += "/" + strings.TrimSuffix(m.prefix, "/")
-		}
-		sbItems = append(sbItems, ui.StatusBarItem{Label: "Container:", Value: label})
 	}
 
 	if m.preview.open {
@@ -41,68 +28,73 @@ func (m Model) View() tea.View {
 
 	pw := m.paneWidths
 	h := m.paneHeight
-	km := m.Keymap
-	paneStyle := m.Styles.Chrome.Pane
+	rightmostPane := m.focus
+	childIdx := m.focus + 1
+	if m.focus == blobsPane {
+		childIdx = previewPane
+	}
+	if childIdx <= previewPane && pw[childIdx] > 0 {
+		rightmostPane = childIdx
+	}
+	frame := func(pane int) ui.MillerColumnFrame {
+		return ui.MillerColumnFrame{Width: pw[pane], Height: h, Focused: m.focus == pane, RightRule: pane != rightmostPane}
+	}
+	footer := func(pane int, l *list.Model) string {
+		f := frame(pane)
+		contentWidth := ui.MillerContentWidth(f)
+		base := m.columnFooter(pane)
+		if inspect := m.inspectFooter(pane, contentWidth); inspect != "" {
+			base = lipgloss.JoinVertical(lipgloss.Left, base, inspect)
+		}
+		// Filter input lives in the focused column's footer so the
+		// scope stays attached to its column without covering the
+		// table header at the top.
+		if pane != m.focus || l == nil {
+			return base
+		}
+		switch l.FilterState() {
+		case list.Filtering:
+			return ui.RenderFilterLine(l.FilterInput.Value(), m.Cursor.View(),
+				m.Styles, contentWidth, true)
+		case list.FilterApplied:
+			return lipgloss.JoinVertical(lipgloss.Left,
+				ui.RenderFilterLine(l.FilterValue(), "", m.Styles, contentWidth, false),
+				base)
+		}
+		return base
+	}
 
-	accounts := ui.RenderListPane(ui.ListPane{
-		List:  &m.accountsList,
-		Title: m.accountsPaneTitle(),
-		Hints: []ui.PaneHint{
-			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
-			{Key: km.FilterInput.Short(), Desc: "filter"},
-			{Key: km.NextFocus.Short(), Desc: "next"},
-			{Key: km.SubscriptionPicker.Short(), Desc: "sub"},
-			{Key: km.Inspect.Short(), Desc: "inspect"},
-		},
-		Footer: m.inspectFooter(accountsPane, ui.PaneContentWidth(paneStyle, pw[0])),
-		Frame:  ui.PaneFrame{Width: pw[0], Height: h, Focused: m.focus == accountsPane},
+	accounts := ui.RenderMillerListColumn(ui.MillerListColumn{
+		List:      &m.accountsList,
+		Title:     "ACCOUNTS",
+		TitleMeta: m.columnTitleMeta(accountsPane),
+		Footer:    footer(accountsPane, &m.accountsList),
+		Frame:     frame(accountsPane),
 	}, m.Styles)
 
-	containers := ui.RenderListPane(ui.ListPane{
-		List:  &m.containersList,
-		Title: m.containersPaneTitle(),
-		Hints: []ui.PaneHint{
-			{Key: km.OpenFocusedAlt.Short(), Desc: "open"},
-			{Key: km.NavigateLeft.Short(), Desc: "back"},
-			{Key: km.FilterInput.Short(), Desc: "filter"},
-		},
-		Footer: m.inspectFooter(containersPane, ui.PaneContentWidth(paneStyle, pw[1])),
-		Frame:  ui.PaneFrame{Width: pw[1], Height: h, Focused: m.focus == containersPane},
+	containers := ui.RenderMillerListColumn(ui.MillerListColumn{
+		List:      &m.containersList,
+		Title:     "CONTAINERS",
+		TitleMeta: m.columnTitleMeta(containersPane),
+		Footer:    footer(containersPane, &m.containersList),
+		Frame:     frame(containersPane),
 	}, m.Styles)
 
-	var blobsHintSet []ui.PaneHint
-	if m.filter.inputOpen {
-		blobsHintSet = []ui.PaneHint{
-			{Key: km.NextFocus.Short(), Desc: "switch input"},
-			{Key: km.OpenFocused.Short(), Desc: "submit"},
-			{Key: km.Cancel.Short(), Desc: "close"},
-		}
-	} else {
-		blobsHintSet = []ui.PaneHint{
-			{Key: km.FilterInput.Short(), Desc: "filter"},
-			{Key: km.ActionMenu.Short(), Desc: "actions"},
-			{Key: km.ToggleMark.Short(), Desc: "mark"},
-			{Key: km.DownloadSelection.Short(), Desc: "download"},
-		}
+	blobsFrame := frame(blobsPane)
+	blobsContentWidth := ui.MillerContentWidth(blobsFrame)
+	blobsTableHeader := ""
+	if m.hasContainer {
+		blobsTableHeader = m.Styles.Chrome.RowMeta.Render(blobsColumnHeader(blobsContentWidth))
 	}
-
-	blobsPaneParams := ui.ListPane{
-		List:   &m.blobsList,
-		Title:  m.blobsPaneTitle(),
-		Hints:  blobsHintSet,
-		Footer: m.inspectFooter(blobsPane, ui.PaneContentWidth(paneStyle, pw[2])),
-		Frame:  ui.PaneFrame{Width: pw[2], Height: h, Focused: m.focus == blobsPane},
+	blobsPaneParams := ui.MillerListColumn{
+		List:      &m.blobsList,
+		Title:     "BLOBS",
+		TitleMeta: m.columnTitleMeta(blobsPane),
+		SubHeader: blobsTableHeader,
+		Footer:    footer(blobsPane, &m.blobsList),
+		Frame:     blobsFrame,
 	}
-	// When a filter is active (but overlay closed), show a banner in the pane.
-	if !m.filter.inputOpen && m.hasActiveFilter() {
-		n := len(m.blobsList.Items())
-		countText := m.Styles.List.StatusBar.Padding(0, 0, 0, 2).Render(fmt.Sprintf("%d entries", n))
-		blobsPaneParams.Prefix = m.renderFilterBanner() + "\n" + countText
-		m.blobsList.SetShowStatusBar(false)
-	} else {
-		m.blobsList.SetShowStatusBar(true)
-	}
-	blobsPaneRendered := ui.RenderListPane(blobsPaneParams, m.Styles)
+	blobsPaneRendered := ui.RenderMillerListColumn(blobsPaneParams, m.Styles)
 
 	// Build pane map for lookup by index.
 	paneMap := map[int]string{
@@ -113,72 +105,81 @@ func (m Model) View() tea.View {
 
 	// Render preview pane if it has a width assigned.
 	if pw[previewPane] > 0 && m.preview.open {
-		previewHints := ui.RenderPaneHints([]ui.PaneHint{
-			{Key: km.PreviewBack.Short(), Desc: "back"},
-			{Key: km.PreviewDown.Short() + "/" + km.PreviewUp.Short(), Desc: "scroll"},
-			{Key: km.PreviewBottom.Short(), Desc: "bottom"},
-		}, m.Styles, ui.PaneContentWidth(m.Styles.Chrome.Pane, pw[previewPane]))
-		previewTitle := m.Styles.Accent.Render(m.preview.title(m.Styles))
 		vpView := m.preview.viewport.View()
 		if m.textSelection.Active {
 			vpView = m.textSelection.HighlightContent(m.preview.viewport, m.Styles.SelectionHighlight)
 		}
-		previewContent := lipgloss.JoinVertical(lipgloss.Left,
-			previewTitle,
-			vpView,
-			previewHints,
-		)
-		focused := m.focus == previewPane
-		paneMap[previewPane] = ui.RenderPane(previewContent, ui.PaneFrame{Width: pw[previewPane], Height: h, Focused: focused}, m.Styles)
+		gutter := ui.RenderLineGutter(m.preview.viewport, m.Styles, previewGutterMinDigits)
+		body := lipgloss.JoinHorizontal(lipgloss.Top, gutter, vpView)
+		paneMap[previewPane] = ui.RenderMillerColumn(ui.MillerColumn{
+			Title: "DETAILS",
+			Body:  body,
+			Frame: frame(previewPane),
+		}, m.Styles)
 	}
 
 	// When blobs are focused and inside a folder, render the parent folder's
 	// blobs in the left column instead of containers.
 	if m.focus == blobsPane && m.prefix != "" && pw[containersPane] > 0 {
-		parentTitle := "/" + strings.TrimSuffix(parentPrefix(m.prefix), "/")
-		if parentTitle == "/" {
-			parentTitle = "/"
-		}
-		paneMap[containersPane] = ui.RenderListPane(ui.ListPane{
-			List:  &m.parentBlobsList,
-			Title: parentTitle,
-			Frame: ui.PaneFrame{Width: pw[containersPane], Height: h, Focused: false},
+		paneMap[containersPane] = ui.RenderMillerListColumn(ui.MillerListColumn{
+			List:   &m.parentBlobsList,
+			Title:  "BLOBS",
+			Footer: fmt.Sprintf("%d items · / filter", len(m.parentBlobsList.VisibleItems())),
+			Frame:  frame(containersPane),
 		}, m.Styles)
 	}
 
-	// Assemble panes in visual order: parent (left), focused (center), child (right).
-	// When there's no parent pane, add an empty spacer to keep the focused pane centered.
-	parentWidth := m.Width * 20 / 100
+	// Assemble panes in visual order: parent (left), focused (center),
+	// child (right). The MillerLayout reserves all three slots so the
+	// focused column's width stays at ~60% even when parent or child
+	// has nothing to render — those slots become column spacers (with
+	// a right rule so the focused column always borders against a
+	// vertical line instead of floating against empty bg).
+	plainSpacer := func(width int) string {
+		if width <= 0 {
+			return ""
+		}
+		return lipgloss.NewStyle().Width(width).Height(h).Render("")
+	}
 	paneParts := make([]string, 0, 3)
 	if m.focus > accountsPane && pw[m.focus-1] > 0 {
 		paneParts = append(paneParts, paneMap[m.focus-1])
-	} else if m.focus == accountsPane {
-		spacer := lipgloss.NewStyle().Width(parentWidth).Height(h).Render("")
-		paneParts = append(paneParts, spacer)
 	}
+	// Topmost focus skips the parent slot entirely — focus expanded to
+	// absorb it via MillerLayout(hasParent=false).
 	paneParts = append(paneParts, paneMap[m.focus])
 
-	// Child column (right side).
-	childIdx := m.focus + 1
-	if m.focus == blobsPane {
-		childIdx = previewPane
-	}
-	if childIdx <= previewPane && pw[childIdx] > 0 {
-		if rendered, ok := paneMap[childIdx]; ok {
+	if childIdx <= previewPane {
+		if rendered, ok := paneMap[childIdx]; ok && pw[childIdx] > 0 {
 			paneParts = append(paneParts, rendered)
+		} else if pw[childIdx] > 0 {
+			// Child column slot is empty: no right rule (it's the
+			// rightmost block), just blank space to fill the slot.
+			paneParts = append(paneParts, plainSpacer(pw[childIdx]))
 		}
 	}
 
+	// Center the column block on wide terminals. Same hasParent flag
+	// as resize() so margin matches the actual rendered widths.
+	cols := ui.MillerLayout(m.Styles.Chrome.Pane, m.Width, m.focus > accountsPane, true)
+	if margin := ui.MillerSideMargin(cols, m.Width); margin > 0 {
+		paneParts = append([]string{plainSpacer(margin)}, paneParts...)
+	}
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, paneParts...)
 
-	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
-
-	if value, ok := activity.StatusBarItem(m.Activities, "F"); ok {
-		sbItems = append(sbItems, ui.StatusBarItem{Value: value})
-	}
-	statusBar := ui.RenderStatusBar(m.Styles, sbItems, "", false, m.Width)
-
-	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, subBar, panes, statusBar), m.Width, m.Height, m.Styles.Bg)
+	header := ui.RenderAppHeader(ui.HeaderConfig{
+		Brand: "lazyaz",
+		Path:  m.headerPath(),
+		Meta:  ui.HeaderMeta(m.CurrentSub, m.HasSubscription, m.Styles),
+	}, m.Styles, m.Width)
+	statusBar := ui.RenderStatusLine(ui.StatusLineConfig{
+		Mode:    m.inputMode().String(),
+		Actions: m.statusActions(),
+	}, m.Styles, m.Width)
+	ticks := m.columnTickPositions()
+	topRule := ui.RenderHorizontalRule(m.Width, m.Styles, ticks)
+	bottomRule := ui.RenderHorizontalRuleBottom(m.Width, m.Styles, ticks)
+	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, header, topRule, panes, bottomRule, statusBar), m.Width, m.Height, m.Styles.Bg)
 	if m.sortOverlay.active {
 		view = m.renderSortOverlay(view)
 	}
@@ -210,56 +211,154 @@ func (m Model) View() tea.View {
 	return out
 }
 
-func (m Model) accountsPaneTitle() string {
-	title := "Storage Accounts"
+func (m Model) headerPath() []string {
+	// Tab bar already labels the explorer (Blob/Service Bus/etc.), so
+	// the header breadcrumb starts at the resource path: subscription
+	// → account → container → prefix. When nothing is drilled, the
+	// crumb collapses to just the subscription name.
+	var path []string
 	if m.HasSubscription {
-		title = fmt.Sprintf("Storage Accounts · %s", ui.SubscriptionDisplayName(m.CurrentSub))
+		path = append(path, ui.SubscriptionDisplayName(m.CurrentSub))
 	}
-	if len(m.accounts) > 0 {
-		title = fmt.Sprintf("%s (%d)", title, len(m.accounts))
-	}
-	return title
-}
-
-func (m Model) containersPaneTitle() string {
-	title := "Containers"
 	if m.hasAccount {
-		title = fmt.Sprintf("Containers · %s", m.currentAccount.Name)
+		path = append(path, m.currentAccount.Name)
 	}
-	if m.containers != nil {
-		title = fmt.Sprintf("%s (%d)", title, len(m.containers))
+	if m.hasContainer {
+		path = append(path, m.containerName)
 	}
-	return title
+	if m.prefix != "" {
+		path = append(path, strings.TrimSuffix(m.prefix, "/"))
+	}
+	return path
 }
 
-func (m Model) blobsPaneTitle() string {
-	title := "Blobs"
-	if m.hasAccount && m.hasContainer {
-		path := "/"
-		if m.prefix != "" {
-			path = "/" + strings.TrimPrefix(m.prefix, "/")
-		}
-		title = fmt.Sprintf("Blobs · %s/%s · %s", m.currentAccount.Name, m.containerName, path)
-	} else if m.hasAccount {
-		title = fmt.Sprintf("Blobs · %s", m.currentAccount.Name)
+// columnTickPositions reports x-coordinates where a vertical column
+// rule lives, so app-level horizontal rules can place ┬/┴ tees at the
+// matching cells. Each column block ends with a `│` at its last cell
+// (when RightRule=true); the spacer rendered when accountsPane is
+// focused has no rule. Position math walks the same join order as the
+// pane assembly above.
+func (m Model) columnTickPositions() []int {
+	pw := m.paneWidths
+	childIdx := m.focus + 1
+	if m.focus == blobsPane {
+		childIdx = previewPane
 	}
-	if m.hasContainer && m.blobs != nil {
-		title = fmt.Sprintf("%s (%d)", title, len(m.blobs))
+	hasChild := childIdx <= previewPane && pw[childIdx] > 0
+	parentVisible := m.focus > accountsPane && pw[m.focus-1] > 0
+
+	cols := ui.MillerLayout(m.Styles.Chrome.Pane, m.Width, m.focus > accountsPane, true)
+	pos := ui.MillerSideMargin(cols, m.Width)
+	var ticks []int
+	if parentVisible {
+		pos += pw[m.focus-1]
+		ticks = append(ticks, pos-1) // parent's right rule
 	}
-	if m.hasContainer && m.blobLoadAll {
-		title = fmt.Sprintf("%s | ALL", title)
+	pos += pw[m.focus]
+	if hasChild {
+		ticks = append(ticks, pos-1) // focused column's right rule
 	}
-	if ind := blobSortIndicator(m.blobSortField, m.blobSortDesc); ind != "" {
-		title = fmt.Sprintf("%s | %s", title, ind)
-	}
-	if len(m.markedBlobs) > 0 {
-		title = fmt.Sprintf("%s | marked:%d", title, len(m.markedBlobs))
-	}
-	if m.visualLineMode {
-		title = fmt.Sprintf("%s | VISUAL:%d", title, len(m.visualSelectionBlobNames()))
-	}
-	return title
+	return ticks
 }
+
+func (m Model) statusActions() []ui.StatusAction {
+	km := m.Keymap
+	actions := []ui.StatusAction{
+		{Key: km.CursorDown.Short() + "/" + km.CursorUp.Short(), Label: "move"},
+		{Key: km.OpenFocusedAlt.Short(), Label: "open"},
+		{Key: km.NavigateLeft.Short(), Label: "back"},
+		{Key: km.FilterInput.Short(), Label: "filter"},
+		{Key: km.RefreshScope.Short(), Label: "refresh"},
+		{Key: km.ToggleHelp.Short(), Label: "help"},
+	}
+	if m.focus == blobsPane {
+		actions = append(actions,
+			ui.StatusAction{Key: km.ActionMenu.Short(), Label: "actions"},
+			ui.StatusAction{Key: km.ToggleMark.Short(), Label: "mark"},
+		)
+	}
+	return actions
+}
+
+func (m Model) columnFooter(pane int) string {
+	var l *list.Model
+	switch pane {
+	case accountsPane:
+		l = &m.accountsList
+	case containersPane:
+		l = &m.containersList
+	case blobsPane:
+		l = &m.blobsList
+	default:
+		return ""
+	}
+	idx := l.Index() + 1
+	count := len(l.VisibleItems())
+	if count == 0 {
+		idx = 0
+	}
+	return fmt.Sprintf("%d of %d · ↕ j/k", idx, count)
+}
+
+// columnTitleMeta is the right-aligned summary that sits on the column
+// title row. Mirrors the visual mockup: containers show
+// "shown / total", blobs show "shown · total · selected", accounts show
+// just total. The cursor index lives in the footer so the meta stays
+// stable while you scroll.
+func (m Model) columnTitleMeta(pane int) string {
+	switch pane {
+	case accountsPane:
+		if total := len(m.accounts); total > 0 {
+			return fmt.Sprintf("%s total", formatThousands(total))
+		}
+	case containersPane:
+		shown := len(m.containersList.VisibleItems())
+		total := len(m.containers)
+		if total == 0 {
+			return ""
+		}
+		if shown != total {
+			return fmt.Sprintf("%s / %s", formatThousands(shown), formatThousands(total))
+		}
+		return fmt.Sprintf("%s total", formatThousands(total))
+	case blobsPane:
+		shown := len(m.blobsList.VisibleItems())
+		total := len(m.blobs)
+		if total == 0 {
+			return ""
+		}
+		parts := []string{fmt.Sprintf("%s shown", formatThousands(shown))}
+		if shown != total {
+			parts = append(parts, fmt.Sprintf("%s total", formatThousands(total)))
+		}
+		if marked := len(m.markedBlobs); marked > 0 {
+			parts = append(parts, fmt.Sprintf("%d selected", marked))
+		}
+		return strings.Join(parts, " · ")
+	}
+	return ""
+}
+
+// formatThousands inserts a thin space every three digits. Mockup uses
+// space rather than comma; matches typical terminal-app conventions.
+func formatThousands(n int) string {
+	s := fmt.Sprintf("%d", n)
+	if n < 1000 {
+		return s
+	}
+	var b strings.Builder
+	rem := len(s) % 3
+	if rem == 0 {
+		rem = 3
+	}
+	b.WriteString(s[:rem])
+	for i := rem; i < len(s); i += 3 {
+		b.WriteByte(' ')
+		b.WriteString(s[i : i+3])
+	}
+	return b.String()
+}
+
 
 func (m Model) renderSortOverlay(base string) string {
 	indices := m.sortOverlay.filtered
@@ -293,9 +392,15 @@ func humanSize(bytes int64) string {
 		kb = 1000
 		mb = kb * 1000
 		gb = mb * 1000
+		tb = gb * 1000
+		pb = tb * 1000
 	)
 
 	switch {
+	case bytes >= pb:
+		return fmt.Sprintf("%.2f PB", float64(bytes)/float64(pb))
+	case bytes >= tb:
+		return fmt.Sprintf("%.2f TB", float64(bytes)/float64(tb))
 	case bytes >= gb:
 		return fmt.Sprintf("%.2f GB", float64(bytes)/float64(gb))
 	case bytes >= mb:

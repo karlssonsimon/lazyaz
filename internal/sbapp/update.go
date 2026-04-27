@@ -288,7 +288,7 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	} else {
 		m.peekedMessages = msg.messages
 	}
-	items := messagesToItems(m.peekedMessages)
+	items := m.messageItems()
 	if msg.repeek || msg.preserveCursor {
 		ui.SetItemsPreserveKey(&m.messageList, items, messageItemKey)
 	} else {
@@ -343,7 +343,7 @@ func (m Model) handleDLQReceived(msg dlqReceivedMsg) (Model, tea.Cmd) {
 	m.peekedMessages = msg.result.PeekedMessages()
 
 	m.messageList.ResetFilter()
-	m.messageList.SetItems(messagesToItems(m.peekedMessages))
+	m.messageList.SetItems(m.messageItems())
 	if len(m.peekedMessages) > 0 {
 		m.messageList.Select(0)
 	}
@@ -432,7 +432,7 @@ func (m *Model) removeLockedMessage(messageKey string) {
 		}
 	}
 	m.peekedMessages = peeked
-	m.messageList.SetItems(messagesToItems(m.peekedMessages))
+	m.messageList.SetItems(m.messageItems())
 	m.messageList.Title = fmt.Sprintf("DLQ Locked (%d)", len(m.peekedMessages))
 
 	// If no more locked messages, clean up the receiver.

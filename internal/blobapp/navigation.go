@@ -177,7 +177,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 // left column shows the folder we came from.
 func (m *Model) updateParentBlobsList() {
 	parentPrefix := m.prefix
-	pw := ui.PaneContentWidth(m.Styles.Chrome.Pane, m.paneWidths[containersPane])
+	// containersPane is the parent slot when in folder mode — it has
+	// a right rule against the focused blobsPane.
+	pw := ui.MillerContentWidth(ui.MillerColumnFrame{
+		Width:     m.paneWidths[containersPane],
+		RightRule: true,
+	})
 	items := blobsToItems(m.blobs, parentPrefix, pw)
 	m.parentBlobsList.SetItems(items)
 	// Position cursor on the folder we're about to enter.
@@ -202,7 +207,10 @@ func (m *Model) rebuildParentBlobsList() {
 	pp := parentPrefix(m.prefix)
 	scope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, pp, false)
 	if cached, ok := m.cache.blobs.Get(scope); ok {
-		pw := ui.PaneContentWidth(m.Styles.Chrome.Pane, m.paneWidths[containersPane])
+		pw := ui.MillerContentWidth(ui.MillerColumnFrame{
+			Width:     m.paneWidths[containersPane],
+			RightRule: true,
+		})
 		items := blobsToItems(cached, pp, pw)
 		m.parentBlobsList.SetItems(items)
 		// Position cursor on the current prefix folder.

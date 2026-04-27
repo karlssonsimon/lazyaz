@@ -11,6 +11,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 
 	"charm.land/bubbles/v2/list"
+	"charm.land/lipgloss/v2"
 )
 
 type accountItem struct {
@@ -52,16 +53,83 @@ type blobItem struct {
 }
 
 func (i blobItem) Title() string {
+	// The bubbles list default delegate truncates the rendered title
+	// to (list.Width - NormalTitle.PaddingLeft - PaddingRight). Our
+	// NormalTitle has 2 cells of left padding (no right padding), so
+	// the title text gets a budget of contentWidth - 2. If we format
+	// to the full contentWidth, the delegate trims the last 2 cells
+	// and replaces them with `…`. Bake the padding awareness in here
+	// so the row ends cleanly at the column edge.
+	const delegateLeftPad = 2
+	width := i.contentWidth - delegateLeftPad
+	if i.contentWidth <= 0 {
+		width = 80 - delegateLeftPad
+	}
+	if width < 1 {
+		width = 1
+	}
+	marker := fileIcon(i.displayName)
 	if i.blob.IsPrefix {
-		return "📁 " + truncateMiddle(i.displayName, 85)
+		marker = "+"
+	}
+	markerWidth := lipgloss.Width(marker + " ") // 2 cells
+
+	// Below 34 effective cells (was 36 before delegateLeftPad
+	// accounting) we drop the date+size columns and let the name take
+	// what's left — the meta grid would be wider than the cell.
+	if i.blob.IsPrefix || width < 34 {
+		nameWidth := width - markerWidth
+		if nameWidth < 1 {
+			nameWidth = 1
+		}
+		return truncateToWidth(marker+" "+truncateMiddleRunes(i.displayName, nameWidth), width)
 	}
 
-	icon := fileIcon(i.displayName)
-	name := truncateMiddle(i.displayName, 85)
-	size := humanSize(i.blob.Size)
+	// Fixed grid that matches blobsColumnHeader so the row aligns
+	// with the NAME / MODIFIED / SIZE labels regardless of how short
+	// any individual row's size string happens to be. The name column
+	// is capped at blobNameColMax so date+size don't drift far from
+	// the name on wide focused columns; trailing space fills to width.
+	const dateCol = blobDateColWidth // 16
+	const sizeCol = blobSizeColWidth // 10
+	const gaps = 4                   // two 2-cell gaps between columns
 	date := formatDate(i.blob.LastModified)
+	size := humanSize(i.blob.Size)
 
-	return fmt.Sprintf("%s %-85s  %s  %-7s", icon, name, date, size)
+	nameCol := width - markerWidth - dateCol - sizeCol - gaps
+	sizePad := sizeCol - lipgloss.Width(size)
+	if nameCol < 4 {
+		// Tight row: drop the size right-padding so the size column
+		// shrinks to its actual width instead of pushing the line
+		// past `width`. Misaligns wide-size rows with their narrower
+		// neighbours, but only triggers when the column is very narrow.
+		sizePad = 0
+		nameCol = width - markerWidth - dateCol - lipgloss.Width(size) - gaps
+		if nameCol < 1 {
+			nameCol = 1
+		}
+	} else if nameCol > blobNameColMax {
+		nameCol = blobNameColMax
+	}
+	if sizePad < 0 {
+		sizePad = 0
+	}
+
+	name := truncateMiddleRunes(i.displayName, nameCol)
+	namePad := nameCol - lipgloss.Width(name)
+	if namePad < 0 {
+		namePad = 0
+	}
+	body := fmt.Sprintf("%s %s%s  %s  %s%s",
+		marker,
+		name, strings.Repeat(" ", namePad),
+		date,
+		strings.Repeat(" ", sizePad), size,
+	)
+	if trailing := width - lipgloss.Width(body); trailing > 0 {
+		body += strings.Repeat(" ", trailing)
+	}
+	return truncateToWidth(body, width)
 }
 
 func formatDate(t time.Time) string {
@@ -69,6 +137,40 @@ func formatDate(t time.Time) string {
 		return "       -        "
 	}
 	return t.Local().Format("2006-01-02 15:04")
+}
+
+// blobsColumnHeader builds the NAME / MODIFIED / SIZE table header that
+// sits between the column title and the first row. Layout matches
+// blobItem.Title above so columns line up: 2-cell leading gutter (to
+// match the list delegate's selection padding), name (capped), two
+// spaces, 16-cell date, two spaces, right-aligned 10-cell size, then
+// optional trailing space to reach `width`.
+const (
+	blobDateColWidth = 16
+	blobSizeColWidth = 10
+	blobNameColMax   = 50 // cap so date+size don't drift far from name on wide columns
+)
+
+func blobsColumnHeader(width int) string {
+	if width < 36 {
+		return ""
+	}
+	metaWidth := blobDateColWidth + blobSizeColWidth + 4 // 4 = two double-space gaps
+	nameColWidth := width - 2 - metaWidth                // 2 = leading gutter
+	if nameColWidth < 4 {
+		return ""
+	}
+	if nameColWidth > blobNameColMax {
+		nameColWidth = blobNameColMax
+	}
+	line := fmt.Sprintf("  %-*s  %-*s  %*s",
+		nameColWidth, "NAME",
+		blobDateColWidth, "MODIFIED",
+		blobSizeColWidth, "SIZE")
+	if pad := width - lipgloss.Width(line); pad > 0 {
+		line += strings.Repeat(" ", pad)
+	}
+	return line
 }
 
 func (i blobItem) Description() string {
@@ -140,27 +242,68 @@ func blobsToItems(entries []blob.BlobEntry, prefix string, contentWidth int) []l
 	return items
 }
 
-// truncateMiddle truncates a string from the middle, preserving the
-// start and end so both the name pattern and the extension stay visible.
-// e.g. "065592282239F001.CAMT054.CRIN.250930182458.XML" → "065592282…82458.XML"
-func truncateMiddle(s string, maxLen int) string {
-	if len(s) <= maxLen {
+func truncateMiddleRunes(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
 		return s
 	}
-	if maxLen < 5 {
-		return s[:maxLen]
+	if maxWidth < 5 {
+		return truncateToWidth(s, maxWidth)
 	}
-	// Keep more of the end (extension + suffix is usually more distinctive).
-	endLen := maxLen * 2 / 5
-	if endLen < 4 {
-		endLen = 4
+	endWidth := maxWidth * 2 / 5
+	if endWidth < 2 {
+		endWidth = 2
 	}
-	startLen := maxLen - endLen - 1 // -1 for the ellipsis
-	if startLen < 2 {
-		startLen = 2
-		endLen = maxLen - startLen - 1
+	end := truncateLeftToWidth(s, endWidth)
+	startWidth := maxWidth - lipgloss.Width(end) - 1
+	if startWidth < 1 {
+		startWidth = 1
+		end = truncateLeftToWidth(s, maxWidth-startWidth-1)
 	}
-	return s[:startLen] + "…" + s[len(s)-endLen:]
+	return truncateToWidth(s, startWidth) + "…" + end
+}
+
+func truncateToWidth(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	var out strings.Builder
+	width := 0
+	for _, r := range s {
+		rw := lipgloss.Width(string(r))
+		if width+rw > maxWidth {
+			break
+		}
+		out.WriteRune(r)
+		width += rw
+	}
+	return out.String()
+}
+
+func truncateLeftToWidth(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+	runes := []rune(s)
+	width := 0
+	start := len(runes)
+	for i := len(runes) - 1; i >= 0; i-- {
+		rw := lipgloss.Width(string(runes[i]))
+		if width+rw > maxWidth {
+			break
+		}
+		width += rw
+		start = i
+	}
+	return string(runes[start:])
 }
 
 func trimPrefixForDisplay(name, prefix string) string {

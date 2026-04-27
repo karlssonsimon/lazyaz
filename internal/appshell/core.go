@@ -25,8 +25,9 @@ import (
 // across package boundaries — this is not an invitation for outside packages
 // to mutate them directly.
 type Model struct {
-	// Spinner is the shared loading spinner. Apps must render it via
-	// ui.RenderPaneSpinner (or the status bar helper) using LoadingStartedAt.
+	// Spinner is the shared loading spinner. Apps render its frames via
+	// ui.SpinnerFrameAt(time.Since(LoadingStartedAt)) — the spinner
+	// model carries no UI itself.
 	Spinner spinner.Model
 
 	// Subscriptions + selection.

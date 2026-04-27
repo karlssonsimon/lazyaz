@@ -10,7 +10,6 @@ import (
 	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 )
 
 // dashboardRefreshInterval is how often the dashboard re-fires its
@@ -504,19 +503,15 @@ func (m *Model) refreshDone() {
 	}
 }
 
-// recomputeWidgetHeights renders the (cheap) sub + status bars to read
-// their actual lipgloss heights, then runs the same row-distribution
-// View() uses. Stashed results let scroll math match the renderer
-// exactly.
+// recomputeWidgetHeights runs the same row-distribution View() uses.
+// Stashed results let scroll math match the renderer exactly.
 func (m *Model) recomputeWidgetHeights() {
 	if m.Width <= 0 || m.Height <= 0 {
 		return
 	}
-	subBar := ui.RenderSubscriptionBar(m.CurrentSub, m.HasSubscription, m.Styles, m.Width)
-	statusBar := ui.RenderStatusBar(m.Styles, m.statusBarItems(), "", false, m.Width)
-	body := m.Height - lipgloss.Height(subBar) - lipgloss.Height(statusBar)
-	if body < 4 {
-		body = 4
+	body := ui.AppBodyHeight(m.Height)
+	if body < 2 {
+		body = 2
 	}
 	rows, _ := gridDims(m.widgets)
 	m.rowHeights = computeRowHeights(body, rows)

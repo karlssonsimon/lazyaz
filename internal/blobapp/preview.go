@@ -45,6 +45,11 @@ func newPreviewState() previewState {
 	return previewState{viewport: vp}
 }
 
+// previewGutterMinDigits is the minimum digit width reserved for the
+// line-number gutter beside the preview content. 3 gives a stable
+// gutter for any file ≤ 999 lines; widens automatically beyond that.
+const previewGutterMinDigits = 3
+
 func (m *Model) resetPreviewState() {
 	m.preview = newPreviewState()
 	m.pendingPreviewG = false
@@ -386,29 +391,19 @@ func computePreviewWindow(totalSize, cursor int64, visibleLines int) (int64, int
 
 // previewViewportRegion returns the screen bounds of the preview
 // viewport so mouse coordinates can be translated to content positions.
+// X starts AFTER the line-number gutter so a click on a number doesn't
+// register as content selection.
 func (m Model) previewViewportRegion() ui.ViewportRegion {
-	pane := m.Styles.Chrome.Pane
-
-	// Compute the X position of the preview pane on screen.
-	// The view assembles panes as: [parent, focused, child].
-	// Preview is always the rightmost rendered pane.
 	previewX := 0
 	for i := 0; i < previewPane; i++ {
 		previewX += m.paneWidths[i]
 	}
+	gutterW := ui.LineGutterWidth(m.preview.viewport.TotalLineCount(), previewGutterMinDigits)
 
-	// Inside the pane: border left (1) + padding left (1) = horizontal frame / 2.
-	hFrame := pane.GetHorizontalFrameSize()
-	innerX := previewX + hFrame/2
-
-	// Y: subscription bar + pane border top + padding top + title line.
-	// The viewport content starts one row after the title inside the pane.
-	vFrameTop := pane.GetBorderTopSize() + pane.GetPaddingTop()
-	innerY := ui.SubscriptionBarHeight + vFrameTop + ui.PaneTitleHeight + 1
-
+	// Flat Miller column viewport starts one row below the title.
 	return ui.ViewportRegion{
-		X:      innerX,
-		Y:      innerY,
+		X:      previewX + gutterW,
+		Y:      m.paneAreaY() + 1,
 		Width:  m.preview.viewport.Width(),
 		Height: m.preview.viewport.Height(),
 	}

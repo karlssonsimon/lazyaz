@@ -195,8 +195,16 @@ func (m *Model) clearAllMarks() {
 // refreshMessageItems rebuilds the message list items. Mark/visual
 // rendering is handled by the delegate.
 func (m *Model) refreshMessageItems() {
-	ui.SetItemsPreserveKey(&m.messageList, messagesToItems(m.peekedMessages), messageItemKey)
+	ui.SetItemsPreserveKey(&m.messageList, m.messageItems(), messageItemKey)
 	m.refreshMessageSelectionDisplay()
+}
+
+func (m Model) messageItems() []list.Item {
+	return messagesToItems(m.peekedMessages, m.messageContentWidth())
+}
+
+func (m Model) messageContentWidth() int {
+	return m.messageList.Width()
 }
 
 // refreshMessageSelectionDisplay updates the delegate's mark/visual

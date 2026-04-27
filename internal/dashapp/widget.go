@@ -40,10 +40,9 @@ type Widget interface {
 	// filter (if any). Drives scroll clamping. Must agree with the
 	// number of rows Render actually emits.
 	RowCount(m *Model, view widgetViewState) int
-	// Render returns the widget body — the inner content drawn
-	// inside the pane frame. innerHeight is the area inside the pane
-	// border. offset is the current scroll position; cursor is the
-	// data row index the user has selected; view carries the active
+	// Render returns the widget body drawn between the Miller column
+	// title and footer. offset is the current scroll position; cursor is
+	// the data row index the user has selected; view carries the active
 	// sort/filter for this widget.
 	Render(m *Model, width, innerHeight, offset, cursor int, view widgetViewState) string
 	// Actions returns the actions the widget exposes for the data
@@ -87,6 +86,13 @@ func sortAction() Action {
 		Key:   "s",
 		Cmd:   openSortOverlayCmd(),
 	}
+}
+
+func focusedWidgetView(m *Model) widgetViewState {
+	if m == nil || m.focusedIdx < 0 || m.focusedIdx >= len(m.viewStates) {
+		return widgetViewState{}
+	}
+	return m.viewStates[m.focusedIdx]
 }
 
 // matchesFilter is the case-insensitive substring check shared by all

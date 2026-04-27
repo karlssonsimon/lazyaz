@@ -23,7 +23,7 @@ type secretDelegate struct {
 }
 
 func newSecretDelegate(base list.DefaultDelegate, styles ui.Styles) secretDelegate {
-	bar := "┃ "
+	bar := "▌ "
 	markedBar := lipgloss.NewStyle().
 		Foreground(styles.Accent2.GetForeground()).
 		Render(bar)

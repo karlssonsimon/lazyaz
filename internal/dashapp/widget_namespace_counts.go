@@ -51,8 +51,9 @@ func (namespaceCountsWidget) SortFields() []SortField {
 
 func (w namespaceCountsWidget) Actions(m *Model, cursorRow int) []Action {
 	var actions []Action
-	if cursorRow >= 0 && cursorRow < len(m.namespaces) {
-		ns := m.namespaces[cursorRow]
+	stats := w.rows(m, focusedWidgetView(m))
+	if cursorRow >= 0 && cursorRow < len(stats) {
+		ns := stats[cursorRow].namespace
 		actions = append(actions, Action{
 			Label: "Open in Service Bus tab",
 			Key:   "o",
@@ -72,14 +73,7 @@ type nsStats struct {
 	entitiesLoaded              bool // false → render placeholder dots
 }
 
-func (w namespaceCountsWidget) Render(m *Model, width, innerHeight, offset, cursor int, view widgetViewState) string {
-	if !m.HasSubscription {
-		return "Pick a subscription with " + m.Keymap.SubscriptionPicker.Short() + "."
-	}
-	if len(m.namespaces) == 0 {
-		return m.loadingOrEmpty("No Service Bus namespaces in this subscription.")
-	}
-
+func (w namespaceCountsWidget) rows(m *Model, view widgetViewState) []nsStats {
 	stats := make([]nsStats, 0, len(m.namespaces))
 	for _, ns := range m.namespaces {
 		if !matchesFilter(ns.Name, view.filter) {
@@ -111,6 +105,18 @@ func (w namespaceCountsWidget) Render(m *Model, width, innerHeight, offset, curs
 	if view.hasSort {
 		sortNamespaceStats(stats, view.sortField, view.sortDesc)
 	}
+	return stats
+}
+
+func (w namespaceCountsWidget) Render(m *Model, width, innerHeight, offset, cursor int, view widgetViewState) string {
+	if !m.HasSubscription {
+		return "Pick a subscription with " + m.Keymap.SubscriptionPicker.Short() + "."
+	}
+	if len(m.namespaces) == 0 {
+		return m.loadingOrEmpty("No Service Bus namespaces in this subscription.")
+	}
+
+	stats := w.rows(m, view)
 
 	cells := [][]string{{"Namespace", "Queues", "Topics", "Active", "DLQ"}}
 	for _, s := range stats {

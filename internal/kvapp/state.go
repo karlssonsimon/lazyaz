@@ -56,6 +56,17 @@ func (m Model) inputMode() InputMode {
 	}
 }
 
+func (mode InputMode) String() string {
+	switch mode {
+	case ModeVisualLine:
+		return "VISUAL"
+	case ModeListFilter:
+		return "FILTER"
+	default:
+		return "NORMAL"
+	}
+}
+
 type Model struct {
 	appshell.Model
 
@@ -155,31 +166,41 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 	delegate := list.NewDefaultDelegate()
 
 	vaults := list.New([]list.Item{}, delegate, 24, 10)
-	vaults.SetShowTitle(false) // title is rendered by ui.RenderListPane
+	vaults.SetShowTitle(false)
+	vaults.SetShowFilter(false) // filter UI lives in our SubHeader
 	vaults.SetShowHelp(false)
 	vaults.SetShowPagination(false)
-	vaults.SetShowStatusBar(true)
+	vaults.SetShowStatusBar(false)
 	vaults.SetStatusBarItemName("vault", "vaults")
 	vaults.SetFilteringEnabled(true)
 	vaults.DisableQuitKeybindings()
 
 	secrets := list.New([]list.Item{}, delegate, 24, 10)
 	secrets.SetShowTitle(false)
+	secrets.SetShowFilter(false)
 	secrets.SetShowHelp(false)
 	secrets.SetShowPagination(false)
-	secrets.SetShowStatusBar(true)
+	secrets.SetShowStatusBar(false)
 	secrets.SetStatusBarItemName("secret", "secrets")
 	secrets.SetFilteringEnabled(true)
 	secrets.DisableQuitKeybindings()
 
 	versionsList := list.New([]list.Item{}, delegate, 40, 10)
 	versionsList.SetShowTitle(false)
+	versionsList.SetShowFilter(false)
 	versionsList.SetShowHelp(false)
 	versionsList.SetShowPagination(false)
-	versionsList.SetShowStatusBar(true)
+	versionsList.SetShowStatusBar(false)
 	versionsList.SetStatusBarItemName("version", "versions")
 	versionsList.SetFilteringEnabled(true)
 	versionsList.DisableQuitKeybindings()
+
+	// Override bubbles list cursor bindings so they follow the user's
+	// configured CursorUp/CursorDown keys.
+	for _, l := range []*list.Model{&vaults, &secrets, &versionsList} {
+		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
+		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
+	}
 
 	m := Model{
 		Model:           appshell.New(cfg, km),
@@ -258,12 +279,11 @@ func (m Model) HelpSections() []ui.HelpSection {
 		{
 			Title: "Navigation",
 			Items: []string{
-				keymap.HelpEntry(km.NextFocus, "next focus"),
-				keymap.HelpEntry(km.PreviousFocus, "previous focus"),
-				keymap.HelpEntry(km.FilterInput, "filter focused pane"),
-				keymap.HelpEntry(keymap.New(km.OpenFocused.Label()+"/"+km.OpenFocusedAlt.Label()), "open selected item"),
-				keymap.HelpEntry(km.NavigateLeft, "go back"),
-				keymap.HelpEntry(km.BackspaceUp, "backspace navigation"),
+				keymap.HelpEntry(km.NextFocus, "focus next column"),
+				keymap.HelpEntry(km.PreviousFocus, "focus previous column"),
+				keymap.HelpEntry(km.FilterInput, "filter focused column"),
+				keymap.HelpEntry(km.OpenFocused, "open selected row"),
+				keymap.HelpEntry(km.BackspaceUp, "go up/back"),
 				keymap.HelpEntry(keymap.New(km.HalfPageDown.Label()+"/"+km.HalfPageUp.Label()), "half-page scroll"),
 			},
 		},

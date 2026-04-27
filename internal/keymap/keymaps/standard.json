@@ -3,6 +3,8 @@
   "bindings": {
     "quit": ["ctrl+c", "ctrl+q"],
     "cancel": ["esc"],
+    "cursor_up": ["up"],
+    "cursor_down": ["down"],
     "half_page_down": ["pgdown"],
     "half_page_up": ["pgup"],
     "next_focus": ["tab"],

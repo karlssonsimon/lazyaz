@@ -54,22 +54,17 @@ func (m *Model) closePreview() {
 }
 
 func (m Model) messageViewportRegion() ui.ViewportRegion {
-	pane := m.Styles.Chrome.Pane
-
 	previewX := 0
 	for i := 0; i < messagePreviewPane; i++ {
 		previewX += m.paneWidths[i]
 	}
-
-	hFrame := pane.GetHorizontalFrameSize()
-	innerX := previewX + hFrame/2
-
-	vFrameTop := pane.GetBorderTopSize() + pane.GetPaddingTop()
-	innerY := ui.SubscriptionBarHeight + vFrameTop + ui.PaneTitleHeight + 1
+	// X starts after the gutter so a click on a line number doesn't
+	// register as content selection.
+	gutterW := ui.LineGutterWidth(m.messageViewport.TotalLineCount(), previewGutterMinDigits)
 
 	return ui.ViewportRegion{
-		X:      innerX,
-		Y:      innerY,
+		X:      previewX + gutterW,
+		Y:      m.paneAreaY() + 2,
 		Width:  m.messageViewport.Width(),
 		Height: m.messageViewport.Height(),
 	}

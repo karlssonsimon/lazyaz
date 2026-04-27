@@ -5,7 +5,6 @@ import (
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 )
 
 const doubleClickThreshold = 400 * time.Millisecond
@@ -103,9 +102,8 @@ func ListItemAtY(l *list.Model, y, itemHeight int) int {
 	return idx
 }
 
-// PaneContentYStart returns the absolute screen Y where the list.View()
-// content begins inside a pane, given the pane area's screen Y start.
-// Accounts for the pane border top and the externally-rendered title row.
-func PaneContentYStart(paneStyle lipgloss.Style, paneAreaY int) int {
-	return paneAreaY + paneStyle.GetBorderTopSize() + paneStyle.GetPaddingTop() + PaneTitleHeight
+// MillerColumnContentYStart returns the absolute Y where a flat Miller
+// column's body starts, directly under the external column title row.
+func MillerColumnContentYStart(areaY int) int {
+	return areaY + 1
 }

@@ -173,9 +173,10 @@ func TestReceivedMessagesPeekedMessagesPreservesDisplayFields(t *testing.T) {
 		ID:     "m1",
 		LockID: "0",
 		raw: &azservicebus.ReceivedMessage{
-			MessageID:    "m1",
-			Body:         []byte("hello"),
-			EnqueuedTime: &enqueued,
+			MessageID:     "m1",
+			Body:          []byte("hello"),
+			DeliveryCount: 5,
+			EnqueuedTime:  &enqueued,
 		},
 	}}}
 
@@ -183,7 +184,7 @@ func TestReceivedMessagesPeekedMessagesPreservesDisplayFields(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("PeekedMessages length = %d, want 1", len(got))
 	}
-	if got[0].MessageID != "m1" || got[0].LockID != "0" || got[0].FullBody != "hello" || got[0].BodyPreview != "hello" || !got[0].EnqueuedAt.Equal(enqueued) {
+	if got[0].MessageID != "m1" || got[0].LockID != "0" || got[0].DeliveryCount != 5 || got[0].FullBody != "hello" || got[0].BodyPreview != "hello" || !got[0].EnqueuedAt.Equal(enqueued) {
 		t.Fatalf("PeekedMessages()[0] = %#v, want display fields preserved", got[0])
 	}
 }

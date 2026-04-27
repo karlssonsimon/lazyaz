@@ -63,6 +63,17 @@ func (m Model) inputMode() InputMode {
 	}
 }
 
+func (mode InputMode) String() string {
+	switch mode {
+	case ModeVisualLine:
+		return "VISUAL"
+	case ModeListFilter:
+		return "FILTER"
+	default:
+		return "NORMAL"
+	}
+}
+
 type Model struct {
 	appshell.Model
 
@@ -237,9 +248,10 @@ type targetEntitiesLoadedMsg struct {
 func newList(delegate list.DefaultDelegate, name, plural string) list.Model {
 	l := list.New([]list.Item{}, delegate, 40, 10)
 	l.SetShowTitle(false)
+	l.SetShowFilter(false) // we render our own /<query>█ as a SubHeader
 	l.SetShowHelp(false)
 	l.SetShowPagination(false)
-	l.SetShowStatusBar(true)
+	l.SetShowStatusBar(false)
 	l.SetStatusBarItemName(name, plural)
 	l.SetFilteringEnabled(true)
 	l.DisableQuitKeybindings()
@@ -264,6 +276,13 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 	queueType.SetFilteringEnabled(false)
 	queueType.SetShowStatusBar(false)
 	messages := newList(delegate, "message", "messages")
+
+	// Override bubbles list cursor bindings so they follow the user's
+	// configured CursorUp/CursorDown keys.
+	for _, l := range []*list.Model{&namespaces, &entities, &subs, &queueType, &messages} {
+		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
+		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
+	}
 
 	m := Model{
 		Model:                appshell.New(cfg, km),
@@ -351,12 +370,11 @@ func (m Model) HelpSections() []ui.HelpSection {
 		{
 			Title: "Navigation",
 			Items: []string{
-				keymap.HelpEntry(km.NextFocus, "next focus"),
-				keymap.HelpEntry(km.PreviousFocus, "previous focus"),
-				keymap.HelpEntry(km.FilterInput, "filter focused pane"),
-				keymap.HelpEntry(keymap.New(km.OpenFocused.Label()+"/"+km.OpenFocusedAlt.Label()), "open selected item"),
-				keymap.HelpEntry(km.NavigateLeft, "go back"),
-				keymap.HelpEntry(km.BackspaceUp, "backspace navigation"),
+				keymap.HelpEntry(km.NextFocus, "focus next column"),
+				keymap.HelpEntry(km.PreviousFocus, "focus previous column"),
+				keymap.HelpEntry(km.FilterInput, "filter focused column"),
+				keymap.HelpEntry(km.OpenFocused, "open selected row"),
+				keymap.HelpEntry(km.BackspaceUp, "go up/back"),
 				keymap.HelpEntry(keymap.New(km.HalfPageDown.Label()+"/"+km.HalfPageUp.Label()), "half-page scroll"),
 			},
 		},

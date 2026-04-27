@@ -6,6 +6,8 @@ package keymap
 import (
 	"slices"
 	"strings"
+
+	"charm.land/bubbles/v2/key"
 )
 
 // Binding represents one or more key aliases for an action.
@@ -59,4 +61,11 @@ func (b Binding) Short() string {
 // HelpEntry formats a binding and description as a help line.
 func HelpEntry(b Binding, description string) string {
 	return b.Label() + "  " + description
+}
+
+// AsBubbleKey returns a bubbles key.Binding bound to the same keys as
+// this Binding. Used to override bubbles list/textinput keymaps so
+// they follow the user-configured bindings.
+func (b Binding) AsBubbleKey() key.Binding {
+	return key.NewBinding(key.WithKeys(b.Keys...))
 }
