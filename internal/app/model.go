@@ -838,7 +838,8 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Activity overlay overlay.
 		if m.activityOverlay.Active {
-			res := m.activityOverlay.HandleKey(key)
+			rows := activityRowsFromRegistry(m.sharedActivities)
+			res := m.activityOverlay.HandleKey(key, rows)
 			if res.Action == ui.ActivityActionCancel && res.TargetID != "" {
 				m.cancelActivity(res.TargetID)
 			}
