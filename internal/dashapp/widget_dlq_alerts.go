@@ -17,6 +17,18 @@ type dlqAlertsWidget struct{}
 func (dlqAlertsWidget) Title() string        { return "DLQ alerts" }
 func (dlqAlertsWidget) Position() (int, int) { return 1, 0 }
 
+func (w dlqAlertsWidget) Context(m *Model, view widgetViewState) string {
+	alerts := m.dlqAlertRows(view)
+	if len(alerts) == 0 {
+		return "all clear"
+	}
+	var msgs int64
+	for _, a := range alerts {
+		msgs += a.count
+	}
+	return fmt.Sprintf("%s · %s msgs", formatThousands(int64(len(alerts))), formatThousands(msgs))
+}
+
 func (dlqAlertsWidget) RowCount(m *Model, view widgetViewState) int {
 	alerts := m.dlqAlerts()
 	if view.filter == "" {
@@ -74,7 +86,7 @@ func (w dlqAlertsWidget) Render(m *Model, width, innerHeight, offset, cursor int
 
 	cells := [][]string{{"Namespace", "Entity", "DLQ"}}
 	for _, a := range alerts {
-		cells = append(cells, []string{a.namespace.Name, a.displayEntity(), fmt.Sprintf("%d", a.count)})
+		cells = append(cells, []string{a.namespace.Name, a.displayEntity(), countCell(a.count, m.Styles, severityDLQ)})
 	}
 	aligns := []lipgloss.Position{lipgloss.Left, lipgloss.Left, lipgloss.Right}
 	return renderScrollableTable(cells, aligns, m.Styles, offset, innerHeightToVisibleData(innerHeight), cursor)

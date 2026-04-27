@@ -208,15 +208,19 @@ func (m Model) statusActions() []ui.StatusAction {
 // widgetTitleFor returns the title shown in the pane header. While the
 // filter input is open on the focused widget, the title carries the
 // filter prompt so the user sees what they're typing without a
-// separate input box.
+// separate input box. Otherwise the widget's optional Context summary
+// is appended muted (e.g. "NAMESPACE COUNTS · 11 visible · 312 total").
 func (m Model) widgetTitleFor(w Widget, idx int, focused bool) string {
-	title := w.Title()
+	title := strings.ToUpper(w.Title())
 	view := m.viewStates[idx]
 	if focused && m.filterInputActive {
 		return title + "  /" + view.filter + "▎"
 	}
 	if view.filter != "" {
 		return title + "  filter: " + view.filter
+	}
+	if ctx := w.Context(&m, view); ctx != "" {
+		return title + m.Styles.Muted.Render(" · "+ctx)
 	}
 	return title
 }
@@ -228,7 +232,7 @@ func (m Model) widgetFrame(title, body string, width, height int, focused, right
 		footer = m.Styles.Chrome.Loading.Render(m.Spinner.View()) + " refreshing"
 	}
 	return ui.RenderMillerColumn(ui.MillerColumn{
-		Title:  strings.ToUpper(title),
+		Title:  title,
 		Body:   body,
 		Footer: footer,
 		Frame:  ui.MillerColumnFrame{Width: width, Height: height, Focused: focused, RightRule: rightRule},
@@ -304,9 +308,12 @@ func renderScrollableTable(cells [][]string, aligns []lipgloss.Position, styles 
 }
 
 // renderTable lays out a simple padded table with per-column alignment.
-// First row is the header (Meta style). Row at index highlightRow gets
-// the SelectionHighlight style applied — that's the visual cursor.
-// Pass -1 to skip the highlight.
+// First row is the header (uppercased, muted). Row at index highlightRow
+// gets a rose-gutter + selBg highlight — same vocabulary as the overlay
+// list cursor row. Pass -1 for highlightRow to skip the highlight.
+//
+// Each row is prefixed with a 2-cell gutter (`▍ ` for the cursor row, two
+// spaces otherwise) so cursor highlight doesn't change row width.
 func renderTable(cells [][]string, aligns []lipgloss.Position, styles ui.Styles, highlightRow int) string {
 	if len(cells) == 0 {
 		return ""
@@ -324,6 +331,14 @@ func renderTable(cells [][]string, aligns []lipgloss.Position, styles ui.Styles,
 		}
 	}
 
+	chrome := styles.Chrome
+	gutterCursor := styles.Warning.Render("▍") + " "
+	gutterPlain := "  "
+
+	cursorBg := styles.Delegate.Styles.SelectedTitle.GetBackground()
+	cursorText := styles.Delegate.Styles.SelectedTitle.GetForeground()
+	cursorRowStyle := lipgloss.NewStyle().Background(cursorBg).Foreground(cursorText).Bold(true)
+
 	var out strings.Builder
 	for ri, row := range cells {
 		parts := make([]string, 0, cols)
@@ -335,15 +350,22 @@ func renderTable(cells [][]string, aligns []lipgloss.Position, styles ui.Styles,
 			if i < len(aligns) {
 				align = aligns[i]
 			}
-			cell := lipgloss.NewStyle().Width(widths[i]).Align(align).Render(c)
+			text := c
+			if ri == 0 {
+				text = strings.ToUpper(text)
+			}
+			cell := lipgloss.NewStyle().Width(widths[i]).Align(align).Render(text)
 			parts = append(parts, cell)
 		}
-		line := strings.Join(parts, "  ")
+		body := strings.Join(parts, "  ")
+		var line string
 		switch {
 		case ri == 0:
-			line = styles.Chrome.Meta.Render(line)
+			line = gutterPlain + chrome.RowMeta.Render(body)
 		case ri == highlightRow:
-			line = styles.SelectionHighlight.Render(line)
+			line = gutterCursor + cursorRowStyle.Render(body)
+		default:
+			line = gutterPlain + body
 		}
 		out.WriteString(line)
 		if ri < len(cells)-1 {

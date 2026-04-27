@@ -1,7 +1,6 @@
 package dashapp
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
@@ -29,8 +28,12 @@ const (
 // sbUsageTypes is the resource_type set this widget queries.
 var sbUsageTypes = []string{sbResourceNamespace, sbResourceQueue, sbResourceTopic, sbResourceTopicSub}
 
-func (usedSBWidget) Title() string        { return "Most used Service Bus" }
+func (usedSBWidget) Title() string        { return "Most used · Service Bus" }
 func (usedSBWidget) Position() (int, int) { return 0, 1 }
+
+func (w usedSBWidget) Context(m *Model, view widgetViewState) string {
+	return "last 7d"
+}
 
 func (usedSBWidget) RowCount(m *Model, view widgetViewState) int {
 	return len(m.usedSBEntries(view.filter))
@@ -49,8 +52,18 @@ func (w usedSBWidget) Render(m *Model, width, innerHeight, offset, cursor int, v
 	}
 
 	cells := [][]string{{"Kind", "Resource", "Uses"}}
+	maxUse := int64(0)
 	for _, e := range entries {
-		cells = append(cells, []string{usageKindLabel(e.ResourceType), e.Display, fmt.Sprintf("%d", e.Count)})
+		if e.Count > maxUse {
+			maxUse = e.Count
+		}
+	}
+	for _, e := range entries {
+		cells = append(cells, []string{
+			m.Styles.Muted.Render(usageKindLabel(e.ResourceType)),
+			e.Display,
+			usageCountCell(e.Count, maxUse, m.Styles),
+		})
 	}
 	aligns := []lipgloss.Position{lipgloss.Left, lipgloss.Left, lipgloss.Right}
 	return renderScrollableTable(cells, aligns, m.Styles, offset, innerHeightToVisibleData(innerHeight), cursor)

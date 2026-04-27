@@ -1,7 +1,6 @@
 package dashapp
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure"
@@ -24,8 +23,12 @@ const (
 
 var blobUsageTypes = []string{blobResourceAccount, blobResourceContainer}
 
-func (usedBlobWidget) Title() string        { return "Most used Blob" }
+func (usedBlobWidget) Title() string        { return "Most used · Blob" }
 func (usedBlobWidget) Position() (int, int) { return 1, 1 }
+
+func (w usedBlobWidget) Context(m *Model, view widgetViewState) string {
+	return "last 7d"
+}
 
 func (usedBlobWidget) RowCount(m *Model, view widgetViewState) int {
 	return len(m.usedBlobEntries(view.filter))
@@ -44,8 +47,18 @@ func (w usedBlobWidget) Render(m *Model, width, innerHeight, offset, cursor int,
 	}
 
 	cells := [][]string{{"Kind", "Resource", "Uses"}}
+	maxUse := int64(0)
 	for _, e := range entries {
-		cells = append(cells, []string{usageKindLabel(e.ResourceType), e.Display, fmt.Sprintf("%d", e.Count)})
+		if e.Count > maxUse {
+			maxUse = e.Count
+		}
+	}
+	for _, e := range entries {
+		cells = append(cells, []string{
+			m.Styles.Muted.Render(usageKindLabel(e.ResourceType)),
+			e.Display,
+			usageCountCell(e.Count, maxUse, m.Styles),
+		})
 	}
 	aligns := []lipgloss.Position{lipgloss.Left, lipgloss.Left, lipgloss.Right}
 	return renderScrollableTable(cells, aligns, m.Styles, offset, innerHeightToVisibleData(innerHeight), cursor)

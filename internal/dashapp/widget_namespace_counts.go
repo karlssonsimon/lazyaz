@@ -18,6 +18,18 @@ type namespaceCountsWidget struct{}
 func (namespaceCountsWidget) Title() string        { return "Namespace counts" }
 func (namespaceCountsWidget) Position() (int, int) { return 0, 0 }
 
+func (w namespaceCountsWidget) Context(m *Model, view widgetViewState) string {
+	total := len(m.namespaces)
+	if total == 0 {
+		return ""
+	}
+	visible := w.RowCount(m, view)
+	if visible == total {
+		return fmt.Sprintf("%s total", formatThousands(int64(total)))
+	}
+	return fmt.Sprintf("%s visible · %s total", formatThousands(int64(visible)), formatThousands(int64(total)))
+}
+
 func (namespaceCountsWidget) RowCount(m *Model, view widgetViewState) int {
 	if view.filter == "" {
 		return len(m.namespaces)
@@ -119,17 +131,19 @@ func (w namespaceCountsWidget) Render(m *Model, width, innerHeight, offset, curs
 	stats := w.rows(m, view)
 
 	cells := [][]string{{"Namespace", "Queues", "Topics", "Active", "DLQ"}}
+	muted := m.Styles.Muted
 	for _, s := range stats {
 		if !s.entitiesLoaded {
-			cells = append(cells, []string{s.namespace.Name, "…", "…", "…", "…"})
+			placeholder := muted.Render("…")
+			cells = append(cells, []string{s.namespace.Name, placeholder, placeholder, placeholder, placeholder})
 			continue
 		}
 		cells = append(cells, []string{
 			s.namespace.Name,
-			fmt.Sprintf("%d", s.queues),
-			fmt.Sprintf("%d", s.topics),
-			fmt.Sprintf("%d", s.active),
-			fmt.Sprintf("%d", s.dlq),
+			countCell(s.queues, m.Styles, severityCounts),
+			countCell(s.topics, m.Styles, severityCounts),
+			countCell(s.active, m.Styles, severityMessages),
+			countCell(s.dlq, m.Styles, severityDLQ),
 		})
 	}
 

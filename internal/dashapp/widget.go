@@ -3,6 +3,8 @@ package dashapp
 import (
 	"strings"
 
+	"github.com/karlssonsimon/lazyaz/internal/ui"
+
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -31,6 +33,10 @@ type SortField struct {
 type Widget interface {
 	// Title is shown in the widget's pane header.
 	Title() string
+	// Context is an optional one-line summary appended after the title
+	// (e.g. "11 visible · 312 total" or "86 · 5,394 msgs"). Empty when
+	// the widget has nothing meaningful to summarise. Rendered muted.
+	Context(m *Model, view widgetViewState) string
 	// Position returns the (row, col) grid cell the widget occupies.
 	// Position drives both layout and spatial navigation. (0, 0) is
 	// the top-left cell.
@@ -102,6 +108,91 @@ func matchesFilter(haystack, filter string) bool {
 		return true
 	}
 	return strings.Contains(strings.ToLower(haystack), strings.ToLower(filter))
+}
+
+// severityScale picks the warn/danger thresholds for a given numeric
+// column. Counts (queues/topics) need much lower bands than message
+// totals (active/dlq) because their natural magnitudes differ.
+type severityScale struct{ warn, danger int64 }
+
+var (
+	// severityCounts is for entity counts (queues, topics): a few is
+	// fine, dozens deserve a glance, hundreds are unusual.
+	severityCounts = severityScale{warn: 50, danger: 200}
+	// severityMessages is for live message backlogs: thousands warn,
+	// >5k is the "go look at this" tier.
+	severityMessages = severityScale{warn: 1000, danger: 5000}
+	// severityDLQ is stricter — any DLQ build-up > 100 is concerning,
+	// > 1000 is bad.
+	severityDLQ = severityScale{warn: 100, danger: 1000}
+)
+
+// countCell formats n for a numeric table column: thousand-separated,
+// muted at zero, amber at the warn threshold, pink at the danger
+// threshold. Returns a styled string ready to drop into renderTable.
+func countCell(n int64, styles ui.Styles, scale severityScale) string {
+	text := formatThousands(n)
+	switch {
+	case n == 0:
+		return styles.Muted.Render(text)
+	case n >= scale.danger:
+		return styles.DangerBold.Render(text)
+	case n >= scale.warn:
+		return styles.Warning.Render(text)
+	}
+	return text
+}
+
+// usageCountCell formats a "uses" counter scaled relative to the row
+// max — the top entry pops pink, the rest fade through default → muted.
+// Used by the most-used widgets where there's no absolute "danger" but
+// users want to see what they touch most.
+func usageCountCell(n, max int64, styles ui.Styles) string {
+	text := formatThousands(n)
+	if max <= 0 {
+		return text
+	}
+	switch {
+	case n == max:
+		return styles.DangerBold.Render(text)
+	case n*4 >= max*3: // top quartile
+		return styles.Warning.Render(text)
+	case n*4 < max:
+		return styles.Muted.Render(text)
+	}
+	return text
+}
+
+// formatThousands formats n with non-breaking-space thousand separators
+// (e.g. 6051 → "6 051"), matching the Swedish-style numerics in the
+// dashboard mockups. Negative numbers preserve their sign.
+func formatThousands(n int64) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var buf [32]byte
+	pos := len(buf)
+	digits := 0
+	for n > 0 {
+		if digits == 3 {
+			pos--
+			buf[pos] = ' '
+			digits = 0
+		}
+		pos--
+		buf[pos] = byte('0' + n%10)
+		n /= 10
+		digits++
+	}
+	if neg {
+		pos--
+		buf[pos] = '-'
+	}
+	return string(buf[pos:])
 }
 
 // dashboardWidgets returns the widgets the dashboard renders, in
