@@ -38,6 +38,23 @@ func (k TabKind) String() string {
 	}
 }
 
+// Icon returns a single-cell glyph that visually identifies the tab kind
+// in the tab bar. Picked to be terminal-safe (single-cell width in
+// monospaced fonts) and recognizable at a glance.
+func (k TabKind) Icon() string {
+	switch k {
+	case TabBlob:
+		return "▲"
+	case TabServiceBus:
+		return "⇄"
+	case TabKeyVault:
+		return "⌬"
+	case TabDashboard:
+		return "▦"
+	}
+	return "·"
+}
+
 // TabKindFromString parses a config-supplied tab kind name into a
 // TabKind. Recognized values (case-insensitive): "blob", "servicebus",
 // "keyvault", "dashboard". Returns ok=false on anything else so the

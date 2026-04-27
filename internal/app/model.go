@@ -974,7 +974,7 @@ func (m *Model) forwardToActive(msg tea.Msg) tea.Cmd {
 }
 
 func (m Model) childHeight() int {
-	h := m.height - 1 // tab bar takes 1 line
+	h := m.height - tabBarHeight // tab bar = accent line + label line
 	if h < 1 {
 		h = 1
 	}

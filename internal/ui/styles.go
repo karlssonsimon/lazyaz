@@ -107,10 +107,14 @@ type OverlayStyles struct {
 
 // TabBarStyles covers tab bar rendering.
 type TabBarStyles struct {
-	Active   lipgloss.Style
-	Inactive lipgloss.Style
-	Sep      lipgloss.Style
-	Bar      lipgloss.Style // full-width bar wrapper
+	Active       lipgloss.Style // active tab label (bold, selBg)
+	ActiveIcon   lipgloss.Style // active tab icon glyph (warning fg, selBg)
+	ActiveNumber lipgloss.Style // "1" prefix on the active tab (muted, selBg)
+	Inactive     lipgloss.Style // inactive tab label (muted)
+	InactiveIcon lipgloss.Style // inactive tab icon glyph
+	Number       lipgloss.Style // "1" prefix on inactive tabs
+	Sep          lipgloss.Style // spacing between tabs
+	Bar          lipgloss.Style // full-width bar wrapper
 }
 
 // color converts a Base16 hex string to a color.Color, prepending "#".
@@ -151,7 +155,7 @@ func NewStyles(s Scheme) Styles {
 	cyan := color(s.Base0C)
 	blue := color(s.Base0D)
 	purple := color(s.Base0E)
-	brown := color(s.Base0F)
+	_ = color(s.Base0F) // brown — reserved
 
 	// --- Chrome ---
 	chrome := ChromeStyles{
@@ -433,21 +437,31 @@ func NewStyles(s Scheme) Styles {
 	}
 
 	// --- Tab Bar ---
-	// Active uses the accent color as a button background so it pops
-	// clearly against the dimmer inactive tabs. Inactive tabs use muted
-	// text on the surface background to recede.
+	// Active tab marks itself with a thin top accent line and bold
+	// foreground — no heavy background fill. Inactive tabs sit muted
+	// on the surface bg so they recede. Per-kind icons get the same
+	// fg as the label so they read as part of the tab.
 	tabBar := TabBarStyles{
 		Active: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(bg).
-			Background(blue).
-			Padding(0, 1),
+			Foreground(text).
+			Background(selBg),
+		ActiveIcon: lipgloss.NewStyle().
+			Foreground(warning).
+			Background(selBg),
 		Inactive: lipgloss.NewStyle().
 			Foreground(muted).
-			Background(surface).
-			Padding(0, 1),
+			Background(surface),
+		InactiveIcon: lipgloss.NewStyle().
+			Foreground(muted).
+			Background(surface),
+		ActiveNumber: lipgloss.NewStyle().
+			Foreground(muted).
+			Background(selBg),
+		Number: lipgloss.NewStyle().
+			Foreground(muted).
+			Background(surface),
 		Sep: lipgloss.NewStyle().
-			Foreground(brown).
 			Background(surface),
 		Bar: lipgloss.NewStyle().
 			Background(surface),
