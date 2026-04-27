@@ -437,10 +437,11 @@ func (m Model) renderActionMenu(base string) string {
 		Query:      s.Query,
 		CursorView: m.Cursor.View(),
 		CloseHint:  m.Keymap.Cancel.Short(),
+		Keymap:     &m.Keymap,
 		MaxVisible: 10,
 		Center:     true,
 	}
-	return ui.RenderOverlayList(cfg, items, s.CursorIdx, m.Styles.Overlay, m.Width, m.Height, base)
+	return ui.RenderOverlayList(cfg, items, s.CursorIdx, m.Styles, m.Width, m.Height, base)
 }
 
 // copyToClipboard copies text to the system clipboard.

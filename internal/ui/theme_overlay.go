@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
 
 type KeyMatcher interface {
@@ -98,7 +99,7 @@ func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, sch
 	return false
 }
 
-func RenderThemeOverlay(state ThemeOverlayState, closeHint, cursorView string, schemes []Scheme, styles Styles, width, height int, base string) string {
+func RenderThemeOverlay(state ThemeOverlayState, closeHint, cursorView string, schemes []Scheme, styles Styles, km *keymap.Keymap, width, height int, base string) string {
 	filtered := state.filtered
 	if filtered == nil {
 		filtered = make([]int, len(schemes))
@@ -115,5 +116,5 @@ func RenderThemeOverlay(state ThemeOverlayState, closeHint, cursorView string, s
 		}
 	}
 
-	return RenderOverlayList(OverlayListConfig{Title: "Themes", Query: state.Query, CursorView: cursorView, CloseHint: closeHint}, items, state.CursorIdx, styles.Overlay, width, height, base)
+	return RenderOverlayList(OverlayListConfig{Title: "Themes", Query: state.Query, CursorView: cursorView, CloseHint: closeHint, Keymap: km}, items, state.CursorIdx, styles, width, height, base)
 }

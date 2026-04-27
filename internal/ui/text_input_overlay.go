@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"unicode"
 
 	"charm.land/lipgloss/v2"
@@ -131,6 +132,7 @@ func RenderTextInputOverlay(state TextInputState, cursorView string, styles Styl
 
 	rows := []string{
 		styles.Overlay.Title.Render(state.Title),
+		styles.Overlay.Rule.Render(strings.Repeat("─", innerWidth)),
 		"",
 		inputLine,
 	}

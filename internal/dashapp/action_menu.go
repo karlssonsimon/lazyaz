@@ -71,9 +71,10 @@ func (m Model) renderActionMenu(base string) string {
 	cfg := ui.OverlayListConfig{
 		Title:      "Widget actions",
 		CloseHint:  m.Keymap.Cancel.Short(),
+		Keymap:     &m.Keymap,
 		HideSearch: true,
 	}
-	return ui.RenderOverlayList(cfg, items, m.actionMenu.cursor, m.Styles.Overlay, m.Width, m.Height, base)
+	return ui.RenderOverlayList(cfg, items, m.actionMenu.cursor, m.Styles, m.Width, m.Height, base)
 }
 
 // fireAction is what gets called when the menu yields an action — just

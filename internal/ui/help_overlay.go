@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
 
 type HelpKeyBindings struct {
@@ -119,7 +120,7 @@ func parseHelpEntry(s string) (keys, desc string) {
 	return s, ""
 }
 
-func RenderHelpOverlay(state HelpOverlayState, closeHint, cursorView string, styles Styles, width, height int, base string) string {
+func RenderHelpOverlay(state HelpOverlayState, closeHint, cursorView string, styles Styles, km *keymap.Keymap, width, height int, base string) string {
 	filtered := state.filtered
 	if filtered == nil {
 		filtered = make([]int, len(state.items))
@@ -180,7 +181,8 @@ func RenderHelpOverlay(state HelpOverlayState, closeHint, cursorView string, sty
 		InnerWidth: innerW,
 		MaxVisible: maxVis,
 		Center:     true,
+		Keymap:     km,
 	}
 
-	return RenderOverlayList(cfg, items, state.CursorIdx, styles.Overlay, width, height, base)
+	return RenderOverlayList(cfg, items, state.CursorIdx, styles, width, height, base)
 }

@@ -362,8 +362,9 @@ func (m Model) renderTargetPicker(base string) string {
 		Query:      s.query,
 		CursorView: m.Cursor.View(),
 		CloseHint:  m.Keymap.Cancel.Short(),
+		Keymap:     &m.Keymap,
 		MaxVisible: 10,
 		Center:     true,
 	}
-	return ui.RenderOverlayList(cfg, items, s.cursorIdx, m.Styles.Overlay, m.Width, m.Height, base)
+	return ui.RenderOverlayList(cfg, items, s.cursorIdx, m.Styles, m.Width, m.Height, base)
 }

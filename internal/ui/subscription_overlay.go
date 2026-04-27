@@ -5,6 +5,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 
 	"charm.land/lipgloss/v2"
 )
@@ -106,7 +107,7 @@ func (s *SubscriptionOverlayState) HandleKey(key string, bindings ThemeKeyBindin
 
 // RenderSubscriptionOverlay renders the subscription picker overlay.
 // If loading is true, a spinner frame is appended to the title.
-func RenderSubscriptionOverlay(state SubscriptionOverlayState, closeHint, cursorView string, subs []azure.Subscription, currentSub azure.Subscription, loading bool, loadingStartedAt time.Time, styles Styles, width, height int, base string) string {
+func RenderSubscriptionOverlay(state SubscriptionOverlayState, closeHint, cursorView string, subs []azure.Subscription, currentSub azure.Subscription, loading bool, loadingStartedAt time.Time, styles Styles, km *keymap.Keymap, width, height int, base string) string {
 	filtered := state.filtered
 	if filtered == nil {
 		filtered = make([]int, len(subs))
@@ -137,8 +138,9 @@ func RenderSubscriptionOverlay(state SubscriptionOverlayState, closeHint, cursor
 		CloseHint:  closeHint,
 		MaxVisible: 12,
 		Center:     true,
+		Keymap:     km,
 	}
-	return RenderOverlayList(cfg, items, state.CursorIdx, styles.Overlay, width, height, base)
+	return RenderOverlayList(cfg, items, state.CursorIdx, styles, width, height, base)
 }
 
 // RenderSubscriptionBar renders a 2-line bar showing the current subscription context.

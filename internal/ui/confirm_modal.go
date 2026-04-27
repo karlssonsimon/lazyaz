@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"charm.land/lipgloss/v2"
 )
 
@@ -90,8 +92,9 @@ func RenderConfirmModal(state ConfirmModalState, styles Styles, width, height in
 		styles.Accent2.Render("(esc) "+cancelLabel)
 
 	title := styles.Overlay.Title.Render(state.Title)
+	rule := styles.Overlay.Rule.Render(strings.Repeat("─", innerWidth))
 
-	rows := []string{title}
+	rows := []string{title, rule}
 	if state.Message != "" {
 		// Render message as plain text — styles.Overlay.Normal has
 		// a left-padding on it (sized for item-row alignment with the

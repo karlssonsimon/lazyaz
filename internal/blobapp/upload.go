@@ -506,7 +506,7 @@ func (m Model) RenderUploadConflictPrompt(base string, width, height int) string
 		HideSearch: true,
 		Center:     true,
 	}
-	return ui.RenderOverlayList(cfg, nil, 0, m.Styles.Overlay, width, height, base)
+	return ui.RenderOverlayList(cfg, nil, 0, m.Styles, width, height, base)
 }
 
 // newUploadCmd returns a tea.Cmd that blocks on the next message in the

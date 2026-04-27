@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
@@ -85,7 +86,7 @@ func (s *tabPickerState) handleKey(key string, bindings ui.ThemeKeyBindings) (Ta
 	return 0, false
 }
 
-func renderTabPickerOverlay(s *tabPickerState, closeHint, cursorView string, styles ui.OverlayStyles, width, height int, base string) string {
+func renderTabPickerOverlay(s *tabPickerState, closeHint, cursorView string, styles ui.Styles, km *keymap.Keymap, width, height int, base string) string {
 	items := make([]ui.OverlayItem, len(s.filtered))
 	for ci, ti := range s.filtered {
 		items[ci] = ui.OverlayItem{Label: tabKinds[ti].name}
@@ -97,6 +98,7 @@ func renderTabPickerOverlay(s *tabPickerState, closeHint, cursorView string, sty
 		CursorView: cursorView,
 		CloseHint:  closeHint,
 		MaxVisible: len(tabKinds),
+		Keymap:     km,
 	}
 	return ui.RenderOverlayList(cfg, items, s.cursorIdx, styles, width, height, base)
 }

@@ -333,7 +333,7 @@ func RenderFileBrowser(state FileBrowserState, styles Styles, width, height int,
 		HideSearch: !state.filterInputOpen && state.filterQuery == "",
 		Center:     true,
 	}
-	return RenderOverlayList(cfg, items, state.cursor, styles.Overlay, width, height, base)
+	return RenderOverlayList(cfg, items, state.cursor, styles, width, height, base)
 }
 
 func insideVisualRange(anchor, cursor, i int) bool {

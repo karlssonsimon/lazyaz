@@ -86,6 +86,10 @@ type ListStyles struct {
 type OverlayStyles struct {
 	Title        lipgloss.Style
 	SectionTitle lipgloss.Style
+	Rule         lipgloss.Style // thin separator above/below header and footer rows
+	DashedRule   lipgloss.Style // dashed divider after the active row
+	HeaderBadge  lipgloss.Style // lavender pill: "THEMES", "COMMANDS", etc.
+	HeaderCount  lipgloss.Style // muted "5 / 312" counter
 	Prompt       lipgloss.Style
 	Input        lipgloss.Style
 	Normal       lipgloss.Style
@@ -94,6 +98,9 @@ type OverlayStyles struct {
 	NoMatch      lipgloss.Style
 	Hint         lipgloss.Style
 	HintFull     lipgloss.Style // hint with full width
+	RowHint      lipgloss.Style // muted inline hint for row content (no bg, so cursor row bg shows through)
+	ActiveMarker lipgloss.Style // cyan • for the active/current row
+	Match        lipgloss.Style // matched query chars in item labels
 	BoxBg        icolor.Color   // background color for custom box construction
 	Box          lipgloss.Style
 }
@@ -225,7 +232,7 @@ func NewStyles(s Scheme) Styles {
 			Foreground(text).
 			Background(bg),
 		SelectionGutter: lipgloss.NewStyle().
-			Foreground(purple).
+			Foreground(warning).
 			Background(bg).
 			Bold(true),
 		RowMeta: lipgloss.NewStyle().
@@ -233,11 +240,11 @@ func NewStyles(s Scheme) Styles {
 			Background(bg),
 		StatusMode: lipgloss.NewStyle().
 			Foreground(bg).
-			Background(purple).
+			Background(warning).
 			Bold(true).
 			Padding(0, 1),
 		StatusKey: lipgloss.NewStyle().
-			Foreground(purple).
+			Foreground(warning).
 			Background(surface).
 			Bold(true),
 		Loading: lipgloss.NewStyle().
@@ -260,17 +267,17 @@ func NewStyles(s Scheme) Styles {
 		Padding(0, 0, 0, 2)
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle().
 		Foreground(selText).
-		Background(bg).
+		Background(selBg).
 		Bold(true).
 		Border(lipgloss.ThickBorder(), false, false, false, true).
-		BorderForeground(purple).
+		BorderForeground(warning).
 		BorderBackground(bg).
 		Padding(0, 0, 0, 1)
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().
 		Foreground(selText).
-		Background(bg).
+		Background(selBg).
 		Border(lipgloss.ThickBorder(), false, false, false, true).
-		BorderForeground(purple).
+		BorderForeground(warning).
 		BorderBackground(bg).
 		Padding(0, 0, 0, 1)
 	delegate.Styles.DimmedTitle = lipgloss.NewStyle().
@@ -350,17 +357,35 @@ func NewStyles(s Scheme) Styles {
 	})
 
 	// --- Overlay ---
+	// Shares the redesign language: thin muted border (matches column
+	// rules), purple-bold title (matches column titles), thick-left
+	// gutter for selected rows (matches list selection delegate). No
+	// rounded corners or accent-colored borders.
 	overlay := OverlayStyles{
 		Title: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(blue).
+			Foreground(purple).
 			Background(bg),
 		SectionTitle: lipgloss.NewStyle().
 			Bold(true).
 			Foreground(purple).
 			Background(bg),
+		Rule: lipgloss.NewStyle().
+			Foreground(muted).
+			Background(bg),
+		DashedRule: lipgloss.NewStyle().
+			Foreground(muted).
+			Background(bg),
+		HeaderBadge: lipgloss.NewStyle().
+			Foreground(bg).
+			Background(blue).
+			Bold(true).
+			Padding(0, 1),
+		HeaderCount: lipgloss.NewStyle().
+			Foreground(muted).
+			Background(bg),
 		Prompt: lipgloss.NewStyle().
-			Foreground(cyan).
+			Foreground(muted).
 			Background(bg),
 		Input: lipgloss.NewStyle().
 			Foreground(text).
@@ -368,7 +393,7 @@ func NewStyles(s Scheme) Styles {
 		Normal: lipgloss.NewStyle().
 			Foreground(text).
 			Background(bg).
-			Padding(0, 0, 0, 1),
+			Padding(0, 0, 0, 2),
 		NormalFull: lipgloss.NewStyle().
 			Foreground(text).
 			Background(bg),
@@ -377,8 +402,9 @@ func NewStyles(s Scheme) Styles {
 			Background(selBg).
 			Bold(true).
 			Border(lipgloss.ThickBorder(), false, false, false, true).
-			BorderForeground(green).
-			BorderBackground(selBg),
+			BorderForeground(warning).
+			BorderBackground(bg).
+			Padding(0, 0, 0, 1),
 		NoMatch: lipgloss.NewStyle().
 			Foreground(muted).
 			Background(bg).
@@ -390,11 +416,18 @@ func NewStyles(s Scheme) Styles {
 		HintFull: lipgloss.NewStyle().
 			Foreground(muted).
 			Background(bg),
+		RowHint: lipgloss.NewStyle().
+			Foreground(muted),
+		ActiveMarker: lipgloss.NewStyle().
+			Foreground(cyan),
+		Match: lipgloss.NewStyle().
+			Foreground(warning).
+			Bold(true),
 		BoxBg: color(s.Base00),
 		Box: lipgloss.NewStyle().
 			Background(bg).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(green).
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(muted).
 			BorderBackground(bg).
 			Padding(1, 2),
 	}

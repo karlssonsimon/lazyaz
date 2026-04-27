@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
 
 // NotificationsOverlayState is the open/closed + scroll state of the
@@ -55,7 +56,7 @@ type NotificationEntry struct {
 // RenderNotificationsOverlay paints the scrollable history list
 // (newest first) on top of the given base view. Use the passed
 // styles to color level pills consistent with toasts.
-func RenderNotificationsOverlay(state NotificationsOverlayState, closeHint string, entries []NotificationEntry, styles Styles, width, height int, base string) string {
+func RenderNotificationsOverlay(state NotificationsOverlayState, closeHint string, entries []NotificationEntry, styles Styles, km *keymap.Keymap, width, height int, base string) string {
 	// Reverse: newest first.
 	reversed := make([]NotificationEntry, len(entries))
 	for i, e := range entries {
@@ -92,13 +93,15 @@ func RenderNotificationsOverlay(state NotificationsOverlayState, closeHint strin
 		InnerWidth: 100,
 		MaxVisible: 20,
 		Center:     true,
+		HideSearch: true,
+		Keymap:     km,
 	}
 
 	if len(items) == 0 {
 		items = []OverlayItem{{Label: "No notifications yet."}}
 	}
 
-	return RenderOverlayList(cfg, items, state.CursorIdx, styles.Overlay, width, height, base)
+	return RenderOverlayList(cfg, items, state.CursorIdx, styles, width, height, base)
 }
 
 func levelLabel(level ToastLevel) string {

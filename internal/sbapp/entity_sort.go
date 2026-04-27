@@ -205,10 +205,11 @@ func (m Model) renderEntitySortOverlay(base string) string {
 		Query:      s.query,
 		CursorView: m.Cursor.View(),
 		CloseHint:  m.Keymap.Cancel.Short(),
+		Keymap:     &m.Keymap,
 		MaxVisible: len(entitySortOptions),
 		Center:     true,
 	}
-	return ui.RenderOverlayList(cfg, items, s.cursorIdx, m.Styles.Overlay, m.Width, m.Height, base)
+	return ui.RenderOverlayList(cfg, items, s.cursorIdx, m.Styles, m.Width, m.Height, base)
 }
 
 func entitySortLabel(field entitySortField, desc bool, dlqFilter bool) string {

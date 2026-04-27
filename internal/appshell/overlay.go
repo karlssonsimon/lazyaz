@@ -78,13 +78,13 @@ func (m Model) RenderOverlays(view string) string {
 	closeHint := m.Keymap.Cancel.Short()
 	cursorView := m.Cursor.View()
 	if m.SubOverlay.Active {
-		view = ui.RenderSubscriptionOverlay(m.SubOverlay, closeHint, cursorView, m.Subscriptions, m.CurrentSub, m.Loading, m.LoadingStartedAt, m.Styles, m.Width, m.Height, view)
+		view = ui.RenderSubscriptionOverlay(m.SubOverlay, closeHint, cursorView, m.Subscriptions, m.CurrentSub, m.Loading, m.LoadingStartedAt, m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
 	if !m.EmbeddedMode && m.ThemeOverlay.Active {
-		view = ui.RenderThemeOverlay(m.ThemeOverlay, closeHint, cursorView, m.Schemes, m.Styles, m.Width, m.Height, view)
+		view = ui.RenderThemeOverlay(m.ThemeOverlay, closeHint, cursorView, m.Schemes, m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
 	if !m.EmbeddedMode && m.HelpOverlay.Active {
-		view = ui.RenderHelpOverlay(m.HelpOverlay, closeHint, cursorView, m.Styles, m.Width, m.Height, view)
+		view = ui.RenderHelpOverlay(m.HelpOverlay, closeHint, cursorView, m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
 	return view
 }

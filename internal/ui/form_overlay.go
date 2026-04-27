@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"charm.land/lipgloss/v2"
 )
 
@@ -159,7 +161,11 @@ func RenderFormOverlay(state FormOverlayState, cursorView string, styles Styles,
 		cursorView = "█"
 	}
 
-	rows := []string{styles.Overlay.Title.Render(state.Title), ""}
+	rows := []string{
+		styles.Overlay.Title.Render(state.Title),
+		styles.Overlay.Rule.Render(strings.Repeat("─", innerWidth)),
+		"",
+	}
 
 	for i, f := range state.Fields {
 		rows = append(rows, styles.Overlay.SectionTitle.Render(f.Label))
