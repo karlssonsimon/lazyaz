@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/activity"
-	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
 
 // ActivityPane enumerates which pane the activity overlay is displaying.
@@ -140,7 +139,7 @@ type ActivityRow struct {
 type ActivityOverlayConfig struct {
 	Tick      int // render-frame counter, used to rotate the fetch spinner
 	CloseHint string
-	Keymap    *keymap.Keymap
+	Bindings  *OverlayBindings
 }
 
 // RenderActivityOverlay paints the activity overlay overlay on top of base.
@@ -203,7 +202,7 @@ func renderActivityList(state *ActivityOverlayState, rows []ActivityRow, cfg Act
 		MaxVisible: 18,
 		HideSearch: true,
 		Center:     true,
-		Keymap:     cfg.Keymap,
+		Bindings:   cfg.Bindings,
 	}
 	return RenderOverlayList(listCfg, items, cursor, styles, width, height, base)
 }
@@ -229,7 +228,7 @@ func renderActivityDetail(state *ActivityOverlayState, rows []ActivityRow, cfg A
 		MaxVisible: 16,
 		HideSearch: true,
 		Center:     true,
-		Keymap:     cfg.Keymap,
+		Bindings:   cfg.Bindings,
 	}
 	return RenderOverlayList(listCfg, items, 0, styles, width, height, base)
 }

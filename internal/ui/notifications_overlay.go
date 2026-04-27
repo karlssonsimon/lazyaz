@@ -87,6 +87,14 @@ func RenderNotificationsOverlay(state NotificationsOverlayState, closeHint strin
 		}
 	}
 
+	var bindings *OverlayBindings
+	if km != nil {
+		bindings = &OverlayBindings{
+			MoveUp:   km.ThemeUp,
+			MoveDown: km.ThemeDown,
+			Cancel:   km.Cancel,
+		}
+	}
 	cfg := OverlayListConfig{
 		Title:      fmt.Sprintf("Notifications (%d)", len(entries)),
 		CloseHint:  closeHint,
@@ -94,7 +102,7 @@ func RenderNotificationsOverlay(state NotificationsOverlayState, closeHint strin
 		MaxVisible: 20,
 		Center:     true,
 		HideSearch: true,
-		Keymap:     km,
+		Bindings:   bindings,
 	}
 
 	if len(items) == 0 {

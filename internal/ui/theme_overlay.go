@@ -116,5 +116,18 @@ func RenderThemeOverlay(state ThemeOverlayState, closeHint, cursorView string, s
 		}
 	}
 
-	return RenderOverlayList(OverlayListConfig{Title: "Themes", Query: state.Query, CursorView: cursorView, CloseHint: closeHint, Keymap: km}, items, state.CursorIdx, styles, width, height, base)
+	cfg := OverlayListConfig{
+		Title:      "Themes",
+		Query:      state.Query,
+		CursorView: cursorView,
+		CloseHint:  closeHint,
+		Bindings: &OverlayBindings{
+			MoveUp:   km.ThemeUp,
+			MoveDown: km.ThemeDown,
+			Apply:    km.ThemeApply,
+			Cancel:   km.Cancel,
+			Erase:    km.BackspaceUp,
+		},
+	}
+	return RenderOverlayList(cfg, items, state.CursorIdx, styles, width, height, base)
 }

@@ -71,8 +71,13 @@ func (m Model) renderActionMenu(base string) string {
 	cfg := ui.OverlayListConfig{
 		Title:      "Widget actions",
 		CloseHint:  m.Keymap.Cancel.Short(),
-		Keymap:     &m.Keymap,
 		HideSearch: true,
+		Bindings: &ui.OverlayBindings{
+			MoveUp:   m.Keymap.ThemeUp,
+			MoveDown: m.Keymap.ThemeDown,
+			Apply:    m.Keymap.ThemeApply,
+			Cancel:   m.Keymap.Cancel,
+		},
 	}
 	return ui.RenderOverlayList(cfg, items, m.actionMenu.cursor, m.Styles, m.Width, m.Height, base)
 }

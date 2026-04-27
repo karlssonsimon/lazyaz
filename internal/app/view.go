@@ -55,7 +55,13 @@ func (m Model) View() tea.View {
 			CloseHint:  closeHint,
 			MaxVisible: 12,
 			Center:     true,
-			Keymap:     &m.keymap,
+			Bindings: &ui.OverlayBindings{
+				MoveUp:   m.keymap.ThemeUp,
+				MoveDown: m.keymap.ThemeDown,
+				Apply:    m.keymap.ThemeApply,
+				Cancel:   m.keymap.Cancel,
+				Erase:    m.keymap.BackspaceUp,
+			},
 		}, m.tenantPicker.visibleItems(), m.tenantPicker.cursor, m.styles, m.width, m.height, view)
 	}
 	if m.themeOverlay.Active {
@@ -73,7 +79,12 @@ func (m Model) View() tea.View {
 		cfg := ui.ActivityOverlayConfig{
 			Tick:      m.activityTick,
 			CloseHint: closeHint,
-			Keymap:    &m.keymap,
+			Bindings: &ui.OverlayBindings{
+				MoveUp:   m.keymap.ThemeUp,
+				MoveDown: m.keymap.ThemeDown,
+				Apply:    m.keymap.ThemeApply,
+				Cancel:   m.keymap.Cancel,
+			},
 		}
 		view = ui.RenderActivityOverlay(&m.activityOverlay, rows, cfg, m.styles, m.width, m.height, view)
 	}

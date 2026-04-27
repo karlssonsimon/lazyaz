@@ -98,7 +98,13 @@ func renderTabPickerOverlay(s *tabPickerState, closeHint, cursorView string, sty
 		CursorView: cursorView,
 		CloseHint:  closeHint,
 		MaxVisible: len(tabKinds),
-		Keymap:     km,
+		Bindings: &ui.OverlayBindings{
+			MoveUp:   km.ThemeUp,
+			MoveDown: km.ThemeDown,
+			Apply:    km.ThemeApply,
+			Cancel:   km.Cancel,
+			Erase:    km.BackspaceUp,
+		},
 	}
 	return ui.RenderOverlayList(cfg, items, s.cursorIdx, styles, width, height, base)
 }

@@ -258,6 +258,7 @@ func TestServiceBusViewUsesMillerChrome(t *testing.T) {
 	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
 	m.Width = 100
 	m.Height = 30
+	m.SubOverlay.Close() // exercise the underlying chrome, not the picker
 	m.resize()
 	out := m.View().Content
 	// "Service Bus" no longer appears in the breadcrumb — the tab bar

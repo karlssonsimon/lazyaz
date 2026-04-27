@@ -173,6 +173,15 @@ func RenderHelpOverlay(state HelpOverlayState, closeHint, cursorView string, sty
 		maxVis = 30
 	}
 
+	var bindings *OverlayBindings
+	if km != nil {
+		bindings = &OverlayBindings{
+			MoveUp:   km.ThemeUp,
+			MoveDown: km.ThemeDown,
+			Cancel:   km.ToggleHelp,
+			Erase:    km.BackspaceUp,
+		}
+	}
 	cfg := OverlayListConfig{
 		Title:      state.Title,
 		Query:      state.Query,
@@ -181,7 +190,7 @@ func RenderHelpOverlay(state HelpOverlayState, closeHint, cursorView string, sty
 		InnerWidth: innerW,
 		MaxVisible: maxVis,
 		Center:     true,
-		Keymap:     km,
+		Bindings:   bindings,
 	}
 
 	return RenderOverlayList(cfg, items, state.CursorIdx, styles, width, height, base)

@@ -197,6 +197,7 @@ func TestBlobViewUsesCompactHeaderAndStatus(t *testing.T) {
 	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
 	m.Width = 100
 	m.Height = 30
+	m.SubOverlay.Close() // exercise the underlying chrome, not the picker
 	m.resize()
 	out := m.View().Content
 	if strings.Contains(out, "Storage Accounts") {

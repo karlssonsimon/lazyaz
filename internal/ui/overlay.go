@@ -23,6 +23,19 @@ type OverlayItem struct {
 	IsActive bool   // shows a marker (e.g. * for current theme)
 }
 
+// OverlayBindings tells the overlay renderer which keymap bindings the
+// dialog actually responds to, so footer hints reflect the truth instead
+// of guessing from a fixed (Theme*) subset of the Keymap. Each dialog
+// declares its own bindings — exactly the same set it passes to its
+// HandleKey method.
+type OverlayBindings struct {
+	MoveUp   keymap.Binding
+	MoveDown keymap.Binding
+	Apply    keymap.Binding
+	Cancel   keymap.Binding
+	Erase    keymap.Binding
+}
+
 // OverlayListConfig configures the dimensions and placement of an overlay list.
 type OverlayListConfig struct {
 	Title      string
@@ -34,16 +47,26 @@ type OverlayListConfig struct {
 	Center     bool   // center vertically instead of 1/5 from top
 	HideSearch bool   // suppress the inline filter; treats overlay as a menu
 
+	// Placeholder is shown in the filter slot when Query is empty (italic muted).
+	Placeholder string
+	// Total, when > 0, makes the header counter render as "<filtered>/<Total>"
+	// instead of "<filtered> matches". Caller passes the raw source size.
+	Total int
+	// Breadcrumb is rendered between the badge and the filter, separated by ›.
+	// Use it for context like a tenant domain or path.
+	Breadcrumb []string
+
 	// ModeBadge is the label shown in the footer's mode pill (e.g. "PICKER",
 	// "MENU"). Defaults to "PICKER" when HideSearch is false, "MENU" otherwise.
 	ModeBadge string
 	// Actions overrides the auto-generated footer hints when non-empty.
-	// Most callers leave this nil and pass Keymap instead.
+	// Most callers leave this nil and pass Bindings instead.
 	Actions []StatusAction
-	// Keymap, when non-nil, drives the auto-generated footer hints from the
-	// real bindings — so renaming a binding in the keymap JSON propagates to
-	// every overlay's hint row without touching call sites.
-	Keymap *keymap.Keymap
+	// Bindings declares the actual keymap bindings the dialog answers to.
+	// When set, the footer hints are derived from these so a user remapping
+	// e.g. theme_apply propagates to the hint row automatically. When nil,
+	// falls back to opinionated hardcoded defaults.
+	Bindings *OverlayBindings
 	// ActiveLabel is the right-aligned hint shown next to the active row
 	// (defaults to "current"). Set to "-" to suppress.
 	ActiveLabel string
@@ -122,30 +145,46 @@ func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, s
 	return placeOverlayTop(termWidth, termHeight, box, base)
 }
 
-// renderOverlayHeader builds the top row: badge › / query  count   esc close.
-func renderOverlayHeader(cfg OverlayListConfig, total int, styles Styles, innerW int) string {
+// renderOverlayHeader builds the top row:
+//
+//	badge › crumb › crumb › <filter>  count        esc close
+func renderOverlayHeader(cfg OverlayListConfig, filtered int, styles Styles, innerW int) string {
 	ov := styles.Overlay
+	chevron := ov.Hint.Inline(true).Padding(0).Render(overlayChevron)
 
 	left := ov.HeaderBadge.Render(strings.ToUpper(cfg.Title))
 
-	if !cfg.HideSearch {
-		chevron := ov.Hint.Inline(true).Padding(0).Render(overlayChevron)
+	for _, crumb := range cfg.Breadcrumb {
+		if crumb == "" {
+			continue
+		}
+		left = left + chevron + ov.Input.Render(crumb)
+	}
 
+	if !cfg.HideSearch {
 		cursorStr := cfg.CursorView
 		if cursorStr == "" {
 			cursorStr = "█"
 		}
 
 		var filter string
-		if cfg.Query == "" {
+		switch {
+		case cfg.Query == "" && cfg.Placeholder != "":
+			filter = cursorStr + ov.Hint.Inline(true).Padding(0).Italic(true).Render(cfg.Placeholder)
+		case cfg.Query == "":
 			filter = cursorStr
-		} else {
+		default:
 			filter = ov.Input.Render(cfg.Query) + cursorStr
 		}
 
 		count := ""
 		if cfg.Query != "" {
-			count = "  " + ov.HeaderCount.Render(formatOverlayCount(total))
+			switch {
+			case cfg.Total > 0:
+				count = "  " + ov.HeaderCount.Render(formatInt(filtered)+" / "+formatInt(cfg.Total))
+			default:
+				count = "  " + ov.HeaderCount.Render(formatOverlayCount(filtered))
+			}
 		}
 		left = left + chevron + filter + count
 	}
@@ -174,7 +213,7 @@ func renderOverlayFooter(cfg OverlayListConfig, styles Styles, innerW int) strin
 
 	actions := cfg.Actions
 	if len(actions) == 0 {
-		actions = defaultOverlayActions(cfg.Keymap, cfg.HideSearch, cfg.Query != "")
+		actions = defaultOverlayActions(cfg.Bindings, cfg.HideSearch, cfg.Query != "")
 	}
 
 	parts := []string{chrome.StatusMode.Render(mode)}
@@ -193,34 +232,37 @@ func renderOverlayFooter(cfg OverlayListConfig, styles Styles, innerW int) strin
 	return overlayJustifyRow(left, "", innerW, ov)
 }
 
-// defaultOverlayActions returns the footer hints for an overlay. When a
-// keymap is provided, every hint reflects the actual bound keys — so a
-// user remapping `theme_up` in their keymap JSON sees their key in the
-// hint row. When km is nil, falls back to opinionated defaults (picker
-// overlays use ctrl+j/k since plain j/k insert into the filter).
-func defaultOverlayActions(km *keymap.Keymap, hideSearch, hasQuery bool) []StatusAction {
-	if km != nil {
-		moveDown := km.ThemeDown.Short()
-		moveUp := km.ThemeUp.Short()
-		apply := km.ThemeApply.Short()
-		cancel := km.ThemeCancel.Short()
-		erase := km.BackspaceUp.Short()
-
-		moveKey := moveDown + "/" + moveUp
+// defaultOverlayActions returns the footer hints for an overlay. When the
+// caller declares its actual Bindings, every hint reflects the real bound
+// keys (so a user remapping their keymap JSON sees their key in the hint
+// row). When nil, falls back to opinionated hardcoded defaults.
+func defaultOverlayActions(b *OverlayBindings, hideSearch, hasQuery bool) []StatusAction {
+	if b != nil {
+		// In picker overlays the filter consumes plain single-char keys, so
+		// the meaningful navigation key is the modifier-prefixed one
+		// (e.g. ctrl+j over plain "down"). In menu overlays (HideSearch)
+		// plain j/k are fine.
+		key := func(bind keymap.Binding) string {
+			if hideSearch {
+				return bind.Short()
+			}
+			return modifierKey(bind)
+		}
+		moveKey := key(b.MoveDown) + "/" + key(b.MoveUp)
 		if hideSearch {
 			return []StatusAction{
 				{Key: moveKey, Label: "move"},
-				{Key: apply, Label: "select"},
-				{Key: cancel, Label: "close"},
+				{Key: b.Apply.Short(), Label: "select"},
+				{Key: b.Cancel.Short(), Label: "close"},
 			}
 		}
 		out := []StatusAction{
 			{Key: moveKey, Label: "move"},
-			{Key: apply, Label: "apply"},
-			{Key: cancel, Label: "cancel"},
+			{Key: b.Apply.Short(), Label: "apply"},
+			{Key: b.Cancel.Short(), Label: "cancel"},
 		}
-		if hasQuery && erase != "" {
-			out = append(out, StatusAction{Key: erase, Label: "clear"})
+		if hasQuery && b.Erase.Short() != "" {
+			out = append(out, StatusAction{Key: b.Erase.Short(), Label: "clear"})
 		}
 		return out
 	}
@@ -284,8 +326,6 @@ func renderOverlayBodyRows(cfg OverlayListConfig, items []OverlayItem, cursor, s
 			marker = markerStyle.Render("•") + " "
 		}
 
-		labelRendered := highlightFuzzyMatch(item.Label, cfg.Query, matchStyle, baseStyle)
-
 		hint := item.Hint
 		if item.IsActive && activeLabel != "" && hint == "" {
 			hint = activeLabel
@@ -299,7 +339,13 @@ func renderOverlayBodyRows(cfg OverlayListConfig, items []OverlayItem, cursor, s
 			nameWidth = 10
 		}
 
-		labelPadded := padRightRendered(labelRendered, nameWidth)
+		// Clamp the visible label to nameWidth so the hint column always
+		// gets its slot — long names elide with `…` instead of pushing the
+		// GUID off the row.
+		visibleLabel := truncateLabel(item.Label, nameWidth)
+		labelRendered := highlightFuzzyMatch(visibleLabel, cfg.Query, matchStyle, baseStyle)
+
+		labelPadded := labelRendered
 		if pad := nameWidth - lipgloss.Width(labelRendered); pad > 0 {
 			labelPadded = labelRendered + baseStyle.Render(strings.Repeat(" ", pad))
 		}
@@ -366,6 +412,19 @@ func overlayJustifyRow(left, right string, innerW int, ov OverlayStyles) string 
 		gap = 1
 	}
 	return left + ov.HintFull.Render(strings.Repeat(" ", gap)) + right
+}
+
+// modifierKey returns the first key in the binding that uses a modifier
+// (ctrl+/alt+/shift+). Falls back to Short() when no modifier-prefixed key
+// is bound. Used in picker overlays so the hint reflects the key that
+// doesn't compete with the filter input.
+func modifierKey(b keymap.Binding) string {
+	for _, k := range b.Keys {
+		if strings.Contains(k, "+") {
+			return k
+		}
+	}
+	return b.Short()
 }
 
 // formatOverlayCount renders the "N / total" counter. Total is the visible
@@ -449,6 +508,29 @@ func padRightRendered(rendered string, width int) string {
 		return rendered
 	}
 	return rendered + strings.Repeat(" ", width-w)
+}
+
+// truncateLabel clamps a plain string to width with a trailing ellipsis when
+// truncated. Used by overlay rows so long labels don't push the right-aligned
+// hint column off the row.
+func truncateLabel(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= width {
+		return s
+	}
+	if width <= 1 {
+		return "…"
+	}
+	runes := []rune(s)
+	for i := len(runes); i > 0; i-- {
+		candidate := string(runes[:i]) + "…"
+		if lipgloss.Width(candidate) <= width {
+			return candidate
+		}
+	}
+	return "…"
 }
 
 // placeOverlayTop places the overlay near the top (1/5 down) and centered

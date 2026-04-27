@@ -111,5 +111,18 @@ func renderCommandPalette(p *commandPalette, closeHint, cursorView string, style
 		}
 	}
 
-	return ui.RenderOverlayList(ui.OverlayListConfig{Title: "Commands", Query: p.query, CursorView: cursorView, CloseHint: closeHint, Keymap: km}, items, p.cursor, styles, width, height, base)
+	cfg := ui.OverlayListConfig{
+		Title:      "Commands",
+		Query:      p.query,
+		CursorView: cursorView,
+		CloseHint:  closeHint,
+		Bindings: &ui.OverlayBindings{
+			MoveUp:   km.ThemeUp,
+			MoveDown: km.ThemeDown,
+			Apply:    km.OpenFocused,
+			Cancel:   km.Cancel,
+			Erase:    km.BackspaceUp,
+		},
+	}
+	return ui.RenderOverlayList(cfg, items, p.cursor, styles, width, height, base)
 }

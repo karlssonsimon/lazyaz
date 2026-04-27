@@ -121,7 +121,7 @@ func RenderSubscriptionOverlay(state SubscriptionOverlayState, closeHint, cursor
 		sub := subs[si]
 		items[ci] = OverlayItem{
 			Label:    SubscriptionDisplayName(sub),
-			Desc:     sub.ID,
+			Hint:     sub.ID,
 			IsActive: sub.ID == currentSub.ID && currentSub.ID != "",
 		}
 	}
@@ -136,9 +136,16 @@ func RenderSubscriptionOverlay(state SubscriptionOverlayState, closeHint, cursor
 		Query:      state.Query,
 		CursorView: cursorView,
 		CloseHint:  closeHint,
-		MaxVisible: 12,
+		MaxVisible: 18,
+		InnerWidth: 100,
 		Center:     true,
-		Keymap:     km,
+		Bindings: &OverlayBindings{
+			MoveUp:   km.ThemeUp,
+			MoveDown: km.ThemeDown,
+			Apply:    km.ThemeApply,
+			Cancel:   km.Cancel,
+			Erase:    km.BackspaceUp,
+		},
 	}
 	return RenderOverlayList(cfg, items, state.CursorIdx, styles, width, height, base)
 }

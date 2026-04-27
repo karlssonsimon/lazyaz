@@ -417,7 +417,7 @@ func NewStyles(s Scheme) Styles {
 			Foreground(muted).
 			Background(bg),
 		RowHint: lipgloss.NewStyle().
-			Foreground(muted),
+			Foreground(statusFg),
 		ActiveMarker: lipgloss.NewStyle().
 			Foreground(cyan),
 		Match: lipgloss.NewStyle().

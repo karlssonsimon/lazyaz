@@ -199,7 +199,19 @@ func (m Model) renderSortOverlay(base string) string {
 		Query:      s.query,
 		CursorView: m.Cursor.View(),
 		CloseHint:  m.Keymap.Cancel.Short(),
-		Keymap:     &m.Keymap,
+		Bindings: &ui.OverlayBindings{
+
+			MoveUp:   m.Keymap.ThemeUp,
+
+			MoveDown: m.Keymap.ThemeDown,
+
+			Apply:    m.Keymap.ThemeApply,
+
+			Cancel:   m.Keymap.ThemeCancel,
+
+			Erase:    m.Keymap.BackspaceUp,
+
+		},
 		MaxVisible: len(s.options),
 		Center:     true,
 	}
