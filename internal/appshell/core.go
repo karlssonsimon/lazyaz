@@ -40,6 +40,11 @@ type Model struct {
 	// Cleared after a successful match — see TryApplyPreferredSubscription.
 	PreferredSub string
 
+	// Tenant is the broker scope key used by HydrateSubscriptionsFromCache
+	// and by callers that write subscription pages back into the broker.
+	// The parent sets this at construction and after a tenant switch.
+	Tenant string
+
 	// Keymap + styling.
 	Keymap  keymap.Keymap
 	Styles  ui.Styles

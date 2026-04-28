@@ -44,6 +44,13 @@ func (m *Model) SetPreferredSubscription(id string) {
 	m.PreferredSub = id
 }
 
+// SetTenant updates the broker scope key used for subscription lookups.
+// Call before HydrateSubscriptionsFromCache or any fetch that writes
+// subscription pages back into the broker.
+func (m *Model) SetTenant(tenantID string) {
+	m.Tenant = tenantID
+}
+
 // TryApplyPreferredSubscription looks up the preferred subscription ID
 // in the currently loaded Subscriptions list. If a match exists, the
 // preferred ID is cleared (so it doesn't fire twice) and the matched
@@ -68,7 +75,7 @@ func (m *Model) HydrateSubscriptionsFromCache(broker *cache.Broker[azure.Subscri
 	if broker == nil {
 		return
 	}
-	if cached, ok := broker.Get(""); ok {
+	if cached, ok := broker.Get(m.Tenant); ok {
 		m.Subscriptions = cached
 	}
 }
