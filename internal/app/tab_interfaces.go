@@ -35,3 +35,11 @@ type navigationTab interface {
 	CurrentNav() jumplist.NavSnapshot
 	WithAppliedNav(jumplist.NavSnapshot) (tea.Model, tea.Cmd)
 }
+
+// CredentialResolver resolves a token credential for a given tenant ID.
+// Implemented by the parent Model so tabs don't construct credentials
+// themselves. The returned credential is shared across calls for the
+// same tenant — do not cache or wrap it.
+type CredentialResolver interface {
+	CredentialFor(tenantID string) (azcore.TokenCredential, error)
+}
