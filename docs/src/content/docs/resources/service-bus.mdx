@@ -61,10 +61,12 @@ action — no network round-trip happens until you ask for it.
 
 Open the action menu (`a`) from the messages pane and choose one of:
 
-- **Peek messages** — fetch the first batch
-- **Peek more messages** — append another batch, continuing from where the
-  previous peek left off
-- **Peek messages (fresh)** — discard the current batch and peek from the start
+- **Peek active / DLQ messages** — fetch the first batch (label says `active`
+  or `DLQ` based on which queue is open)
+- **Peek more active / DLQ messages** — append another batch, continuing from
+  where the previous peek left off
+- **Peek active / DLQ messages (fresh)** — discard the current batch and peek
+  from the start
 - **Clear messages** — drop the local snapshot without peeking
 
 <Aside type="note">
@@ -106,7 +108,7 @@ Once locked, the action menu offers:
   then complete it from the DLQ
 - **Move N message(s) to...** — send each locked message to a different target
   queue or subscription (picker opens), then complete from DLQ
-- **Complete N message(s)** — complete without re-sending (removes from DLQ)
+- **Complete N message(s) (remove from DLQ)** — complete without re-sending
 - **Abandon all (release locks)** — release all locks, messages stay in DLQ
 
 `N` is the number of marked messages, or `1` (the cursor) if nothing is marked.
@@ -181,9 +183,9 @@ Press `a` to open the action menu. Available actions depend on which pane is foc
 
 | Action | Description |
 |---|---|
-| Peek messages | Fetch a batch of messages (read-only) |
-| Peek more messages | Append another batch |
-| Peek messages (fresh) | Discard current batch and re-peek |
+| Peek active / DLQ messages | Fetch a batch of messages (read-only); label depends on the open queue |
+| Peek more active / DLQ messages | Append another batch |
+| Peek active / DLQ messages (fresh) | Discard current batch and re-peek |
 | Clear messages | Drop the local snapshot |
 | Receive DLQ messages (with lock) | Lock messages for transactional operations (DLQ only) |
 | Toggle mark | Mark or unmark the current message |
@@ -195,7 +197,7 @@ Press `a` to open the action menu. Available actions depend on which pane is foc
 |---|---|
 | Requeue N message(s) | Send marked messages to the active queue and complete from DLQ |
 | Move N message(s) to... | Send marked messages to a different target and complete from DLQ |
-| Complete N message(s) | Complete (remove) marked messages from the DLQ |
+| Complete N message(s) (remove from DLQ) | Complete marked messages without re-sending |
 | Abandon all (release locks) | Release all held locks without modifying messages |
 | Toggle mark | Mark or unmark the current message |
 | Toggle visual line selection | Enter or exit visual-line mode |
