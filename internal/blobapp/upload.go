@@ -499,14 +499,7 @@ func (m Model) RenderUploadConflictPrompt(base string, width, height int) string
 	if m.uploadConflict == nil {
 		return base
 	}
-	cfg := ui.OverlayListConfig{
-		Title:      fmt.Sprintf("%s already exists", m.uploadConflict.blobName),
-		CloseHint:  "(y) overwrite · (n) skip · (a) overwrite all · (s) skip all · (c) cancel",
-		MaxVisible: 0,
-		HideSearch: true,
-		Center:     true,
-	}
-	return ui.RenderOverlayList(cfg, nil, 0, m.Styles, width, height, base)
+	return ui.RenderUploadConflictPrompt(m.uploadConflict.blobName, m.Styles, width, height, base)
 }
 
 // newUploadCmd returns a tea.Cmd that blocks on the next message in the
