@@ -5,6 +5,25 @@ import (
 	"testing"
 )
 
+func countItems(visible []OverlayItem) int {
+	n := 0
+	for _, v := range visible {
+		if !v.IsHeader {
+			n++
+		}
+	}
+	return n
+}
+
+func firstItemLabel(visible []OverlayItem) string {
+	for _, v := range visible {
+		if !v.IsHeader {
+			return v.Label
+		}
+	}
+	return ""
+}
+
 func TestHelpOverlayOpenClose(t *testing.T) {
 	state := HelpOverlayState{}
 	sections := []HelpSection{{Title: "Test", Items: []string{"key  desc"}}}
@@ -26,7 +45,7 @@ func TestRenderHelpOverlayIncludesContent(t *testing.T) {
 
 	view := RenderHelpOverlay(state, "esc", "█", styles, nil, 100, 40, "base")
 
-	for _, want := range []string{"HELP", "General", "toggle help", "esc"} {
+	for _, want := range []string{"HELP", "GENERAL", "toggle help", "esc"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected rendered overlay to contain %q", want)
 		}
@@ -40,32 +59,32 @@ func TestHelpOverlaySearch(t *testing.T) {
 		{Title: "Actions", Items: []string{"d  download", "r  refresh"}},
 	})
 
-	// Type "down" to filter.
 	bindings := HelpKeyBindings{
 		Up:    noopMatcher{},
 		Down:  noopMatcher{},
 		Close: noopMatcher{},
 		Erase: keyMatcher{"backspace"},
 	}
+	// Type "down" to filter.
 	state.HandleKey("d", bindings)
 	state.HandleKey("o", bindings)
 	state.HandleKey("w", bindings)
 	state.HandleKey("n", bindings)
 
-	if len(state.filtered) != 1 {
-		t.Fatalf("expected 1 filtered item, got %d", len(state.filtered))
+	if got := countItems(state.visible); got != 1 {
+		t.Fatalf("expected 1 filtered item, got %d", got)
 	}
-	if state.items[state.filtered[0]].desc != "download" {
-		t.Fatalf("expected filtered item to be download, got %q", state.items[state.filtered[0]].desc)
+	if !strings.Contains(firstItemLabel(state.visible), "download") {
+		t.Fatalf("expected filtered item to be download, got %q", firstItemLabel(state.visible))
 	}
 
-	// Backspace to remove filter.
+	// Backspace to clear filter; back to grouped view with all items.
 	state.HandleKey("backspace", bindings)
 	state.HandleKey("backspace", bindings)
 	state.HandleKey("backspace", bindings)
 	state.HandleKey("backspace", bindings)
-	if len(state.filtered) != 4 {
-		t.Fatalf("expected 4 items after clearing filter, got %d", len(state.filtered))
+	if got := countItems(state.visible); got != 4 {
+		t.Fatalf("expected 4 items after clearing filter, got %d", got)
 	}
 }
 
@@ -82,8 +101,8 @@ func TestHelpOverlaySearchBySection(t *testing.T) {
 		state.HandleKey(string(ch), bindings)
 	}
 
-	if len(state.filtered) != 2 {
-		t.Fatalf("expected 2 filtered items for section 'Actions', got %d", len(state.filtered))
+	if got := countItems(state.visible); got != 2 {
+		t.Fatalf("expected 2 filtered items for section 'Actions', got %d", got)
 	}
 }
 

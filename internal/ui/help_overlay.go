@@ -17,7 +17,8 @@ type HelpOverlayState struct {
 	CursorIdx int
 	Query     string
 	items     []helpItem
-	filtered  []int
+	visible   []OverlayItem // rebuilt on refilter; what gets rendered
+	maxKeyW   int           // stable column width across queries
 }
 
 type helpItem struct {
@@ -37,7 +38,13 @@ func (s *HelpOverlayState) Open(title string, sections []HelpSection) {
 	s.Query = ""
 	s.CursorIdx = 0
 	s.items = flattenSections(sections)
-	s.filtered = nil
+	s.maxKeyW = 0
+	for _, it := range s.items {
+		if w := len(it.keys); w > s.maxKeyW {
+			s.maxKeyW = w
+		}
+	}
+	s.refilter()
 }
 
 func (s *HelpOverlayState) Close() {
@@ -45,7 +52,7 @@ func (s *HelpOverlayState) Close() {
 }
 
 func (s *HelpOverlayState) HandleKey(key string, bindings HelpKeyBindings) {
-	if s.filtered == nil {
+	if s.visible == nil {
 		s.refilter()
 	}
 
@@ -58,13 +65,9 @@ func (s *HelpOverlayState) HandleKey(key string, bindings HelpKeyBindings) {
 			s.Active = false
 		}
 	case bindings.Up.Matches(key):
-		if s.CursorIdx > 0 {
-			s.CursorIdx--
-		}
+		s.moveCursor(-1)
 	case bindings.Down.Matches(key):
-		if s.CursorIdx < len(s.filtered)-1 {
-			s.CursorIdx++
-		}
+		s.moveCursor(1)
 	case bindings.Erase != nil && bindings.Erase.Matches(key):
 		if len(s.Query) > 0 {
 			s.Query = s.Query[:len(s.Query)-1]
@@ -89,12 +92,55 @@ func (s *HelpOverlayState) PasteText(text string) {
 	s.refilter()
 }
 
+// moveCursor advances by delta, skipping over header rows so the user
+// never lands on a non-selectable section title.
+func (s *HelpOverlayState) moveCursor(delta int) {
+	if len(s.visible) == 0 {
+		return
+	}
+	next := s.CursorIdx + delta
+	for next >= 0 && next < len(s.visible) {
+		if !s.visible[next].IsHeader {
+			s.CursorIdx = next
+			return
+		}
+		next += delta
+	}
+}
+
 func (s *HelpOverlayState) refilter() {
-	s.filtered = fuzzy.Filter(s.Query, s.items, func(item helpItem) string {
+	matched := fuzzy.Filter(s.Query, s.items, func(item helpItem) string {
 		return item.keys + " " + item.desc + " " + item.section
 	})
-	if s.CursorIdx >= len(s.filtered) {
-		s.CursorIdx = max(0, len(s.filtered)-1)
+
+	s.visible = s.visible[:0]
+	// Always group by section. The header sits above its items — when
+	// filtering, sections with no matches simply don't appear, so the
+	// surviving headers double as the "this match is in section X" cue.
+	var lastSection string
+	for _, idx := range matched {
+		it := s.items[idx]
+		if it.section != lastSection {
+			s.visible = append(s.visible, OverlayItem{
+				Label:    strings.ToUpper(it.section),
+				IsHeader: true,
+			})
+			lastSection = it.section
+		}
+		s.visible = append(s.visible, OverlayItem{
+			Label: padRight(it.keys, s.maxKeyW) + "  " + it.desc,
+		})
+	}
+
+	// Snap cursor to a real item (skip headers, clamp to bounds).
+	if s.CursorIdx >= len(s.visible) {
+		s.CursorIdx = max(0, len(s.visible)-1)
+	}
+	if s.CursorIdx < len(s.visible) && s.visible[s.CursorIdx].IsHeader {
+		s.moveCursor(1)
+		if s.visible[s.CursorIdx].IsHeader {
+			s.moveCursor(-1)
+		}
 	}
 }
 
@@ -121,42 +167,21 @@ func parseHelpEntry(s string) (keys, desc string) {
 }
 
 func RenderHelpOverlay(state HelpOverlayState, closeHint, cursorView string, styles Styles, km *keymap.Keymap, width, height int, base string) string {
-	filtered := state.filtered
-	if filtered == nil {
-		filtered = make([]int, len(state.items))
-		for i := range state.items {
-			filtered[i] = i
-		}
+	if state.visible == nil {
+		state.refilter()
 	}
 
-	// Compute column widths from ALL items so the overlay stays stable during search.
-	maxKeyW := 0
+	// Compute desc width from ALL items so the overlay stays stable
+	// during search.
 	maxDescW := 0
-	maxSectW := 0
 	for _, item := range state.items {
-		if w := len(item.keys); w > maxKeyW {
-			maxKeyW = w
-		}
 		if w := len(item.desc); w > maxDescW {
 			maxDescW = w
 		}
-		if w := len(item.section); w > maxSectW {
-			maxSectW = w
-		}
 	}
 
-	items := make([]OverlayItem, len(filtered))
-	for ci, idx := range filtered {
-		item := state.items[idx]
-		label := padRight(item.keys, maxKeyW) + "  " + item.desc
-		items[ci] = OverlayItem{
-			Label: label,
-			Hint:  item.section,
-		}
-	}
-
-	// Size to fit content: marker(2) + key + gap(2) + desc + gap(2) + section + padding(4).
-	innerW := 2 + maxKeyW + 2 + maxDescW + 2 + maxSectW + 4
+	// Size to fit content: key + gap(2) + desc + padding(4).
+	innerW := state.maxKeyW + 2 + maxDescW + 4
 	if innerW < 60 {
 		innerW = 60
 	}
@@ -164,8 +189,9 @@ func RenderHelpOverlay(state HelpOverlayState, closeHint, cursorView string, sty
 		innerW = width - 10
 	}
 
-	// Height based on total item count, not terminal size.
-	maxVis := len(state.items) + 2
+	// Height accounts for the worst-case visible list (items + their
+	// section headers) capped at 30 so the box fits comfortably.
+	maxVis := len(state.items) + 8
 	if maxVis < 10 {
 		maxVis = 10
 	}
@@ -183,15 +209,16 @@ func RenderHelpOverlay(state HelpOverlayState, closeHint, cursorView string, sty
 		}
 	}
 	cfg := OverlayListConfig{
-		Title:      state.Title,
-		Query:      state.Query,
-		CursorView: cursorView,
-		CloseHint:  closeHint,
-		InnerWidth: innerW,
-		MaxVisible: maxVis,
-		Center:     true,
-		Bindings:   bindings,
+		Title:          state.Title,
+		Query:          state.Query,
+		CursorView:     cursorView,
+		CloseHint:      closeHint,
+		InnerWidth:     innerW,
+		MaxVisible:     maxVis,
+		Center:         true,
+		Bindings:       bindings,
+		NoActiveMarker: true,
 	}
 
-	return RenderOverlayList(cfg, items, state.CursorIdx, styles, width, height, base)
+	return RenderOverlayList(cfg, state.visible, state.CursorIdx, styles, width, height, base)
 }

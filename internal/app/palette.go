@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
@@ -10,9 +12,10 @@ import (
 
 // command represents a single entry in the command palette.
 type command struct {
-	name   string
-	hint   string // keyboard shortcut shown on the right
-	action func() commandAction
+	name    string
+	hint    string // keyboard shortcut shown on the right
+	section string // grouping label shown as a section header
+	action  func() commandAction
 }
 
 // commandAction is the result of executing a command.
@@ -23,12 +26,17 @@ type commandAction struct {
 }
 
 // commandPalette manages the state of the command palette overlay.
+//
+// Cursor and rendering work on the `visible` list which interleaves
+// section headers with selectable commands. cmdIndex is parallel to
+// visible: header rows hold -1, item rows hold the index into commands.
 type commandPalette struct {
 	active   bool
 	query    string
 	cursor   int
 	commands []command
-	filtered []int // indices into commands
+	visible  []ui.OverlayItem
+	cmdIndex []int
 }
 
 func (p *commandPalette) open(commands []command) {
@@ -43,21 +51,72 @@ func (p *commandPalette) close() {
 	p.active = false
 	p.query = ""
 	p.cursor = 0
-	p.filtered = nil
+	p.visible = nil
+	p.cmdIndex = nil
 }
 
 func (p *commandPalette) refilter() {
-	p.filtered = fuzzy.Filter(p.query, p.commands, func(c command) string { return c.name })
-	if p.cursor >= len(p.filtered) {
-		p.cursor = max(0, len(p.filtered)-1)
+	matched := fuzzy.Filter(p.query, p.commands, func(c command) string {
+		return c.name + " " + c.section
+	})
+
+	p.visible = p.visible[:0]
+	p.cmdIndex = p.cmdIndex[:0]
+
+	var lastSection string
+	for _, idx := range matched {
+		c := p.commands[idx]
+		if c.section != lastSection {
+			p.visible = append(p.visible, ui.OverlayItem{
+				Label:    strings.ToUpper(c.section),
+				IsHeader: true,
+			})
+			p.cmdIndex = append(p.cmdIndex, -1)
+			lastSection = c.section
+		}
+		p.visible = append(p.visible, ui.OverlayItem{
+			Label: c.name,
+			Hint:  c.hint,
+		})
+		p.cmdIndex = append(p.cmdIndex, idx)
+	}
+
+	if p.cursor >= len(p.visible) {
+		p.cursor = max(0, len(p.visible)-1)
+	}
+	if p.cursor < len(p.visible) && p.visible[p.cursor].IsHeader {
+		p.moveCursor(1)
+		if p.cursor < len(p.visible) && p.visible[p.cursor].IsHeader {
+			p.moveCursor(-1)
+		}
+	}
+}
+
+// moveCursor advances by delta, skipping over header rows so the cursor
+// always rests on a selectable command.
+func (p *commandPalette) moveCursor(delta int) {
+	if len(p.visible) == 0 {
+		return
+	}
+	next := p.cursor + delta
+	for next >= 0 && next < len(p.visible) {
+		if !p.visible[next].IsHeader {
+			p.cursor = next
+			return
+		}
+		next += delta
 	}
 }
 
 func (p *commandPalette) selectedCommand() (command, bool) {
-	if len(p.filtered) == 0 || p.cursor >= len(p.filtered) {
+	if p.cursor < 0 || p.cursor >= len(p.cmdIndex) {
 		return command{}, false
 	}
-	return p.commands[p.filtered[p.cursor]], true
+	idx := p.cmdIndex[p.cursor]
+	if idx < 0 {
+		return command{}, false
+	}
+	return p.commands[idx], true
 }
 
 func (p *commandPalette) handleKey(key string, km keymap.Keymap) (cmd command, executed bool, closed bool) {
@@ -71,13 +130,9 @@ func (p *commandPalette) handleKey(key string, km keymap.Keymap) (cmd command, e
 		p.close()
 		return command{}, false, true
 	case km.ThemeUp.Matches(key):
-		if p.cursor > 0 {
-			p.cursor--
-		}
+		p.moveCursor(-1)
 	case km.ThemeDown.Matches(key):
-		if p.cursor < len(p.filtered)-1 {
-			p.cursor++
-		}
+		p.moveCursor(1)
 	case km.OpenFocused.Matches(key):
 		if c, ok := p.selectedCommand(); ok {
 			p.close()
@@ -103,19 +158,12 @@ func (p *commandPalette) handleKey(key string, km keymap.Keymap) (cmd command, e
 }
 
 func renderCommandPalette(p *commandPalette, closeHint, cursorView string, styles ui.Styles, km *keymap.Keymap, width, height int, base string) string {
-	items := make([]ui.OverlayItem, len(p.filtered))
-	for ci, idx := range p.filtered {
-		items[ci] = ui.OverlayItem{
-			Label: p.commands[idx].name,
-			Hint:  p.commands[idx].hint,
-		}
-	}
-
 	cfg := ui.OverlayListConfig{
-		Title:      "Commands",
-		Query:      p.query,
-		CursorView: cursorView,
-		CloseHint:  closeHint,
+		Title:          "Commands",
+		Query:          p.query,
+		CursorView:     cursorView,
+		CloseHint:      closeHint,
+		NoActiveMarker: true,
 		Bindings: &ui.OverlayBindings{
 			MoveUp:   km.ThemeUp,
 			MoveDown: km.ThemeDown,
@@ -124,5 +172,5 @@ func renderCommandPalette(p *commandPalette, closeHint, cursorView string, style
 			Erase:    km.BackspaceUp,
 		},
 	}
-	return ui.RenderOverlayList(cfg, items, p.cursor, styles, width, height, base)
+	return ui.RenderOverlayList(cfg, p.visible, p.cursor, styles, width, height, base)
 }

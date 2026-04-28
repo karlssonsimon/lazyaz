@@ -992,29 +992,34 @@ func (m *Model) resizeAndTickActive() tea.Cmd {
 }
 
 func (m *Model) buildCommands() []command {
+	const (
+		secTabs   = "Tabs"
+		secOpen   = "Open Tabs"
+		secApp    = "Application"
+	)
 	cmds := []command{
-		{name: "New Tab: Blob Storage", hint: "ctrl+t", action: func() commandAction {
+		{name: "New Tab: Blob Storage", hint: "ctrl+t", section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabBlob}}
 		}},
-		{name: "New Tab: Service Bus", hint: "ctrl+t", action: func() commandAction {
+		{name: "New Tab: Service Bus", hint: "ctrl+t", section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabServiceBus}}
 		}},
-		{name: "New Tab: Key Vault", hint: "ctrl+t", action: func() commandAction {
+		{name: "New Tab: Key Vault", hint: "ctrl+t", section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabKeyVault}}
 		}},
-		{name: "New Tab: Dashboard", hint: "ctrl+t", action: func() commandAction {
+		{name: "New Tab: Dashboard", hint: "ctrl+t", section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabDashboard}}
 		}},
-		{name: "Close Tab", hint: "ctrl+w", action: func() commandAction {
+		{name: "Close Tab", hint: "ctrl+w", section: secTabs, action: func() commandAction {
 			if len(m.tabs) <= 1 {
 				return commandAction{quit: true}
 			}
 			return commandAction{msg: closeTabMsg{tabID: m.tabs[m.activeIdx].ID}}
 		}},
-		{name: "Next Tab", hint: "L", action: func() commandAction {
+		{name: "Next Tab", hint: "L", section: secTabs, action: func() commandAction {
 			return commandAction{msg: nextTabMsg{}}
 		}},
-		{name: "Previous Tab", hint: "H", action: func() commandAction {
+		{name: "Previous Tab", hint: "H", section: secTabs, action: func() commandAction {
 			return commandAction{msg: prevTabMsg{}}
 		}},
 	}
@@ -1025,28 +1030,28 @@ func (m *Model) buildCommands() []command {
 		tab := t
 		label := fmt.Sprintf("Go to Tab %d: %s", idx+1, tab.Kind.String())
 		hint := fmt.Sprintf("alt+%d", idx+1)
-		cmds = append(cmds, command{name: label, hint: hint, action: func() commandAction {
+		cmds = append(cmds, command{name: label, hint: hint, section: secOpen, action: func() commandAction {
 			return commandAction{msg: jumpTabMsg{index: idx}}
 		}})
 	}
 
 	cmds = append(cmds,
-		command{name: "Azure Login / Switch Tenant", action: func() commandAction {
+		command{name: "Azure Login / Switch Tenant", section: secApp, action: func() commandAction {
 			return commandAction{msg: openAzLoginMsg{}}
 		}},
-		command{name: "Theme Picker", hint: "T", action: func() commandAction {
+		command{name: "Theme Picker", hint: "T", section: secApp, action: func() commandAction {
 			return commandAction{msg: openThemePickerMsg{}}
 		}},
-		command{name: "Notifications History", hint: "N", action: func() commandAction {
+		command{name: "Notifications History", hint: "N", section: secApp, action: func() commandAction {
 			return commandAction{msg: toggleNotificationsMsg{}}
 		}},
-		command{name: "Activity", hint: "F", action: func() commandAction {
+		command{name: "Activity", hint: "F", section: secApp, action: func() commandAction {
 			return commandAction{msg: toggleActivityMsg{}}
 		}},
-		command{name: "Help", hint: "?", action: func() commandAction {
+		command{name: "Help", hint: "?", section: secApp, action: func() commandAction {
 			return commandAction{msg: toggleHelpMsg{}}
 		}},
-		command{name: "Quit", hint: "ctrl+c", action: func() commandAction {
+		command{name: "Quit", hint: "ctrl+c", section: secApp, action: func() commandAction {
 			return commandAction{quit: true}
 		}},
 	)

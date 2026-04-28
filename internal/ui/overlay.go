@@ -21,6 +21,7 @@ type OverlayItem struct {
 	Desc     string // optional second line below label (muted)
 	Hint     string // right-aligned secondary text (shortcut, author, etc.)
 	IsActive bool   // shows a marker (e.g. * for current theme)
+	IsHeader bool   // renders Label as a section title; never selectable
 }
 
 // OverlayBindings tells the overlay renderer which keymap bindings the
@@ -70,6 +71,11 @@ type OverlayListConfig struct {
 	// ActiveLabel is the right-aligned hint shown next to the active row
 	// (defaults to "current"). Set to "-" to suppress.
 	ActiveLabel string
+	// NoActiveMarker drops the 2-col marker slot reserved for the IsActive
+	// indicator. Use it for overlays that never set IsActive — items then
+	// align flush with section headers instead of sitting indented under
+	// them.
+	NoActiveMarker bool
 }
 
 // RenderOverlayList renders an overlay using the floating-screen pattern:
@@ -309,6 +315,15 @@ func renderOverlayBodyRows(cfg OverlayListConfig, items []OverlayItem, cursor, s
 	for ci := start; ci < end; ci++ {
 		item := items[ci]
 
+		if item.IsHeader {
+			// Section title row: bold colored label, no marker, no cursor
+			// styling. The caller should keep the cursor on real items so
+			// this branch only fires for non-cursor rows.
+			title := ov.SectionTitle.Background(rowBg).Render(item.Label)
+			rows = append(rows, normal.Render(title))
+			continue
+		}
+
 		bg := rowBg
 		style := normal
 		if ci == cursor {
@@ -321,8 +336,12 @@ func renderOverlayBodyRows(cfg OverlayListConfig, items []OverlayItem, cursor, s
 		hintStyle := ov.RowHint.Background(bg)
 		baseStyle := lipgloss.NewStyle().Background(bg)
 
-		marker := "  "
-		if item.IsActive {
+		markerW := 2
+		if cfg.NoActiveMarker {
+			markerW = 0
+		}
+		marker := strings.Repeat(" ", markerW)
+		if item.IsActive && !cfg.NoActiveMarker {
 			marker = markerStyle.Render("•") + " "
 		}
 
@@ -331,7 +350,7 @@ func renderOverlayBodyRows(cfg OverlayListConfig, items []OverlayItem, cursor, s
 			hint = activeLabel
 		}
 
-		nameWidth := contentW - 2 // marker takes 2 cells
+		nameWidth := contentW - markerW
 		if hint != "" {
 			nameWidth = nameWidth - lipgloss.Width(hint) - 2
 		}
