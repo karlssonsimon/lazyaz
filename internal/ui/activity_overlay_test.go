@@ -2,6 +2,14 @@ package ui
 
 import "testing"
 
+func rowsByID(ids ...string) []ActivityRow {
+	out := make([]ActivityRow, len(ids))
+	for i, id := range ids {
+		out[i] = ActivityRow{ID: id}
+	}
+	return out
+}
+
 func TestActivityOverlayClosedByDefault(t *testing.T) {
 	var s ActivityOverlayState
 	if s.Active {
@@ -46,17 +54,18 @@ func TestActivityOverlayCloseResets(t *testing.T) {
 func TestActivityOverlayListKeyJMovesCursor(t *testing.T) {
 	var s ActivityOverlayState
 	s.Open()
-	s.VisibleIDs = []string{"a", "b", "c"}
-	s.HandleKey("j")
+	s.FocusedID = "a"
+	rows := rowsByID("a", "b", "c")
+	s.HandleKey("j", rows)
 	if s.FocusedID != "b" {
 		t.Fatalf("after j: want b, got %q", s.FocusedID)
 	}
-	s.HandleKey("j")
-	s.HandleKey("j") // clamp
+	s.HandleKey("j", rows)
+	s.HandleKey("j", rows) // clamp
 	if s.FocusedID != "c" {
 		t.Fatalf("after 3j: want c (clamped), got %q", s.FocusedID)
 	}
-	s.HandleKey("k")
+	s.HandleKey("k", rows)
 	if s.FocusedID != "b" {
 		t.Fatalf("after k: want b, got %q", s.FocusedID)
 	}
@@ -65,9 +74,9 @@ func TestActivityOverlayListKeyJMovesCursor(t *testing.T) {
 func TestActivityOverlayListEnterOpensDetail(t *testing.T) {
 	var s ActivityOverlayState
 	s.Open()
-	s.VisibleIDs = []string{"a", "b"}
 	s.FocusedID = "b"
-	res := s.HandleKey("enter")
+	rows := rowsByID("a", "b")
+	res := s.HandleKey("enter", rows)
 	if res.Action != ActivityActionDrill {
 		t.Fatalf("enter in list: want Drill, got %v", res.Action)
 	}
@@ -79,7 +88,7 @@ func TestActivityOverlayListEnterOpensDetail(t *testing.T) {
 func TestActivityOverlayListEscCloses(t *testing.T) {
 	var s ActivityOverlayState
 	s.Open()
-	res := s.HandleKey("esc")
+	res := s.HandleKey("esc", nil)
 	if res.Action != ActivityActionClose {
 		t.Fatalf("esc in list: want Close, got %v", res.Action)
 	}
@@ -91,7 +100,7 @@ func TestActivityOverlayListEscCloses(t *testing.T) {
 func TestActivityOverlayDetailEscBacksToList(t *testing.T) {
 	var s ActivityOverlayState
 	s.OpenDetail("x")
-	res := s.HandleKey("esc")
+	res := s.HandleKey("esc", nil)
 	if res.Action != ActivityActionBack {
 		t.Fatalf("esc in detail: want Back, got %v", res.Action)
 	}
@@ -106,9 +115,9 @@ func TestActivityOverlayDetailEscBacksToList(t *testing.T) {
 func TestActivityOverlayListXCancelsSelected(t *testing.T) {
 	var s ActivityOverlayState
 	s.Open()
-	s.VisibleIDs = []string{"a"}
 	s.FocusedID = "a"
-	res := s.HandleKey("x")
+	rows := rowsByID("a")
+	res := s.HandleKey("x", rows)
 	if res.Action != ActivityActionCancel {
 		t.Fatalf("x: want Cancel action, got %v", res.Action)
 	}
