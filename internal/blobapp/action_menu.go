@@ -259,7 +259,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 	case actionSubscriptionPicker:
 		m.SubOverlay.Open()
 		m.startLoading(-1, "Refreshing subscriptions...")
-		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 
 	case actionThemePicker:
 		if !m.EmbeddedMode && !m.ThemeOverlay.Active {

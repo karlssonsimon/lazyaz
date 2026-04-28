@@ -13,7 +13,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	if !m.HasSubscription {
 		m.SubOverlay.Open()
 		m.startLoading(-1, "Refreshing subscriptions...")
-		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	}
 
 	if !m.hasNamespace || m.focus == namespacesPane {

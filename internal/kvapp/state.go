@@ -351,7 +351,7 @@ func (m Model) WithoutSubscription(subs []azure.Subscription) tea.Model {
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.Spinner.Tick, cursor.Blink}
 	if m.SubOverlay.Active {
-		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
+		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	}
 	if m.HasSubscription {
 		cmds = append(cmds, fetchVaultsCmd(m.service, m.cache.vaults, m.CurrentSub.ID, m.vaults))

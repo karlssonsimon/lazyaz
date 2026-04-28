@@ -481,7 +481,7 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.Spinner.Tick, cursor.Blink}
 	// Only fetch subscriptions from Azure if the picker is open.
 	if m.SubOverlay.Active {
-		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
+		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	}
 	if m.HasSubscription {
 		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.CurrentSub.ID, m.accounts))

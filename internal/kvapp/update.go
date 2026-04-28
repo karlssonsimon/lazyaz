@@ -155,7 +155,7 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (M
 	}
 
 	if msg.Done {
-		m.cache.subscriptions.Set("", msg.Subscriptions)
+		m.cache.subscriptions.Set(m.Tenant, msg.Subscriptions)
 		status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.Subscriptions), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		if !m.HasSubscription {
 			if matched, ok := m.TryApplyPreferredSubscription(); ok {
@@ -449,7 +449,7 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 	case m.Keymap.SubscriptionPicker.Matches(key):
 		m.SubOverlay.Open()
 		m.startLoading(-1, "Refreshing subscriptions...")
-		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Subscriptions))
+		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	case m.Keymap.Inspect.Matches(key):
 		m.toggleInspect()
 		return m, nil
