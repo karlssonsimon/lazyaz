@@ -22,19 +22,21 @@ const (
 )
 
 const (
-	toastWidth        = 50 // outer width incl. left border + padding
-	toastMaxLines     = 4  // hard clamp on message body lines
-	toastTopMargin    = 1  // rows below the top of the screen
-	toastRightMargin  = 2  // columns from the right edge
-	toastVerticalGap  = 1  // blank rows between stacked toasts
-	toastMaxOnScreen  = 5  // never render more than this many at once
-	toastBorderCharL  = "▎"
-	toastBorderCharR  = "▕"
-	toastInnerPadding = 1 // spaces between border and message text
+	toastWidth       = 64
+	toastMaxLines    = 3
+	toastTopMargin   = 1
+	toastRightMargin = 2
+	toastVerticalGap = 1
+	toastMaxOnScreen = 5
+	toastBarChar     = "▍"
+	// Layout: bar(1) + lpad(1) + icon(1) + iconGap(2) + msg + rpad(2)
+	toastLPad    = 1
+	toastIconGap = 2
+	toastRPad    = 2
 )
 
 // Toast is a single notification rendered as a top-right popup.
-// Toasts have a colored left border keyed off the level.
+// Toasts have a colored left bar keyed off the level.
 type Toast struct {
 	Level   ToastLevel
 	Message string
@@ -66,11 +68,6 @@ func RenderToasts(toasts []Toast, styles Styles, termWidth, termHeight int, base
 		baseLines = append(baseLines, "")
 	}
 
-	// gapRow is an opaque blank line the width of a toast, painted
-	// between stacked toasts so the underlying view doesn't bleed
-	// through the vertical gap. Without this the gap row shows
-	// whatever was below — usually a pane border or footer hint —
-	// which looks like the next toast lost its body.
 	for ti, t := range toasts {
 		boxLines := renderToastBox(t, styles)
 		if cursorY+len(boxLines) > termHeight {
@@ -82,8 +79,6 @@ func RenderToasts(toasts []Toast, styles Styles, termWidth, termHeight int, base
 		}
 		cursorY += len(boxLines)
 
-		// Skip gap rows between toasts — the top/bottom padding inside
-		// each toast box already provides visual separation.
 		if ti < len(toasts)-1 {
 			cursorY += toastVerticalGap
 		}
@@ -92,80 +87,85 @@ func RenderToasts(toasts []Toast, styles Styles, termWidth, termHeight int, base
 	return strings.Join(baseLines[:termHeight], "\n")
 }
 
-// buildGapRow returns an opaque blank line of toastWidth columns,
-// styled with the body background, for use as the spacer between
-// stacked toasts. The body background matches the toast box so the
-// gap visually belongs to the toast stack.
-func buildGapRow(styles Styles) string {
-	body := lipgloss.NewStyle().Background(styles.Chrome.Status.GetBackground())
-	return body.Render(strings.Repeat(" ", toastWidth)) + ansiReset
-}
-
-// renderToastBox returns the rendered lines of a single toast box.
-// The first column is the colored level border; the rest is the
-// wrapped, clamped message body.
+// renderToastBox returns the rendered lines of a single toast card.
+// Layout: colored left bar + level icon + message body, wrapping to
+// continuation lines indented under the message column. No top/bottom
+// padding — the card is as tall as the wrapped message.
 func renderToastBox(t Toast, styles Styles) []string {
-	border, body := toastStyles(t.Level, styles)
+	body, barStyle, iconStyle := toastStyles(t.Level, styles)
 
-	borderLW := lipgloss.Width(toastBorderCharL)
-	borderRW := lipgloss.Width(toastBorderCharR)
-	bodyW := toastWidth - borderLW - borderRW - toastInnerPadding*2
-	if bodyW < 10 {
-		bodyW = 10
-	}
-
-	msg := t.Message
+	icon := levelIcon(t.Level)
 	if t.Spinner {
-		msg = SpinnerFrameAt(time.Since(t.Time)) + " " + msg
-	}
-	wrapped := wrapAndClamp(msg, bodyW, toastMaxLines)
-	pad := strings.Repeat(" ", toastInnerPadding)
-	left := border.Render(toastBorderCharL)
-	right := border.Render(toastBorderCharR)
-
-	// Build each line by hand: left border + styled body + right border + reset.
-	// We avoid lipgloss Width() which can miscount columns with special chars.
-	renderLine := func(text string) string {
-		// Ensure the body content is exactly the right width.
-		inner := pad + padRight(text, bodyW) + pad
-		return left + body.Render(inner) + ansiReset + right + ansiReset
+		icon = SpinnerFrameAt(time.Since(t.Time))
 	}
 
-	emptyLine := renderLine("")
-	rendered := make([]string, 0, len(wrapped)+2)
-	rendered = append(rendered, emptyLine)
-	for _, line := range wrapped {
-		rendered = append(rendered, renderLine(line))
+	contentW := toastWidth - 1 - toastLPad - 1 - toastIconGap - toastRPad
+	if contentW < 10 {
+		contentW = 10
 	}
-	rendered = append(rendered, emptyLine)
+
+	lines := wrapAndClamp(t.Message, contentW, toastMaxLines)
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+
+	bar := barStyle.Render(toastBarChar)
+	leftPad := body.Render(strings.Repeat(" ", toastLPad))
+	gap := body.Render(strings.Repeat(" ", toastIconGap))
+	rightPad := body.Render(strings.Repeat(" ", toastRPad))
+	indent := body.Render(strings.Repeat(" ", toastLPad+1+toastIconGap))
+
+	rendered := make([]string, 0, len(lines))
+	for i, line := range lines {
+		msg := body.Render(padRight(line, contentW))
+		var row string
+		if i == 0 {
+			row = bar + leftPad + iconStyle.Render(icon) + gap + msg + rightPad
+		} else {
+			row = bar + indent + msg + rightPad
+		}
+		rendered = append(rendered, row+ansiReset)
+	}
 	return rendered
 }
 
-// toastStyles returns (left-border style, body style) for a level.
-func toastStyles(level ToastLevel, styles Styles) (lipgloss.Style, lipgloss.Style) {
+// toastStyles returns body/bar/icon styles for a level.
+func toastStyles(level ToastLevel, styles Styles) (lipgloss.Style, lipgloss.Style, lipgloss.Style) {
+	bg := styles.Chrome.Status.GetBackground()
 	body := lipgloss.NewStyle().
-		Background(styles.Chrome.Status.GetBackground())
+		Foreground(styles.Chrome.Status.GetForeground()).
+		Background(bg)
 
-	var borderColor icolor.Color
+	col := levelColor(level, styles)
+	bar := lipgloss.NewStyle().Foreground(col).Background(bg).Bold(true)
+	icon := lipgloss.NewStyle().Foreground(col).Background(bg).Bold(true)
+	return body, bar, icon
+}
+
+func levelColor(level ToastLevel, styles Styles) icolor.Color {
 	switch level {
 	case ToastError:
-		borderColor = styles.Danger.GetForeground()
+		return styles.Danger.GetForeground()
 	case ToastWarn:
-		borderColor = styles.Warning.GetForeground()
+		return styles.Warning.GetForeground()
 	case ToastSuccess:
-		// FocusBorder is the green base0B; reusing it keeps the
-		// success-indicator color consistent with focused panes.
-		borderColor = styles.FocusBorder.GetForeground()
+		return styles.Ok.GetForeground()
 	default:
-		borderColor = styles.Accent.GetForeground()
+		return styles.Accent.GetForeground()
 	}
+}
 
-	border := lipgloss.NewStyle().
-		Foreground(borderColor).
-		Background(body.GetBackground()).
-		Bold(true)
-
-	return border, body
+func levelIcon(level ToastLevel) string {
+	switch level {
+	case ToastError:
+		return "✗"
+	case ToastWarn:
+		return "!"
+	case ToastSuccess:
+		return "✓"
+	default:
+		return "·"
+	}
 }
 
 // wrapAndClamp word-wraps msg to width w (greedy), then clamps to at
@@ -232,8 +232,8 @@ func wrapLine(p string, w int) []string {
 // overlay before pasting it into the base line so the overlay can't
 // inherit any unclosed styling left over by truncateAnsi cutting the
 // base mid-style. Without this the first cell of the overlay (the
-// toast's colored border bar) would absorb whatever foreground or
-// background was active in the truncated tail of the base line.
+// toast's colored bar) would absorb whatever foreground or background
+// was active in the truncated tail of the base line.
 const ansiReset = "\x1b[0m"
 
 // overlayInto pastes overlayCol into baseLine at startX, replacing the
