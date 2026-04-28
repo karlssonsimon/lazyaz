@@ -32,7 +32,7 @@ func scheduleRefreshTick() tea.Cmd {
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.Spinner.Tick, cursor.Blink, scheduleRefreshTick()}
 	if m.SubOverlay.Active || len(m.Subscriptions) == 0 {
-		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.stores.Subscriptions, m.Subscriptions))
+		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.stores.Subscriptions, m.Tenant, m.Subscriptions))
 	}
 	if m.HasSubscription {
 		cmds = append(cmds, m.kickoffFetches()...)
@@ -378,7 +378,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case km.ReloadSubscriptions.Matches(key):
 		m.Subscriptions = nil
 		m.SubOverlay.Open()
-		return m, fetchSubscriptionsCmd(m.service, m.stores.Subscriptions, nil)
+		return m, fetchSubscriptionsCmd(m.service, m.stores.Subscriptions, m.Tenant, nil)
 	}
 
 	// Per-widget action keybinds. Each widget exposes its own actions

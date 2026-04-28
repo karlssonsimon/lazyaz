@@ -44,8 +44,8 @@ type topicSubsLoadedMsg struct {
 	next      tea.Cmd
 }
 
-func fetchSubscriptionsCmd(svc *servicebus.Service, broker *cache.Broker[azure.Subscription], seed []azure.Subscription) tea.Cmd {
-	cmd, _ := broker.Subscribe("", seed, func(ctx context.Context, send func([]azure.Subscription)) error {
+func fetchSubscriptionsCmd(svc *servicebus.Service, broker *cache.Broker[azure.Subscription], tenantID string, seed []azure.Subscription) tea.Cmd {
+	cmd, _ := broker.Subscribe(tenantID, seed, func(ctx context.Context, send func([]azure.Subscription)) error {
 		return svc.ListSubscriptions(ctx, send)
 	}, func(p cache.Page[azure.Subscription]) tea.Msg {
 		return appshell.SubscriptionsLoadedMsg{Subscriptions: p.Items, Done: p.Done, Err: p.Err, Next: p.Next}
