@@ -30,7 +30,7 @@ iwr -useb https://raw.githubusercontent.com/karlssonsimon/lazyaz/master/install.
 go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest
 ```
 
-Requires Azure CLI logged in (`az login`). Go install additionally needs Go 1.22+.
+Requires Azure CLI logged in (`az login`). Go install additionally needs Go 1.25+.
 
 ## Quick start
 

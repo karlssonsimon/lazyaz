@@ -36,7 +36,7 @@ lazyaz ships with two keymaps. Set `keymap` in your `config.json` to switch:
 | Theme picker | `T` |
 | Help | `?` / `F1` |
 | Notifications | `N` |
-| Stream manager | `F` |
+| Activity | `F` |
 </TabItem>
 <TabItem label="Standard">
 | Action | Keys |
@@ -59,7 +59,7 @@ lazyaz ships with two keymaps. Set `keymap` in your `config.json` to switch:
 | Theme picker | `Ctrl+T` |
 | Help | `F1` |
 | Notifications | `Ctrl+N` |
-| Stream manager | `Ctrl+G` |
+| Activity | `Ctrl+G` |
 </TabItem>
 </Tabs>
 
@@ -255,6 +255,8 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
   "bindings": {
     "quit": ["ctrl+c", "q"],
     "cancel": ["esc", "ctrl+c"],
+    "cursor_up": ["k", "up"],
+    "cursor_down": ["j", "down"],
     "half_page_down": ["ctrl+d", "pgdown"],
     "half_page_up": ["ctrl+u", "pgup"],
     "next_focus": ["tab"],
@@ -270,7 +272,7 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
     "toggle_theme_picker": ["T"],
     "toggle_help": ["?", "f1"],
     "toggle_notifications": ["N"],
-    "toggle_streams": ["F"],
+    "toggle_activity": ["F"],
     "theme_up": ["up", "ctrl+k"],
     "theme_down": ["down", "ctrl+j"],
     "theme_apply": ["enter"],
@@ -332,6 +334,8 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
   "bindings": {
     "quit": ["ctrl+c", "ctrl+q"],
     "cancel": ["esc"],
+    "cursor_up": ["up"],
+    "cursor_down": ["down"],
     "half_page_down": ["pgdown"],
     "half_page_up": ["pgup"],
     "next_focus": ["tab"],
@@ -347,7 +351,7 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
     "toggle_theme_picker": ["ctrl+t"],
     "toggle_help": ["f1"],
     "toggle_notifications": ["ctrl+n"],
-    "toggle_streams": ["ctrl+g"],
+    "toggle_activity": ["ctrl+g"],
     "theme_up": ["up"],
     "theme_down": ["down"],
     "theme_apply": ["enter"],

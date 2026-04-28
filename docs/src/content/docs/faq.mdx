@@ -13,7 +13,7 @@ Yes. lazyaz uses `DefaultAzureCredential` which relies on `az login` for local d
 
 ### Do I need Go installed?
 
-No. The install script downloads a prebuilt binary. Go is only needed if you prefer `go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest` (requires Go 1.22+).
+No. The install script downloads a prebuilt binary. Go is only needed if you prefer `go install github.com/karlssonsimon/lazyaz/cmd/lazyaz@latest` (requires Go 1.25+).
 
 ### Does it work on Windows / macOS / Linux?
 
@@ -102,7 +102,13 @@ No. When you press `y` to yank a secret, the value goes directly to your clipboa
 
 ### Can I create or update secrets?
 
-Not currently. lazyaz is read-only for Key Vault — browse, inspect versions, and copy values.
+Yes. From the secrets pane, press `a` and choose **Create secret...** to open
+a two-field form (name + value). Submitting creates a new secret, or — if a
+secret with that name already exists — adds a new version. The value field is
+masked by default; press `Ctrl+R` to reveal while typing.
+
+Other write operations (delete, disable, manual version pinning) aren't
+supported yet.
 
 ## General
 

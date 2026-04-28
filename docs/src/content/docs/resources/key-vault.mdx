@@ -35,6 +35,20 @@ For bulk export, mark multiple secrets with `Space` or visual-line mode (`v`),
 then open the action menu (`a`) and select "Yank marked as JSON". This fetches
 all marked secret values and copies them as a JSON object to your clipboard.
 
+## Creating secrets
+
+Press `a` on the secrets pane and choose **Create secret...** to open a
+two-field form: a **Name** (1–127 chars, letters/digits/hyphens) and a
+**Value**. The value field is masked while you type — press `Ctrl+R` to
+toggle reveal.
+
+Submitting calls Azure's `SetSecret`, which creates a new secret or — if a
+secret with that name already exists — adds a new version. The list refreshes
+automatically so the new entry appears without a manual reload.
+
+Update of an existing value is implicit (re-create with the same name = new
+version). Delete and disable aren't supported yet.
+
 ## Selecting secrets
 
 Mark individual secrets with `Space`, or use visual-line mode for ranges:
@@ -60,6 +74,7 @@ Press `a` to open the action menu. Available actions depend on which pane is foc
 |---|---|
 | Yank secret name | Copy the secret name to clipboard |
 | Yank secret value | Fetch and copy the secret value to clipboard |
+| Create secret... | Open a two-field form to create a secret (or add a new version of an existing one) |
 | Toggle mark | Mark or unmark the current secret |
 | Toggle visual line selection | Enter or exit visual-line mode |
 | Yank marked as JSON (N) | Fetch all marked secrets and copy as a JSON object (shown when marks exist) |
