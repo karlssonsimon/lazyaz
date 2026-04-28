@@ -34,11 +34,17 @@ Switch themes at runtime with `T`.
 
 ## Keybindings
 
-Keybinding files live in `~/.config/lazyaz/keymaps/` as JSON files. The `default.json`
-keymap uses vim-style navigation and is written on first run.
+Keybinding files live in `~/.config/lazyaz/keymaps/` as JSON files. The
+`default.json` keymap uses vim-style navigation and is written on first run.
 
-To customize, edit the file or create a new one and set `keymap` in `config.json`.
-Each key in the JSON maps an action name to an array of key strings:
+To switch to a different keymap, set `keymap` in `config.json`:
+
+```json
+{ "keymap": "standard" }
+```
+
+To override individual bindings, edit the file or create a new one. Each key
+in the JSON maps an action name to an array of key strings:
 
 ```json
 {
@@ -51,4 +57,18 @@ Each key in the JSON maps an action name to an array of key strings:
 }
 ```
 
-Only the bindings you specify are overridden — everything else keeps its default.
+You can also inline a `bindings` object directly in `config.json` to override
+specific actions of the active keymap without keeping a separate file:
+
+```json
+{
+  "keymap": "default",
+  "bindings": {
+    "subscription_picker": ["s"]
+  }
+}
+```
+
+Only the bindings you specify are overridden — everything else keeps its
+default. See [Keymaps](/lazyaz/configuration/keymaps/) for the full action
+reference.

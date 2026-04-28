@@ -54,6 +54,14 @@ Yes. On the blobs pane, press `a` and choose **Upload files...** to open the
 file browser. See [Blob Storage — Uploading](/lazyaz/resources/blob-storage/#uploading)
 for the full flow.
 
+### Can I rename or delete blobs and containers?
+
+Yes. The action menu (`a`) exposes Rename, Delete, and bulk-delete operations
+for blobs, plus Create / Delete for containers. On HNS-enabled (Data Lake
+Gen2) accounts you also get folder Create / Rename / Delete. See
+[Container, folder & blob operations](/lazyaz/resources/blob-storage/#container-folder--blob-operations)
+for the full list.
+
 ### How does it handle containers with millions of blobs?
 
 In the default hierarchy mode, lazyaz only loads one level of virtual folders at a time using server-side prefix listing. This is fast regardless of container size. To search by prefix, press `a` to open the action menu and select **Search by prefix** — this runs a server-side query so it works on containers of any size.

@@ -112,6 +112,28 @@ non-modal.
 **Errors.** Failures don't abort the whole batch — they're collected and shown
 in the completion summary alongside the success count.
 
+## Container, folder & blob operations
+
+Beyond browse and download, the action menu (`a`) exposes write operations:
+
+- **Create container...** — available when a storage account is selected.
+- **Delete container...** — available when a container is focused.
+- **Rename blob...** / **Delete blob...** — on any blob (not a virtual folder).
+- **Delete marked (N)...** — bulk delete of marked blobs.
+
+For storage accounts with **hierarchical namespace** (Data Lake Gen2), folders
+are first-class resources rather than virtual prefixes, so additional actions
+appear:
+
+- **Create folder...**
+- **Rename folder...** (on a folder)
+- **Delete folder...** (on a folder, recursive)
+
+All write operations open a confirmation or input prompt before they touch
+the storage account. On HNS accounts renames are atomic via the Data Lake
+path API; on non-HNS accounts a blob "rename" is implemented as a server-side
+copy followed by a delete of the original.
+
 ## Sorting
 
 Press `s` on the blobs pane to open the sort picker:
@@ -145,6 +167,7 @@ Press `a` to open the action menu. Available actions depend on context:
 
 | Action | Description |
 |---|---|
+| Upload files... | Open the file browser to upload local files into the current folder |
 | Load all blobs / Browse by folder | Switch between hierarchy and flat load-all mode |
 | Search by prefix | Server-side prefix search (hierarchy mode only) |
 | Sort blobs | Open the sort picker |
@@ -156,6 +179,19 @@ Press `a` to open the action menu. Available actions depend on context:
 | Download current blob | Download the blob under the cursor |
 | Yank blob name | Copy the blob name to clipboard |
 | Yank blob content | Copy the blob data to clipboard (blobs under 5 MB) |
+| Rename blob... | Rename the blob under the cursor |
+| Delete blob... | Delete the blob under the cursor |
+| Delete marked (N)... | Bulk delete of marked blobs (shown when marks exist) |
+| Create folder... | Create a new folder (HNS-enabled accounts only) |
+| Rename folder... | Rename the current folder (HNS-enabled accounts only) |
+| Delete folder... | Delete the current folder, recursive (HNS-enabled accounts only) |
+
+### Containers pane
+
+| Action | Description |
+|---|---|
+| Create container... | Create a new container in the focused storage account |
+| Delete container... | Delete the container under the cursor |
 
 ### Any pane
 

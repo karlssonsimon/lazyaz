@@ -32,14 +32,13 @@ The dashboard shows four widgets tiled in a grid:
 
 | Widget | Shows |
 |---|---|
-| **Namespace counts** | Message counts per Service Bus namespace — active and dead-letter totals across all entities |
-| **DLQ alerts** | Entities with dead-letter messages, sorted by count. Each row is a direct navigation target |
+| **Namespace counts** | Message counts per Service Bus namespace — queues, topics, active and dead-letter totals. Sortable by queue count, topic count, active, or DLQ messages |
+| **DLQ alerts** | Entities with dead-letter messages. Sortable by DLQ count (default), namespace, or entity name. Each row drills directly into that entity's DLQ |
 | **Most used Blob** | Your frequently accessed blob containers — based on recent navigation history |
 | **Most used Service Bus** | Your frequently accessed queues and subscriptions — same heuristic |
 
-All widgets update automatically at a regular interval. They share a single
-cache broker so the data is also available instantly to the matching
-explorer tab.
+Widgets auto-refresh every 30 seconds. They share a single cache broker so the
+data is also available instantly to the matching explorer tab.
 
 ## Spatial navigation
 
@@ -97,9 +96,10 @@ inside it.
 
 ## Drilling into a resource
 
-Press `Enter` on a row to open the matching explorer with that resource
-already selected. For example, pressing `Enter` on a DLQ alert row opens a
-Service Bus tab navigated directly to that entity's dead-letter pane.
+Press `o` on a row to open the matching explorer with that resource already
+selected. For example, pressing `o` on a DLQ alert row opens a Service Bus tab
+navigated directly to that entity's dead-letter pane. The same action is also
+reachable through the action menu (`a` → choose "Open in...").
 
 This works through the same pending-navigation path the jump list uses — if
 the target tab's cache is warm the switch is instant; otherwise it fetches
@@ -117,9 +117,9 @@ The action menu shows only the actions relevant to the focused widget. Press
 ## Refresh
 
 <Aside type="note">
-The dashboard auto-refreshes its widgets on a timer, so you usually don't need
-to refresh manually. Press `r` to force an immediate refresh of the focused
-widget.
+The dashboard auto-refreshes its widgets every 30 seconds, so you usually
+don't need to refresh manually. Press `r` to force an immediate refresh of
+the entire dashboard.
 </Aside>
 
 ## Jump list

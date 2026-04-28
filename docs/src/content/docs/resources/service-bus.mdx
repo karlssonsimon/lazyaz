@@ -102,11 +102,11 @@ locks on them. The pane title changes to `DLQ Locked (N)` to indicate the mode.
 
 Once locked, the action menu offers:
 
-- **Requeue N message(s) (send + complete)** — send each locked message to the
-  active queue, then complete it from the DLQ
+- **Requeue N message(s)** — send each locked message to the active queue,
+  then complete it from the DLQ
 - **Move N message(s) to...** — send each locked message to a different target
   queue or subscription (picker opens), then complete from DLQ
-- **Complete N message(s) (remove from DLQ)** — complete without re-sending
+- **Complete N message(s)** — complete without re-sending (removes from DLQ)
 - **Abandon all (release locks)** — release all locks, messages stay in DLQ
 
 `N` is the number of marked messages, or `1` (the cursor) if nothing is marked.
@@ -119,7 +119,9 @@ For larger jobs, skip the per-message lock flow and use the action menu on the
 
 - **Requeue all DLQ messages (N)** — drains the entire DLQ to the active queue.
   Receives in batches of 50, sends each, completes each, repeats until empty.
-- **Move all messages to...** — same but sends to a different target you pick.
+- **Move all active messages to... (N)** / **Move all DLQ messages to... (N)** —
+  same but sends to a different target you pick. The label includes whether
+  it's the active or DLQ queue based on which one you have open.
 
 These are safer than looping locally because they lock each batch before
 processing, and recover if interrupted (unprocessed messages retain their
