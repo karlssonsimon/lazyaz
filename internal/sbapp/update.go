@@ -647,11 +647,12 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 		m.actionMenu.open(m.buildActions())
 		return m, nil
 	case m.Keymap.ToggleDLQFilter.Matches(key):
+		// "s" on the entities pane opens the entity sort overlay.
+		// (Keymap field name is stale — historically toggled a DLQ filter,
+		// now repurposed for sort. The action menu still exposes "Sort
+		// entities" with the same shortcut for discoverability.)
 		if m.focus == entitiesPane && m.hasNamespace {
-			actions := m.buildActions()
-			if len(actions) > 0 {
-				m.actionMenu.open(actions)
-			}
+			m.entitySortOverlay.open(m.entitySortField, m.entitySortDesc)
 			return m, nil
 		}
 	case m.Keymap.SubscriptionPicker.Matches(key):

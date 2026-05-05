@@ -184,6 +184,29 @@ func TestEntityDisplayName(t *testing.T) {
 	}
 }
 
+// TestPressingSOnEntitiesOpensSortOverlay regresses a bug where the "s"
+// keybinding on the entities pane opened the action menu instead of the
+// entity sort overlay (the action menu's "Sort entities" entry advertised
+// "s" as its shortcut, but the handler routed back to the action menu).
+func TestPressingSOnEntitiesOpensSortOverlay(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.focus = entitiesPane
+	m.hasNamespace = true
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	model, ok := updated.(Model)
+	if !ok {
+		t.Fatalf("expected Model, got %T", updated)
+	}
+	if !model.entitySortOverlay.active {
+		t.Fatal("pressing s on entities pane should open the sort overlay")
+	}
+	if model.actionMenu.Active {
+		t.Fatal("pressing s on entities pane should NOT open the action menu")
+	}
+}
+
 func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
 	m.SubOverlay.Close()
