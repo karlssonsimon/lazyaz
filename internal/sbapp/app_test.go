@@ -123,27 +123,6 @@ func TestTrimToWidth(t *testing.T) {
 	}
 }
 
-func TestTruncateForStatus(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		max   int
-		want  string
-	}{
-		{name: "short", input: "hello", max: 10, want: "hello"},
-		{name: "exact", input: "hello", max: 5, want: "hello"},
-		{name: "truncated", input: "hello world", max: 5, want: "hello..."},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := truncateForStatus(tc.input, tc.max); got != tc.want {
-				t.Fatalf("expected %q, got %q", tc.want, got)
-			}
-		})
-	}
-}
-
 func TestPaneName(t *testing.T) {
 	tests := []struct {
 		pane int
@@ -159,25 +138,6 @@ func TestPaneName(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.want, func(t *testing.T) {
 			if got := paneName(tc.pane); got != tc.want {
-				t.Fatalf("expected %q, got %q", tc.want, got)
-			}
-		})
-	}
-}
-
-func TestEntityDisplayName(t *testing.T) {
-	tests := []struct {
-		name string
-		e    servicebus.Entity
-		want string
-	}{
-		{name: "queue", e: servicebus.Entity{Name: "orders", Kind: servicebus.EntityQueue}, want: "☰ orders"},
-		{name: "topic", e: servicebus.Entity{Name: "events", Kind: servicebus.EntityTopic}, want: "▶ events"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := entityDisplayName(tc.e); got != tc.want {
 				t.Fatalf("expected %q, got %q", tc.want, got)
 			}
 		})

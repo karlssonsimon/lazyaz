@@ -95,26 +95,6 @@ func (m Model) WithAppliedNav(snap jumplist.NavSnapshot) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// NavSnapshotFromPending builds a snapshot from a PendingNav target.
-// Mirrors the blobapp/sbapp helper so external openers can record a
-// destination snapshot even before the eager fast-forward applies.
-// (kvapp has no cross-tab open message today, but exporting this keeps
-// the pattern uniform if one is added later.)
-func NavSnapshotFromPending(p PendingNav) jumplist.NavSnapshot {
-	if p.VaultName == "" {
-		return nil
-	}
-	pane := secretsPane
-	if p.SecretName != "" {
-		pane = versionsPane
-	}
-	return kvNavSnapshot{
-		vaultName:   p.VaultName,
-		secretName:  p.SecretName,
-		focusedPane: pane,
-	}
-}
-
 func recordJumpForCurrent(m Model) tea.Cmd {
 	if m.applyingNav {
 		return nil

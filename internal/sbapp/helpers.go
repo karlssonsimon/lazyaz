@@ -3,7 +3,6 @@ package sbapp
 import (
 	"fmt"
 
-	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
@@ -36,25 +35,6 @@ func paneName(pane int) string {
 	}
 }
 
-func entityDisplayName(e servicebus.Entity) string {
-	glyph := "☰"
-	if e.Kind == servicebus.EntityTopic {
-		glyph = "▶"
-	}
-	return fmt.Sprintf("%s %s", glyph, e.Name)
-}
-
-func (m Model) namespacesPaneTitle() string {
-	title := "Namespaces"
-	if m.HasSubscription {
-		title = fmt.Sprintf("Namespaces · %s", ui.SubscriptionDisplayName(m.CurrentSub))
-	}
-	if len(m.namespaces) > 0 {
-		title = fmt.Sprintf("%s (%d)", title, len(m.namespaces))
-	}
-	return title
-}
-
 func (m Model) entitiesPaneTitle() string {
 	title := "Entities"
 	if label := entitySortLabel(m.entitySortField, m.entitySortDesc, m.entityDLQFilter); label != "" {
@@ -68,28 +48,6 @@ func (m Model) entitiesPaneTitle() string {
 		title = fmt.Sprintf("%s (%d)", title, n)
 	}
 	return title
-}
-
-func (m Model) subscriptionsPaneTitle() string {
-	title := "Subscriptions"
-	if m.currentEntity.Name != "" {
-		title = fmt.Sprintf("Subscriptions · %s", m.currentEntity.Name)
-	}
-	if len(m.subscriptions) > 0 {
-		title = fmt.Sprintf("%s (%d)", title, len(m.subscriptions))
-	}
-	return title
-}
-
-func (m Model) queueTypePaneTitle() string {
-	if !m.hasPeekTarget {
-		return "Queue Type"
-	}
-	target := m.currentEntity.Name
-	if m.currentSubName != "" {
-		target = m.currentEntity.Name + "/" + m.currentSubName
-	}
-	return target
 }
 
 func (m Model) messagesPaneTitle() string {
@@ -118,9 +76,3 @@ func (m *Model) applyEntitySort() {
 	}
 }
 
-func truncateForStatus(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
-}

@@ -97,9 +97,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case entitiesLoadedMsg:
 		return m.handleEntitiesLoaded(msg)
 
-	case topicSubsLoadedMsg:
-		return m.handleTopicSubsLoaded(msg)
-
 	case refreshTickMsg:
 		// refreshCounts uses Azure Monitor — one call per namespace
 		// gets fresh active/DLQ counts for all entities. Structure
@@ -248,25 +245,6 @@ func (m Model) handleMetricsLoaded(msg metricsLoadedMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.entitiesByNS[msg.namespace.Name] = ents
-	return m, nil
-}
-
-func (m Model) handleTopicSubsLoaded(msg topicSubsLoadedMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		m.LastErr = msg.err.Error()
-		m.refreshDone()
-		return m, nil
-	}
-	if !msg.done && len(msg.subs) == 0 {
-		return m, msg.next
-	}
-	key := msg.namespace.Name + "/" + msg.topicName
-	m.topicSubsByKey[key] = msg.subs
-	if !msg.done {
-		return m, msg.next
-	}
-	m.refreshDone()
-	m.clampCursorsToData()
 	return m, nil
 }
 

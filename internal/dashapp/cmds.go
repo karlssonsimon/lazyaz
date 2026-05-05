@@ -32,18 +32,6 @@ type entitiesLoadedMsg struct {
 	next      tea.Cmd
 }
 
-// topicSubsLoadedMsg carries subscriptions for a single topic. Fetched
-// lazily when a namespace has topics and the DLQ widget needs per-sub
-// DLQ counts.
-type topicSubsLoadedMsg struct {
-	namespace servicebus.Namespace
-	topicName string
-	subs      []servicebus.TopicSubscription
-	done      bool
-	err       error
-	next      tea.Cmd
-}
-
 func fetchSubscriptionsCmd(svc *servicebus.Service, broker *cache.Broker[azure.Subscription], tenantID string, seed []azure.Subscription) tea.Cmd {
 	cmd, _ := broker.Subscribe(tenantID, seed, func(ctx context.Context, send func([]azure.Subscription)) error {
 		return svc.ListSubscriptions(ctx, send)
@@ -68,16 +56,6 @@ func fetchEntitiesCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.E
 		return svc.ListEntities(ctx, ns, send)
 	}, func(p cache.Page[servicebus.Entity]) tea.Msg {
 		return entitiesLoadedMsg{namespace: ns, entities: p.Items, done: p.Done, err: p.Err, next: p.Next}
-	})
-	return cmd
-}
-
-func fetchTopicSubsCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.TopicSubscription], subscriptionID string, ns servicebus.Namespace, topicName string) tea.Cmd {
-	cacheKey := cache.Key(subscriptionID, ns.Name, topicName)
-	cmd, _ := broker.Subscribe(cacheKey, nil, func(ctx context.Context, send func([]servicebus.TopicSubscription)) error {
-		return svc.ListTopicSubscriptions(ctx, ns, topicName, send)
-	}, func(p cache.Page[servicebus.TopicSubscription]) tea.Msg {
-		return topicSubsLoadedMsg{namespace: ns, topicName: topicName, subs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 	return cmd
 }

@@ -166,7 +166,8 @@ func (b *Broker[T]) Cancel(key string) {
 // fetchFn is only called when a new stream is started. If a stream for
 // key is already active, the subscriber joins it and fetchFn is ignored.
 //
-// The returned int64 is the subscription ID, needed for Unsubscribe.
+// The returned int64 is the subscription ID (currently unused — the
+// channel is closed when the worker emits its final Done page).
 func (b *Broker[T]) Subscribe(
 	key string,
 	seed []T,
@@ -223,22 +224,6 @@ func (b *Broker[T]) Subscribe(
 	go b.worker(ctx, key, seed, fetchFn, s)
 
 	return b.recv(key, subID, ch, wrapMsg), subID
-}
-
-// Unsubscribe removes a subscriber from a stream. If the stream has no
-// remaining subscribers the fetch continues to completion (warming the
-// cache). The subscriber's channel is closed.
-func (b *Broker[T]) Unsubscribe(key string, subID int64) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	s, ok := b.streams[key]
-	if !ok {
-		return
-	}
-	if ch, exists := s.subs[subID]; exists {
-		delete(s.subs, subID)
-		close(ch)
-	}
 }
 
 // worker runs the fetch on a background goroutine. Very similar to

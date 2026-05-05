@@ -388,14 +388,6 @@ func NewStandaloneModel(svc *blob.Service, cfg ui.Config, km keymap.Keymap, acco
 	return m
 }
 
-// IsStandalone reports whether this tab is bound to a single
-// connection-string Account (no AAD discovery).
-func (m Model) IsStandalone() bool { return m.standalone }
-
-// StandaloneLabel returns the human label set at construction time, or
-// empty for AAD tabs.
-func (m Model) StandaloneLabel() string { return m.standaloneLabel }
-
 // NewModelWithCache creates a Model using pre-built shared cache stores.
 // Used by the tabapp to share cache data across tabs.
 func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores, km keymap.Keymap) Model {
