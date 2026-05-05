@@ -104,6 +104,14 @@ type Model struct {
 	// IsTextInputActive returns true so the parent stays out of
 	// the way.
 	filterInputActive bool
+
+	// CredResolver, when set, supplies a credential for the active
+	// subscription's tenant. The parent injects this; standalone
+	// (non-embedded) usage leaves it nil and falls back to the service's
+	// existing credential.
+	CredResolver interface {
+		CredentialFor(tenantID string) (azcore.TokenCredential, error)
+	}
 }
 
 // NewModelWithCache constructs a dashboard model wired to shared caches.
@@ -156,8 +164,8 @@ func (m Model) WithNotification(level appshell.NotificationLevel, message string
 // same subscription) lights up instantly instead of flashing placeholders.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
-	if m.service != nil && sub.TenantID != "" {
-		if cred, err := azure.NewCredentialForTenant(sub.TenantID); err == nil {
+	if m.service != nil && m.CredResolver != nil && sub.TenantID != "" {
+		if cred, err := m.CredResolver.CredentialFor(sub.TenantID); err == nil {
 			m.service.SetCredential(cred)
 		}
 	}

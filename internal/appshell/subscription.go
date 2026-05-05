@@ -32,6 +32,12 @@ func (m Model) CurrentSubscription() (azure.Subscription, bool) {
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.CurrentSub = sub
 	m.HasSubscription = true
+	// Keep the broker scope key aligned with the active subscription's
+	// tenant. Subscription broker queries (HydrateSubscriptionsFromCache,
+	// per-app subscription Set/Get sites) all key on m.Tenant — without
+	// this, switching to a sub in a different tenant would silently read
+	// from the wrong slot or fall back to an empty key.
+	m.Tenant = sub.TenantID
 	m.SubOverlay.Close()
 	m.ClearLoading()
 	m.Status = ""

@@ -122,6 +122,14 @@ type Model struct {
 	clickTracker ui.ClickTracker
 	paneWidths   [3]int // vlt, sec, ver — set by resize
 	paneHeight   int
+
+	// CredResolver, when set, supplies a credential for the active
+	// subscription's tenant. The parent injects this; standalone
+	// (non-embedded) usage leaves it nil and falls back to the service's
+	// existing credential.
+	CredResolver interface {
+		CredentialFor(tenantID string) (azcore.TokenCredential, error)
+	}
 }
 
 type vaultsLoadedMsg struct {
@@ -318,8 +326,8 @@ func (m Model) HelpSections() []ui.HelpSection {
 // cached vaults instantly while the network call runs in the background.
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
-	if m.service != nil && sub.TenantID != "" {
-		if cred, err := azure.NewCredentialForTenant(sub.TenantID); err == nil {
+	if m.service != nil && m.CredResolver != nil && sub.TenantID != "" {
+		if cred, err := m.CredResolver.CredentialFor(sub.TenantID); err == nil {
 			m.service.SetCredential(cred)
 		}
 	}

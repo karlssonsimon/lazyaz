@@ -80,7 +80,7 @@ func TestApplyNewCredentialAllowsNilRootServices(t *testing.T) {
 			t.Fatalf("applyNewCredential panicked with nil services: %v", r)
 		}
 	}()
-	m.applyNewCredential(testCredential{id: "new"}, "logged in")
+	m.applyNewCredential(testCredential{id: "new"}, "", "logged in")
 }
 
 func TestHandleOpenAzLoginAllowsNilBlobService(t *testing.T) {
@@ -133,6 +133,95 @@ func TestNewPerTabServicesCopyCredentialWithoutSharingService(t *testing.T) {
 	}
 	if got := empty.newKeyVaultService(); got == nil || got.Credential() != nil {
 		t.Fatalf("nil parent key vault service produced %#v, want service with nil credential", got)
+	}
+}
+
+// credResolverField pulls a tab's CredResolver field via reflection so
+// tests can assert the parent injected itself. Returns nil if the field
+// is missing or not set.
+func credResolverField(model any) any {
+	field := reflect.ValueOf(model).FieldByName("CredResolver")
+	if !field.IsValid() {
+		return nil
+	}
+	return field.Interface()
+}
+
+func TestAddTabInjectsCredResolverIntoEveryTab(t *testing.T) {
+	m := NewModel(blob.NewService(nil), servicebus.NewService(nil), keyvault.NewService(nil), testConfig(), nil, keymap.Default())
+	m.tabs = nil
+	m.activeIdx = 0
+	m.addTab(TabBlob, "")
+	m.addTab(TabServiceBus, "")
+	m.addTab(TabKeyVault, "")
+	m.addTab(TabDashboard, "")
+
+	for _, tab := range m.tabs {
+		got := credResolverField(tab.Model)
+		if got == nil {
+			t.Fatalf("%v: CredResolver not set", tab.Kind)
+		}
+		// The parent Model is the only thing injected. Pointer equality
+		// proves it's literally m, not some wrapper or stale copy.
+		resolver, ok := got.(*Model)
+		if !ok {
+			t.Fatalf("%v: CredResolver = %T, want *Model", tab.Kind, got)
+		}
+		if resolver != &m {
+			t.Fatalf("%v: CredResolver points at %p, want parent %p", tab.Kind, resolver, &m)
+		}
+	}
+}
+
+func TestCredentialForReturnsSameInstancePerTenant(t *testing.T) {
+	m := NewModel(nil, nil, nil, testConfig(), nil, keymap.Default())
+	// Swap in a deterministic factory so the test doesn't touch azidentity.
+	m.credCache = newCredentialCache(func(id string) (azcore.TokenCredential, error) {
+		return testCredential{id: id}, nil
+	})
+	a, err := m.CredentialFor("t1")
+	if err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	b, err := m.CredentialFor("t1")
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if a != b {
+		t.Fatalf("same tenant returned different credentials: %#v vs %#v", a, b)
+	}
+	c, _ := m.CredentialFor("t2")
+	if a == c {
+		t.Fatalf("different tenants returned the same credential")
+	}
+}
+
+func TestPostLoginSubsAfterTenantSwitchSeedsBrokerAtTenantScope(t *testing.T) {
+	m := NewModel(blob.NewService(nil), servicebus.NewService(nil), keyvault.NewService(nil), testConfig(), nil, keymap.Default())
+	subs := []azure.Subscription{{ID: "s1", TenantID: "tenant-A"}}
+
+	// Tenant-switch path: applyNewCredential is called with a tenant ID.
+	updated, _ := m.applyNewCredential(testCredential{id: "tenant-A-cred"}, "tenant-A", "Switched tenant")
+	updated, _ = updated.handlePostLoginSubs(postLoginSubsMsg{subs: subs})
+
+	if got, ok := updated.brokers.subscriptions.Get("tenant-A"); !ok || len(got) != 1 || got[0].ID != "s1" {
+		t.Fatalf("broker.Get(tenant-A) = %v ok=%v, want seeded subs", got, ok)
+	}
+	if got, ok := updated.brokers.subscriptions.Get(""); ok && len(got) > 0 {
+		t.Fatalf("broker.Get(\"\") leaked tenant-A subs: %v", got)
+	}
+}
+
+func TestPostLoginSubsAfterAzLoginSeedsBrokerAtEmptyScope(t *testing.T) {
+	m := NewModel(blob.NewService(nil), servicebus.NewService(nil), keyvault.NewService(nil), testConfig(), nil, keymap.Default())
+	subs := []azure.Subscription{{ID: "s1", TenantID: "tenant-A"}}
+
+	// az login path: tenantID is empty (default credential isn't pinned).
+	updated, _ := m.applyNewCredential(testCredential{id: "default"}, "", "Logged in")
+	updated, _ = updated.handlePostLoginSubs(postLoginSubsMsg{subs: subs})
+
+	if got, ok := updated.brokers.subscriptions.Get(""); !ok || len(got) != 1 {
+		t.Fatalf("broker.Get(\"\") = %v ok=%v, want seeded subs", got, ok)
 	}
 }
 
@@ -263,7 +352,7 @@ func TestPostLoginSubsUpdatesPrivateServiceCredentialForMatchedSubscription(t *t
 		}
 	}
 
-	updated, _ := m.applyNewCredential(newCred, "logged in")
+	updated, _ := m.applyNewCredential(newCred, "", "logged in")
 	updated, _ = updated.handlePostLoginSubs(postLoginSubsMsg{subs: []azure.Subscription{matched}})
 
 	for _, tab := range updated.tabs {
@@ -303,7 +392,7 @@ func TestPostLoginSubsUpdatesPrivateServiceCredentialWhenSubscriptionGone(t *tes
 		}
 	}
 
-	updated, _ := m.applyNewCredential(newCred, "logged in")
+	updated, _ := m.applyNewCredential(newCred, "", "logged in")
 	updated, _ = updated.handlePostLoginSubs(postLoginSubsMsg{subs: []azure.Subscription{newSub}})
 
 	for _, tab := range updated.tabs {

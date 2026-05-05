@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
@@ -90,6 +91,18 @@ type Model struct {
 	// shown once the post-login subscription fetch completes.
 	pendingLoginMsg string
 
+	// pendingTenantID is the tenant ID corresponding to the credential
+	// currently in flight (set by applyNewCredential, consumed by
+	// handlePostLoginSubs). Empty after the default-credential path
+	// (initial login / az login completion) where no tenant is pinned.
+	pendingTenantID string
+
+	// credCache memoizes one tenant-scoped credential per tenant ID for
+	// the process lifetime. Used by CredentialFor (the CredentialResolver
+	// implementation injected into each tab) and by switchTenantCmd so
+	// every code path goes through the same cache.
+	credCache *credentialCache
+
 	width  int
 	height int
 }
@@ -119,6 +132,7 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		notifier:         appshell.NewNotifier(1000),
 		db:               db,
 		jumpIdx:          -1,
+		credCache:        newCredentialCache(azure.NewCredentialForTenant),
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
@@ -165,6 +179,15 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 	}
 
 	return m
+}
+
+// CredentialFor implements CredentialResolver — tabs call this through
+// their CredResolver field to get a credential scoped to the active
+// subscription's tenant. Backed by credCache so repeat calls (across
+// tabs and across SetSubscription invocations) reuse the same credential
+// instance.
+func (m *Model) CredentialFor(tenantID string) (azcore.TokenCredential, error) {
+	return m.credCache.For(tenantID)
 }
 
 func (m *Model) newBlobService() *blob.Service {
@@ -239,6 +262,10 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 
 	var child tea.Model
 	switch kind {
+	// CredResolver must be set before applyInitialSub: that calls
+	// SetSubscription, which fetches the tenant-scoped credential through
+	// the resolver. Without this, the initial sub would silently skip the
+	// credential swap and fall back to the service's default.
 	case TabBlob:
 		bm := blobapp.NewModelWithCache(m.newBlobService(), m.cfg, blobapp.BlobStores{
 			Subscriptions: m.brokers.subscriptions,
@@ -250,6 +277,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		bm.EmbeddedMode = true
 		bm.Notifier = m.notifier
 		bm.Activities = m.sharedActivities
+		bm.CredResolver = m
 		applyInitialSub(&bm)
 		child = bm
 	case TabServiceBus:
@@ -263,6 +291,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		sm.EmbeddedMode = true
 		sm.Notifier = m.notifier
 		sm.Activities = m.sharedActivities
+		sm.CredResolver = m
 		applyInitialSub(&sm)
 		child = sm
 	case TabKeyVault:
@@ -275,6 +304,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		kvm.EmbeddedMode = true
 		kvm.Notifier = m.notifier
 		kvm.Activities = m.sharedActivities
+		kvm.CredResolver = m
 		applyInitialSub(&kvm)
 		child = kvm
 	case TabDashboard:
@@ -288,6 +318,7 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		dm.EmbeddedMode = true
 		dm.Notifier = m.notifier
 		dm.Activities = m.sharedActivities
+		dm.CredResolver = m
 		applyInitialSub(&dm)
 		child = dm
 	}

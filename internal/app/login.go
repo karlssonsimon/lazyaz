@@ -128,10 +128,12 @@ type azLoginFinishedMsg struct {
 }
 
 // tenantCredentialMsg carries a freshly created credential scoped to
-// the chosen tenant. Produced by switchTenantCmd.
+// the chosen tenant. Produced by switchTenantCmd. tenantID is echoed back
+// so applyNewCredential / handlePostLoginSubs can key the broker by tenant.
 type tenantCredentialMsg struct {
-	cred azcore.TokenCredential
-	err  error
+	tenantID string
+	cred     azcore.TokenCredential
+	err      error
 }
 
 // postLoginSubsMsg carries the subscription list fetched after a
@@ -152,10 +154,13 @@ func listTenantsCmd(cred azcore.TokenCredential) tea.Cmd {
 
 // switchTenantCmd creates a new credential scoped to the given tenant.
 // No browser sign-in needed — it reuses the existing az login session.
-func switchTenantCmd(tenantID string) tea.Cmd {
+// Routes through credCache so subsequent calls (including SetSubscription
+// on tabs) reuse the same instance.
+func (m *Model) switchTenantCmd(tenantID string) tea.Cmd {
+	cache := m.credCache
 	return func() tea.Msg {
-		cred, err := azure.NewCredentialForTenant(tenantID)
-		return tenantCredentialMsg{cred: cred, err: err}
+		cred, err := cache.For(tenantID)
+		return tenantCredentialMsg{tenantID: tenantID, cred: cred, err: err}
 	}
 }
 
@@ -215,7 +220,7 @@ func (m *Model) handleTenantsLoaded(msg tenantsLoadedMsg) (Model, tea.Cmd) {
 func (m *Model) handleTenantSelected(tenant azure.Tenant) (Model, tea.Cmd) {
 	m.tenantPicker.close()
 	m.notifier.Push(appshell.LevelInfo, fmt.Sprintf("Switching to %s...", tenant.DisplayName))
-	return *m, switchTenantCmd(tenant.ID)
+	return *m, m.switchTenantCmd(tenant.ID)
 }
 
 // handleTenantCredential swaps the tenant-scoped credential into all
@@ -225,10 +230,12 @@ func (m *Model) handleTenantCredential(msg tenantCredentialMsg) (Model, tea.Cmd)
 		m.notifier.Push(appshell.LevelError, fmt.Sprintf("Failed to switch tenant: %s", msg.err))
 		return *m, nil
 	}
-	return m.applyNewCredential(msg.cred, "Switched tenant")
+	return m.applyNewCredential(msg.cred, msg.tenantID, "Switched tenant")
 }
 
 // handleAzLoginFinished re-initializes credentials after az login exits.
+// The session has changed, so any tenant-scoped credentials cached from
+// before are now stale — drop them and let CredentialFor lazily rebuild.
 func (m *Model) handleAzLoginFinished(msg azLoginFinishedMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		m.notifier.Push(appshell.LevelError, fmt.Sprintf("az login failed: %s", msg.err))
@@ -239,13 +246,19 @@ func (m *Model) handleAzLoginFinished(msg azLoginFinishedMsg) (Model, tea.Cmd) {
 		m.notifier.Push(appshell.LevelError, fmt.Sprintf("Failed to create credential: %s", err))
 		return *m, nil
 	}
-	return m.applyNewCredential(cred, "Logged in successfully")
+	if m.credCache != nil {
+		m.credCache.Reset()
+	}
+	return m.applyNewCredential(cred, "", "Logged in successfully")
 }
 
 // applyNewCredential swaps a credential into all services, resets caches,
 // and starts a subscription fetch. Tabs are not touched yet — that happens
 // in handlePostLoginSubs once we know which subscriptions are available.
-func (m *Model) applyNewCredential(cred azcore.TokenCredential, successMsg string) (Model, tea.Cmd) {
+// tenantID is the broker scope key the freshly fetched subs will be stored
+// under: empty after az login (default credential, sees subs across tenants),
+// set after a tenant switch so per-tenant caches stay isolated.
+func (m *Model) applyNewCredential(cred azcore.TokenCredential, tenantID string, successMsg string) (Model, tea.Cmd) {
 	if m.blobSvc != nil {
 		m.blobSvc.SetCredential(cred)
 	}
@@ -258,6 +271,7 @@ func (m *Model) applyNewCredential(cred azcore.TokenCredential, successMsg strin
 
 	m.brokers.resetAll()
 	m.pendingLoginMsg = successMsg
+	m.pendingTenantID = tenantID
 
 	return *m, fetchPostLoginSubsCmd(cred)
 }
@@ -269,15 +283,20 @@ func (m *Model) applyNewCredential(cred azcore.TokenCredential, successMsg strin
 // picker opens with the list already populated — no empty flash.
 func (m *Model) handlePostLoginSubs(msg postLoginSubsMsg) (Model, tea.Cmd) {
 	successMsg := m.pendingLoginMsg
+	tenantID := m.pendingTenantID
 	m.pendingLoginMsg = ""
+	m.pendingTenantID = ""
 
 	if msg.err != nil {
 		m.notifier.Push(appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.err))
 		return *m, nil
 	}
 
-	// Seed the broker cache so child tabs don't re-fetch.
-	m.brokers.subscriptions.Set("", msg.subs)
+	// Seed the broker at the same scope tabs query at via m.Tenant.
+	// After a tenant switch, tenantID is the new tenant; after az login
+	// it's empty (default credential — no tenant pin), which matches a
+	// freshly-constructed tab whose Tenant hasn't been set yet.
+	m.brokers.subscriptions.Set(tenantID, msg.subs)
 
 	// Build a set for fast lookup.
 	subsByID := make(map[string]azure.Subscription, len(msg.subs))

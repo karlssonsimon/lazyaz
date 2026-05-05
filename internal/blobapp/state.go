@@ -150,6 +150,14 @@ type Model struct {
 	// parent runs in-memory.
 	usage *cache.DB
 
+	// CredResolver, when set, supplies a credential for the active
+	// subscription's tenant. The parent injects this; standalone
+	// (non-embedded) usage leaves it nil and falls back to the service's
+	// existing credential.
+	CredResolver interface {
+		CredentialFor(tenantID string) (azcore.TokenCredential, error)
+	}
+
 	// pendingNav is set by the parent app (via SetPendingNav) when
 	// the dashboard wants this tab to navigate to a specific resource.
 	// advancePendingNav drives the selection forward as fetches land.
@@ -446,9 +454,11 @@ func (m Model) HelpSections() []ui.HelpSection {
 func (m *Model) SetSubscription(sub azure.Subscription) {
 	m.Model.SetSubscription(sub)
 	// Scope the credential to the subscription's tenant so ARM and data
-	// plane calls authenticate against the correct directory.
-	if m.service != nil && sub.TenantID != "" {
-		if cred, err := azure.NewCredentialForTenant(sub.TenantID); err == nil {
+	// plane calls authenticate against the correct directory. The parent
+	// injects CredResolver; standalone usage leaves it nil and the
+	// service keeps whatever credential it was constructed with.
+	if m.service != nil && m.CredResolver != nil && sub.TenantID != "" {
+		if cred, err := m.CredResolver.CredentialFor(sub.TenantID); err == nil {
 			m.service.SetCredential(cred)
 		}
 	}
