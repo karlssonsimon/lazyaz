@@ -26,7 +26,12 @@ type Config struct {
 	ThemeName   string      `json:"theme"`
 	DownloadDir string      `json:"download_dir"`
 	Tabs        []TabConfig `json:"tabs"`
-	Schemes     []Scheme    `json:"-"`
+	// Nerdfonts opts into the Nerd Fonts icon set for tab badges.
+	// Defaults to false (terminal-safe Unicode glyphs). Requires the
+	// terminal to be configured with a patched font from
+	// nerdfonts.com — otherwise the user sees tofu boxes.
+	Nerdfonts bool     `json:"nerdfonts,omitempty"`
+	Schemes   []Scheme `json:"-"`
 }
 
 // ResolvedDownloadDir returns the directory under which marked blobs

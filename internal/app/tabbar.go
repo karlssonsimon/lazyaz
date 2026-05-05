@@ -19,7 +19,7 @@ const (
 //
 // Active tab is marked by a selBg-highlighted card + bold name +
 // accent-colored icon. Inactive tabs sit muted on the bar bg.
-func renderTabBar(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, width int) string {
+func renderTabBar(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, icons ui.Icons, width int) string {
 	if len(tabs) == 0 {
 		return tabStyles.Bar.Render(strings.Repeat(" ", width))
 	}
@@ -47,7 +47,7 @@ func renderTabBar(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, width in
 			}
 		}
 		number := fmt.Sprintf(" %d ", i+1)
-		icon := t.Kind.Icon()
+		icon := t.Kind.Icon(icons)
 
 		var rendered string
 		if i == activeIdx {
@@ -74,7 +74,7 @@ func renderTabBar(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, width in
 
 // tabIndexAtX returns the tab index for a click at screen column x,
 // or -1 if the click doesn't land on any tab label.
-func tabIndexAtX(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, x int) int {
+func tabIndexAtX(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, icons ui.Icons, x int) int {
 	if len(tabs) == 0 {
 		return -1
 	}
@@ -101,7 +101,7 @@ func tabIndexAtX(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, x int) in
 			}
 		}
 		number := fmt.Sprintf(" %d ", i+1)
-		icon := t.Kind.Icon()
+		icon := t.Kind.Icon(icons)
 		labelText := icon + " " + name + " "
 		w := ansi.StringWidth(number) + ansi.StringWidth(labelText)
 		if x >= cursor && x < cursor+w {

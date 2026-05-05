@@ -9,6 +9,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -38,19 +39,20 @@ func (k TabKind) String() string {
 	}
 }
 
-// Icon returns a single-cell glyph that visually identifies the tab kind
-// in the tab bar. Picked to be terminal-safe (single-cell width in
-// monospaced fonts) and recognizable at a glance.
-func (k TabKind) Icon() string {
+// Icon returns the glyph used in the tab bar to identify a kind, drawn
+// from the supplied icon set. The icon set is config-driven — see
+// ui.NewIcons — so terminal-safe Unicode (default) and Nerd Fonts both
+// work via the same code path.
+func (k TabKind) Icon(icons ui.Icons) string {
 	switch k {
 	case TabBlob:
-		return "▲"
+		return icons.TabBlob
 	case TabServiceBus:
-		return "⇄"
+		return icons.TabServiceBus
 	case TabKeyVault:
-		return "⌬"
+		return icons.TabKeyVault
 	case TabDashboard:
-		return "▦"
+		return icons.TabDashboard
 	}
 	return "·"
 }

@@ -75,6 +75,7 @@ type Model struct {
 	toastTickActive bool
 
 	styles               ui.Styles
+	icons                ui.Icons
 	schemes              []ui.Scheme
 	themeOverlay         ui.ThemeOverlayState
 	helpOverlay          ui.HelpOverlayState
@@ -139,6 +140,7 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		},
 	}
 	m.styles = ui.NewStyles(cfg.ActiveScheme())
+	m.icons = ui.NewIcons(cfg.Nerdfonts)
 	m.brokers.bindRegistry(m.sharedActivities)
 
 	// Last subscription used in a previous session (best-effort read,
@@ -668,7 +670,7 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.MouseClickMsg:
 		if msg.Y == 0 {
-			if idx := tabIndexAtX(m.tabs, m.activeIdx, m.styles.TabBar, msg.X); idx >= 0 && idx != m.activeIdx {
+			if idx := tabIndexAtX(m.tabs, m.activeIdx, m.styles.TabBar, m.icons, msg.X); idx >= 0 && idx != m.activeIdx {
 				m.activeIdx = idx
 				return m, m.resizeAndTickActive()
 			}

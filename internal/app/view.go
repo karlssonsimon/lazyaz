@@ -19,7 +19,7 @@ func (m Model) View() tea.View {
 		return v
 	}
 
-	tabBar := renderTabBar(m.tabs, m.activeIdx, m.styles.TabBar, m.width)
+	tabBar := renderTabBar(m.tabs, m.activeIdx, m.styles.TabBar, m.icons, m.width)
 
 	childView := ""
 	if len(m.tabs) > 0 {
