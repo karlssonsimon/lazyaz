@@ -140,7 +140,7 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		},
 	}
 	m.styles = ui.NewStyles(cfg.ActiveScheme())
-	m.icons = ui.NewIcons(cfg.Nerdfonts)
+	m.icons = ui.NewIcons(cfg.NerdfontsEnabled())
 	m.brokers.bindRegistry(m.sharedActivities)
 
 	// Last subscription used in a previous session (best-effort read,

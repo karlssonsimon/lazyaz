@@ -26,12 +26,26 @@ type Config struct {
 	ThemeName   string      `json:"theme"`
 	DownloadDir string      `json:"download_dir"`
 	Tabs        []TabConfig `json:"tabs"`
-	// Nerdfonts opts into the Nerd Fonts icon set for tab badges.
-	// Defaults to false (terminal-safe Unicode glyphs). Requires the
-	// terminal to be configured with a patched font from
-	// nerdfonts.com — otherwise the user sees tofu boxes.
-	Nerdfonts bool     `json:"nerdfonts,omitempty"`
+	// Nerdfonts selects the icon set for tab badges. Defaults to enabled
+	// when unset; users without a Nerd Font installed should set
+	// "nerdfonts": false explicitly to fall back to terminal-safe
+	// Unicode glyphs. The pointer type is what lets the loader
+	// distinguish "absent" (use the on default) from "explicit false".
+	// There is no reliable runtime detection of which fonts the
+	// terminal has loaded, so the choice is config-driven.
+	Nerdfonts *bool    `json:"nerdfonts,omitempty"`
 	Schemes   []Scheme `json:"-"`
+}
+
+// NerdfontsEnabled resolves the tristate Nerdfonts field to a bool.
+// Absent (nil) means use the default — which is enabled. Callers
+// constructing Icons should go through this helper rather than
+// reading the pointer directly.
+func (c Config) NerdfontsEnabled() bool {
+	if c.Nerdfonts == nil {
+		return true
+	}
+	return *c.Nerdfonts
 }
 
 // ResolvedDownloadDir returns the directory under which marked blobs
