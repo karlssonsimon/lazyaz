@@ -33,6 +33,20 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 		m.accountsHistory[m.CurrentSub.ID] = ui.SnapshotListState(&m.accountsList, accountItemKey)
 	}
 
+	// Cancel any in-flight upload before tearing down per-subscription
+	// state. Otherwise the upload keeps writing blobs against the
+	// outgoing tenant's credential and the activity registry surfaces
+	// a stale entry whose context the user has already left.
+	if m.uploadCancelFn != nil {
+		m.uploadCancelFn()
+		m.uploadCancelFn = nil
+	}
+	if m.uploadActivityUnreg != nil {
+		m.uploadActivityUnreg()
+		m.uploadActivityUnreg = nil
+	}
+	m.uploadProgress = nil
+
 	m.CurrentSub = sub
 	m.HasSubscription = true
 	m.hasAccount = false
