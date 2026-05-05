@@ -62,8 +62,8 @@ func fetchNamespacesCmd(svc *servicebus.Service, broker *cache.Broker[servicebus
 	return cmd
 }
 
-func fetchEntitiesCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.Entity], ns servicebus.Namespace) tea.Cmd {
-	cacheKey := ns.Name
+func fetchEntitiesCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.Entity], subscriptionID string, ns servicebus.Namespace) tea.Cmd {
+	cacheKey := cache.Key(subscriptionID, ns.Name)
 	cmd, _ := broker.Subscribe(cacheKey, nil, func(ctx context.Context, send func([]servicebus.Entity)) error {
 		return svc.ListEntities(ctx, ns, send)
 	}, func(p cache.Page[servicebus.Entity]) tea.Msg {
@@ -72,8 +72,8 @@ func fetchEntitiesCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.E
 	return cmd
 }
 
-func fetchTopicSubsCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.TopicSubscription], ns servicebus.Namespace, topicName string) tea.Cmd {
-	cacheKey := ns.Name + "/" + topicName
+func fetchTopicSubsCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.TopicSubscription], subscriptionID string, ns servicebus.Namespace, topicName string) tea.Cmd {
+	cacheKey := cache.Key(subscriptionID, ns.Name, topicName)
 	cmd, _ := broker.Subscribe(cacheKey, nil, func(ctx context.Context, send func([]servicebus.TopicSubscription)) error {
 		return svc.ListTopicSubscriptions(ctx, ns, topicName, send)
 	}, func(p cache.Page[servicebus.TopicSubscription]) tea.Msg {

@@ -49,7 +49,7 @@ func (m *Model) kickoffFetches() []tea.Cmd {
 		fetchNamespacesCmd(m.service, m.stores.Namespaces, m.CurrentSub.ID, m.namespaces),
 	}
 	for _, ns := range m.namespaces {
-		cmds = append(cmds, fetchEntitiesCmd(m.service, m.stores.Entities, ns))
+		cmds = append(cmds, fetchEntitiesCmd(m.service, m.stores.Entities, m.CurrentSub.ID, ns))
 		m.pendingFetches++
 	}
 	return cmds
@@ -194,7 +194,7 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (tea.Model, tea.C
 		if _, have := m.entitiesByNS[ns.Name]; have {
 			continue
 		}
-		cmds = append(cmds, fetchEntitiesCmd(m.service, m.stores.Entities, ns))
+		cmds = append(cmds, fetchEntitiesCmd(m.service, m.stores.Entities, m.CurrentSub.ID, ns))
 		m.pendingFetches++
 	}
 	return m, tea.Batch(cmds...)
@@ -489,7 +489,7 @@ func (m Model) refreshAll() (tea.Model, tea.Cmd) {
 	}
 	m.refreshInFlight++
 	for _, ns := range m.namespaces {
-		cmds = append(cmds, fetchEntitiesCmd(m.service, m.stores.Entities, ns))
+		cmds = append(cmds, fetchEntitiesCmd(m.service, m.stores.Entities, m.CurrentSub.ID, ns))
 		m.refreshInFlight++
 	}
 	return m, tea.Batch(cmds...)

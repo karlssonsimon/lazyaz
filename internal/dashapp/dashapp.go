@@ -205,7 +205,7 @@ func (m *Model) hydrateFromCache(sub azure.Subscription) {
 	}
 	m.namespaces = cachedNS
 	for _, ns := range cachedNS {
-		ents, ok := m.stores.Entities.Get(ns.Name)
+		ents, ok := m.stores.Entities.Get(cache.Key(sub.ID, ns.Name))
 		if !ok {
 			continue
 		}
@@ -214,9 +214,8 @@ func (m *Model) hydrateFromCache(sub azure.Subscription) {
 			if e.Kind != servicebus.EntityTopic {
 				continue
 			}
-			key := ns.Name + "/" + e.Name
-			if subs, ok := m.stores.TopicSubs.Get(key); ok {
-				m.topicSubsByKey[key] = subs
+			if subs, ok := m.stores.TopicSubs.Get(cache.Key(sub.ID, ns.Name, e.Name)); ok {
+				m.topicSubsByKey[ns.Name+"/"+e.Name] = subs
 			}
 		}
 	}
