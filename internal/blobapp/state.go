@@ -515,6 +515,11 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 	if m.service != nil && m.CredResolver != nil && sub.TenantID != "" {
 		if cred, err := m.CredResolver.CredentialFor(sub.TenantID); err == nil {
 			m.service.SetCredential(cred)
+		} else {
+			// Surface the failure instead of silently retaining the
+			// previous (wrong-tenant) credential. The next data-plane
+			// call would otherwise return an opaque 401/403.
+			m.Notify(appshell.LevelError, fmt.Sprintf("Credential for tenant %s: %s", sub.TenantID, err.Error()))
 		}
 	}
 	if cached, ok := m.cache.accounts.Get(sub.ID); ok {

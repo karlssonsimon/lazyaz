@@ -5,6 +5,8 @@
 package dashapp
 
 import (
+	"fmt"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
@@ -167,6 +169,8 @@ func (m *Model) SetSubscription(sub azure.Subscription) {
 	if m.service != nil && m.CredResolver != nil && sub.TenantID != "" {
 		if cred, err := m.CredResolver.CredentialFor(sub.TenantID); err == nil {
 			m.service.SetCredential(cred)
+		} else {
+			m.Notify(appshell.LevelError, fmt.Sprintf("Credential for tenant %s: %s", sub.TenantID, err.Error()))
 		}
 	}
 	m.namespaces = nil
