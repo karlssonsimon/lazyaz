@@ -26,6 +26,9 @@ func renderTabBar(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, width in
 
 	kindCount := map[TabKind]int{}
 	for _, t := range tabs {
+		if t.Label != "" {
+			continue
+		}
 		kindCount[t.Kind]++
 	}
 	kindSeq := map[TabKind]int{}
@@ -33,10 +36,15 @@ func renderTabBar(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, width in
 	parts := make([]string, 0, 2*len(tabs))
 	gap := tabStyles.Sep.Render(tabGap)
 	for i, t := range tabs {
-		kindSeq[t.Kind]++
-		name := t.Kind.String()
-		if kindCount[t.Kind] > 1 {
-			name = fmt.Sprintf("%s %d", name, kindSeq[t.Kind])
+		var name string
+		if t.Label != "" {
+			name = t.Label
+		} else {
+			kindSeq[t.Kind]++
+			name = t.Kind.String()
+			if kindCount[t.Kind] > 1 {
+				name = fmt.Sprintf("%s %d", name, kindSeq[t.Kind])
+			}
 		}
 		number := fmt.Sprintf(" %d ", i+1)
 		icon := t.Kind.Icon()
@@ -73,16 +81,24 @@ func tabIndexAtX(tabs []Tab, activeIdx int, tabStyles ui.TabBarStyles, x int) in
 
 	kindCount := map[TabKind]int{}
 	for _, t := range tabs {
+		if t.Label != "" {
+			continue
+		}
 		kindCount[t.Kind]++
 	}
 	kindSeq := map[TabKind]int{}
 
 	cursor := 0
 	for i, t := range tabs {
-		kindSeq[t.Kind]++
-		name := t.Kind.String()
-		if kindCount[t.Kind] > 1 {
-			name = fmt.Sprintf("%s %d", name, kindSeq[t.Kind])
+		var name string
+		if t.Label != "" {
+			name = t.Label
+		} else {
+			kindSeq[t.Kind]++
+			name = t.Kind.String()
+			if kindCount[t.Kind] > 1 {
+				name = fmt.Sprintf("%s %d", name, kindSeq[t.Kind])
+			}
 		}
 		number := fmt.Sprintf(" %d ", i+1)
 		icon := t.Kind.Icon()

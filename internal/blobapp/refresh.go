@@ -16,8 +16,16 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	}
 
 	if !m.hasAccount || m.focus == accountsPane {
-		m.startLoading(accountsPane, fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(m.CurrentSub)))
-		return m, tea.Batch(m.Spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, m.CurrentSub.ID, m.accounts))
+		// Standalone tabs have a fixed account list — refreshing it via
+		// ARM would fail. Fall through to refreshing whatever is below.
+		if m.standalone {
+			if !m.hasAccount {
+				return m, nil
+			}
+		} else {
+			m.startLoading(accountsPane, fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(m.CurrentSub)))
+			return m, tea.Batch(m.Spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, m.CurrentSub.ID, m.accounts))
+		}
 	}
 
 	if m.focus == containersPane || !m.hasContainer {

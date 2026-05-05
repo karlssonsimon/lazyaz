@@ -163,6 +163,14 @@ type Model struct {
 	// advancePendingNav drives the selection forward as fetches land.
 	pendingNav PendingNav
 
+	// standalone marks tabs bound to a single connection-string Account
+	// (Azurite, ad-hoc connection strings) instead of the AAD discovery
+	// flow. When set: no subscription overlay, no ARM fetches, the
+	// subscription picker key is suppressed, and the accounts list is
+	// fixed at the one connection-string account.
+	standalone      bool
+	standaloneLabel string
+
 	// applyingNav suppresses RecordJumpMsg emission while ApplyNav
 	// (jump-list restoration) is driving navigation. See sbapp's
 	// equivalent field for the full rationale.
@@ -341,6 +349,53 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	return m
 }
 
+// NewStandaloneModel constructs a Model bound to a single, pre-resolved
+// Account instead of running the subscription→account discovery flow.
+// Used by connection-string and Azurite tabs that have no AAD identity.
+//
+// `label` is shown in the accounts column title and the tab title; pass
+// something human-recognizable like "Azurite (local)" or the parsed
+// account name. The synthetic subscription ID derived from the account
+// keeps cache rows disjoint from real Azure data sharing the same name.
+func NewStandaloneModel(svc *blob.Service, cfg ui.Config, km keymap.Keymap, account blob.Account, label string, stores BlobStores) Model {
+	m := NewModelWithKeyMap(svc, cfg, km, nil)
+	if stores.Containers != nil {
+		m.cache = NewCacheWithStores(stores)
+		m.usage = stores.Usage
+	}
+	m.standalone = true
+	m.standaloneLabel = label
+
+	// The base constructor opens the subscription overlay when no sub is
+	// set; this tab never picks one, so undo that.
+	m.SubOverlay.Close()
+	m.ClearLoading()
+
+	// Synthetic subscription scoped by endpoint+name so cache keys
+	// (subID/account/container/prefix) don't collide with any real Azure
+	// data. The phantom sub is invisible to the dashboard since its ID
+	// won't match any real subscription returned by ARM.
+	sub := azure.Subscription{
+		ID:       "connstring:" + account.BlobEndpoint + "/" + account.Name,
+		Name:     label,
+		TenantID: "",
+	}
+	m.Model.SetSubscription(sub)
+
+	m.accounts = []blob.Account{account}
+	m.accountsList.Title = label
+	ui.SetItemsPreserveKey(&m.accountsList, accountsToItems(m.accounts), accountItemKey)
+	return m
+}
+
+// IsStandalone reports whether this tab is bound to a single
+// connection-string Account (no AAD discovery).
+func (m Model) IsStandalone() bool { return m.standalone }
+
+// StandaloneLabel returns the human label set at construction time, or
+// empty for AAD tabs.
+func (m Model) StandaloneLabel() string { return m.standaloneLabel }
+
 // NewModelWithCache creates a Model using pre-built shared cache stores.
 // Used by the tabapp to share cache data across tabs.
 func NewModelWithCache(svc *blob.Service, cfg ui.Config, stores BlobStores, km keymap.Keymap) Model {
@@ -493,7 +548,9 @@ func (m Model) Init() tea.Cmd {
 	if m.SubOverlay.Active {
 		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	}
-	if m.HasSubscription {
+	// Standalone tabs (connection-string / Azurite) have a fixed single
+	// account seeded at construction — there's nothing to discover.
+	if m.HasSubscription && !m.standalone {
 		cmds = append(cmds, fetchAccountsCmd(m.service, m.cache.accounts, m.CurrentSub.ID, m.accounts))
 	}
 	return tea.Batch(cmds...)

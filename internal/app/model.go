@@ -82,10 +82,11 @@ type Model struct {
 	activityOverlay      ui.ActivityOverlayState
 	activityTick         int // render-frame counter for fetch-spinner rotation
 
-	cursor       cursor.Model
-	tabPicker    tabPickerState
-	tenantPicker tenantPickerState
-	cmdPalette   commandPalette
+	cursor           cursor.Model
+	tabPicker        tabPickerState
+	tenantPicker     tenantPickerState
+	cmdPalette       commandPalette
+	connStringPrompt ui.TextInputState
 
 	// pendingLoginMsg is the success toast queued by applyNewCredential,
 	// shown once the post-login subscription fetch completes.
@@ -325,6 +326,64 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 
 	m.tabs = append(m.tabs, Tab{ID: id, Kind: kind, Model: child})
 	m.activeIdx = len(m.tabs) - 1
+}
+
+// openStandaloneBlobTab creates a Blob tab bound to a single Account
+// (typically parsed from a connection string), bypassing the AAD
+// subscription→account discovery flow. The tab carries `label` as its
+// tabbar name so users can tell connection-string tabs apart from
+// regular Azure-discovered Blob tabs at a glance.
+func (m Model) openStandaloneBlobTab(account blob.Account, label string) (tea.Model, tea.Cmd) {
+	id := m.nextID
+	m.nextID++
+
+	// Standalone tabs use a brand-new blob.Service with no AAD credential —
+	// the shared service holds whatever AAD identity the rest of the app is
+	// using, which has nothing to do with this connection string.
+	svc := blob.NewService(nil)
+	bm := blobapp.NewStandaloneModel(svc, m.cfg, m.keymap, account, label, blobapp.BlobStores{
+		Subscriptions: m.brokers.subscriptions,
+		Accounts:      m.brokers.blobAccounts,
+		Containers:    m.brokers.blobContainers,
+		Blobs:         m.brokers.blobs,
+		Usage:         m.db,
+	})
+	bm.EmbeddedMode = true
+	bm.Notifier = m.notifier
+	bm.Activities = m.sharedActivities
+	// CredResolver intentionally left nil — standalone tabs don't switch
+	// subscriptions, so the resolver would never be consulted.
+
+	oldIdx := m.activeIdx
+	m.tabs = append(m.tabs, Tab{ID: id, Kind: TabBlob, Label: label, Model: bm})
+	m.activeIdx = len(m.tabs) - 1
+	m.recordTabChange(oldIdx, m.activeIdx)
+
+	tab := &m.tabs[m.activeIdx]
+	initCmd := wrapCmd(tab.ID, tab.Model.Init())
+	resizeCmd := m.forwardToActive(tea.WindowSizeMsg{
+		Width:  m.width,
+		Height: m.childHeight(),
+	})
+	return m, tea.Batch(initCmd, resizeCmd)
+}
+
+// openConnStringTab parses a user-supplied connection string and opens
+// a standalone blob tab. Validation also runs on Submit in the prompt's
+// validator — by the time we get here, parsing should succeed.
+func (m Model) openConnStringTab(connStr string) (tea.Model, tea.Cmd) {
+	account, err := blob.AccountFromConnectionString(connStr)
+	if err != nil {
+		// Defensive: validator should have caught this. Surface as a
+		// notification rather than silently dropping the user's input.
+		m.notifier.Push(appshell.LevelError, "Connection string: "+err.Error())
+		return m, m.maybeStartToastTick()
+	}
+	label := account.Name
+	if label == "" {
+		label = "Blob (connection)"
+	}
+	return m.openStandaloneBlobTab(account, label)
 }
 
 // openSBTabWithNav creates a new Service Bus tab pre-positioned to a
@@ -567,6 +626,10 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tabPicker.query += text
 			m.tabPicker.refilter()
 			return m, nil
+		case m.connStringPrompt.Active:
+			m.connStringPrompt.Value += text
+			m.connStringPrompt.Error = ""
+			return m, nil
 		case m.tenantPicker.active:
 			m.tenantPicker.query += text
 			m.tenantPicker.refilter()
@@ -665,6 +728,33 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Height: m.childHeight(),
 		})
 		return m, tea.Batch(initCmd, resizeCmd)
+
+	case openAzuriteTabMsg:
+		m.tabPicker.active = false
+		account, err := blob.AccountFromConnectionString(blob.AzuriteConnectionString)
+		if err != nil {
+			// The preset is a compile-time constant — a parse failure
+			// here would be a programming bug, not user input. Surface
+			// it as a notification so it isn't silent.
+			m.notifier.Push(appshell.LevelError, "Azurite preset failed: "+err.Error())
+			return m, m.maybeStartToastTick()
+		}
+		return m.openStandaloneBlobTab(account, "Azurite (local)")
+
+	case openConnStringPromptMsg:
+		m.tabPicker.active = false
+		m.connStringPrompt.Open(
+			"Open Blob Tab",
+			"DefaultEndpointsProtocol=…;AccountName=…;AccountKey=…",
+			"",
+			func(value string) string {
+				if _, err := blob.AccountFromConnectionString(value); err != nil {
+					return err.Error()
+				}
+				return ""
+			},
+		)
+		return m, nil
 
 	case jumplist.RecordJumpMsg:
 		// Snapshot is owned by the active tab — record it against
@@ -820,13 +910,27 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Tab picker overlay.
 		if m.tabPicker.active {
-			if kind, ok := m.tabPicker.handleKey(key, ui.ThemeKeyBindings{
+			if action, ok := m.tabPicker.handleKey(key, ui.ThemeKeyBindings{
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
 				Apply:  m.keymap.ThemeApply,
 				Cancel: m.keymap.Cancel,
 				Erase:  m.keymap.BackspaceUp,
 			}); ok {
-				return m.Update(tabPickerMsg{kind: kind})
+				return m.Update(action())
+			}
+			return m, nil
+		}
+
+		// Connection-string prompt overlay (driven by the "Blob (connection
+		// string)" picker entry). On submit we parse and open a standalone
+		// blob tab; on cancel we just close.
+		if m.connStringPrompt.Active {
+			result := m.connStringPrompt.HandleKey(key)
+			switch result.Action {
+			case ui.TextInputActionSubmit:
+				return m.openConnStringTab(result.Value)
+			case ui.TextInputActionCancel:
+				return m, nil
 			}
 			return m, nil
 		}
@@ -1040,6 +1144,12 @@ func (m *Model) buildCommands() []command {
 		}},
 		{name: "New Tab: Dashboard", hint: "ctrl+t", section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabDashboard}}
+		}},
+		{name: "New Tab: Azurite (local emulator)", hint: "ctrl+t", section: secTabs, action: func() commandAction {
+			return commandAction{msg: openAzuriteTabMsg{}}
+		}},
+		{name: "New Tab: Blob (connection string)", hint: "ctrl+t", section: secTabs, action: func() commandAction {
+			return commandAction{msg: openConnStringPromptMsg{}}
 		}},
 		{name: "Close Tab", hint: "ctrl+w", section: secTabs, action: func() commandAction {
 			if len(m.tabs) <= 1 {

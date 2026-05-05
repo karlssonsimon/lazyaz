@@ -30,6 +30,14 @@ type Account struct {
 	ResourceGroup  string
 	BlobEndpoint   string
 	IsHnsEnabled   bool // true when Azure Data Lake Storage Gen2 hierarchical namespace is enabled
+
+	// SharedKey, when set, supplies the data-plane shared key directly
+	// (e.g. parsed from a connection string). Bypasses ARM ListKeys and,
+	// when SharedKeyOnly is true, also bypasses the AAD attempt in
+	// withFallback. Used by Azurite and by users who only have a
+	// connection string (no AAD identity) for the account.
+	SharedKey     string
+	SharedKeyOnly bool
 }
 
 type ContainerInfo struct {
@@ -160,28 +168,52 @@ func (s *Service) DiscoverAccountsForSubscription(ctx context.Context, subscript
 	return nil
 }
 
-// withFallback runs fn with an AAD client. If fn returns a data-plane
-// auth error, it retries with a shared-key client (fetched via the
-// control-plane ListKeys API). The label is used to contextualize the
-// final error if both paths fail.
-func (s *Service) withFallback(ctx context.Context, account Account, label string, fn func(*service.Client) error) error {
-	aad, err := s.getAADServiceClient(account.BlobEndpoint)
+// runWithAuthFallback runs op with the primary client for account; on a
+// data-plane auth error from an AAD-capable account it retries with a
+// shared-key client (fetched via control-plane ListKeys). SharedKeyOnly
+// accounts (connection-string / Azurite) skip the AAD attempt and have
+// no fallback to retry. label contextualizes the error if both paths
+// fail. This is the single home for the auth-fallback policy — every
+// data-plane caller (list, get-properties, read, download, upload, etc.)
+// goes through here.
+func runWithAuthFallback[T any](ctx context.Context, s *Service, account Account, label string, op func(*service.Client) (T, error)) (T, error) {
+	var zero T
+	primary, allowFallback, err := s.getPrimaryServiceClient(ctx, account)
 	if err != nil {
-		return err
+		return zero, err
 	}
-	err = fn(aad)
-	if err == nil || !isDataPlaneAuthError(err) {
-		return err
+
+	out, err := op(primary)
+	if err == nil {
+		return out, nil
+	}
+	if !allowFallback {
+		// No fallback available (SharedKeyOnly). Wrap the error with
+		// the label so callers see context regardless of how it failed.
+		return zero, fmt.Errorf("%s: %w", label, err)
+	}
+	if !isDataPlaneAuthError(err) {
+		return zero, err
 	}
 
 	shared, fbErr := s.getSharedKeyServiceClient(ctx, account)
 	if fbErr != nil {
-		return fmt.Errorf("%s with AAD failed: %v; shared key fallback failed: %w", label, err, fbErr)
+		return zero, fmt.Errorf("%s with AAD failed: %v; shared key fallback failed: %w", label, err, fbErr)
 	}
-	if err := fn(shared); err != nil {
-		return fmt.Errorf("%s with shared key fallback: %w", label, err)
+	out, err = op(shared)
+	if err != nil {
+		return zero, fmt.Errorf("%s with shared key fallback: %w", label, err)
 	}
-	return nil
+	return out, nil
+}
+
+// withFallback is the void variant of runWithAuthFallback for the many
+// callers that don't need a return value (list, delete, rename, etc.).
+func (s *Service) withFallback(ctx context.Context, account Account, label string, fn func(*service.Client) error) error {
+	_, err := runWithAuthFallback(ctx, s, account, label, func(c *service.Client) (struct{}, error) {
+		return struct{}{}, fn(c)
+	})
+	return err
 }
 
 func (s *Service) ListContainers(ctx context.Context, account Account, send func([]ContainerInfo)) error {
@@ -411,13 +443,7 @@ func (s *Service) DownloadBlobs(ctx context.Context, account Account, containerN
 		return nil, fmt.Errorf("create destination root %s: %w", root, err)
 	}
 
-	aadClient, err := s.getAADServiceClient(account.BlobEndpoint)
-	if err != nil {
-		return nil, err
-	}
-
 	results := make([]BlobDownloadResult, 0, len(names))
-	var sharedKeyClient *service.Client
 	for _, blobName := range names {
 		if ctx.Err() != nil {
 			return results, ctx.Err()
@@ -429,19 +455,13 @@ func (s *Service) DownloadBlobs(ctx context.Context, account Account, containerN
 			continue
 		}
 
-		downloadErr := s.downloadBlobWithClient(ctx, aadClient, containerName, blobName, destinationPath)
-		if downloadErr != nil && isDataPlaneAuthError(downloadErr) {
-			if sharedKeyClient == nil {
-				var sharedErr error
-				sharedKeyClient, sharedErr = s.getSharedKeyServiceClient(ctx, account)
-				if sharedErr != nil {
-					downloadErr = fmt.Errorf("aad auth failed: %v; shared key fallback failed: %w", downloadErr, sharedErr)
-				}
-			}
-			if sharedKeyClient != nil {
-				downloadErr = s.downloadBlobWithClient(ctx, sharedKeyClient, containerName, blobName, destinationPath)
-			}
-		}
+		// Per-blob auth fallback. The underlying client lookups are
+		// cached on the Service, so the second-and-subsequent blobs
+		// don't pay any setup cost when they need the shared key.
+		label := fmt.Sprintf("download %s from %s/%s", blobName, account.Name, containerName)
+		_, downloadErr := runWithAuthFallback(ctx, s, account, label, func(c *service.Client) (struct{}, error) {
+			return struct{}{}, s.downloadBlobWithClient(ctx, c, containerName, blobName, destinationPath)
+		})
 
 		results = append(results, BlobDownloadResult{
 			BlobName:    blobName,
@@ -561,6 +581,21 @@ func destinationPathForBlob(root, blobName string) (string, error) {
 	return destinationPath, nil
 }
 
+// getPrimaryServiceClient returns the client to try first for this
+// account, plus whether the caller may attempt a shared-key fallback on
+// auth errors. For SharedKeyOnly accounts (connection-string / Azurite
+// tabs) the primary is already the shared-key client and there is no
+// fallback to attempt; for AAD-capable accounts the primary is AAD and
+// a shared-key fallback is allowed.
+func (s *Service) getPrimaryServiceClient(ctx context.Context, account Account) (*service.Client, bool, error) {
+	if account.SharedKeyOnly {
+		c, err := s.getSharedKeyServiceClient(ctx, account)
+		return c, false, err
+	}
+	c, err := s.getAADServiceClient(account.BlobEndpoint)
+	return c, true, err
+}
+
 func (s *Service) getAADServiceClient(blobEndpoint string) (*service.Client, error) {
 	endpoint := strings.TrimRight(strings.TrimSpace(blobEndpoint), "/")
 	if endpoint == "" {
@@ -587,7 +622,17 @@ func (s *Service) getAADServiceClient(blobEndpoint string) (*service.Client, err
 // caching it on the Service keyed by account name. Backs both the
 // azblob and azdatalake shared-key fallback paths so ARM ListKeys is
 // called at most once per account.
+//
+// When the Account already carries a SharedKey (connection-string flow),
+// ARM is skipped entirely and the embedded key is returned directly.
 func (s *Service) fetchAccountKey(ctx context.Context, account Account) (string, error) {
+	if account.SharedKey != "" {
+		s.mu.Lock()
+		s.accountKeys[account.Name] = account.SharedKey
+		s.mu.Unlock()
+		return account.SharedKey, nil
+	}
+
 	if strings.TrimSpace(account.SubscriptionID) == "" || strings.TrimSpace(account.ResourceGroup) == "" || strings.TrimSpace(account.Name) == "" {
 		return "", fmt.Errorf("insufficient account metadata for shared key fallback")
 	}

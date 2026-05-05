@@ -75,9 +75,14 @@ func TabKindFromString(s string) (TabKind, bool) {
 }
 
 // Tab represents a single tab in the application.
+//
+// Label, when non-empty, overrides the default Kind.String() name shown
+// in the tab bar. Used for connection-string / Azurite tabs whose name
+// (e.g. "Azurite (local)") communicates more than the bare TabKind.
 type Tab struct {
 	ID    int
 	Kind  TabKind
+	Label string
 	Model tea.Model
 }
 

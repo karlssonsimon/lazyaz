@@ -636,6 +636,11 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 	case m.Keymap.SubscriptionPicker.Matches(key):
+		// Standalone tabs (connection-string / Azurite) aren't tied to
+		// an Azure subscription — switching subs would have no meaning.
+		if m.standalone {
+			return m, nil
+		}
 		m.SubOverlay.Open()
 		m.startLoading(-1, "Refreshing subscriptions...")
 		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))

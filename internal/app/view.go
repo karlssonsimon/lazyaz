@@ -43,6 +43,9 @@ func (m Model) View() tea.View {
 	if m.tabPicker.active {
 		view = renderTabPickerOverlay(&m.tabPicker, closeHint, cursorView, m.styles, &m.keymap, m.width, m.height, view)
 	}
+	if m.connStringPrompt.Active {
+		view = ui.RenderTextInputOverlay(m.connStringPrompt, cursorView, m.styles, &m.keymap, m.width, m.height, view)
+	}
 	if m.tenantPicker.active {
 		title := "Switch Tenant"
 		if m.tenantPicker.loading {

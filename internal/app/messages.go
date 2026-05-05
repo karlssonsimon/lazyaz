@@ -21,10 +21,21 @@ type closeTabMsg struct {
 	tabID int
 }
 
-// tabPickerMsg carries the user's choice from the tab-type picker.
+// tabPickerMsg carries the user's choice from the tab-type picker for
+// kinds that map directly to TabKind (Blob, Service Bus, etc.).
 type tabPickerMsg struct {
 	kind TabKind
 }
+
+// openAzuriteTabMsg is fired when the user picks the "Azurite (local
+// emulator)" entry from the tab picker. The handler creates a Blob tab
+// pre-bound to the well-known Azurite connection string.
+type openAzuriteTabMsg struct{}
+
+// openConnStringPromptMsg is fired when the user picks the "Blob
+// (connection string)" entry. The handler opens a text-input overlay;
+// on submit it parses the string and creates a standalone Blob tab.
+type openConnStringPromptMsg struct{}
 
 // Command palette action messages.
 type nextTabMsg struct{}
