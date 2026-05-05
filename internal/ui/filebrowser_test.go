@@ -216,7 +216,56 @@ func TestFileBrowserConfirmWithMarksReturnsSelected(t *testing.T) {
 	}
 }
 
-func TestFileBrowserConfirmWithNoMarksNoOp(t *testing.T) {
+func TestFileBrowserEnterSubmitsWhenDirIsMarked(t *testing.T) {
+	// Regression: marking a directory and pressing Enter used to navigate
+	// into the dir instead of submitting. Marks should win over the dir-nav
+	// convenience — l/right is the explicit navigation key.
+	reader := &mapDirReader{
+		entries: map[string][]os.DirEntry{
+			"/start": {
+				fakeDirEntry{name: "mydir", isDir: true},
+				fakeDirEntry{name: "myfile.txt", isDir: false},
+			},
+			filepath.Join("/start", "mydir"): {fakeDirEntry{name: "inner.txt", isDir: false}},
+		},
+	}
+	var s FileBrowserState
+	s.Open("/start", reader)
+	s.HandleKey(" ") // cursor at 0 = "mydir"; mark the dir
+	res := s.HandleKey("enter")
+	if res.Action != FBActionConfirm {
+		t.Fatalf("want Confirm with marked dir, got %v (cwd=%q)", res.Action, s.Cwd())
+	}
+	if s.Cwd() != "/start" {
+		t.Fatalf("cwd should not change on submit, got %q", s.Cwd())
+	}
+	if len(res.Selected) != 1 || filepath.Base(res.Selected[0]) != "mydir" {
+		t.Fatalf("want selected [mydir], got %v", res.Selected)
+	}
+}
+
+func TestFileBrowserEnterOnDirWithoutMarksStillNavigates(t *testing.T) {
+	// Convenience preserved: with no marks, Enter on a directory navigates in.
+	reader := &mapDirReader{
+		entries: map[string][]os.DirEntry{
+			"/start":                          {fakeDirEntry{name: "sub", isDir: true}},
+			filepath.Join("/start", "sub"):    {fakeDirEntry{name: "inner.txt", isDir: false}},
+		},
+	}
+	var s FileBrowserState
+	s.Open("/start", reader)
+	res := s.HandleKey("enter")
+	if res.Action != FBActionNone {
+		t.Fatalf("want None (navigation), got %v", res.Action)
+	}
+	if s.Cwd() != filepath.Join("/start", "sub") {
+		t.Fatalf("want cwd to descend into sub, got %q", s.Cwd())
+	}
+}
+
+func TestFileBrowserEnterOnFileWithoutMarksSubmitsThatFile(t *testing.T) {
+	// With no marks, Enter on a file submits just that file — no need
+	// to space-mark a single selection first.
 	reader := &mapDirReader{
 		entries: map[string][]os.DirEntry{
 			"/x": {fakeDirEntry{name: "a", isDir: false}},
@@ -225,8 +274,23 @@ func TestFileBrowserConfirmWithNoMarksNoOp(t *testing.T) {
 	var s FileBrowserState
 	s.Open("/x", reader)
 	res := s.HandleKey("enter")
+	if res.Action != FBActionConfirm {
+		t.Fatalf("want Confirm (cursor on file, no marks), got %v", res.Action)
+	}
+	if len(res.Selected) != 1 || filepath.Base(res.Selected[0]) != "a" {
+		t.Fatalf("want selected [a], got %v", res.Selected)
+	}
+}
+
+func TestFileBrowserEnterOnEmptyDirIsNoOp(t *testing.T) {
+	reader := &mapDirReader{
+		entries: map[string][]os.DirEntry{"/x": {}},
+	}
+	var s FileBrowserState
+	s.Open("/x", reader)
+	res := s.HandleKey("enter")
 	if res.Action != FBActionNone {
-		t.Fatalf("want None (file, no marks → no confirm), got %v", res.Action)
+		t.Fatalf("want None (empty dir, no marks), got %v", res.Action)
 	}
 }
 

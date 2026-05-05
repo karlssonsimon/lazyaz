@@ -176,21 +176,26 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 			s.loadEntries()
 		}
 	case "enter":
-		visible := s.VisibleEntries()
-		if len(visible) > 0 {
-			cur := visible[s.cursor]
-			if cur.IsDir() {
-				s.cwd = filepath.Join(s.cwd, cur.Name())
-				s.cursor = 0
-				s.filterQuery = ""
-				s.loadEntries()
-				return FileBrowserResult{Action: FBActionNone}
-			}
+		// Marks win: if anything is marked, Enter submits the marks.
+		// Otherwise: a directory under the cursor navigates in (use l/right
+		// for explicit nav with marks held); a file under the cursor
+		// submits just that file.
+		if len(s.marked) > 0 {
+			return FileBrowserResult{Action: FBActionConfirm, Selected: s.Marked()}
 		}
-		if len(s.marked) == 0 {
+		visible := s.VisibleEntries()
+		if len(visible) == 0 {
 			return FileBrowserResult{Action: FBActionNone}
 		}
-		return FileBrowserResult{Action: FBActionConfirm, Selected: s.Marked()}
+		cur := visible[s.cursor]
+		if cur.IsDir() {
+			s.cwd = filepath.Join(s.cwd, cur.Name())
+			s.cursor = 0
+			s.filterQuery = ""
+			s.loadEntries()
+			return FileBrowserResult{Action: FBActionNone}
+		}
+		return FileBrowserResult{Action: FBActionConfirm, Selected: []string{filepath.Join(s.cwd, cur.Name())}}
 	case "esc":
 		// Peel filter first (mirrors how the blobs pane handles esc).
 		if s.filterQuery != "" {
