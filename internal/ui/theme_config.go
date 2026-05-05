@@ -49,6 +49,7 @@ func loadConfigFromDir(dir string) Config {
 			ThemeName   string      `json:"theme"`
 			DownloadDir string      `json:"download_dir"`
 			Tabs        []TabConfig `json:"tabs"`
+			Nerdfonts   bool        `json:"nerdfonts"`
 		}
 		if json.Unmarshal(data, &fileCfg) == nil {
 			if fileCfg.ThemeName != "" {
@@ -56,6 +57,7 @@ func loadConfigFromDir(dir string) Config {
 			}
 			cfg.DownloadDir = fileCfg.DownloadDir
 			cfg.Tabs = fileCfg.Tabs
+			cfg.Nerdfonts = fileCfg.Nerdfonts
 		}
 	}
 
