@@ -42,6 +42,31 @@ func makeModel(focusedIdx, topH, botH, totalRows int) Model {
 	return m
 }
 
+// TestIsTextInputActiveCoversFuzzyFilterOverlays guards against the
+// parent tabapp eating keys (q→quit, 1–9→tab-jump) while an overlay that
+// fuzzy-filters typed characters is open. The sort overlay's options are
+// number-prefixed, so 1/2/3 must reach it instead of jumping tabs.
+func TestIsTextInputActiveCoversFuzzyFilterOverlays(t *testing.T) {
+	var m Model
+	if m.IsTextInputActive() {
+		t.Fatal("zero-value model should not be text input")
+	}
+	m.filterInputActive = true
+	if !m.IsTextInputActive() {
+		t.Fatal("filter input active: want text input")
+	}
+	m.filterInputActive = false
+	m.actionMenu.active = true
+	if !m.IsTextInputActive() {
+		t.Fatal("action menu active: want text input")
+	}
+	m.actionMenu.active = false
+	m.sortOverlay.active = true
+	if !m.IsTextInputActive() {
+		t.Fatal("sort overlay active: want text input")
+	}
+}
+
 func TestFocusedWidgetDimsTopWidget(t *testing.T) {
 	m := makeModel(0, 10, 12, 7)
 	total, visible := m.focusedWidgetDims()

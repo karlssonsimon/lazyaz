@@ -17,6 +17,21 @@ var testConfig = ui.Config{
 	Schemes:   []ui.Scheme{ui.FallbackScheme()},
 }
 
+// TestIsTextInputActiveTrueForActionMenu guards against the parent
+// tabapp eating keys (q→quit, 1–9→tab-jump) while the action menu — which
+// fuzzy-filters typed characters — is open.
+func TestIsTextInputActiveTrueForActionMenu(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	if m.IsTextInputActive() {
+		t.Fatal("normal mode should not be text input")
+	}
+	m.actionMenu.open([]action{{label: "Yank"}})
+	if !m.IsTextInputActive() {
+		t.Fatal("action menu open: want text input active")
+	}
+}
+
 func TestKeyVaultHelpDescribesMillerColumns(t *testing.T) {
 	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
 	sections := m.HelpSections()

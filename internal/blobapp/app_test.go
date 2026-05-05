@@ -17,6 +17,28 @@ var testConfig = ui.Config{
 	Schemes:   []ui.Scheme{ui.FallbackScheme()},
 }
 
+// TestIsTextInputActiveTrueForFuzzyFilterOverlays guards against a class
+// of regressions where the parent tabapp eats keys (q→quit, 1–9→tab-jump)
+// while an overlay is open that fuzzy-filters typed characters. The sort
+// overlay's options are number-prefixed, so this surfaced as 1/2/3
+// jumping tabs instead of selecting an option.
+func TestIsTextInputActiveTrueForFuzzyFilterOverlays(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	if m.IsTextInputActive() {
+		t.Fatal("normal mode should not be text input")
+	}
+	m.actionMenu.open([]action{{label: "Upload"}})
+	if !m.IsTextInputActive() {
+		t.Fatal("action menu open: want text input active")
+	}
+	m.actionMenu.close()
+	m.sortOverlay.open(blobSortNone, false)
+	if !m.IsTextInputActive() {
+		t.Fatal("sort overlay open: want text input active")
+	}
+}
+
 func TestBlobHelpDescribesMillerColumns(t *testing.T) {
 	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
 	sections := m.HelpSections()

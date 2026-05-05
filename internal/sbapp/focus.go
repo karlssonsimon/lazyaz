@@ -179,12 +179,15 @@ func (m Model) focusedListSettingFilter() bool {
 // IsTextInputActive reports whether the model is currently accepting
 // free-form text input.
 //
-// Modes that just consume key shortcuts (message preview, action menu,
-// sort overlay, target picker) are NOT text input — they should still
-// let `q` quit at the parent level.
+// Action menu, sort overlay, and target picker all fuzzy-filter on typed
+// characters, and the sort overlay's options are number-prefixed (1, 2,
+// 3…) for direct selection — so they're text input. Without this, the
+// parent intercepts 1–9 as tab-jumps and `q` as quit before keys reach
+// the overlay. Genuine non-text modes: message preview (scroll-only) and
+// visual line (motion-only).
 func (m Model) IsTextInputActive() bool {
 	switch m.inputMode() {
-	case ModeNormal, ModeVisualLine, ModeMessagePreview, ModeActionMenu, ModeSortOverlay, ModeTargetPicker:
+	case ModeNormal, ModeVisualLine, ModeMessagePreview:
 		return false
 	default:
 		return true

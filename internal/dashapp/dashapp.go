@@ -233,10 +233,13 @@ func (m Model) WithScheme(scheme ui.Scheme) tea.Model {
 }
 
 // IsTextInputActive reports whether the tab is accepting free-form text.
-// True while a filter input is open so the parent app doesn't snatch
-// keys for global shortcuts (single-letter quit, tab nav, etc.).
+// True while a filter input or overlay-with-fuzzy-filter is open so the
+// parent app doesn't snatch keys for global shortcuts (quit, tab-jump
+// 1–9, etc.). The action menu and sort overlay both fuzzy-filter on
+// typed characters and the sort overlay's options are number-prefixed
+// for direct selection.
 func (m Model) IsTextInputActive() bool {
-	return m.filterInputActive
+	return m.filterInputActive || m.actionMenu.active || m.sortOverlay.active
 }
 
 // HelpSections returns the dashboard's keybindings for the parent

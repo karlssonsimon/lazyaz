@@ -222,6 +222,27 @@ func TestHelpToggleOpensAndCloses(t *testing.T) {
 	}
 }
 
+// TestIsTextInputActiveTrueForFuzzyFilterOverlays guards against the
+// parent tabapp eating keys (q→quit, 1–9→tab-jump) while an overlay that
+// fuzzy-filters typed characters is open. The sort overlay's options are
+// number-prefixed so 1/2/3 must reach it.
+func TestIsTextInputActiveTrueForFuzzyFilterOverlays(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	if m.IsTextInputActive() {
+		t.Fatal("normal mode should not be text input")
+	}
+	m.actionMenu.open([]action{{label: "Download"}})
+	if !m.IsTextInputActive() {
+		t.Fatal("action menu open: want text input active")
+	}
+	m.actionMenu.close()
+	m.entitySortOverlay.open(entitySortNone, false)
+	if !m.IsTextInputActive() {
+		t.Fatal("sort overlay open: want text input active")
+	}
+}
+
 func TestPasteRoutesToActionMenu(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
 	m.SubOverlay.Close()

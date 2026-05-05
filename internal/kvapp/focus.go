@@ -143,13 +143,14 @@ func (m Model) focusedListSettingFilter() bool {
 
 // IsTextInputActive reports whether the model is currently accepting
 // free-form text input (list filter, overlay search, etc.). The parent
-// tabapp uses this to suppress single-key shortcuts like quit.
+// tabapp uses this to suppress single-key shortcuts (quit, tab-jump 1–9,
+// etc.) so they don't fire while the user is typing into a fuzzy filter.
 //
-// Modes that just consume key shortcuts (action menu) are NOT text
-// input — they should still let `q` quit at the parent level.
+// Action menu fuzzy-filters on typed characters, so it's text input even
+// though it doesn't *look* like an input box.
 func (m Model) IsTextInputActive() bool {
 	switch m.inputMode() {
-	case ModeNormal, ModeVisualLine, ModeActionMenu:
+	case ModeNormal, ModeVisualLine:
 		return false
 	default:
 		return true
