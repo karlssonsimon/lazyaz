@@ -1,6 +1,7 @@
 package kvapp
 
 import (
+	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
@@ -21,46 +22,130 @@ func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
 			{Label: "Resource Group", Value: v.ResourceGroup},
 			{Label: "Vault URI", Value: v.VaultURI},
 		}
+	case kindPane:
+		// The kind row carries no inspectable Azure metadata; just label
+		// the choice so the strip isn't empty.
+		ki, ok := m.kindList.SelectedItem().(kindItem)
+		if !ok {
+			return "Kind", nil
+		}
+		return "Kind", []ui.InspectField{
+			{Label: "Selection", Value: ki.Title()},
+		}
 	case secretsPane:
-		item, ok := m.secretsList.SelectedItem().(secretItem)
-		if !ok {
-			return "Secret", nil
+		switch v := m.secretsList.SelectedItem().(type) {
+		case secretItem:
+			return secretInspect(v.secret, m.revealedSecrets[v.secret.Name])
+		case certItem:
+			return certInspect(v.cert)
+		case keyItem:
+			return keyInspect(v.key)
 		}
-		s := item.secret
-		enabled := "Yes"
-		if !s.Enabled {
-			enabled = "No"
-		}
-		return "Secret", []ui.InspectField{
-			{Label: "Name", Value: s.Name},
-			{Label: "Value", Value: revealedValueOrMask(m.revealedSecrets[s.Name])},
-			{Label: "Content Type", Value: ui.EmptyToDash(s.ContentType)},
-			{Label: "Enabled", Value: enabled},
-			{Label: "Created", Value: ui.FormatTime(s.CreatedOn)},
-			{Label: "Updated", Value: ui.FormatTime(s.UpdatedOn)},
-		}
+		return middleColumnInspectFallback(m.kvKind), nil
 	case versionsPane:
-		item, ok := m.versionsList.SelectedItem().(versionItem)
-		if !ok {
-			return "Secret Version", nil
+		switch v := m.versionsList.SelectedItem().(type) {
+		case versionItem:
+			return secretVersionInspect(v.version, m.revealedVersions[revealVersionKey(m.currentSecret.Name, v.version.Version)])
+		case certVersionItem:
+			return certVersionInspect(v.version)
+		case keyVersionItem:
+			return keyVersionInspect(v.version)
 		}
-		v := item.version
-		enabled := "Yes"
-		if !v.Enabled {
-			enabled = "No"
-		}
-		key := revealVersionKey(m.currentSecret.Name, v.Version)
-		return "Secret Version", []ui.InspectField{
-			{Label: "Version", Value: v.Version},
-			{Label: "Value", Value: revealedValueOrMask(m.revealedVersions[key])},
-			{Label: "Content Type", Value: ui.EmptyToDash(v.ContentType)},
-			{Label: "Enabled", Value: enabled},
-			{Label: "Created", Value: ui.FormatTime(v.CreatedOn)},
-			{Label: "Updated", Value: ui.FormatTime(v.UpdatedOn)},
-			{Label: "Expires", Value: ui.FormatTime(v.ExpiresOn)},
-		}
+		return middleColumnInspectFallback(m.kvKind) + " Version", nil
 	}
 	return "", nil
+}
+
+func middleColumnInspectFallback(kind kvKind) string {
+	switch kind {
+	case kvKindCertificates:
+		return "Certificate"
+	case kvKindKeys:
+		return "Key"
+	default:
+		return "Secret"
+	}
+}
+
+func secretInspect(s keyvault.Secret, revealed string) (string, []ui.InspectField) {
+	return "Secret", []ui.InspectField{
+		{Label: "Name", Value: s.Name},
+		{Label: "Value", Value: revealedValueOrMask(revealed)},
+		{Label: "Content Type", Value: ui.EmptyToDash(s.ContentType)},
+		{Label: "Enabled", Value: yesNo(s.Enabled)},
+		{Label: "Created", Value: ui.FormatTime(s.CreatedOn)},
+		{Label: "Updated", Value: ui.FormatTime(s.UpdatedOn)},
+	}
+}
+
+func secretVersionInspect(v keyvault.SecretVersion, revealed string) (string, []ui.InspectField) {
+	return "Secret Version", []ui.InspectField{
+		{Label: "Version", Value: v.Version},
+		{Label: "Value", Value: revealedValueOrMask(revealed)},
+		{Label: "Content Type", Value: ui.EmptyToDash(v.ContentType)},
+		{Label: "Enabled", Value: yesNo(v.Enabled)},
+		{Label: "Created", Value: ui.FormatTime(v.CreatedOn)},
+		{Label: "Updated", Value: ui.FormatTime(v.UpdatedOn)},
+		{Label: "Expires", Value: ui.FormatTime(v.ExpiresOn)},
+	}
+}
+
+func certInspect(c keyvault.Certificate) (string, []ui.InspectField) {
+	return "Certificate", []ui.InspectField{
+		{Label: "Name", Value: c.Name},
+		{Label: "Thumbprint", Value: ui.EmptyToDash(c.Thumbprint)},
+		{Label: "Enabled", Value: yesNo(c.Enabled)},
+		{Label: "Created", Value: ui.FormatTime(c.CreatedOn)},
+		{Label: "Updated", Value: ui.FormatTime(c.UpdatedOn)},
+		{Label: "Not Before", Value: ui.FormatTime(c.NotBefore)},
+		{Label: "Expires", Value: ui.FormatTime(c.Expires)},
+	}
+}
+
+func certVersionInspect(v keyvault.CertificateVersion) (string, []ui.InspectField) {
+	return "Certificate Version", []ui.InspectField{
+		{Label: "Version", Value: v.Version},
+		{Label: "Thumbprint", Value: ui.EmptyToDash(v.Thumbprint)},
+		{Label: "Enabled", Value: yesNo(v.Enabled)},
+		{Label: "Created", Value: ui.FormatTime(v.CreatedOn)},
+		{Label: "Updated", Value: ui.FormatTime(v.UpdatedOn)},
+		{Label: "Not Before", Value: ui.FormatTime(v.NotBefore)},
+		{Label: "Expires", Value: ui.FormatTime(v.Expires)},
+	}
+}
+
+func keyInspect(k keyvault.Key) (string, []ui.InspectField) {
+	managed := "No"
+	if k.Managed {
+		managed = "Yes"
+	}
+	return "Key", []ui.InspectField{
+		{Label: "Name", Value: k.Name},
+		{Label: "Enabled", Value: yesNo(k.Enabled)},
+		{Label: "Managed", Value: managed},
+		{Label: "Created", Value: ui.FormatTime(k.CreatedOn)},
+		{Label: "Updated", Value: ui.FormatTime(k.UpdatedOn)},
+		{Label: "Not Before", Value: ui.FormatTime(k.NotBefore)},
+		{Label: "Expires", Value: ui.FormatTime(k.Expires)},
+	}
+}
+
+func keyVersionInspect(v keyvault.KeyVersion) (string, []ui.InspectField) {
+	return "Key Version", []ui.InspectField{
+		{Label: "Version", Value: v.Version},
+		{Label: "Enabled", Value: yesNo(v.Enabled)},
+		{Label: "Created", Value: ui.FormatTime(v.CreatedOn)},
+		{Label: "Updated", Value: ui.FormatTime(v.UpdatedOn)},
+		{Label: "Not Before", Value: ui.FormatTime(v.NotBefore)},
+		{Label: "Expires", Value: ui.FormatTime(v.Expires)},
+	}
+}
+
+func yesNo(enabled bool) string {
+	if enabled {
+		return "Yes"
+	}
+	return "No"
 }
 
 // revealedValueOrMask renders the secret-value cell. Empty string from

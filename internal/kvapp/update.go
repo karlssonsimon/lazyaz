@@ -41,6 +41,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.focus {
 			case vaultsPane:
 				m.vaultsList, cmd = m.vaultsList.Update(msg)
+			case kindPane:
+				m.kindList, cmd = m.kindList.Update(msg)
 			case secretsPane:
 				m.secretsList, cmd = m.secretsList.Update(msg)
 			case versionsPane:
@@ -91,6 +93,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case versionsLoadedMsg:
 		return m.handleVersionsLoaded(msg)
 
+	case certsLoadedMsg:
+		return m.handleCertsLoaded(msg)
+
+	case certVersionsLoadedMsg:
+		return m.handleCertVersionsLoaded(msg)
+
+	case keysLoadedMsg:
+		return m.handleKeysLoaded(msg)
+
+	case keyVersionsLoadedMsg:
+		return m.handleKeyVersionsLoaded(msg)
+
 	case secretValueYankedMsg:
 		return m.handleSecretValueYanked(msg)
 
@@ -135,6 +149,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case vaultsPane:
 		m.vaultsList, cmd = m.vaultsList.Update(msg)
+	case kindPane:
+		m.kindList, cmd = m.kindList.Update(msg)
 	case secretsPane:
 		m.secretsList, cmd = m.secretsList.Update(msg)
 	case versionsPane:
@@ -216,6 +232,11 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 	if !m.hasVault || m.currentVault.Name != msg.vault.Name {
 		return m, nil
 	}
+	// Stale: a kind cycle could land secrets results into a now-different
+	// view. Drop them silently so the middle column doesn't flash.
+	if m.kvKind != kvKindSecrets {
+		return m, nil
+	}
 
 	if msg.err != nil {
 		m.ClearLoading()
@@ -267,6 +288,90 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	return m, msg.next
+}
+
+func (m Model) handleCertsLoaded(msg certsLoadedMsg) (Model, tea.Cmd) {
+	if !m.hasVault || m.currentVault.Name != msg.vault.Name || m.kvKind != kvKindCertificates {
+		return m, nil
+	}
+	if msg.err != nil {
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load certificates in %s: %s", msg.vault.Name, msg.err.Error()))
+		return m, nil
+	}
+	m.certs = msg.certs
+	m.secretsList.Title = fmt.Sprintf("Certificates (%d)", len(m.certs))
+	ui.SetItemsPreserveKey(&m.secretsList, certsToItems(m.certs), certItemKey)
+	if msg.done {
+		status := fmt.Sprintf("Loaded %d certificates from %s in %s", len(m.certs), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
+	}
+	return m, msg.next
+}
+
+func (m Model) handleCertVersionsLoaded(msg certVersionsLoadedMsg) (Model, tea.Cmd) {
+	if !m.hasCert || m.currentCert.Name != msg.certName || m.currentVault.Name != msg.vault.Name || m.kvKind != kvKindCertificates {
+		return m, nil
+	}
+	if msg.err != nil {
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.certName, msg.err.Error()))
+		return m, nil
+	}
+	m.certVersions = msg.versions
+	m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(m.certVersions))
+	ui.SetItemsPreserveKey(&m.versionsList, certVersionsToItems(m.certVersions), versionItemKey)
+	if msg.done {
+		status := fmt.Sprintf("Loaded %d versions for %s in %s", len(m.certVersions), msg.certName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
+	}
+	return m, msg.next
+}
+
+func (m Model) handleKeysLoaded(msg keysLoadedMsg) (Model, tea.Cmd) {
+	if !m.hasVault || m.currentVault.Name != msg.vault.Name || m.kvKind != kvKindKeys {
+		return m, nil
+	}
+	if msg.err != nil {
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load keys in %s: %s", msg.vault.Name, msg.err.Error()))
+		return m, nil
+	}
+	m.keys = msg.keys
+	m.secretsList.Title = fmt.Sprintf("Keys (%d)", len(m.keys))
+	ui.SetItemsPreserveKey(&m.secretsList, keysToItems(m.keys), keyItemKey)
+	if msg.done {
+		status := fmt.Sprintf("Loaded %d keys from %s in %s", len(m.keys), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
+	}
+	return m, msg.next
+}
+
+func (m Model) handleKeyVersionsLoaded(msg keyVersionsLoadedMsg) (Model, tea.Cmd) {
+	if !m.hasKey || m.currentKey.Name != msg.keyName || m.currentVault.Name != msg.vault.Name || m.kvKind != kvKindKeys {
+		return m, nil
+	}
+	if msg.err != nil {
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.keyName, msg.err.Error()))
+		return m, nil
+	}
+	m.keyVersions = msg.versions
+	m.versionsList.Title = fmt.Sprintf("Versions (%d)", len(m.keyVersions))
+	ui.SetItemsPreserveKey(&m.versionsList, keyVersionsToItems(m.keyVersions), versionItemKey)
+	if msg.done {
+		status := fmt.Sprintf("Loaded %d versions for %s in %s", len(m.keyVersions), msg.keyName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
+		m.ClearLoading()
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		return m, nil
+	}
 	return m, msg.next
 }
 
@@ -534,6 +639,8 @@ func (m Model) updateFocusedList(msg tea.Msg) (Model, tea.Cmd) {
 	switch m.focus {
 	case vaultsPane:
 		m.vaultsList, cmd = m.vaultsList.Update(msg)
+	case kindPane:
+		m.kindList, cmd = m.kindList.Update(msg)
 	case secretsPane:
 		m.secretsList, cmd = m.secretsList.Update(msg)
 	case versionsPane:

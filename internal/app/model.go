@@ -301,6 +301,10 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 			Vaults:        m.brokers.kvVaults,
 			Secrets:       m.brokers.kvSecrets,
 			Versions:      m.brokers.kvVersions,
+			Certs:         m.brokers.kvCerts,
+			CertVersions:  m.brokers.kvCertVersions,
+			Keys:          m.brokers.kvKeys,
+			KeyVersions:   m.brokers.kvKeyVersions,
 		}, m.keymap)
 		kvm.EmbeddedMode = true
 		kvm.Notifier = m.notifier

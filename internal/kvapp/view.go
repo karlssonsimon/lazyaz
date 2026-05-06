@@ -57,9 +57,17 @@ func (m Model) View() tea.View {
 		Frame:     frame(vaultsPane),
 	}, m.Styles)
 
+	kinds := ui.RenderMillerListColumn(ui.MillerListColumn{
+		List:      &m.kindList,
+		Title:     "KINDS",
+		TitleMeta: m.columnTitleMeta(kindPane),
+		Footer:    footer(kindPane, &m.kindList),
+		Frame:     frame(kindPane),
+	}, m.Styles)
+
 	secrets := ui.RenderMillerListColumn(ui.MillerListColumn{
 		List:      &m.secretsList,
-		Title:     "SECRETS",
+		Title:     m.kvKind.titleLabel(),
 		TitleMeta: m.columnTitleMeta(secretsPane),
 		Footer:    footer(secretsPane, &m.secretsList),
 		Frame:     frame(secretsPane),
@@ -76,6 +84,7 @@ func (m Model) View() tea.View {
 	// Build pane map for lookup by index.
 	paneMap := map[int]string{
 		vaultsPane:   vaults,
+		kindPane:     kinds,
 		secretsPane:  secrets,
 		versionsPane: versions,
 	}
@@ -188,9 +197,15 @@ func (m Model) statusActions() []ui.StatusAction {
 	if m.focus == secretsPane || m.focus == versionsPane {
 		actions = append(actions,
 			ui.StatusAction{Key: km.ActionMenu.Short(), Label: "actions"},
-			ui.StatusAction{Key: km.YankSecret.Short(), Label: "yank"},
-			ui.StatusAction{Key: km.RevealSecret.Short(), Label: "reveal"},
 		)
+		// Yank/reveal are secret-specific. Hide them on cert/key kinds
+		// where they have no equivalent action — keeps the bar clean.
+		if m.kvKind == kvKindSecrets {
+			actions = append(actions,
+				ui.StatusAction{Key: km.YankSecret.Short(), Label: "yank"},
+				ui.StatusAction{Key: km.RevealSecret.Short(), Label: "reveal"},
+			)
+		}
 	}
 	return actions
 }
@@ -215,9 +230,20 @@ func (m Model) columnTitleMeta(pane int) string {
 		if total := len(m.vaults); total > 0 {
 			return fmt.Sprintf("%d total", total)
 		}
+	case kindPane:
+		// Three rows, fixed. No meta — visual noise.
+		return ""
 	case secretsPane:
 		shown := len(m.secretsList.VisibleItems())
-		total := len(m.secrets)
+		var total int
+		switch m.kvKind {
+		case kvKindCertificates:
+			total = len(m.certs)
+		case kvKindKeys:
+			total = len(m.keys)
+		default:
+			total = len(m.secrets)
+		}
 		if total == 0 {
 			return ""
 		}
@@ -225,12 +251,25 @@ func (m Model) columnTitleMeta(pane int) string {
 		if shown != total {
 			parts[0] = fmt.Sprintf("%d / %d", shown, total)
 		}
-		if marked := len(m.markedSecrets); marked > 0 {
-			parts = append(parts, fmt.Sprintf("%d marked", marked))
+		// Marks only ever apply to secrets — don't surface a stale count
+		// for cert/key kinds.
+		if m.kvKind == kvKindSecrets {
+			if marked := len(m.markedSecrets); marked > 0 {
+				parts = append(parts, fmt.Sprintf("%d marked", marked))
+			}
 		}
 		return strings.Join(parts, " · ")
 	case versionsPane:
-		if total := len(m.versions); total > 0 {
+		var total int
+		switch m.kvKind {
+		case kvKindCertificates:
+			total = len(m.certVersions)
+		case kvKindKeys:
+			total = len(m.keyVersions)
+		default:
+			total = len(m.versions)
+		}
+		if total > 0 {
 			return fmt.Sprintf("%d total", total)
 		}
 	}

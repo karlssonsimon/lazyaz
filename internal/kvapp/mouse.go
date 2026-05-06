@@ -36,6 +36,8 @@ func (m *Model) listForPane(pane int) *list.Model {
 	switch pane {
 	case vaultsPane:
 		return &m.vaultsList
+	case kindPane:
+		return &m.kindList
 	case secretsPane:
 		return &m.secretsList
 	case versionsPane:

@@ -70,14 +70,14 @@ func (m *Model) transitionTo(pane int) {
 }
 
 func (m *Model) nextFocus() {
-	next := (m.focus + 1) % 3
+	next := (m.focus + 1) % 4
 	m.transitionTo(next)
 }
 
 func (m *Model) previousFocus() {
 	prev := m.focus - 1
 	if prev < 0 {
-		prev = 2
+		prev = 3
 	}
 	m.transitionTo(prev)
 }
@@ -86,6 +86,7 @@ func (m *Model) blurAllFilters() {
 	m.vaultsList.FilterInput.Blur()
 	m.secretsList.FilterInput.Blur()
 	m.versionsList.FilterInput.Blur()
+	m.kindList.FilterInput.Blur()
 }
 
 func (m *Model) commitFocusedFilter() {
@@ -132,6 +133,8 @@ func (m Model) focusedListSettingFilter() bool {
 	switch m.focus {
 	case vaultsPane:
 		return m.vaultsList.SettingFilter()
+	case kindPane:
+		return m.kindList.SettingFilter()
 	case secretsPane:
 		return m.secretsList.SettingFilter()
 	case versionsPane:

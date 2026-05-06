@@ -17,6 +17,87 @@ var testConfig = ui.Config{
 	Schemes:   []ui.Scheme{ui.FallbackScheme()},
 }
 
+// TestKindPaneSelectionDrivesKvKindAndFocus locks in the new
+// vaults → kind → items → versions hierarchy. Selecting a row in the
+// kindPane sets m.kvKind to that row's kind and moves focus to the
+// items pane (where Enter would then drill into a specific item).
+func TestKindPaneSelectionDrivesKvKindAndFocus(t *testing.T) {
+	cases := []struct {
+		row  int
+		want kvKind
+	}{
+		{row: 0, want: kvKindSecrets},
+		{row: 1, want: kvKindCertificates},
+		{row: 2, want: kvKindKeys},
+	}
+	for _, tc := range cases {
+		t.Run(tc.want.String(), func(t *testing.T) {
+			m := NewModel(nil, testConfig, nil)
+			m.SubOverlay.Close()
+			m.HasSubscription = true
+			m.hasVault = true
+			m.currentVault.Name = "v"
+			m.focus = kindPane
+			m.kindList.Select(tc.row)
+			// Force a non-secrets starting kind for the secrets case so
+			// the assertion catches "did anything change?".
+			if tc.want == kvKindSecrets {
+				m.kvKind = kvKindKeys
+			}
+
+			updated, _ := m.handleEnter()
+			if updated.kvKind != tc.want {
+				t.Fatalf("kvKind = %v, want %v", updated.kvKind, tc.want)
+			}
+			if updated.focus != secretsPane {
+				t.Fatalf("focus = %d, want secretsPane (%d)", updated.focus, secretsPane)
+			}
+		})
+	}
+}
+
+// TestNavigateLeftWalksThroughKindPane confirms the four-column back
+// path: versions → items → kind → vaults. Each step regresses one
+// pane.
+func TestNavigateLeftWalksThroughKindPane(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.focus = versionsPane
+
+	for _, want := range []int{secretsPane, kindPane, vaultsPane} {
+		updated, _ := m.navigateLeft()
+		m = updated
+		if m.focus != want {
+			t.Fatalf("after navigateLeft: focus = %d, want %d", m.focus, want)
+		}
+	}
+}
+
+// TestActionMenuHidesSecretActionsOnCertKeyKinds confirms the per-kind
+// action filtering: secret-only entries (yank/reveal/mark/visual line)
+// shouldn't surface when the middle column is showing certs or keys.
+func TestActionMenuHidesSecretActionsOnCertKeyKinds(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.hasVault = true
+	m.focus = secretsPane
+
+	for _, kind := range []kvKind{kvKindCertificates, kvKindKeys} {
+		t.Run(kind.String(), func(t *testing.T) {
+			m.kvKind = kind
+			labels := make(map[string]bool)
+			for _, a := range m.buildActions() {
+				labels[a.label] = true
+			}
+			for _, hidden := range []string{"Yank secret name", "Yank secret value", "Reveal secret value", "Toggle mark", "Create secret..."} {
+				if labels[hidden] {
+					t.Fatalf("kind %s: %q should not appear in action menu", kind, hidden)
+				}
+			}
+		})
+	}
+}
+
 // TestSecretRevealHideRoundTrip exercises the toggle on the reveal map
 // directly (no Azure call): once a value lands in revealedSecrets the
 // inspect strip renders it; toggling again drops it back to a mask.

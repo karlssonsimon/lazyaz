@@ -16,9 +16,13 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// Miller column panes, left → right. The kindPane is a fixed 3-row
+// list (Secrets / Certificates / Keys); selecting a row sets m.kvKind
+// and reloads the items column from cache + refetches.
 const (
 	vaultsPane = iota
-	secretsPane
+	kindPane
+	secretsPane // historically "secrets"; renders whichever kvKind is active
 	versionsPane
 )
 
@@ -67,6 +71,40 @@ func (mode InputMode) String() string {
 	}
 }
 
+// kvKind selects which collection of vault objects the items column
+// renders: secrets (default), certificates, or keys. Driven by the
+// cursor position in the kindPane (see navigation.go).
+type kvKind int
+
+const (
+	kvKindSecrets kvKind = iota
+	kvKindCertificates
+	kvKindKeys
+)
+
+func (k kvKind) String() string {
+	switch k {
+	case kvKindCertificates:
+		return "certificates"
+	case kvKindKeys:
+		return "keys"
+	default:
+		return "secrets"
+	}
+}
+
+// titleLabel returns the column heading for the middle pane in this kind.
+func (k kvKind) titleLabel() string {
+	switch k {
+	case kvKindCertificates:
+		return "CERTIFICATES"
+	case kvKindKeys:
+		return "KEYS"
+	default:
+		return "SECRETS"
+	}
+}
+
 type Model struct {
 	appshell.Model
 
@@ -75,15 +113,29 @@ type Model struct {
 	vaultsList   list.Model
 	secretsList  list.Model
 	versionsList list.Model
+	// kindList is the fixed three-row chooser between vaults and items.
+	// Cursor position drives m.kvKind on selection.
+	kindList list.Model
 
 	focus int
 
 	vaults         []keyvault.Vault
 	secrets        []keyvault.Secret
 	versions       []keyvault.SecretVersion
+	certs          []keyvault.Certificate
+	certVersions   []keyvault.CertificateVersion
+	keys           []keyvault.Key
+	keyVersions    []keyvault.KeyVersion
 	markedSecrets  map[string]keyvault.Secret
 	visualLineMode bool
 	visualAnchor   string
+
+	// kvKind picks which child collection the items/versions columns
+	// surface for the current vault. Driven by the cursor position in
+	// the kindPane — selecting a kind row sets this and reloads items.
+	// Only the data slices and inspect/action menu vary; the rendered
+	// list widgets (secretsList, versionsList) are reused.
+	kvKind kvKind
 
 	// Per-scope list state history. When the user navigates between
 	// scopes (different subscription, different vault, etc.) the cursor
@@ -98,6 +150,10 @@ type Model struct {
 	currentVault  keyvault.Vault
 	hasSecret     bool
 	currentSecret keyvault.Secret
+	hasCert       bool
+	currentCert   keyvault.Certificate
+	hasKey        bool
+	currentKey    keyvault.Key
 
 	// Pending navigation drives eager/advance drill-in from programmatic
 	// openers (today only ctrl+o restore via ApplyNav). See pending_nav.go.
@@ -128,7 +184,7 @@ type Model struct {
 	revealedVersions map[string]string
 
 	clickTracker ui.ClickTracker
-	paneWidths   [3]int // vlt, sec, ver — set by resize
+	paneWidths   [4]int // vlt, kind, items, ver — set by resize
 	paneHeight   int
 
 	// CredResolver, when set, supplies a credential for the active
@@ -163,6 +219,40 @@ type versionsLoadedMsg struct {
 	done       bool
 	err        error
 	next       tea.Cmd
+}
+
+type certsLoadedMsg struct {
+	vault keyvault.Vault
+	certs []keyvault.Certificate
+	done  bool
+	err   error
+	next  tea.Cmd
+}
+
+type certVersionsLoadedMsg struct {
+	vault    keyvault.Vault
+	certName string
+	versions []keyvault.CertificateVersion
+	done     bool
+	err      error
+	next     tea.Cmd
+}
+
+type keysLoadedMsg struct {
+	vault keyvault.Vault
+	keys  []keyvault.Key
+	done  bool
+	err   error
+	next  tea.Cmd
+}
+
+type keyVersionsLoadedMsg struct {
+	vault    keyvault.Vault
+	keyName  string
+	versions []keyvault.KeyVersion
+	done     bool
+	err      error
+	next     tea.Cmd
 }
 
 type secretValueYankedMsg struct {
@@ -222,9 +312,19 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 	versionsList.SetFilteringEnabled(true)
 	versionsList.DisableQuitKeybindings()
 
+	kindList := list.New(kindItems(), delegate, 24, 10)
+	kindList.SetShowTitle(false)
+	kindList.SetShowFilter(false)
+	kindList.SetShowHelp(false)
+	kindList.SetShowPagination(false)
+	kindList.SetShowStatusBar(false)
+	kindList.SetStatusBarItemName("kind", "kinds")
+	kindList.SetFilteringEnabled(true)
+	kindList.DisableQuitKeybindings()
+
 	// Override bubbles list cursor bindings so they follow the user's
 	// configured CursorUp/CursorDown keys.
-	for _, l := range []*list.Model{&vaults, &secrets, &versionsList} {
+	for _, l := range []*list.Model{&vaults, &secrets, &versionsList, &kindList} {
 		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
 		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
 	}
@@ -235,6 +335,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 		vaultsList:      vaults,
 		secretsList:     secrets,
 		versionsList:    versionsList,
+		kindList:        kindList,
 		markedSecrets:   make(map[string]keyvault.Secret),
 		focus:           vaultsPane,
 		cache:           newCache(db),
@@ -283,7 +384,7 @@ func (m Model) WithNotification(level appshell.NotificationLevel, message string
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.SetScheme(scheme)
 	m.Styles.ApplyToLists([]*list.Model{
-		&m.vaultsList, &m.secretsList, &m.versionsList,
+		&m.vaultsList, &m.kindList, &m.secretsList, &m.versionsList,
 	}, &m.Spinner)
 	d := newSecretDelegate(m.Styles.Delegate, m.Styles)
 	d.marked = m.markedSecrets
@@ -314,6 +415,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(km.OpenFocused, "open selected row"),
 				keymap.HelpEntry(km.BackspaceUp, "go up/back"),
 				keymap.HelpEntry(keymap.New(km.HalfPageDown.Label()+"/"+km.HalfPageUp.Label()), "half-page scroll"),
+				"  vaults → kind → items → versions  (kind picks secrets / certificates / keys)",
 			},
 		},
 		{

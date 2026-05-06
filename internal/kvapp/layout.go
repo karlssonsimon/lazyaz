@@ -13,7 +13,7 @@ func (m *Model) resize() {
 	hasParent := m.focus > vaultsPane
 	cols := ui.MillerLayout(m.Styles.Chrome.Pane, m.Width, hasParent, true)
 
-	m.paneWidths = [3]int{}
+	m.paneWidths = [4]int{}
 	m.paneWidths[m.focus] = cols.Focused
 	if m.focus > vaultsPane {
 		m.paneWidths[m.focus-1] = cols.Parent
@@ -37,6 +37,9 @@ func (m *Model) resize() {
 	// Size each visible list to its pane width.
 	if w := m.paneWidths[vaultsPane]; w > 0 {
 		m.vaultsList.SetSize(ui.MillerContentWidth(ui.MillerColumnFrame{Width: w, RightRule: vaultsPane != rightmost}), baseListHeight-m.inspectFooterHeight(vaultsPane))
+	}
+	if w := m.paneWidths[kindPane]; w > 0 {
+		m.kindList.SetSize(ui.MillerContentWidth(ui.MillerColumnFrame{Width: w, RightRule: kindPane != rightmost}), baseListHeight-m.inspectFooterHeight(kindPane))
 	}
 	if w := m.paneWidths[secretsPane]; w > 0 {
 		m.secretsList.SetSize(ui.MillerContentWidth(ui.MillerColumnFrame{Width: w, RightRule: secretsPane != rightmost}), baseListHeight-m.inspectFooterHeight(secretsPane))

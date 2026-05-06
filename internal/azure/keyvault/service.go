@@ -2,6 +2,7 @@ package keyvault
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/keyvault/armkeyvault"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azcertificates"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 )
 
@@ -39,21 +42,78 @@ type SecretVersion struct {
 	ExpiresOn   time.Time
 }
 
+// Certificate is the metadata view of a vault certificate. The actual
+// cert bytes (PFX/PEM) are intentionally not stored here — callers fetch
+// them on demand if needed.
+type Certificate struct {
+	Name       string
+	Enabled    bool
+	Thumbprint string // hex-encoded SHA-1 from the SDK's X509Thumbprint
+	CreatedOn  time.Time
+	UpdatedOn  time.Time
+	NotBefore  time.Time
+	Expires    time.Time
+}
+
+type CertificateVersion struct {
+	Version    string
+	Enabled    bool
+	Thumbprint string
+	CreatedOn  time.Time
+	UpdatedOn  time.Time
+	NotBefore  time.Time
+	Expires    time.Time
+}
+
+// Key holds list-level metadata for a vault key. The Azure list API
+// only returns Name + Attributes + Managed flag — algorithm details
+// (KeyType / KeySize / Curve) require a per-key GetKey call and aren't
+// fetched up front. Private key material is never returned by the API.
+type Key struct {
+	Name      string
+	Enabled   bool
+	Managed   bool // true when the key backs a certificate and is auto-rotated
+	CreatedOn time.Time
+	UpdatedOn time.Time
+	NotBefore time.Time
+	Expires   time.Time
+}
+
+type KeyVersion struct {
+	Version   string
+	Enabled   bool
+	CreatedOn time.Time
+	UpdatedOn time.Time
+	NotBefore time.Time
+	Expires   time.Time
+}
+
 // Key functions for cache deduplication.
-func VaultKey(v Vault) string           { return v.Name }
-func SecretKey(s Secret) string         { return s.Name }
-func VersionKey(v SecretVersion) string { return v.Version }
+func VaultKey(v Vault) string                       { return v.Name }
+func SecretKey(s Secret) string                     { return s.Name }
+func VersionKey(v SecretVersion) string             { return v.Version }
+func CertificateKey(c Certificate) string           { return c.Name }
+func CertificateVersionKey(v CertificateVersion) string { return v.Version }
+func KvKeyKey(k Key) string                         { return k.Name }
+func KeyVersionKey(v KeyVersion) string             { return v.Version }
 
 type Service struct {
-	cred    azcore.TokenCredential
-	mu      sync.Mutex
-	clients map[string]*azsecrets.Client
+	cred azcore.TokenCredential
+	mu   sync.Mutex
+	// Three independent client caches, one per Azure SDK package. They
+	// share the same vaultURI keyspace but the SDK clients themselves
+	// aren't interchangeable.
+	secretsClients map[string]*azsecrets.Client
+	certsClients   map[string]*azcertificates.Client
+	keysClients    map[string]*azkeys.Client
 }
 
 func NewService(cred azcore.TokenCredential) *Service {
 	return &Service{
-		cred:    cred,
-		clients: make(map[string]*azsecrets.Client),
+		cred:           cred,
+		secretsClients: make(map[string]*azsecrets.Client),
+		certsClients:   make(map[string]*azcertificates.Client),
+		keysClients:    make(map[string]*azkeys.Client),
 	}
 }
 
@@ -69,14 +129,16 @@ func (s *Service) SetCredential(cred azcore.TokenCredential) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cred = cred
-	s.clients = make(map[string]*azsecrets.Client)
+	s.secretsClients = make(map[string]*azsecrets.Client)
+	s.certsClients = make(map[string]*azcertificates.Client)
+	s.keysClients = make(map[string]*azkeys.Client)
 }
 
 func (s *Service) getClient(vaultURI string) (*azsecrets.Client, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if c, ok := s.clients[vaultURI]; ok {
+	if c, ok := s.secretsClients[vaultURI]; ok {
 		return c, nil
 	}
 
@@ -85,7 +147,35 @@ func (s *Service) getClient(vaultURI string) (*azsecrets.Client, error) {
 		return nil, fmt.Errorf("create secrets client for %s: %w", vaultURI, err)
 	}
 
-	s.clients[vaultURI] = c
+	s.secretsClients[vaultURI] = c
+	return c, nil
+}
+
+func (s *Service) getCertsClient(vaultURI string) (*azcertificates.Client, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c, ok := s.certsClients[vaultURI]; ok {
+		return c, nil
+	}
+	c, err := azcertificates.NewClient(vaultURI, s.cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create certificates client for %s: %w", vaultURI, err)
+	}
+	s.certsClients[vaultURI] = c
+	return c, nil
+}
+
+func (s *Service) getKeysClient(vaultURI string) (*azkeys.Client, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c, ok := s.keysClients[vaultURI]; ok {
+		return c, nil
+	}
+	c, err := azkeys.NewClient(vaultURI, s.cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create keys client for %s: %w", vaultURI, err)
+	}
+	s.keysClients[vaultURI] = c
 	return c, nil
 }
 
@@ -270,6 +360,201 @@ func (s *Service) SetSecret(ctx context.Context, vault Vault, name, value string
 	}
 	if _, err := client.SetSecret(ctx, name, azsecrets.SetSecretParameters{Value: &value}, nil); err != nil {
 		return fmt.Errorf("set secret %s in %s: %w", name, vault.Name, err)
+	}
+	return nil
+}
+
+// ListCertificates streams certificate metadata for the vault. Mirrors
+// ListSecrets in shape so the cache broker plumbing works the same way.
+func (s *Service) ListCertificates(ctx context.Context, vault Vault, send func([]Certificate)) error {
+	client, err := s.getCertsClient(vault.VaultURI)
+	if err != nil {
+		return err
+	}
+	pager := client.NewListCertificatePropertiesPager(nil)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return fmt.Errorf("list certificates in %s: %w", vault.Name, err)
+		}
+		var batch []Certificate
+		for _, cp := range page.Value {
+			if cp == nil || cp.ID == nil {
+				continue
+			}
+			entry := Certificate{
+				Name:       cp.ID.Name(),
+				Thumbprint: hex.EncodeToString(cp.X509Thumbprint),
+			}
+			if a := cp.Attributes; a != nil {
+				if a.Enabled != nil {
+					entry.Enabled = *a.Enabled
+				}
+				if a.Created != nil {
+					entry.CreatedOn = *a.Created
+				}
+				if a.Updated != nil {
+					entry.UpdatedOn = *a.Updated
+				}
+				if a.NotBefore != nil {
+					entry.NotBefore = *a.NotBefore
+				}
+				if a.Expires != nil {
+					entry.Expires = *a.Expires
+				}
+			}
+			batch = append(batch, entry)
+		}
+		if len(batch) > 0 {
+			sort.Slice(batch, func(i, j int) bool {
+				return strings.ToLower(batch[i].Name) < strings.ToLower(batch[j].Name)
+			})
+			send(batch)
+		}
+	}
+	return nil
+}
+
+func (s *Service) ListCertificateVersions(ctx context.Context, vault Vault, certName string, send func([]CertificateVersion)) error {
+	client, err := s.getCertsClient(vault.VaultURI)
+	if err != nil {
+		return err
+	}
+	pager := client.NewListCertificatePropertiesVersionsPager(certName, nil)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return fmt.Errorf("list certificate versions for %s in %s: %w", certName, vault.Name, err)
+		}
+		var batch []CertificateVersion
+		for _, cp := range page.Value {
+			if cp == nil || cp.ID == nil {
+				continue
+			}
+			entry := CertificateVersion{
+				Version:    cp.ID.Version(),
+				Thumbprint: hex.EncodeToString(cp.X509Thumbprint),
+			}
+			if a := cp.Attributes; a != nil {
+				if a.Enabled != nil {
+					entry.Enabled = *a.Enabled
+				}
+				if a.Created != nil {
+					entry.CreatedOn = *a.Created
+				}
+				if a.Updated != nil {
+					entry.UpdatedOn = *a.Updated
+				}
+				if a.NotBefore != nil {
+					entry.NotBefore = *a.NotBefore
+				}
+				if a.Expires != nil {
+					entry.Expires = *a.Expires
+				}
+			}
+			batch = append(batch, entry)
+		}
+		if len(batch) > 0 {
+			sort.Slice(batch, func(i, j int) bool {
+				return batch[i].CreatedOn.After(batch[j].CreatedOn)
+			})
+			send(batch)
+		}
+	}
+	return nil
+}
+
+func (s *Service) ListKeys(ctx context.Context, vault Vault, send func([]Key)) error {
+	client, err := s.getKeysClient(vault.VaultURI)
+	if err != nil {
+		return err
+	}
+	pager := client.NewListKeyPropertiesPager(nil)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return fmt.Errorf("list keys in %s: %w", vault.Name, err)
+		}
+		var batch []Key
+		for _, kp := range page.Value {
+			if kp == nil || kp.KID == nil {
+				continue
+			}
+			entry := Key{Name: kp.KID.Name()}
+			if kp.Managed != nil {
+				entry.Managed = *kp.Managed
+			}
+			if a := kp.Attributes; a != nil {
+				if a.Enabled != nil {
+					entry.Enabled = *a.Enabled
+				}
+				if a.Created != nil {
+					entry.CreatedOn = *a.Created
+				}
+				if a.Updated != nil {
+					entry.UpdatedOn = *a.Updated
+				}
+				if a.NotBefore != nil {
+					entry.NotBefore = *a.NotBefore
+				}
+				if a.Expires != nil {
+					entry.Expires = *a.Expires
+				}
+			}
+			batch = append(batch, entry)
+		}
+		if len(batch) > 0 {
+			sort.Slice(batch, func(i, j int) bool {
+				return strings.ToLower(batch[i].Name) < strings.ToLower(batch[j].Name)
+			})
+			send(batch)
+		}
+	}
+	return nil
+}
+
+func (s *Service) ListKeyVersions(ctx context.Context, vault Vault, keyName string, send func([]KeyVersion)) error {
+	client, err := s.getKeysClient(vault.VaultURI)
+	if err != nil {
+		return err
+	}
+	pager := client.NewListKeyPropertiesVersionsPager(keyName, nil)
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return fmt.Errorf("list key versions for %s in %s: %w", keyName, vault.Name, err)
+		}
+		var batch []KeyVersion
+		for _, kp := range page.Value {
+			if kp == nil || kp.KID == nil {
+				continue
+			}
+			entry := KeyVersion{Version: kp.KID.Version()}
+			if a := kp.Attributes; a != nil {
+				if a.Enabled != nil {
+					entry.Enabled = *a.Enabled
+				}
+				if a.Created != nil {
+					entry.CreatedOn = *a.Created
+				}
+				if a.Updated != nil {
+					entry.UpdatedOn = *a.Updated
+				}
+				if a.NotBefore != nil {
+					entry.NotBefore = *a.NotBefore
+				}
+				if a.Expires != nil {
+					entry.Expires = *a.Expires
+				}
+			}
+			batch = append(batch, entry)
+		}
+		if len(batch) > 0 {
+			sort.Slice(batch, func(i, j int) bool {
+				return batch[i].CreatedOn.After(batch[j].CreatedOn)
+			})
+			send(batch)
+		}
 	}
 	return nil
 }

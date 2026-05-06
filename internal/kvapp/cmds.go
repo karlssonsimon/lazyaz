@@ -49,6 +49,42 @@ func fetchVersionsCmd(svc *keyvault.Service, broker *cache.Broker[keyvault.Secre
 	return cmd
 }
 
+func fetchCertsCmd(svc *keyvault.Service, broker *cache.Broker[keyvault.Certificate], vault keyvault.Vault, seed []keyvault.Certificate) tea.Cmd {
+	cmd, _ := broker.Subscribe(cache.Key(vault.SubscriptionID, vault.Name), seed, func(ctx context.Context, send func([]keyvault.Certificate)) error {
+		return svc.ListCertificates(ctx, vault, send)
+	}, func(p cache.Page[keyvault.Certificate]) tea.Msg {
+		return certsLoadedMsg{vault: vault, certs: p.Items, done: p.Done, err: p.Err, next: p.Next}
+	})
+	return cmd
+}
+
+func fetchCertVersionsCmd(svc *keyvault.Service, broker *cache.Broker[keyvault.CertificateVersion], vault keyvault.Vault, certName string, seed []keyvault.CertificateVersion) tea.Cmd {
+	cmd, _ := broker.Subscribe(cache.Key(vault.SubscriptionID, vault.Name, certName), seed, func(ctx context.Context, send func([]keyvault.CertificateVersion)) error {
+		return svc.ListCertificateVersions(ctx, vault, certName, send)
+	}, func(p cache.Page[keyvault.CertificateVersion]) tea.Msg {
+		return certVersionsLoadedMsg{vault: vault, certName: certName, versions: p.Items, done: p.Done, err: p.Err, next: p.Next}
+	})
+	return cmd
+}
+
+func fetchKeysCmd(svc *keyvault.Service, broker *cache.Broker[keyvault.Key], vault keyvault.Vault, seed []keyvault.Key) tea.Cmd {
+	cmd, _ := broker.Subscribe(cache.Key(vault.SubscriptionID, vault.Name), seed, func(ctx context.Context, send func([]keyvault.Key)) error {
+		return svc.ListKeys(ctx, vault, send)
+	}, func(p cache.Page[keyvault.Key]) tea.Msg {
+		return keysLoadedMsg{vault: vault, keys: p.Items, done: p.Done, err: p.Err, next: p.Next}
+	})
+	return cmd
+}
+
+func fetchKeyVersionsCmd(svc *keyvault.Service, broker *cache.Broker[keyvault.KeyVersion], vault keyvault.Vault, keyName string, seed []keyvault.KeyVersion) tea.Cmd {
+	cmd, _ := broker.Subscribe(cache.Key(vault.SubscriptionID, vault.Name, keyName), seed, func(ctx context.Context, send func([]keyvault.KeyVersion)) error {
+		return svc.ListKeyVersions(ctx, vault, keyName, send)
+	}, func(p cache.Page[keyvault.KeyVersion]) tea.Msg {
+		return keyVersionsLoadedMsg{vault: vault, keyName: keyName, versions: p.Items, done: p.Done, err: p.Err, next: p.Next}
+	})
+	return cmd
+}
+
 // revealSecretValueCmd fetches a secret value for on-screen display only
 // (no clipboard write — that's yankSecretValueCmd's job). Same Azure call
 // as the yank path, different result message so update can route it to

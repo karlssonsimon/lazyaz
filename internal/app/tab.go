@@ -101,9 +101,13 @@ type sharedBrokers struct {
 	sbEntities   *cache.Broker[servicebus.Entity]
 	sbTopicSubs  *cache.Broker[servicebus.TopicSubscription]
 
-	kvVaults   *cache.Broker[keyvault.Vault]
-	kvSecrets  *cache.Broker[keyvault.Secret]
-	kvVersions *cache.Broker[keyvault.SecretVersion]
+	kvVaults       *cache.Broker[keyvault.Vault]
+	kvSecrets      *cache.Broker[keyvault.Secret]
+	kvVersions     *cache.Broker[keyvault.SecretVersion]
+	kvCerts        *cache.Broker[keyvault.Certificate]
+	kvCertVersions *cache.Broker[keyvault.CertificateVersion]
+	kvKeys         *cache.Broker[keyvault.Key]
+	kvKeyVersions  *cache.Broker[keyvault.KeyVersion]
 }
 
 // bindRegistry wires r into every broker so activity tracking is
@@ -119,6 +123,10 @@ func (b *sharedBrokers) bindRegistry(r *activity.Registry) {
 	b.kvVaults.SetRegistry(r)
 	b.kvSecrets.SetRegistry(r)
 	b.kvVersions.SetRegistry(r)
+	b.kvCerts.SetRegistry(r)
+	b.kvCertVersions.SetRegistry(r)
+	b.kvKeys.SetRegistry(r)
+	b.kvKeyVersions.SetRegistry(r)
 }
 
 // resetAll cancels all active streams and clears all cached data.
@@ -134,6 +142,10 @@ func (b *sharedBrokers) resetAll() {
 	b.kvVaults.Reset()
 	b.kvSecrets.Reset()
 	b.kvVersions.Reset()
+	b.kvCerts.Reset()
+	b.kvCertVersions.Reset()
+	b.kvKeys.Reset()
+	b.kvKeyVersions.Reset()
 }
 
 func newSharedBrokers(db *cache.DB) sharedBrokers {
@@ -149,9 +161,13 @@ func newSharedBrokers(db *cache.DB) sharedBrokers {
 			sbEntities:   cache.NewBroker(cache.NewStore[servicebus.Entity](db, "sb_entities"), servicebus.EntityKey),
 			sbTopicSubs:  cache.NewBroker(cache.NewStore[servicebus.TopicSubscription](db, "sb_topic_subs"), servicebus.TopicSubscriptionKey),
 
-			kvVaults:   cache.NewBroker(cache.NewStore[keyvault.Vault](db, "kv_vaults"), keyvault.VaultKey),
-			kvSecrets:  cache.NewBroker(cache.NewStore[keyvault.Secret](db, "kv_secrets"), keyvault.SecretKey),
-			kvVersions: cache.NewBroker(cache.NewStore[keyvault.SecretVersion](db, "kv_secret_versions"), keyvault.VersionKey),
+			kvVaults:       cache.NewBroker(cache.NewStore[keyvault.Vault](db, "kv_vaults"), keyvault.VaultKey),
+			kvSecrets:      cache.NewBroker(cache.NewStore[keyvault.Secret](db, "kv_secrets"), keyvault.SecretKey),
+			kvVersions:     cache.NewBroker(cache.NewStore[keyvault.SecretVersion](db, "kv_secret_versions"), keyvault.VersionKey),
+			kvCerts:        cache.NewBroker(cache.NewStore[keyvault.Certificate](db, "kv_certs"), keyvault.CertificateKey),
+			kvCertVersions: cache.NewBroker(cache.NewStore[keyvault.CertificateVersion](db, "kv_cert_versions"), keyvault.CertificateVersionKey),
+			kvKeys:         cache.NewBroker(cache.NewStore[keyvault.Key](db, "kv_keys"), keyvault.KvKeyKey),
+			kvKeyVersions:  cache.NewBroker(cache.NewStore[keyvault.KeyVersion](db, "kv_key_versions"), keyvault.KeyVersionKey),
 		}
 	}
 	return sharedBrokers{
@@ -165,8 +181,12 @@ func newSharedBrokers(db *cache.DB) sharedBrokers {
 		sbEntities:   cache.NewBroker(cache.NewMap[servicebus.Entity](), servicebus.EntityKey),
 		sbTopicSubs:  cache.NewBroker(cache.NewMap[servicebus.TopicSubscription](), servicebus.TopicSubscriptionKey),
 
-		kvVaults:   cache.NewBroker(cache.NewMap[keyvault.Vault](), keyvault.VaultKey),
-		kvSecrets:  cache.NewBroker(cache.NewMap[keyvault.Secret](), keyvault.SecretKey),
-		kvVersions: cache.NewBroker(cache.NewMap[keyvault.SecretVersion](), keyvault.VersionKey),
+		kvVaults:       cache.NewBroker(cache.NewMap[keyvault.Vault](), keyvault.VaultKey),
+		kvSecrets:      cache.NewBroker(cache.NewMap[keyvault.Secret](), keyvault.SecretKey),
+		kvVersions:     cache.NewBroker(cache.NewMap[keyvault.SecretVersion](), keyvault.VersionKey),
+		kvCerts:        cache.NewBroker(cache.NewMap[keyvault.Certificate](), keyvault.CertificateKey),
+		kvCertVersions: cache.NewBroker(cache.NewMap[keyvault.CertificateVersion](), keyvault.CertificateVersionKey),
+		kvKeys:         cache.NewBroker(cache.NewMap[keyvault.Key](), keyvault.KvKeyKey),
+		kvKeyVersions:  cache.NewBroker(cache.NewMap[keyvault.KeyVersion](), keyvault.KeyVersionKey),
 	}
 }

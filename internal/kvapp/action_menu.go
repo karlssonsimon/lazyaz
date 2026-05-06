@@ -84,7 +84,7 @@ func (m Model) buildActions() []action {
 	km := m.Keymap
 	var actions []action
 
-	if m.focus == secretsPane && m.hasVault {
+	if m.focus == secretsPane && m.hasVault && m.kvKind == kvKindSecrets {
 		if item, ok := m.secretsList.SelectedItem().(secretItem); ok {
 			actions = append(actions, action{actionYankSecretName, "Yank secret name", ""})
 			actions = append(actions, action{actionYankSecretValue, fmt.Sprintf("Yank secret value (%s)", item.secret.Name), km.YankSecret.Short()})
@@ -113,7 +113,7 @@ func (m Model) buildActions() []action {
 		}
 	}
 
-	if m.focus == versionsPane && m.hasSecret {
+	if m.focus == versionsPane && m.kvKind == kvKindSecrets && m.hasSecret {
 		if item, ok := m.versionsList.SelectedItem().(versionItem); ok {
 			actions = append(actions, action{actionYankSecretVersion, fmt.Sprintf("Yank version value (%s)", item.version.Version), km.YankSecret.Short()})
 			label := "Reveal version value"
