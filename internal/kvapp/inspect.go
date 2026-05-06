@@ -33,6 +33,7 @@ func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
 		}
 		return "Secret", []ui.InspectField{
 			{Label: "Name", Value: s.Name},
+			{Label: "Value", Value: revealedValueOrMask(m.revealedSecrets[s.Name])},
 			{Label: "Content Type", Value: ui.EmptyToDash(s.ContentType)},
 			{Label: "Enabled", Value: enabled},
 			{Label: "Created", Value: ui.FormatTime(s.CreatedOn)},
@@ -48,8 +49,10 @@ func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
 		if !v.Enabled {
 			enabled = "No"
 		}
+		key := revealVersionKey(m.currentSecret.Name, v.Version)
 		return "Secret Version", []ui.InspectField{
 			{Label: "Version", Value: v.Version},
+			{Label: "Value", Value: revealedValueOrMask(m.revealedVersions[key])},
 			{Label: "Content Type", Value: ui.EmptyToDash(v.ContentType)},
 			{Label: "Enabled", Value: enabled},
 			{Label: "Created", Value: ui.FormatTime(v.CreatedOn)},
@@ -58,6 +61,17 @@ func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
 		}
 	}
 	return "", nil
+}
+
+// revealedValueOrMask renders the secret-value cell. Empty string from
+// the map (i.e. not revealed) returns a fixed-width mask plus the hint;
+// any non-empty value is shown verbatim. Centralised so the mask doesn't
+// drift between secret and version inspect rows.
+func revealedValueOrMask(value string) string {
+	if value == "" {
+		return "••••••••  (R to reveal)"
+	}
+	return value
 }
 
 // inspectFooterHeight returns the rendered row count of the inspect strip
@@ -79,6 +93,18 @@ func (m Model) inspectFooter(pane, contentWidth int) string {
 	}
 	title, fields := m.inspectFor(pane)
 	return ui.RenderInspectStrip(title, fields, m.Styles, contentWidth)
+}
+
+// clearReveals drops every revealed value. Called when the active
+// subscription or vault changes — values from the prior context shouldn't
+// follow the user across boundaries.
+func (m *Model) clearReveals() {
+	for k := range m.revealedSecrets {
+		delete(m.revealedSecrets, k)
+	}
+	for k := range m.revealedVersions {
+		delete(m.revealedVersions, k)
+	}
 }
 
 // toggleInspect flips the inspect strip on/off for the focused pane.

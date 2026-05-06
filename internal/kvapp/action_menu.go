@@ -32,6 +32,7 @@ const (
 	actionThemePicker
 	actionHelp
 	actionCreateSecret
+	actionRevealSecret
 )
 
 type action struct {
@@ -87,6 +88,11 @@ func (m Model) buildActions() []action {
 		if item, ok := m.secretsList.SelectedItem().(secretItem); ok {
 			actions = append(actions, action{actionYankSecretName, "Yank secret name", ""})
 			actions = append(actions, action{actionYankSecretValue, fmt.Sprintf("Yank secret value (%s)", item.secret.Name), km.YankSecret.Short()})
+			label := "Reveal secret value"
+			if _, on := m.revealedSecrets[item.secret.Name]; on {
+				label = "Hide secret value"
+			}
+			actions = append(actions, action{actionRevealSecret, label, km.RevealSecret.Short()})
 		}
 
 		actions = append(actions, action{actionCreateSecret, "Create secret...", ""})
@@ -110,6 +116,11 @@ func (m Model) buildActions() []action {
 	if m.focus == versionsPane && m.hasSecret {
 		if item, ok := m.versionsList.SelectedItem().(versionItem); ok {
 			actions = append(actions, action{actionYankSecretVersion, fmt.Sprintf("Yank version value (%s)", item.version.Version), km.YankSecret.Short()})
+			label := "Reveal version value"
+			if _, on := m.revealedVersions[revealVersionKey(m.currentSecret.Name, item.version.Version)]; on {
+				label = "Hide version value"
+			}
+			actions = append(actions, action{actionRevealSecret, label, km.RevealSecret.Short()})
 		}
 	}
 
@@ -167,6 +178,9 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		m.refreshSecretSelectionDisplay()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
 		return m, nil
+
+	case actionRevealSecret:
+		return m.toggleSecretReveal()
 
 	case actionYankSecretVersion:
 		item, ok := m.versionsList.SelectedItem().(versionItem)

@@ -189,6 +189,7 @@ func (m Model) statusActions() []ui.StatusAction {
 		actions = append(actions,
 			ui.StatusAction{Key: km.ActionMenu.Short(), Label: "actions"},
 			ui.StatusAction{Key: km.YankSecret.Short(), Label: "yank"},
+			ui.StatusAction{Key: km.RevealSecret.Short(), Label: "reveal"},
 		)
 	}
 	return actions

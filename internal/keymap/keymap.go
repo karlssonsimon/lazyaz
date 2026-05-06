@@ -79,7 +79,8 @@ type Keymap struct {
 	MessageBack         Binding `json:"message_back"`
 
 	// Key Vault app.
-	YankSecret Binding `json:"yank_secret"`
+	YankSecret   Binding `json:"yank_secret"`
+	RevealSecret Binding `json:"reveal_secret"`
 
 	// Shared — inspect selected item.
 	Inspect Binding `json:"inspect"`

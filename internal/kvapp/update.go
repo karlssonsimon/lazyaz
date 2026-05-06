@@ -94,6 +94,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case secretValueYankedMsg:
 		return m.handleSecretValueYanked(msg)
 
+	case secretRevealedMsg:
+		return m.handleSecretRevealed(msg)
+
 	case clipboardMsg:
 		if msg.err != nil {
 			m.Notify(appshell.LevelError, fmt.Sprintf("Clipboard: %s", msg.err.Error()))
@@ -267,6 +270,68 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 	return m, msg.next
 }
 
+// handleSecretRevealed lands the fetched value into the reveal map and
+// auto-opens the inspect strip on the relevant pane so the user actually
+// sees it. On error we notify but don't open inspect (nothing to show).
+func (m Model) handleSecretRevealed(msg secretRevealedMsg) (Model, tea.Cmd) {
+	m.ClearLoading()
+	if msg.err != nil {
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to reveal %s: %s", msg.secretName, msg.err.Error()))
+		return m, nil
+	}
+	if msg.version == "" {
+		m.revealedSecrets[msg.secretName] = msg.value
+		m.inspectPanes[secretsPane] = true
+	} else {
+		m.revealedVersions[revealVersionKey(msg.secretName, msg.version)] = msg.value
+		m.inspectPanes[versionsPane] = true
+	}
+	m.resize() // inspect strip toggling on changes pane height
+	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelInfo, fmt.Sprintf("Revealed %s — press R again to hide", msg.secretName))
+	return m, nil
+}
+
+// revealVersionKey is the map key for revealedVersions. Centralised so
+// the reveal/hide/render sites can't drift on the format.
+func revealVersionKey(secretName, version string) string {
+	return secretName + "@" + version
+}
+
+// toggleSecretReveal flips visibility for the cursor's secret/version.
+// Already-revealed → drop from the map; not yet revealed → fire the
+// async fetch (handleSecretRevealed lands the result).
+func (m Model) toggleSecretReveal() (Model, tea.Cmd) {
+	switch m.focus {
+	case secretsPane:
+		item, ok := m.secretsList.SelectedItem().(secretItem)
+		if !ok {
+			return m, nil
+		}
+		name := item.secret.Name
+		if _, revealed := m.revealedSecrets[name]; revealed {
+			delete(m.revealedSecrets, name)
+			m.resize()
+			return m, nil
+		}
+		m.startLoading(secretsPane, fmt.Sprintf("Revealing %s...", name))
+		return m, tea.Batch(m.Spinner.Tick, revealSecretValueCmd(m.service, m.currentVault, name, ""))
+	case versionsPane:
+		item, ok := m.versionsList.SelectedItem().(versionItem)
+		if !ok || m.currentSecret.Name == "" {
+			return m, nil
+		}
+		key := revealVersionKey(m.currentSecret.Name, item.version.Version)
+		if _, revealed := m.revealedVersions[key]; revealed {
+			delete(m.revealedVersions, key)
+			m.resize()
+			return m, nil
+		}
+		m.startLoading(versionsPane, fmt.Sprintf("Revealing %s @ %s...", m.currentSecret.Name, item.version.Version))
+		return m, tea.Batch(m.Spinner.Tick, revealSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))
+	}
+	return m, nil
+}
+
 func (m Model) handleSecretValueYanked(msg secretValueYankedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
@@ -432,6 +497,8 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 		return m, nil
 	case m.Keymap.YankSecret.Matches(key):
 		return m.handleYank()
+	case m.Keymap.RevealSecret.Matches(key):
+		return m.toggleSecretReveal()
 	case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):
 		if !m.ThemeOverlay.Active {
 			m.ThemeOverlay.Open()

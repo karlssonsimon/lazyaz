@@ -79,7 +79,8 @@ func Default() Keymap {
 		MessageBack:         New("h", "left", "backspace", "esc"),
 
 		// Key Vault.
-		YankSecret: New("y"),
+		YankSecret:   New("y"),
+		RevealSecret: New("R"),
 
 		// Shared.
 		Inspect: New("K"),

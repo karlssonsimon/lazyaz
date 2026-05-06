@@ -49,6 +49,19 @@ func fetchVersionsCmd(svc *keyvault.Service, broker *cache.Broker[keyvault.Secre
 	return cmd
 }
 
+// revealSecretValueCmd fetches a secret value for on-screen display only
+// (no clipboard write — that's yankSecretValueCmd's job). Same Azure call
+// as the yank path, different result message so update can route it to
+// the reveal map without touching the clipboard.
+func revealSecretValueCmd(svc *keyvault.Service, vault keyvault.Vault, secretName, version string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		value, err := svc.GetSecretValue(ctx, vault, secretName, version)
+		return secretRevealedMsg{secretName: secretName, version: version, value: value, err: err}
+	}
+}
+
 func yankSecretValueCmd(svc *keyvault.Service, vault keyvault.Vault, secretName string, version string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

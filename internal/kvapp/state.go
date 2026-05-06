@@ -119,6 +119,14 @@ type Model struct {
 	// keep browsing while details remain visible. Toggled with K.
 	inspectPanes map[int]bool
 
+	// Revealed secret values, keyed by secret name (for the latest version)
+	// or by "<secretName>@<version>" (for a specific version). Presence in
+	// the map means the inspect strip should render the value in the clear.
+	// Cleared when the active subscription or vault changes so values from
+	// one tenant/vault don't leak across.
+	revealedSecrets  map[string]string
+	revealedVersions map[string]string
+
 	clickTracker ui.ClickTracker
 	paneWidths   [3]int // vlt, sec, ver — set by resize
 	paneHeight   int
@@ -160,6 +168,17 @@ type versionsLoadedMsg struct {
 type secretValueYankedMsg struct {
 	secretName string
 	version    string
+	err        error
+}
+
+// secretRevealedMsg is the result of fetching a secret value purely for
+// on-screen display (no clipboard write). On success the value is stored
+// in revealedSecrets/revealedVersions; on error a notification is shown
+// and the reveal request is dropped silently.
+type secretRevealedMsg struct {
+	secretName string
+	version    string
+	value      string
 	err        error
 }
 
@@ -222,7 +241,9 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 		vaultsHistory:   make(map[string]ui.ListState),
 		secretsHistory:  make(map[string]ui.ListState),
 		versionsHistory: make(map[string]ui.ListState),
-		inspectPanes:    make(map[int]bool),
+		inspectPanes:     make(map[int]bool),
+		revealedSecrets:  make(map[string]string),
+		revealedVersions: make(map[string]string),
 	}
 	m.applyScheme(cfg.ActiveScheme())
 	// Hydrate subscriptions from cache without hitting Azure.
@@ -300,6 +321,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 			Items: []string{
 				keymap.HelpEntry(km.ActionMenu, "action menu"),
 				keymap.HelpEntry(km.YankSecret, "yank secret value to clipboard"),
+				keymap.HelpEntry(km.RevealSecret, "toggle on-screen secret reveal (note: terminal scrollback may retain it)"),
 				keymap.HelpEntry(km.ToggleMark, "toggle mark on current secret"),
 				keymap.HelpEntry(km.ToggleVisualLine, "start/end visual-line selection"),
 				keymap.HelpEntry(km.ExitVisualLine, "exit visual mode / clear marks"),

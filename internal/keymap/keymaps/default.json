@@ -63,6 +63,7 @@
     "toggle_dlq_filter": ["s"],
     "message_back": ["h", "left", "backspace", "esc"],
     "yank_secret": ["y"],
+    "reveal_secret": ["R"],
     "inspect": ["K"],
     "widget_left": ["ctrl+h", "alt+h"],
     "widget_down": ["ctrl+j", "alt+j"],

@@ -17,6 +17,44 @@ var testConfig = ui.Config{
 	Schemes:   []ui.Scheme{ui.FallbackScheme()},
 }
 
+// TestSecretRevealHideRoundTrip exercises the toggle on the reveal map
+// directly (no Azure call): once a value lands in revealedSecrets the
+// inspect strip renders it; toggling again drops it back to a mask.
+// Also confirms revealing a secret auto-opens its pane's inspect strip.
+func TestSecretRevealHideRoundTrip(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	if _, masked := m.revealedSecrets["api-key"]; masked {
+		t.Fatal("zero-value model should have nothing revealed")
+	}
+
+	updated, _ := m.handleSecretRevealed(secretRevealedMsg{secretName: "api-key", value: "s3cret"})
+	if updated.revealedSecrets["api-key"] != "s3cret" {
+		t.Fatalf("revealedSecrets[api-key] = %q, want s3cret", updated.revealedSecrets["api-key"])
+	}
+	if !updated.inspectPanes[secretsPane] {
+		t.Fatal("revealing should auto-open the secrets-pane inspect strip")
+	}
+
+	// Hide path: clearReveals (called on subscription/vault change) drops
+	// every revealed value. Equivalent to a manual delete in the toggle.
+	updated.clearReveals()
+	if _, on := updated.revealedSecrets["api-key"]; on {
+		t.Fatal("clearReveals should drop every revealed secret")
+	}
+}
+
+// TestRevealedValueOrMaskFormat locks in the inspect-strip rendering
+// for revealed and unrevealed secrets. The mask string is part of the
+// UX contract — changes here should be intentional.
+func TestRevealedValueOrMaskFormat(t *testing.T) {
+	if got := revealedValueOrMask(""); !strings.Contains(got, "•") || !strings.Contains(got, "R to reveal") {
+		t.Fatalf("masked render should show bullets and hint, got %q", got)
+	}
+	if got := revealedValueOrMask("plain"); got != "plain" {
+		t.Fatalf("revealed render should pass value through verbatim, got %q", got)
+	}
+}
+
 // TestIsTextInputActiveTrueForActionMenu guards against the parent
 // tabapp eating keys (q→quit, 1–9→tab-jump) while the action menu — which
 // fuzzy-filters typed characters — is open.

@@ -52,6 +52,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.currentVault = keyvault.Vault{}
 	m.currentSecret = keyvault.Secret{}
 	m.clearSecretSelectionState()
+	m.clearReveals()
 	m.transitionTo(vaultsPane)
 
 	if cached, ok := m.cache.vaults.Get(sub.ID); ok {
@@ -117,6 +118,7 @@ func (m Model) selectVault(vault keyvault.Vault) (Model, tea.Cmd) {
 	m.hasSecret = false
 	m.currentSecret = keyvault.Secret{}
 	m.clearSecretSelectionState()
+	m.clearReveals()
 	m.transitionTo(secretsPane)
 	ui.SelectByKey(&m.vaultsList, vault.Name, vaultItemKey)
 
