@@ -150,12 +150,18 @@ func (m Model) buildActions() []action {
 			actions = append(actions, action{actionDeleteMarked, fmt.Sprintf("Delete marked (%d)...", len(m.markedBlobs)), ""})
 		}
 
+		// Folder operations:
+		// - Create/Rename are HNS-only (real directories with metadata).
+		// - Delete works on both: HNS uses the recursive Data Lake call;
+		//   flat-namespace lists blobs under the prefix and deletes them.
 		if m.currentAccount.IsHnsEnabled {
 			actions = append(actions, action{actionCreateDirectory, "Create folder...", ""})
-			if item, ok := m.blobsList.SelectedItem().(blobItem); ok && item.blob.IsPrefix {
+		}
+		if item, ok := m.blobsList.SelectedItem().(blobItem); ok && item.blob.IsPrefix {
+			if m.currentAccount.IsHnsEnabled {
 				actions = append(actions, action{actionRenameDirectory, "Rename folder...", ""})
-				actions = append(actions, action{actionDeleteDirectory, "Delete folder...", ""})
 			}
+			actions = append(actions, action{actionDeleteDirectory, "Delete folder...", ""})
 		}
 	}
 

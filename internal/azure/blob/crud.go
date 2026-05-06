@@ -209,9 +209,10 @@ func ValidateContainerName(name string) string {
 var containerNameRe = regexp.MustCompile(`^[a-z0-9-]+$`)
 
 // DeleteDirectory recursively deletes a directory and all its contents.
-// HNS accounts only — caller must gate on account.IsHnsEnabled. The
-// operation is server-side atomic (one API call), unlike a walk-and-
-// delete loop against a flat-namespace account.
+// On HNS-enabled accounts the operation is server-side atomic (one Data
+// Lake API call). On flat-namespace accounts it lists every blob under
+// the prefix and deletes them sequentially — same end result, just not
+// atomic, which matches the user's mental model of "delete this folder".
 func (s *Service) DeleteDirectory(ctx context.Context, account Account, containerName, directoryPath string) error {
 	if strings.TrimSpace(containerName) == "" {
 		return fmt.Errorf("container name is required")
@@ -220,9 +221,13 @@ func (s *Service) DeleteDirectory(ctx context.Context, account Account, containe
 	if directoryPath == "" {
 		return fmt.Errorf("directory path is required")
 	}
-	if !account.IsHnsEnabled {
-		return fmt.Errorf("directory deletion requires an HNS-enabled (Data Lake Gen2) account")
+	if account.IsHnsEnabled {
+		return s.deleteDirectoryHNS(ctx, account, containerName, directoryPath)
 	}
+	return s.deleteVirtualFolder(ctx, account, containerName, directoryPath)
+}
+
+func (s *Service) deleteDirectoryHNS(ctx context.Context, account Account, containerName, directoryPath string) error {
 	dfs := dfsEndpoint(account)
 	if dfs == "" {
 		return fmt.Errorf("cannot derive DFS endpoint for account %s", account.Name)
@@ -234,6 +239,51 @@ func (s *Service) DeleteDirectory(ctx context.Context, account Account, containe
 		_, err := c.Delete(ctx, nil)
 		return err
 	})
+}
+
+// deleteVirtualFolder enumerates every blob whose name starts with the
+// prefix and deletes them. This is recursive at any depth: flat listing
+// has no delimiter, so foo/a.txt, foo/sub/b.txt, foo/sub/deep/c.txt all
+// come back in one stream and get deleted together. Errors are
+// aggregated so the user sees which blobs (if any) didn't get cleaned up.
+func (s *Service) deleteVirtualFolder(ctx context.Context, account Account, containerName, directoryPath string) error {
+	prefix := directoryPath + "/"
+	var names []string
+	if err := s.SearchBlobsByPrefix(ctx, account, containerName, prefix, 0, func(batch []BlobEntry) {
+		for _, e := range batch {
+			names = append(names, e.Name)
+		}
+	}); err != nil {
+		return fmt.Errorf("list blobs under %s: %w", prefix, err)
+	}
+	if len(names) == 0 {
+		// Empty virtual folders don't really exist in flat namespace;
+		// treat this as a no-op success rather than an error.
+		return nil
+	}
+	results, err := s.DeleteBlobs(ctx, account, containerName, names)
+	if err != nil {
+		return err
+	}
+	var failed []string
+	for _, r := range results {
+		if r.Err != nil {
+			failed = append(failed, r.BlobName)
+		}
+	}
+	if len(failed) > 0 {
+		head := failed
+		const maxShow = 3
+		if len(head) > maxShow {
+			head = head[:maxShow]
+		}
+		suffix := ""
+		if len(failed) > maxShow {
+			suffix = fmt.Sprintf(" (+ %d more)", len(failed)-maxShow)
+		}
+		return fmt.Errorf("delete folder %s: %d of %d blobs failed: %s%s", directoryPath, len(failed), len(names), strings.Join(head, ", "), suffix)
+	}
+	return nil
 }
 
 // RenameDirectory atomically renames (or moves) a directory on an

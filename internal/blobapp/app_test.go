@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -15,6 +16,70 @@ import (
 var testConfig = ui.Config{
 	ThemeName: "fallback",
 	Schemes:   []ui.Scheme{ui.FallbackScheme()},
+}
+
+// TestDeleteFolderActionAvailableOnBothAccountTypes regresses a bug
+// where "Delete folder..." was hidden on flat-namespace (non-HNS)
+// accounts, leaving virtual folders un-deletable through the UI. The
+// service-level DeleteDirectory now lists+batch-deletes for flat
+// accounts, so the action should surface in both cases.
+func TestDeleteFolderActionAvailableOnBothAccountTypes(t *testing.T) {
+	cases := []struct {
+		name        string
+		hnsEnabled  bool
+		wantRename  bool
+		wantCreate  bool
+	}{
+		{name: "HNS account", hnsEnabled: true, wantRename: true, wantCreate: true},
+		{name: "flat-namespace account", hnsEnabled: false, wantRename: false, wantCreate: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewModel(nil, testConfig, nil)
+			m.SubOverlay.Close()
+			m.hasAccount = true
+			m.hasContainer = true
+			m.focus = blobsPane
+			m.currentAccount.IsHnsEnabled = tc.hnsEnabled
+			m.blobs = []blob.BlobEntry{{Name: "reports/", IsPrefix: true}}
+			m.blobsList.SetItems(blobsToItems(m.blobs, m.prefix, 12))
+
+			labels := make(map[string]bool)
+			for _, a := range m.buildActions() {
+				labels[a.label] = true
+			}
+			if !labels["Delete folder..."] {
+				t.Fatal("Delete folder... should be available on virtual folder cursor regardless of HNS")
+			}
+			if labels["Rename folder..."] != tc.wantRename {
+				t.Fatalf("Rename folder... presence = %v, want %v (HNS-only)", labels["Rename folder..."], tc.wantRename)
+			}
+			if labels["Create folder..."] != tc.wantCreate {
+				t.Fatalf("Create folder... presence = %v, want %v (HNS-only)", labels["Create folder..."], tc.wantCreate)
+			}
+		})
+	}
+}
+
+// TestDeleteFolderActionHiddenOnFileCursor confirms the folder-delete
+// action only surfaces when the cursor is on a virtual folder, not a
+// regular blob — preventing accidental whole-folder semantics on a
+// single-file cursor.
+func TestDeleteFolderActionHiddenOnFileCursor(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.hasAccount = true
+	m.hasContainer = true
+	m.focus = blobsPane
+	m.currentAccount.IsHnsEnabled = false
+	m.blobs = []blob.BlobEntry{{Name: "report.csv", IsPrefix: false}}
+	m.blobsList.SetItems(blobsToItems(m.blobs, m.prefix, 12))
+
+	for _, a := range m.buildActions() {
+		if a.label == "Delete folder..." {
+			t.Fatal("Delete folder... should NOT appear when cursor is on a blob, not a folder")
+		}
+	}
 }
 
 // TestIsTextInputActiveTrueForFuzzyFilterOverlays guards against a class
