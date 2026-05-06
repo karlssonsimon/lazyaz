@@ -141,6 +141,18 @@ func (m Model) View() tea.View {
 	if m.createSecret.Active {
 		view = ui.RenderFormOverlay(m.createSecret, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
+	if m.createKey.Active {
+		view = ui.RenderFormOverlay(m.createKey, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
+	}
+	if m.importCert.Active {
+		view = ui.RenderFormOverlay(m.importCert, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
+	}
+	if m.certImportBrowserActive {
+		view = ui.RenderFileBrowser(m.certImportBrowser, m.Styles, m.Width, m.Height, view)
+	}
+	if m.confirmModal.Active {
+		view = ui.RenderConfirmModal(m.confirmModal, m.Styles, m.Width, m.Height, view)
+	}
 	out := tea.NewView(m.RenderOverlays(view))
 	out.AltScreen = true
 	out.MouseMode = tea.MouseModeCellMotion

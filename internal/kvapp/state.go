@@ -45,7 +45,12 @@ const (
 // and how data handlers should behave.
 func (m Model) inputMode() InputMode {
 	switch {
-	case m.createSecret.Active:
+	case m.createSecret.Active, m.createKey.Active, m.importCert.Active:
+		return ModeForm
+	case m.certImportBrowserActive:
+		// File browser is its own kind of text input (filter / typing
+		// for path navigation). Treat it as a form so the parent tabapp
+		// doesn't snatch single-key shortcuts (q-quit, 1–9 tab-jump).
 		return ModeForm
 	case m.actionMenu.Active:
 		return ModeActionMenu
@@ -163,9 +168,20 @@ type Model struct {
 	// driving navigation. See jump.go.
 	applyingNav bool
 
-	actionMenu   actionMenuState
-	createSecret ui.FormOverlayState
-	cache        kvCache
+	actionMenu    actionMenuState
+	createSecret  ui.FormOverlayState
+	createKey     ui.FormOverlayState
+	importCert    ui.FormOverlayState
+	confirmModal  ui.ConfirmModalState
+	confirmAction func() tea.Cmd
+	// certImportBrowser is the local-filesystem picker for selecting the
+	// PFX file to import. Mirrors blobapp.uploadBrowser. Populated when
+	// the user opens "Import certificate..."; the picked path is stashed
+	// on pendingCertPath while the import form collects name/password.
+	certImportBrowser       ui.FileBrowserState
+	certImportBrowserActive bool
+	pendingCertPath         string
+	cache                   kvCache
 
 	loadingSpinnerID int
 
@@ -416,6 +432,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(km.BackspaceUp, "go up/back"),
 				keymap.HelpEntry(keymap.New(km.HalfPageDown.Label()+"/"+km.HalfPageUp.Label()), "half-page scroll"),
 				"  vaults → kind → items → versions  (kind picks secrets / certificates / keys)",
+				"  action menu in items → Create secret / Create key / Import certificate (kind-aware)",
 			},
 		},
 		{

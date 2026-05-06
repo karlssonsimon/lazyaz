@@ -36,6 +36,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				f.Error = ""
 			}
 			return m, nil
+		case m.createKey.Active:
+			if f := m.createKey.FocusedField(); f != nil {
+				f.Value += text
+				f.Error = ""
+			}
+			return m, nil
+		case m.importCert.Active:
+			if f := m.importCert.FocusedField(); f != nil {
+				f.Value += text
+				f.Error = ""
+			}
+			return m, nil
 		default:
 			var cmd tea.Cmd
 			switch m.focus {
@@ -130,6 +142,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case secretCreatedMsg:
 		return m.handleSecretCreated(msg)
+
+	case keyCreatedMsg:
+		return m.handleKeyCreated(msg)
+
+	case certImportedMsg:
+		return m.handleCertImported(msg)
+
+	case crudDoneMsg:
+		return m.handleCrudDone(msg)
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -459,8 +480,32 @@ func (m Model) handleSecretValueYanked(msg secretValueYankedMsg) (Model, tea.Cmd
 func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
+	// Confirm modal takes precedence over every other handler — same as
+	// blobapp. Built before the inputMode switch so it routes regardless
+	// of focus / form / overlay state.
+	if m.confirmModal.Active {
+		switch m.confirmModal.HandleKey(key) {
+		case ui.ConfirmActionConfirm:
+			act := m.confirmAction
+			m.confirmAction = nil
+			if act != nil {
+				return m, act()
+			}
+			return m, nil
+		case ui.ConfirmActionCancel:
+			m.confirmAction = nil
+			return m, nil
+		}
+		return m, nil
+	}
+
 	switch m.inputMode() {
 	case ModeForm:
+		// File browser is its own ModeForm via inputMode() — route it
+		// before the form overlays because it has different key semantics.
+		if m.certImportBrowserActive {
+			return m.handleCertImportBrowserKey(key)
+		}
 		return m.handleFormKey(key)
 
 	case ModeActionMenu:

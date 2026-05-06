@@ -33,6 +33,11 @@ const (
 	actionHelp
 	actionCreateSecret
 	actionRevealSecret
+	actionCreateKey
+	actionImportCertificate
+	actionDeleteSecret
+	actionDeleteCertificate
+	actionDeleteKey
 )
 
 type action struct {
@@ -121,6 +126,38 @@ func (m Model) buildActions() []action {
 				label = "Hide version value"
 			}
 			actions = append(actions, action{actionRevealSecret, label, km.RevealSecret.Short()})
+		}
+	}
+
+	// Per-kind create entries — kept symmetric with actionCreateSecret.
+	// Available on the items pane regardless of whether a row is selected.
+	if m.focus == secretsPane && m.hasVault {
+		switch m.kvKind {
+		case kvKindCertificates:
+			actions = append(actions, action{actionImportCertificate, "Import certificate...", ""})
+		case kvKindKeys:
+			actions = append(actions, action{actionCreateKey, "Create key...", ""})
+		}
+	}
+
+	// Per-kind delete entries — only surface when a row is selected.
+	// Soft-delete is the vault default; the confirmation message
+	// reflects that ("moved to recovery bin") rather than implying a
+	// purge.
+	if m.focus == secretsPane && m.hasVault {
+		switch m.kvKind {
+		case kvKindSecrets:
+			if it, ok := m.secretsList.SelectedItem().(secretItem); ok {
+				actions = append(actions, action{actionDeleteSecret, fmt.Sprintf("Delete secret (%s)...", it.secret.Name), ""})
+			}
+		case kvKindCertificates:
+			if it, ok := m.secretsList.SelectedItem().(certItem); ok {
+				actions = append(actions, action{actionDeleteCertificate, fmt.Sprintf("Delete certificate (%s)...", it.cert.Name), ""})
+			}
+		case kvKindKeys:
+			if it, ok := m.secretsList.SelectedItem().(keyItem); ok {
+				actions = append(actions, action{actionDeleteKey, fmt.Sprintf("Delete key (%s)...", it.key.Name), ""})
+			}
 		}
 	}
 
@@ -233,6 +270,35 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 	case actionCreateSecret:
 		m.openCreateSecretForm()
 		return m, nil
+
+	case actionCreateKey:
+		m.openCreateKeyForm()
+		return m, nil
+
+	case actionImportCertificate:
+		m.openImportCertBrowser()
+		return m, nil
+
+	case actionDeleteSecret:
+		it, ok := m.secretsList.SelectedItem().(secretItem)
+		if !ok {
+			return m, nil
+		}
+		return m.confirmDelete(it.secret.Name, "secret", deleteSecretCmd(m.service, m.currentVault, it.secret.Name))
+
+	case actionDeleteCertificate:
+		it, ok := m.secretsList.SelectedItem().(certItem)
+		if !ok {
+			return m, nil
+		}
+		return m.confirmDelete(it.cert.Name, "certificate", deleteCertificateCmd(m.service, m.currentVault, it.cert.Name))
+
+	case actionDeleteKey:
+		it, ok := m.secretsList.SelectedItem().(keyItem)
+		if !ok {
+			return m, nil
+		}
+		return m.confirmDelete(it.key.Name, "key", deleteKeyCmd(m.service, m.currentVault, it.key.Name))
 	}
 
 	return m, nil

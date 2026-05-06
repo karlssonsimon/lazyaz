@@ -2,6 +2,7 @@ package keyvault
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"sort"
@@ -360,6 +361,95 @@ func (s *Service) SetSecret(ctx context.Context, vault Vault, name, value string
 	}
 	if _, err := client.SetSecret(ctx, name, azsecrets.SetSecretParameters{Value: &value}, nil); err != nil {
 		return fmt.Errorf("set secret %s in %s: %w", name, vault.Name, err)
+	}
+	return nil
+}
+
+// DeleteSecret removes a secret. With soft-delete enabled (the vault
+// default), this moves the secret to the recovery bin where it can be
+// purged or recovered for the configured retention period.
+func (s *Service) DeleteSecret(ctx context.Context, vault Vault, name string) error {
+	client, err := s.getClient(vault.VaultURI)
+	if err != nil {
+		return err
+	}
+	if _, err := client.DeleteSecret(ctx, name, nil); err != nil {
+		return fmt.Errorf("delete secret %s in %s: %w", name, vault.Name, err)
+	}
+	return nil
+}
+
+// DeleteCertificate removes a certificate (all versions). Soft-delete
+// applies the same way as for secrets.
+func (s *Service) DeleteCertificate(ctx context.Context, vault Vault, name string) error {
+	client, err := s.getCertsClient(vault.VaultURI)
+	if err != nil {
+		return err
+	}
+	if _, err := client.DeleteCertificate(ctx, name, nil); err != nil {
+		return fmt.Errorf("delete certificate %s in %s: %w", name, vault.Name, err)
+	}
+	return nil
+}
+
+// DeleteKey removes a key (all versions). Soft-delete applies. Note
+// that a "managed" key (one auto-created to back a certificate) can't
+// be deleted directly — you delete the certificate instead.
+func (s *Service) DeleteKey(ctx context.Context, vault Vault, name string) error {
+	client, err := s.getKeysClient(vault.VaultURI)
+	if err != nil {
+		return err
+	}
+	if _, err := client.DeleteKey(ctx, name, nil); err != nil {
+		return fmt.Errorf("delete key %s in %s: %w", name, vault.Name, err)
+	}
+	return nil
+}
+
+// CreateKey generates a new key in the vault. kty is "RSA" or "EC".
+// For RSA, keySize is the modulus length in bits (2048/3072/4096) and
+// curve is ignored. For EC, curve is the named curve (P-256/P-384/P-521)
+// and keySize is ignored. Mirrors the create-vs-update semantics of
+// SetSecret: re-using a name produces a new version under the same name.
+func (s *Service) CreateKey(ctx context.Context, vault Vault, name, kty string, keySize int32, curve string) error {
+	client, err := s.getKeysClient(vault.VaultURI)
+	if err != nil {
+		return err
+	}
+	keyType := azkeys.KeyType(kty)
+	params := azkeys.CreateKeyParameters{Kty: &keyType}
+	switch kty {
+	case "RSA":
+		params.KeySize = &keySize
+	case "EC":
+		c := azkeys.CurveName(curve)
+		params.Curve = &c
+	}
+	if _, err := client.CreateKey(ctx, name, params, nil); err != nil {
+		return fmt.Errorf("create key %s in %s: %w", name, vault.Name, err)
+	}
+	return nil
+}
+
+// ImportCertificate imports a PFX-encoded certificate (with private key)
+// into the vault. pfxBytes is raw PFX content; password is the PFX
+// password (empty when unprotected). Producing a base64 encoding here
+// keeps the call site simple — the SDK's ImportCertificate is base64-only.
+func (s *Service) ImportCertificate(ctx context.Context, vault Vault, name string, pfxBytes []byte, password string) error {
+	if len(pfxBytes) == 0 {
+		return fmt.Errorf("PFX content is empty")
+	}
+	client, err := s.getCertsClient(vault.VaultURI)
+	if err != nil {
+		return err
+	}
+	encoded := base64.StdEncoding.EncodeToString(pfxBytes)
+	params := azcertificates.ImportCertificateParameters{Base64EncodedCertificate: &encoded}
+	if password != "" {
+		params.Password = &password
+	}
+	if _, err := client.ImportCertificate(ctx, name, params, nil); err != nil {
+		return fmt.Errorf("import certificate %s in %s: %w", name, vault.Name, err)
 	}
 	return nil
 }

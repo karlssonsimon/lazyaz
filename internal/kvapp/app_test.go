@@ -9,12 +9,177 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
+	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 )
 
 var testConfig = ui.Config{
 	ThemeName: "fallback",
 	Schemes:   []ui.Scheme{ui.FallbackScheme()},
+}
+
+// TestValidateKeyAlgorithmAcceptsAllSixAndRejectsOthers locks the
+// allowed-values list. Case-insensitive on the prefix; trim whitespace.
+func TestValidateKeyAlgorithmAcceptsAllSixAndRejectsOthers(t *testing.T) {
+	good := []string{"RSA-2048", "RSA-3072", "RSA-4096", "EC-P256", "EC-P384", "EC-P521", "rsa-2048", "  EC-P256  "}
+	for _, v := range good {
+		if msg := validateKeyAlgorithm(v); msg != "" {
+			t.Fatalf("validateKeyAlgorithm(%q) = %q, want empty", v, msg)
+		}
+	}
+	bad := map[string]string{
+		"":           "algorithm is required",
+		"RSA-1024":   "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
+		"DSA-1024":   "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
+		"EC-P25":     "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
+		"RSA":        "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
+		"RSA 2048":   "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
+	}
+	for v, want := range bad {
+		if got := validateKeyAlgorithm(v); got != want {
+			t.Fatalf("validateKeyAlgorithm(%q) = %q, want %q", v, got, want)
+		}
+	}
+}
+
+// TestParseKeyAlgorithmMapsToSDKShape ensures the output matches what
+// CreateKey expects: kty + size for RSA, kty + curve for EC.
+func TestParseKeyAlgorithmMapsToSDKShape(t *testing.T) {
+	cases := []struct {
+		in        string
+		wantKty   string
+		wantSize  int32
+		wantCurve string
+	}{
+		{"RSA-2048", "RSA", 2048, ""},
+		{"RSA-3072", "RSA", 3072, ""},
+		{"RSA-4096", "RSA", 4096, ""},
+		{"EC-P256", "EC", 0, "P-256"},
+		{"EC-P384", "EC", 0, "P-384"},
+		{"EC-P521", "EC", 0, "P-521"},
+		{"  rsa-3072  ", "RSA", 3072, ""}, // whitespace + lowercase tolerated
+		{"unknown", "RSA", 2048, ""},      // fallback to default
+	}
+	for _, tc := range cases {
+		gotKty, gotSize, gotCurve := parseKeyAlgorithm(tc.in)
+		if gotKty != tc.wantKty || gotSize != tc.wantSize || gotCurve != tc.wantCurve {
+			t.Fatalf("parseKeyAlgorithm(%q) = (%s, %d, %s), want (%s, %d, %s)",
+				tc.in, gotKty, gotSize, gotCurve, tc.wantKty, tc.wantSize, tc.wantCurve)
+		}
+	}
+}
+
+// TestCreateActionsFollowKvKind confirms the per-kind create entries
+// only appear on the matching kind. Secrets sees "Create secret...",
+// certs sees "Import certificate...", keys sees "Create key..."; none
+// of them surface across kinds.
+func TestCreateActionsFollowKvKind(t *testing.T) {
+	cases := []struct {
+		kind  kvKind
+		want  string
+		other []string
+	}{
+		{kvKindSecrets, "Create secret...", []string{"Create key...", "Import certificate..."}},
+		{kvKindCertificates, "Import certificate...", []string{"Create secret...", "Create key..."}},
+		{kvKindKeys, "Create key...", []string{"Create secret...", "Import certificate..."}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.kind.String(), func(t *testing.T) {
+			m := NewModel(nil, testConfig, nil)
+			m.SubOverlay.Close()
+			m.hasVault = true
+			m.focus = secretsPane
+			m.kvKind = tc.kind
+
+			labels := make(map[string]bool)
+			for _, a := range m.buildActions() {
+				labels[a.label] = true
+			}
+			if !labels[tc.want] {
+				t.Fatalf("kind %s: missing %q in action menu", tc.kind, tc.want)
+			}
+			for _, leaked := range tc.other {
+				if labels[leaked] {
+					t.Fatalf("kind %s: %q leaked from another kind", tc.kind, leaked)
+				}
+			}
+		})
+	}
+}
+
+// TestDeleteActionFollowsCursorAndKvKind locks the per-kind delete
+// entries: only the matching kind sees its delete row, only when an
+// item is actually selected, and never across kinds.
+func TestDeleteActionFollowsCursorAndKvKind(t *testing.T) {
+	cases := []struct {
+		kind       kvKind
+		seedItems  []list.Item
+		wantLabel  string
+		otherLabels []string
+	}{
+		{
+			kind:       kvKindSecrets,
+			seedItems:  []list.Item{secretItem{secret: keyvault.Secret{Name: "api-key"}}},
+			wantLabel:  "Delete secret (api-key)...",
+			otherLabels: []string{"Delete certificate", "Delete key"},
+		},
+		{
+			kind:       kvKindCertificates,
+			seedItems:  []list.Item{certItem{cert: keyvault.Certificate{Name: "tls-cert"}}},
+			wantLabel:  "Delete certificate (tls-cert)...",
+			otherLabels: []string{"Delete secret", "Delete key"},
+		},
+		{
+			kind:       kvKindKeys,
+			seedItems:  []list.Item{keyItem{key: keyvault.Key{Name: "signing"}}},
+			wantLabel:  "Delete key (signing)...",
+			otherLabels: []string{"Delete secret", "Delete certificate"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.kind.String(), func(t *testing.T) {
+			m := NewModel(nil, testConfig, nil)
+			m.SubOverlay.Close()
+			m.hasVault = true
+			m.focus = secretsPane
+			m.kvKind = tc.kind
+			m.secretsList.SetItems(tc.seedItems)
+
+			labels := make(map[string]bool)
+			for _, a := range m.buildActions() {
+				labels[a.label] = true
+			}
+			if !labels[tc.wantLabel] {
+				t.Fatalf("kind %s: missing %q in action menu", tc.kind, tc.wantLabel)
+			}
+			for label := range labels {
+				for _, other := range tc.otherLabels {
+					if strings.HasPrefix(label, other) {
+						t.Fatalf("kind %s: %q leaked from another kind", tc.kind, label)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestDeleteActionAbsentWithoutSelection confirms the delete entry
+// only surfaces when there's actually an item to delete — empty list
+// or wrong-kind cursor must not produce a stray Delete row.
+func TestDeleteActionAbsentWithoutSelection(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.hasVault = true
+	m.focus = secretsPane
+	m.kvKind = kvKindSecrets
+	// Empty items list — no selection possible.
+	m.secretsList.SetItems(nil)
+
+	for _, a := range m.buildActions() {
+		if strings.HasPrefix(a.label, "Delete ") {
+			t.Fatalf("delete entry %q should not surface with empty list", a.label)
+		}
+	}
 }
 
 // TestKindPaneSelectionDrivesKvKindAndFocus locks in the new
