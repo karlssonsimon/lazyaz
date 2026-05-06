@@ -2,6 +2,7 @@ package blobapp
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/karlssonsimon/lazyaz/internal/activity"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
 // fakeWalker is a synthetic fs for upload plan tests.
@@ -151,6 +153,47 @@ func TestPlanUploadWindowsSeparatorsNormalized(t *testing.T) {
 	plan, _ := planUpload(w, []string{"/x/a.txt"}, "logs\\2026")
 	if plan.files[0].blobName != "logs/2026/a.txt" {
 		t.Fatalf("want forward slashes, got %q", plan.files[0].blobName)
+	}
+}
+
+// TestUploadFromVirtualFolderUsesPrefixAsDestination is a focused
+// regression test for the user-reported bug: uploading from inside a
+// virtual folder dropped files at the container root. Drives the real
+// keypress path (file browser Confirm → startUpload) and asserts the
+// captured destPrefix matches m.prefix.
+func TestUploadFromVirtualFolderUsesPrefixAsDestination(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "file.txt"), []byte("hi"), 0o644); err != nil {
+		t.Fatalf("seed temp file: %v", err)
+	}
+
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.hasAccount = true
+	m.currentAccount.Name = "acct"
+	m.hasContainer = true
+	m.containerName = "cont"
+	m.focus = blobsPane
+	m.prefix = "myfolder/"
+
+	m.uploadBrowserActive = true
+	m.uploadBrowser.Open(tmp, ui.OSDirReader{})
+	m.uploadBrowser.HandleKey(" ") // mark file.txt
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 13, Text: "enter"})
+	model, ok := updated.(Model)
+	if !ok {
+		t.Fatalf("want Model, got %T", updated)
+	}
+	if model.uploadProgress == nil {
+		t.Fatalf("upload didn't start; uploadProgress is nil (browserActive=%v)", model.uploadBrowserActive)
+	}
+	if model.uploadProgress.destPrefix != "myfolder/" {
+		t.Fatalf("destPrefix = %q, want %q", model.uploadProgress.destPrefix, "myfolder/")
+	}
+	// Cancel the worker we kicked off so the test doesn't leak goroutines.
+	if model.uploadCancelFn != nil {
+		model.uploadCancelFn()
 	}
 }
 
