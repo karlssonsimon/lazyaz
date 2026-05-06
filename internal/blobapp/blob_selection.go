@@ -263,7 +263,11 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		m.refreshItems()
 	}
 
-	m.startLoading(blobsPane, fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName))
+	scope := m.currentAccount.Name + "/" + m.containerName
+	if m.prefix != "" {
+		scope += " under " + m.prefix
+	}
+	m.startLoading(blobsPane, fmt.Sprintf("Loading all blobs in %s", scope))
 	return m, tea.Batch(m.Spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.blobs))
 }
 

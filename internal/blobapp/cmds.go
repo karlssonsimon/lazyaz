@@ -54,7 +54,7 @@ func fetchHierarchyBlobsCmd(svc *blob.Service, broker *cache.Broker[blob.BlobEnt
 func fetchAllBlobsCmd(svc *blob.Service, broker *cache.Broker[blob.BlobEntry], account blob.Account, containerName, prefix string, seed []blob.BlobEntry) tea.Cmd {
 	key := blobsCacheKey(account.SubscriptionID, account.Name, containerName, prefix, true)
 	cmd, _ := broker.Subscribe(key, seed, func(ctx context.Context, send func([]blob.BlobEntry)) error {
-		return svc.ListAllBlobs(ctx, account, containerName, send)
+		return svc.ListAllBlobs(ctx, account, containerName, prefix, send)
 	}, func(p cache.Page[blob.BlobEntry]) tea.Msg {
 		return blobsLoadedMsg{account: account, container: containerName, prefix: prefix, loadAll: true, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})

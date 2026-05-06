@@ -316,9 +316,16 @@ func (s *Service) listBlobsWithClient(ctx context.Context, serviceClient *servic
 	return nil
 }
 
-func (s *Service) ListAllBlobs(ctx context.Context, account Account, containerName string, send func([]BlobEntry)) error {
-	return s.withFallback(ctx, account, fmt.Sprintf("list all blobs for %s/%s", account.Name, containerName), func(c *service.Client) error {
-		return s.listBlobsFlatWithClient(ctx, c, account, containerName, "", 0, send)
+// ListAllBlobs streams every blob under prefix (empty = whole container)
+// using flat listing. Pass m.prefix when you want load-all to stay scoped
+// to the folder the user is currently browsing.
+func (s *Service) ListAllBlobs(ctx context.Context, account Account, containerName, prefix string, send func([]BlobEntry)) error {
+	desc := fmt.Sprintf("list all blobs for %s/%s", account.Name, containerName)
+	if prefix != "" {
+		desc = fmt.Sprintf("list all blobs for %s/%s under %q", account.Name, containerName, prefix)
+	}
+	return s.withFallback(ctx, account, desc, func(c *service.Client) error {
+		return s.listBlobsFlatWithClient(ctx, c, account, containerName, prefix, 0, send)
 	})
 }
 
