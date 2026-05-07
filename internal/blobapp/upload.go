@@ -327,8 +327,44 @@ func (m *Model) updateUploadThroughput() {
 	up.lastSampleBytes = up.uploadedBytes
 }
 
+// promptForUploadDest opens the destination text input prefilled with
+// the user's current prefix. This is the first step of the upload flow;
+// once they submit, uploadDestEnteredMsg lands and openUploadBrowser
+// runs. Letting the user edit the destination is what makes uploading
+// to a brand-new virtual folder possible — flat-namespace accounts
+// can't navigate into a folder that doesn't exist yet, so the upload
+// path is the only way to create one.
+func (m Model) promptForUploadDest() (Model, tea.Cmd) {
+	m.textInput.OpenWithBreadcrumb(
+		"Upload destination",
+		[]string{m.containerName},
+		"folder/path (blank for root)",
+		m.prefix,
+		validateUploadDest,
+	)
+	m.textInputAction = func(v string) tea.Cmd {
+		return func() tea.Msg { return uploadDestEnteredMsg{dest: v} }
+	}
+	return m, nil
+}
+
+// validateUploadDest is permissive — Azure blob names accept almost
+// anything. The only client-side rule worth enforcing here is that we
+// strip leading slashes (which would create a blob named "/foo/bar"
+// rather than "foo/bar"). Empty value is fine: it means "container root".
+func validateUploadDest(value string) string {
+	// Reject backslashes — Windows-style paths confuse new users who
+	// expect them to behave like forward slashes. We auto-translate
+	// during planning, but it's cleaner to surface the convention here.
+	if strings.ContainsAny(value, "\\") {
+		return "use forward slashes only"
+	}
+	return ""
+}
+
 // openUploadBrowser mounts the file browser at the current working
-// directory. Called from the action menu "Upload files..." entry.
+// directory. Called once the destination has been confirmed; the
+// destination is already stashed on m.uploadDest by the caller.
 func (m Model) openUploadBrowser() (Model, tea.Cmd) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -338,6 +374,11 @@ func (m Model) openUploadBrowser() (Model, tea.Cmd) {
 	m.uploadBrowserActive = true
 	return m, nil
 }
+
+// uploadDestEnteredMsg is emitted after the destination text input is
+// submitted. The Update handler stashes the dest on m.uploadDest and
+// opens the file browser as the next step.
+type uploadDestEnteredMsg struct{ dest string }
 
 // startUpload kicks off the upload worker for selected paths with the
 // given destination prefix. Builds the plan, creates the cancellable

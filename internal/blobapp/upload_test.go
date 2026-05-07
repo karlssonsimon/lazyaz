@@ -156,12 +156,12 @@ func TestPlanUploadWindowsSeparatorsNormalized(t *testing.T) {
 	}
 }
 
-// TestUploadFromVirtualFolderUsesPrefixAsDestination is a focused
-// regression test for the user-reported bug: uploading from inside a
-// virtual folder dropped files at the container root. Drives the real
-// keypress path (file browser Confirm → startUpload) and asserts the
-// captured destPrefix matches m.prefix.
-func TestUploadFromVirtualFolderUsesPrefixAsDestination(t *testing.T) {
+// TestUploadUsesTypedDestPrefixFromTextInput drives the full two-step
+// flow: a typed destination (which may differ from m.prefix — that's
+// the whole point) becomes uploadProgress.destPrefix. Uses
+// uploadDestEnteredMsg directly so the test doesn't depend on the
+// text-input keypress sequence.
+func TestUploadUsesTypedDestPrefixFromTextInput(t *testing.T) {
 	tmp := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tmp, "file.txt"), []byte("hi"), 0o644); err != nil {
 		t.Fatalf("seed temp file: %v", err)
@@ -174,26 +174,76 @@ func TestUploadFromVirtualFolderUsesPrefixAsDestination(t *testing.T) {
 	m.hasContainer = true
 	m.containerName = "cont"
 	m.focus = blobsPane
+	// User is standing in "myfolder/" but types "newfolder/" — the
+	// typed value should win, proving uploads can land in a folder
+	// the user hasn't navigated into.
 	m.prefix = "myfolder/"
 
-	m.uploadBrowserActive = true
-	m.uploadBrowser.Open(tmp, ui.OSDirReader{})
-	m.uploadBrowser.HandleKey(" ") // mark file.txt
-
-	updated, _ := m.Update(tea.KeyPressMsg{Code: 13, Text: "enter"})
+	updated, _ := m.Update(uploadDestEnteredMsg{dest: "newfolder/"})
 	model, ok := updated.(Model)
 	if !ok {
-		t.Fatalf("want Model, got %T", updated)
+		t.Fatalf("want Model after dest entered, got %T", updated)
 	}
+	if !model.uploadBrowserActive {
+		t.Fatal("uploadDestEnteredMsg should open the file browser")
+	}
+	if model.uploadDest != "newfolder/" {
+		t.Fatalf("uploadDest = %q, want newfolder/", model.uploadDest)
+	}
+
+	// Drive the file browser to confirm a single file.
+	model.uploadBrowser.Open(tmp, ui.OSDirReader{})
+	model.uploadBrowser.HandleKey(" ") // mark file.txt
+	updated, _ = model.Update(tea.KeyPressMsg{Code: 13, Text: "enter"})
+	model = updated.(Model)
 	if model.uploadProgress == nil {
-		t.Fatalf("upload didn't start; uploadProgress is nil (browserActive=%v)", model.uploadBrowserActive)
+		t.Fatalf("upload didn't start (browserActive=%v)", model.uploadBrowserActive)
 	}
-	if model.uploadProgress.destPrefix != "myfolder/" {
-		t.Fatalf("destPrefix = %q, want %q", model.uploadProgress.destPrefix, "myfolder/")
+	if model.uploadProgress.destPrefix != "newfolder/" {
+		t.Fatalf("destPrefix = %q, want newfolder/ (typed dest, not m.prefix)", model.uploadProgress.destPrefix)
 	}
-	// Cancel the worker we kicked off so the test doesn't leak goroutines.
+	if model.uploadDest != "" {
+		t.Fatalf("uploadDest should be cleared after browser confirm, got %q", model.uploadDest)
+	}
 	if model.uploadCancelFn != nil {
 		model.uploadCancelFn()
+	}
+}
+
+// TestUploadDestEnteredStripsLeadingSlash confirms a "/foo/bar"
+// destination is normalised to "foo/bar" — Azure doesn't want a leading
+// slash in blob names.
+func TestUploadDestEnteredStripsLeadingSlash(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.hasAccount = true
+	m.hasContainer = true
+	m.containerName = "cont"
+
+	updated, _ := m.Update(uploadDestEnteredMsg{dest: "/foo/bar/"})
+	model := updated.(Model)
+	if model.uploadDest != "foo/bar/" {
+		t.Fatalf("uploadDest = %q, want %q (leading slash stripped)", model.uploadDest, "foo/bar/")
+	}
+}
+
+// TestPromptForUploadDestPrefilllsCurrentPrefix locks in the UX that
+// matters most: standing in a folder prefills the text input with that
+// folder's prefix so the common "upload to here" path stays one keypress
+// away (just press Enter to accept).
+func TestPromptForUploadDestPrefilllsCurrentPrefix(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.hasContainer = true
+	m.containerName = "cont"
+	m.prefix = "reports/2026/"
+
+	updated, _ := m.promptForUploadDest()
+	if !updated.textInput.Active {
+		t.Fatal("promptForUploadDest should activate the text input")
+	}
+	if updated.textInput.Value != "reports/2026/" {
+		t.Fatalf("text input value = %q, want prefilled m.prefix", updated.textInput.Value)
 	}
 }
 

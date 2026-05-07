@@ -123,6 +123,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case uploadDestEnteredMsg:
+		// Step 2 of the upload flow: stash the typed destination and
+		// open the file browser. Trim a leading slash so users typing
+		// "/foo/bar" get "foo/bar" — the SDK takes the latter.
+		m.uploadDest = strings.TrimPrefix(msg.dest, "/")
+		return m.openUploadBrowser()
+
 	case uploadStartedMsg:
 		if m.uploadProgress != nil {
 			m.uploadProgress.total = msg.fileCount
@@ -432,10 +439,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		case ui.FBActionCancel:
 			m.uploadBrowserActive = false
+			m.uploadDest = ""
 			return m, nil
 		case ui.FBActionConfirm:
 			m.uploadBrowserActive = false
-			return m.startUpload(res.Selected, m.prefix)
+			dest := m.uploadDest
+			m.uploadDest = ""
+			return m.startUpload(res.Selected, dest)
 		}
 		return m, nil
 	}

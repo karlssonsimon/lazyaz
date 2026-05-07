@@ -195,6 +195,10 @@ type Model struct {
 	uploadConflict       *pendingConflict
 	uploadConflictPolicy conflictAnswer
 	uploadCancelFn       context.CancelFunc
+	// uploadDest captures the destination prefix typed at the start of
+	// the upload flow. Survives between the text-input step and the
+	// file-browser step. Empty = container root.
+	uploadDest string
 
 	// CRUD modal state. Only one of these is ever active at a time.
 	// On Confirm/Submit, the pending closure runs and emits a tea.Cmd

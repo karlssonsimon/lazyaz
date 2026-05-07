@@ -284,7 +284,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m, nil
 
 	case actionUpload:
-		return m.openUploadBrowser()
+		return m.promptForUploadDest()
 
 	case actionDeleteCurrent:
 		item, ok := m.blobsList.SelectedItem().(blobItem)
