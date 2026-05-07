@@ -794,6 +794,14 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ContainerName: msg.ContainerName,
 		})
 
+	case sbapp.OpenBlobReferenceMsg:
+		return m.openBlobTabWithNav(msg.Subscription, blobapp.PendingNav{
+			AccountName:   msg.AccountName,
+			ContainerName: msg.ContainerName,
+			Prefix:        msg.Prefix,
+			BlobName:      msg.BlobName,
+		})
+
 	case nextTabMsg:
 		// Plain tab cycling (H/L) isn't a vim "jump" — it's :bnext.
 		// Don't record so the jump list stays focused on real

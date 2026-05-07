@@ -709,6 +709,9 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 	case m.Keymap.PreviousFocus.Matches(key):
 		m.previousFocus()
 		return m, nil
+	case m.Keymap.ActionMenu.Matches(key):
+		m.actionMenu.open(m.buildActions())
+		return m, nil
 	case m.Keymap.MessageBack.Matches(key):
 		m.transitionTo(messagesPane)
 		m.Notify(appshell.LevelInfo, "Back to message list")

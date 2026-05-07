@@ -306,6 +306,94 @@ func TestMessagePreviewViewportRegionMatchesFlatDetailsColumn(t *testing.T) {
 	}
 }
 
+// TestActionMenuSurfacesBlobReferenceForEventGridMessage verifies the
+// "Open blob in explorer" action only appears when the selected message
+// parses as a Microsoft.Storage.Blob* event, and that activating it
+// emits an OpenBlobReferenceMsg pointing at the right blob.
+func TestActionMenuSurfacesBlobReferenceForEventGridMessage(t *testing.T) {
+	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
+	m.hasPeekTarget = true
+	m.focus = messagesPane
+	m.peekedMessages = []servicebus.PeekedMessage{
+		{MessageID: "1", FullBody: blobCreatedSample},
+		{MessageID: "2", FullBody: `{"messageId":"2","message":{}}`},
+	}
+	m.messageList.SetItems(m.messageItems())
+
+	// Cursor on the Event Grid message: action should be present.
+	m.messageList.Select(0)
+	hasAction := false
+	for _, a := range m.buildActions() {
+		if a.id == actionOpenBlobReference {
+			hasAction = true
+			if !strings.Contains(a.label, "picking-list-incoming/PL-PX165.xml") {
+				t.Errorf("action label = %q, want container/blob path", a.label)
+			}
+		}
+	}
+	if !hasAction {
+		t.Fatal("expected actionOpenBlobReference to be surfaced for blob event message")
+	}
+
+	// Dispatch the action and verify the emitted msg.
+	_, cmd := m.executeAction(action{id: actionOpenBlobReference})
+	if cmd == nil {
+		t.Fatal("expected executeAction to return a cmd")
+	}
+	got, ok := cmd().(OpenBlobReferenceMsg)
+	if !ok {
+		t.Fatalf("emitted %T, want OpenBlobReferenceMsg", cmd())
+	}
+	if got.AccountName != "sthtgdevarc" || got.ContainerName != "picking-list-incoming" || got.BlobName != "PL-PX165.xml" {
+		t.Errorf("emitted %+v, fields don't match parsed ref", got)
+	}
+
+	// Cursor on a non-blob message: action should disappear.
+	m.messageList.Select(1)
+	for _, a := range m.buildActions() {
+		if a.id == actionOpenBlobReference {
+			t.Fatal("actionOpenBlobReference should not surface for non-blob message")
+		}
+	}
+}
+
+// TestActionMenuOpensFromMessagePreview is a regression for two bugs:
+// (1) handleViewingMessageKey swallowed the action-menu hotkey, so the
+// menu never opened from the preview pane; (2) buildActions only
+// surfaced the messagesPane action block when focus == messagesPane,
+// so even if the menu had opened it'd be empty of message-relevant
+// actions. Both should now work — verified by sending the action-menu
+// keypress while focus is on messagePreviewPane and checking that
+// the menu activates with the blob-ref entry visible.
+func TestActionMenuOpensFromMessagePreview(t *testing.T) {
+	m := NewModel(nil, ui.Config{ThemeName: "fallback", Schemes: []ui.Scheme{ui.FallbackScheme()}}, nil)
+	m.hasPeekTarget = true
+	m.focus = messagePreviewPane
+	m.viewingMessage = true
+	m.peekedMessages = []servicebus.PeekedMessage{
+		{MessageID: "1", FullBody: blobCreatedSample},
+	}
+	m.messageList.SetItems(m.messageItems())
+	m.messageList.Select(0)
+	m.selectedMessage = m.peekedMessages[0]
+
+	hotkey := m.Keymap.ActionMenu.Keys[0]
+	updated, _ := m.handleViewingMessageKey(tea.KeyPressMsg{Code: rune(hotkey[0]), Text: hotkey}, hotkey)
+	if !updated.actionMenu.Active {
+		t.Fatal("expected action menu to open from preview pane")
+	}
+	hasBlobRef := false
+	for _, a := range updated.actionMenu.Visible() {
+		if a.id == actionOpenBlobReference {
+			hasBlobRef = true
+			break
+		}
+	}
+	if !hasBlobRef {
+		t.Fatal("action menu opened from preview but blob-ref entry missing")
+	}
+}
+
 func isQuitCmd(cmd tea.Cmd) bool {
 	if cmd == nil {
 		return false

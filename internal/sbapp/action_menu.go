@@ -18,6 +18,7 @@ const (
 	actionPeekMessages actionID = iota
 	actionPeekMore
 	actionClearMessages
+	actionOpenBlobReference
 	actionReceiveDLQ
 	actionRequeueCurrent
 	actionCompleteCurrent
@@ -117,7 +118,21 @@ func (m Model) buildActions() []action {
 		}
 	}
 
-	// Messages pane — peek, DLQ, and selection actions.
+	// Messages pane — peek, DLQ, and selection actions. From the
+	// preview pane only the blob-ref jump is relevant; everything
+	// else is a list-cursor operation that doesn't fit a
+	// "viewing one message" context.
+	if m.focus == messagePreviewPane && m.hasPeekTarget {
+		if item, ok := m.messageList.SelectedItem().(messageItem); ok {
+			if ref, ok := parseBlobReference(item.message.FullBody); ok {
+				actions = append(actions, action{
+					actionOpenBlobReference,
+					fmt.Sprintf("Open blob in explorer (%s/%s)", ref.ContainerName, ref.LeafPath()),
+					"",
+				})
+			}
+		}
+	}
 	if m.focus == messagesPane && m.hasPeekTarget {
 		label := "active"
 		if m.deadLetter {
@@ -131,6 +146,19 @@ func (m Model) buildActions() []action {
 			actions = append(actions, action{actionPeekMore, fmt.Sprintf("Peek more %s messages", label), ""})
 			actions = append(actions, action{actionPeekMessages, fmt.Sprintf("Peek %s messages (fresh)", label), ""})
 			actions = append(actions, action{actionClearMessages, "Clear messages", ""})
+		}
+
+		// Cross-tab: if the selected message is an Event Grid blob event,
+		// surface a jump action that opens the Blob explorer pre-positioned
+		// on that exact blob.
+		if item, ok := m.messageList.SelectedItem().(messageItem); ok {
+			if ref, ok := parseBlobReference(item.message.FullBody); ok {
+				actions = append(actions, action{
+					actionOpenBlobReference,
+					fmt.Sprintf("Open blob in explorer (%s/%s)", ref.ContainerName, ref.LeafPath()),
+					"",
+				})
+			}
 		}
 
 		// DLQ receive-with-lock actions.
@@ -158,10 +186,18 @@ func (m Model) buildActions() []action {
 		)
 	}
 
-	// App-wide actions — available from any pane.
+	// App-wide actions — available from any pane. Refresh and the
+	// inspect-strip toggle are skipped from the preview pane: refresh
+	// would re-peek the list (pulling the user out of preview) and
+	// toggleInspect targets list panes only, so neither has a visible
+	// effect from preview.
+	if m.focus != messagePreviewPane {
+		actions = append(actions,
+			action{actionRefresh, "Refresh", km.RefreshScope.Short()},
+			action{actionInspect, "Toggle details panel", km.Inspect.Short()},
+		)
+	}
 	actions = append(actions,
-		action{actionRefresh, "Refresh", km.RefreshScope.Short()},
-		action{actionInspect, "Toggle details panel", km.Inspect.Short()},
 		action{actionSubscriptionPicker, "Change subscription", km.SubscriptionPicker.Short()},
 	)
 	if !m.EmbeddedMode {
@@ -185,6 +221,17 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 
 	case actionPeekMore:
 		return m.doPeek(true)
+
+	case actionOpenBlobReference:
+		item, ok := m.messageList.SelectedItem().(messageItem)
+		if !ok {
+			return m, nil
+		}
+		ref, ok := parseBlobReference(item.message.FullBody)
+		if !ok {
+			return m, nil
+		}
+		return m, openBlobReferenceCmd(m.resolveSubscription(ref.SubscriptionID), ref)
 
 	case actionClearMessages:
 		m.clearLockedMessages()

@@ -1,6 +1,8 @@
 package blobapp
 
 import (
+	"fmt"
+
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 
 	tea "charm.land/bubbletea/v2"
@@ -8,10 +10,14 @@ import (
 
 // PendingNav describes a navigation target the dashboard wants the
 // Blob tab to land on. Empty AccountName means "no nav"; empty
-// ContainerName stops at the account.
+// ContainerName stops at the account. Prefix and BlobName are optional
+// extras: Prefix descends into a subfolder ("a/b/" form), and BlobName
+// places the cursor on a specific blob row at that level.
 type PendingNav struct {
 	AccountName   string
 	ContainerName string
+	Prefix        string
+	BlobName      string
 }
 
 func (p PendingNav) hasTarget() bool { return p.AccountName != "" }
@@ -65,19 +71,70 @@ func (m Model) advancePendingNav() (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if len(m.containers) == 0 {
+	if !m.hasContainer || m.containerName != target.ContainerName {
+		if len(m.containers) == 0 {
+			return m, nil
+		}
+		for _, c := range m.containers {
+			if c.Name == target.ContainerName {
+				updated, cmd := m.selectContainer(c)
+				// Keep pendingNav set so subsequent loads (prefix/blob)
+				// continue the chain. Clearing it here would stop the
+				// drill-in at the container.
+				return updated, cmd
+			}
+		}
+		m.pendingNav = PendingNav{}
 		return m, nil
 	}
 
-	for _, c := range m.containers {
-		if c.Name == target.ContainerName {
-			updated, cmd := m.selectContainer(c)
-			updated.pendingNav = PendingNav{}
-			return updated, cmd
+	// Step 3: descend into the requested prefix. Skipped when the user
+	// is already at that prefix. We trigger a hierarchy fetch the same
+	// way as a folder-click in the UI.
+	if m.prefix != target.Prefix {
+		m.prefix = target.Prefix
+		blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
+		if cached, ok := m.cache.blobs.Get(blobsScope); ok {
+			m.blobs = cached
+		} else {
+			m.blobs = nil
+		}
+		m.refreshItems()
+		if len(m.blobs) == 0 {
+			m.startLoading(blobsPane, fmt.Sprintf("Loading entries under %q", displayPrefix(m.prefix)))
+			return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 		}
 	}
+
+	// Step 4: place the cursor on the requested blob row, if any.
+	if target.BlobName == "" {
+		m.pendingNav = PendingNav{}
+		return m, nil
+	}
+	if len(m.blobs) == 0 {
+		return m, nil // wait for blobs to arrive
+	}
+	m.selectBlobRow(target.Prefix, target.BlobName)
 	m.pendingNav = PendingNav{}
 	return m, nil
+}
+
+// selectBlobRow positions the cursor on the blob with name
+// "<prefix><leaf>" in the current blobsList. Folder rows are skipped —
+// the target is always a leaf blob. No-op if the row isn't present
+// (e.g. the prefix's blob page hasn't loaded yet).
+func (m *Model) selectBlobRow(prefix, leaf string) {
+	full := prefix + leaf
+	for i, it := range m.blobsList.VisibleItems() {
+		bi, ok := it.(blobItem)
+		if !ok || bi.blob.IsPrefix {
+			continue
+		}
+		if bi.blob.Name == full {
+			m.blobsList.Select(i)
+			return
+		}
+	}
 }
 
 // eagerNavigate walks as far down the pending target as the cache
@@ -128,6 +185,7 @@ func (m Model) eagerNavigate() (Model, tea.Cmd) {
 	if len(m.containers) == 0 {
 		return m, batchNavCmds(cmds)
 	}
+	containerFound := false
 	for _, c := range m.containers {
 		if c.Name == target.ContainerName {
 			updated, cmd = m.selectContainer(c)
@@ -135,10 +193,41 @@ func (m Model) eagerNavigate() (Model, tea.Cmd) {
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
-			m.pendingNav = PendingNav{}
+			containerFound = true
+			break
+		}
+	}
+	if !containerFound {
+		return m, batchNavCmds(cmds)
+	}
+
+	if target.Prefix == "" && target.BlobName == "" {
+		m.pendingNav = PendingNav{}
+		return m, batchNavCmds(cmds)
+	}
+
+	// Try the prefix's blobs from cache. If hot, set m.prefix and run
+	// the blob-row select inline; otherwise leave the chain pending so
+	// handleBlobsLoaded can finish it once the fetch returns.
+	if target.Prefix != "" {
+		m.prefix = target.Prefix
+		blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
+		if cached, ok := m.cache.blobs.Get(blobsScope); ok {
+			m.blobs = cached
+			m.refreshItems()
+		} else {
+			m.startLoading(blobsPane, fmt.Sprintf("Loading entries under %q", displayPrefix(m.prefix)))
+			cmds = append(cmds, m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 			return m, batchNavCmds(cmds)
 		}
 	}
+
+	if target.BlobName == "" {
+		m.pendingNav = PendingNav{}
+		return m, batchNavCmds(cmds)
+	}
+	m.selectBlobRow(target.Prefix, target.BlobName)
+	m.pendingNav = PendingNav{}
 	return m, batchNavCmds(cmds)
 }
 

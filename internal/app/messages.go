@@ -4,6 +4,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/blobapp"
 	"github.com/karlssonsimon/lazyaz/internal/dashapp"
 	"github.com/karlssonsimon/lazyaz/internal/jumplist"
+	"github.com/karlssonsimon/lazyaz/internal/sbapp"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -98,6 +99,7 @@ func wrapMsg(id int, msg tea.Msg) tea.Msg {
 	// emitting tab.
 	case dashapp.OpenSBNamespaceMsg, dashapp.OpenSBEntityMsg,
 		dashapp.OpenBlobAccountMsg, dashapp.OpenBlobContainerMsg,
+		sbapp.OpenBlobReferenceMsg,
 		jumplist.RecordJumpMsg,
 		blobapp.ActivityAutoOpenRequestMsg:
 		return msg

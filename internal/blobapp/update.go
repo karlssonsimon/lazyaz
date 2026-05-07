@@ -352,7 +352,8 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 		}
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
-		return m, nil
+		updated, navCmd := m.advancePendingNav()
+		return updated, navCmd
 	}
 
 	return m, msg.next
