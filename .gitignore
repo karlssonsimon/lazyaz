@@ -23,6 +23,9 @@ mem.prof
 # Local downloads from blob actions
 downloads/
 
+# Local git worktrees
+.worktrees/
+
 # Editor and OS files
 .vscode/
 .idea/
