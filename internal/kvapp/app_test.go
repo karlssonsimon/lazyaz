@@ -568,6 +568,37 @@ func TestOpenCreateSecretFormGatesOnVault(t *testing.T) {
 	}
 }
 
+// TestOpenAddSecretVersionFormGatesOnSecret confirms the form only
+// opens when both a vault and a secret are selected — adding a version
+// to "no secret" is meaningless.
+func TestOpenAddSecretVersionFormGatesOnSecret(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.openAddSecretVersionForm()
+	if m.addSecretVersion.Active {
+		t.Fatal("expected form to stay inactive without vault/secret selected")
+	}
+
+	m.hasVault = true
+	m.currentVault.Name = "vault-a"
+	m.openAddSecretVersionForm()
+	if m.addSecretVersion.Active {
+		t.Fatal("expected form to stay inactive without secret selected")
+	}
+
+	m.hasSecret = true
+	m.currentSecret.Name = "db-password"
+	m.openAddSecretVersionForm()
+	if !m.addSecretVersion.Active {
+		t.Fatal("expected form to open with vault and secret selected")
+	}
+	if len(m.addSecretVersion.Fields) != 1 {
+		t.Fatalf("expected single Value field, got %d", len(m.addSecretVersion.Fields))
+	}
+	if m.addSecretVersion.Fields[0].Label != "Value" {
+		t.Fatalf("expected sole field labelled Value, got %q", m.addSecretVersion.Fields[0].Label)
+	}
+}
+
 // TestApplyNavEmptyVaultRestoresFocus ensures the root-pane snapshot
 // restores focus without dispatching a PendingNav drill-in.
 func TestApplyNavEmptyVaultRestoresFocus(t *testing.T) {

@@ -141,6 +141,9 @@ func (m Model) View() tea.View {
 	if m.createSecret.Active {
 		view = ui.RenderFormOverlay(m.createSecret, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
+	if m.addSecretVersion.Active {
+		view = ui.RenderFormOverlay(m.addSecretVersion, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
+	}
 	if m.createKey.Active {
 		view = ui.RenderFormOverlay(m.createKey, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}

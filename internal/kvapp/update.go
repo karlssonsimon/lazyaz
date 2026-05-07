@@ -36,6 +36,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				f.Error = ""
 			}
 			return m, nil
+		case m.addSecretVersion.Active:
+			if f := m.addSecretVersion.FocusedField(); f != nil {
+				f.Value += text
+				f.Error = ""
+			}
+			return m, nil
 		case m.createKey.Active:
 			if f := m.createKey.FocusedField(); f != nil {
 				f.Value += text
@@ -142,6 +148,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case secretCreatedMsg:
 		return m.handleSecretCreated(msg)
+
+	case secretVersionAddedMsg:
+		return m.handleSecretVersionAdded(msg)
 
 	case keyCreatedMsg:
 		return m.handleKeyCreated(msg)

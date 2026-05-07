@@ -45,7 +45,7 @@ const (
 // and how data handlers should behave.
 func (m Model) inputMode() InputMode {
 	switch {
-	case m.createSecret.Active, m.createKey.Active, m.importCert.Active:
+	case m.createSecret.Active, m.addSecretVersion.Active, m.createKey.Active, m.importCert.Active:
 		return ModeForm
 	case m.certImportBrowserActive:
 		// File browser is its own kind of text input (filter / typing
@@ -168,10 +168,11 @@ type Model struct {
 	// driving navigation. See jump.go.
 	applyingNav bool
 
-	actionMenu    actionMenuState
-	createSecret  ui.FormOverlayState
-	createKey     ui.FormOverlayState
-	importCert    ui.FormOverlayState
+	actionMenu       actionMenuState
+	createSecret     ui.FormOverlayState
+	addSecretVersion ui.FormOverlayState
+	createKey        ui.FormOverlayState
+	importCert       ui.FormOverlayState
 	confirmModal  ui.ConfirmModalState
 	confirmAction func() tea.Cmd
 	// certImportBrowser is the local-filesystem picker for selecting the

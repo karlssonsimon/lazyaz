@@ -32,6 +32,7 @@ const (
 	actionThemePicker
 	actionHelp
 	actionCreateSecret
+	actionAddSecretVersion
 	actionRevealSecret
 	actionCreateKey
 	actionImportCertificate
@@ -127,6 +128,7 @@ func (m Model) buildActions() []action {
 			}
 			actions = append(actions, action{actionRevealSecret, label, km.RevealSecret.Short()})
 		}
+		actions = append(actions, action{actionAddSecretVersion, fmt.Sprintf("Add new version (%s)...", m.currentSecret.Name), ""})
 	}
 
 	// Per-kind create entries — kept symmetric with actionCreateSecret.
@@ -269,6 +271,10 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 
 	case actionCreateSecret:
 		m.openCreateSecretForm()
+		return m, nil
+
+	case actionAddSecretVersion:
+		m.openAddSecretVersionForm()
 		return m, nil
 
 	case actionCreateKey:

@@ -73,6 +73,31 @@ func (m *Model) openCreateSecretForm() {
 	)
 }
 
+// openAddSecretVersionForm mounts a single-field "Value" form for
+// adding a new version of the currently-selected secret. The secret
+// name is pinned (shown in the breadcrumb) so the user can't rename
+// it mid-flow — that would create a different secret. Backed by the
+// same SetSecret call createSecretCmd uses; re-using the name produces
+// a new version row under the same secret.
+func (m *Model) openAddSecretVersionForm() {
+	if !m.hasVault || !m.hasSecret {
+		return
+	}
+	m.addSecretVersion.OpenWithBreadcrumb(
+		"Add secret version",
+		[]string{m.currentVault.Name, m.currentSecret.Name},
+		[]ui.FormField{
+			{
+				Label:       "Value",
+				Placeholder: "paste new secret value",
+				Hint:        "ctrl+r reveal",
+				Mask:        true,
+				Validate:    validateSecretValue,
+			},
+		},
+	)
+}
+
 // handleFormKey routes a key to whichever form overlay is currently
 // open. On Submit the overlay closes and the corresponding create cmd
 // dispatches; on Cancel the overlay just closes.
@@ -87,6 +112,18 @@ func (m Model) handleFormKey(key string) (Model, tea.Cmd) {
 			name, value := res.Values[0], res.Values[1]
 			m.startLoading(secretsPane, fmt.Sprintf("Creating secret %s in %s...", name, m.currentVault.Name))
 			return m, tea.Batch(m.Spinner.Tick, createSecretCmd(m.service, m.currentVault, name, value))
+		}
+		return m, nil
+	case m.addSecretVersion.Active:
+		res := m.addSecretVersion.HandleKey(key)
+		if res.Action == ui.FormActionSubmit {
+			if !m.hasVault || !m.hasSecret || len(res.Values) < 1 {
+				return m, nil
+			}
+			value := res.Values[0]
+			name := m.currentSecret.Name
+			m.startLoading(versionsPane, fmt.Sprintf("Adding new version of %s...", name))
+			return m, tea.Batch(m.Spinner.Tick, addSecretVersionCmd(m.service, m.currentVault, name, value))
 		}
 		return m, nil
 	case m.createKey.Active:
@@ -432,6 +469,49 @@ func createSecretCmd(svc *keyvault.Service, vault keyvault.Vault, name, value st
 			err:        err,
 		}
 	}
+}
+
+// secretVersionAddedMsg is the async result of addSecretVersionCmd.
+// Distinct from secretCreatedMsg so the handler refreshes the versions
+// list (where the new version appears) instead of the secrets list.
+type secretVersionAddedMsg struct {
+	vaultName  string
+	secretName string
+	err        error
+}
+
+// addSecretVersionCmd calls SetSecret with the existing secret name —
+// the same call as createSecretCmd, but returns a different message
+// type so the handler routes to the versions-list refresh path.
+func addSecretVersionCmd(svc *keyvault.Service, vault keyvault.Vault, name, value string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err := svc.SetSecret(ctx, vault, name, value)
+		return secretVersionAddedMsg{
+			vaultName:  vault.Name,
+			secretName: name,
+			err:        err,
+		}
+	}
+}
+
+// handleSecretVersionAdded reports the outcome and refreshes the
+// versions list so the new version row shows up. Only refreshes when
+// the user is still looking at the same secret — switching secrets
+// mid-flight shouldn't trigger a refetch of an unrelated list.
+func (m Model) handleSecretVersionAdded(msg secretVersionAddedMsg) (Model, tea.Cmd) {
+	m.ClearLoading()
+	if msg.err != nil {
+		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to add secret version: %s", msg.err.Error()))
+		return m, nil
+	}
+	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Added new version of %s in %s", msg.secretName, msg.vaultName))
+	if !m.hasVault || !m.hasSecret || m.currentVault.Name != msg.vaultName || m.currentSecret.Name != msg.secretName {
+		return m, nil
+	}
+	m.startLoading(versionsPane, fmt.Sprintf("Refreshing versions of %s", msg.secretName))
+	return m, tea.Batch(m.Spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, m.currentSecret.Name, m.versions))
 }
 
 // handleSecretCreated reports the outcome and refreshes the secrets
