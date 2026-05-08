@@ -182,10 +182,10 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.pendingPreviewG = false
 		step := max(1, m.preview.viewport.Height()/2)
 		return m.movePreviewCursorByLines(-step)
-	case m.Keymap.PreviewBottom.Matches(key):
+	case m.Keymap.JumpBottom.Matches(key):
 		m.pendingPreviewG = false
 		return m.jumpPreviewToBottom()
-	case m.Keymap.PreviewTopPrefix.Matches(key):
+	case m.Keymap.JumpTopPrefix.Matches(key):
 		if m.pendingPreviewG {
 			m.pendingPreviewG = false
 			return m.jumpPreviewToTop()

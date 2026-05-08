@@ -67,8 +67,8 @@ func Default() Keymap {
 		PreviewPreviousFocus: New("shift+tab"),
 		PreviewDown:          New("j", "down"),
 		PreviewUp:            New("k", "up"),
-		PreviewBottom:        New("G", "end"),
-		PreviewTopPrefix:     New("g", "home"),
+		JumpBottom:           New("G", "end"),
+		JumpTopPrefix:        New("g", "home"),
 
 		// Service Bus.
 		ShowActiveQueue:     New("["),

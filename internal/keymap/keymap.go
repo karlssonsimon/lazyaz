@@ -67,8 +67,8 @@ type Keymap struct {
 	PreviewPreviousFocus Binding `json:"preview_previous_focus"`
 	PreviewDown          Binding `json:"preview_down"`
 	PreviewUp            Binding `json:"preview_up"`
-	PreviewBottom        Binding `json:"preview_bottom"`
-	PreviewTopPrefix     Binding `json:"preview_top_prefix"`
+	JumpBottom           Binding `json:"jump_bottom"`
+	JumpTopPrefix        Binding `json:"jump_top_prefix"`
 
 	// Service Bus app.
 	ShowActiveQueue     Binding `json:"show_active_queue"`
