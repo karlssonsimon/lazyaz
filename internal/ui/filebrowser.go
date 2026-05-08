@@ -355,7 +355,7 @@ func RenderFileBrowser(state FileBrowserState, styles Styles, width, height int,
 	}
 
 	title := truncateMiddle(state.cwd, 60)
-	hint := "/ filter · esc cancel · space mark · v range · enter confirm"
+	hint := "/ filter · g/G top/bot · ctrl+d/u half-page · space mark · v range · o swap · enter"
 	if state.filterInputOpen {
 		hint = "type to filter · enter apply · esc clear"
 	} else if state.filterQuery != "" {
