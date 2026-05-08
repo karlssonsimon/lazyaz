@@ -446,6 +446,75 @@ func TestFileBrowserMarkOperatesOnFilteredView(t *testing.T) {
 	}
 }
 
+func TestFileBrowserGGJumpsToTop(t *testing.T) {
+	reader := &mapDirReader{
+		entries: map[string][]os.DirEntry{
+			"/x": {
+				fakeDirEntry{name: "a"},
+				fakeDirEntry{name: "b"},
+				fakeDirEntry{name: "c"},
+			},
+		},
+	}
+	var s FileBrowserState
+	s.Open("/x", reader, keymap.Default())
+	s.HandleKey("j")
+	s.HandleKey("j")
+	if s.Cursor() != 2 {
+		t.Fatalf("setup: want cursor 2, got %d", s.Cursor())
+	}
+	s.HandleKey("g")
+	if s.Cursor() != 2 {
+		t.Fatalf("first g should be silent, got cursor %d", s.Cursor())
+	}
+	s.HandleKey("g")
+	if s.Cursor() != 0 {
+		t.Fatalf("second g should jump to top, got %d", s.Cursor())
+	}
+}
+
+func TestFileBrowserCapitalGJumpsToBottom(t *testing.T) {
+	reader := &mapDirReader{
+		entries: map[string][]os.DirEntry{
+			"/x": {
+				fakeDirEntry{name: "a"},
+				fakeDirEntry{name: "b"},
+				fakeDirEntry{name: "c"},
+			},
+		},
+	}
+	var s FileBrowserState
+	s.Open("/x", reader, keymap.Default())
+	s.HandleKey("G")
+	if s.Cursor() != 2 {
+		t.Fatalf("G should jump to last (2), got %d", s.Cursor())
+	}
+}
+
+func TestFileBrowserGPrimeResetsOnUnrelatedKey(t *testing.T) {
+	reader := &mapDirReader{
+		entries: map[string][]os.DirEntry{
+			"/x": {
+				fakeDirEntry{name: "a"},
+				fakeDirEntry{name: "b"},
+				fakeDirEntry{name: "c"},
+			},
+		},
+	}
+	var s FileBrowserState
+	s.Open("/x", reader, keymap.Default())
+	s.HandleKey("j") // cursor = 1
+	s.HandleKey("g") // primes
+	s.HandleKey("j") // unrelated key resets prime AND moves cursor
+	if s.Cursor() != 2 {
+		t.Fatalf("after primed g + j: want cursor 2, got %d", s.Cursor())
+	}
+	s.HandleKey("g") // should NOT jump — prime was reset
+	if s.Cursor() != 2 {
+		t.Fatalf("g after reset should stay at 2, got %d", s.Cursor())
+	}
+}
+
 func TestFileBrowserUsesProvidedKeymap(t *testing.T) {
 	// Custom keymap: 'X' moves cursor down instead of 'j'.
 	km := keymap.Default()
