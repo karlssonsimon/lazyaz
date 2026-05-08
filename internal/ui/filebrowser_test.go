@@ -446,6 +446,55 @@ func TestFileBrowserMarkOperatesOnFilteredView(t *testing.T) {
 	}
 }
 
+func TestFileBrowserVisualOSwapsAnchor(t *testing.T) {
+	reader := &mapDirReader{
+		entries: map[string][]os.DirEntry{
+			"/x": {
+				fakeDirEntry{name: "a"},
+				fakeDirEntry{name: "b"},
+				fakeDirEntry{name: "c"},
+				fakeDirEntry{name: "d"},
+			},
+		},
+	}
+	var s FileBrowserState
+	s.Open("/x", reader, keymap.Default())
+	s.HandleKey("j") // cursor = 1
+	s.HandleKey("v") // anchor = 1, visual on
+	s.HandleKey("j") // cursor = 2
+	s.HandleKey("j") // cursor = 3
+	// anchor=1, cursor=3. After 'o': anchor=3, cursor=1.
+	s.HandleKey("o")
+	if s.Cursor() != 1 || s.anchor != 3 {
+		t.Fatalf("after o: want cursor=1 anchor=3, got cursor=%d anchor=%d", s.Cursor(), s.anchor)
+	}
+	// Extending up from the swapped cursor should grow downward (toward 0).
+	s.HandleKey("k") // cursor = 0
+	s.HandleKey("v") // commit; range = [0..3] = a,b,c,d
+	marks := s.Marked()
+	if len(marks) != 4 {
+		t.Fatalf("after o + k + commit: want 4 marks (a,b,c,d), got %d: %v", len(marks), marks)
+	}
+}
+
+func TestFileBrowserVisualOOutsideVisualIsNoOp(t *testing.T) {
+	reader := &mapDirReader{
+		entries: map[string][]os.DirEntry{
+			"/x": {
+				fakeDirEntry{name: "a"},
+				fakeDirEntry{name: "b"},
+			},
+		},
+	}
+	var s FileBrowserState
+	s.Open("/x", reader, keymap.Default())
+	s.HandleKey("j")
+	s.HandleKey("o")
+	if s.Cursor() != 1 {
+		t.Fatalf("o outside visual should be a no-op, cursor moved to %d", s.Cursor())
+	}
+}
+
 func TestFileBrowserHalfPageDown(t *testing.T) {
 	ents := make([]os.DirEntry, 30)
 	for i := range ents {
