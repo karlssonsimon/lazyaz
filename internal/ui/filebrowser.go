@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
 
 // DirReader abstracts filesystem access so the file browser can be
@@ -50,6 +52,9 @@ type FileBrowserState struct {
 
 	filterQuery     string
 	filterInputOpen bool
+
+	km       keymap.Keymap
+	pendingG bool
 }
 
 // Cwd returns the current working directory the browser is showing.
@@ -95,8 +100,10 @@ func (s *FileBrowserState) Marked() []string {
 }
 
 // Open initializes the browser at startDir using reader for fs access.
-// Marks, cursor, visual state, and filter are all reset.
-func (s *FileBrowserState) Open(startDir string, reader DirReader) {
+// Marks, cursor, visual state, and filter are all reset. The keymap
+// is captured for HandleKey to consult; callers pass m.Keymap so the
+// user's keymap config applies.
+func (s *FileBrowserState) Open(startDir string, reader DirReader, km keymap.Keymap) {
 	s.reader = reader
 	s.cwd = startDir
 	s.cursor = 0
@@ -105,6 +112,8 @@ func (s *FileBrowserState) Open(startDir string, reader DirReader) {
 	s.anchor = 0
 	s.filterQuery = ""
 	s.filterInputOpen = false
+	s.km = km
+	s.pendingG = false
 	s.loadEntries()
 }
 

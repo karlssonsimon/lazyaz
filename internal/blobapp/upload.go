@@ -370,7 +370,7 @@ func (m Model) openUploadBrowser() (Model, tea.Cmd) {
 	if err != nil {
 		cwd = "/"
 	}
-	m.uploadBrowser.Open(cwd, ui.OSDirReader{})
+	m.uploadBrowser.Open(cwd, ui.OSDirReader{}, m.Keymap)
 	m.uploadBrowserActive = true
 	return m, nil
 }

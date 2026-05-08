@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
 
 // fakeDirEntry implements os.DirEntry for test injection.
@@ -61,7 +63,7 @@ func TestFileBrowserOpenPopulatesEntries(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/start", reader)
+	s.Open("/start", reader, keymap.Default())
 
 	if s.Cwd() != "/start" {
 		t.Fatalf("want cwd /start, got %q", s.Cwd())
@@ -89,7 +91,7 @@ func TestFileBrowserCursorJAndK(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/x", reader)
+	s.Open("/x", reader, keymap.Default())
 	if s.Cursor() != 0 {
 		t.Fatalf("initial cursor: want 0, got %d", s.Cursor())
 	}
@@ -116,7 +118,7 @@ func TestFileBrowserEnterDirectoryWithL(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/home", reader)
+	s.Open("/home", reader, keymap.Default())
 	s.HandleKey("l")
 	want := filepath.Join("/home", "docs")
 	if s.Cwd() != want {
@@ -135,7 +137,7 @@ func TestFileBrowserGoUpWithH(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/home", reader)
+	s.Open("/home", reader, keymap.Default())
 	s.HandleKey("h")
 	if s.Cwd() != "/" {
 		t.Fatalf("after h: want cwd /, got %q", s.Cwd())
@@ -152,7 +154,7 @@ func TestFileBrowserSpaceTogglesMark(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/x", reader)
+	s.Open("/x", reader, keymap.Default())
 	s.HandleKey(" ")
 	marks := s.Marked()
 	if len(marks) != 1 || filepath.Base(marks[0]) != "a" {
@@ -176,7 +178,7 @@ func TestFileBrowserVisualLineMarksRange(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/x", reader)
+	s.Open("/x", reader, keymap.Default())
 	// Anchor at index 1 (b), move down to index 3 (d), commit.
 	s.HandleKey("j") // cursor = 1 (b)
 	s.HandleKey("v")
@@ -205,7 +207,7 @@ func TestFileBrowserConfirmWithMarksReturnsSelected(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/x", reader)
+	s.Open("/x", reader, keymap.Default())
 	s.HandleKey(" ") // mark a
 	res := s.HandleKey("enter")
 	if res.Action != FBActionConfirm {
@@ -230,7 +232,7 @@ func TestFileBrowserEnterSubmitsWhenDirIsMarked(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/start", reader)
+	s.Open("/start", reader, keymap.Default())
 	s.HandleKey(" ") // cursor at 0 = "mydir"; mark the dir
 	res := s.HandleKey("enter")
 	if res.Action != FBActionConfirm {
@@ -253,7 +255,7 @@ func TestFileBrowserEnterOnDirWithoutMarksStillNavigates(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/start", reader)
+	s.Open("/start", reader, keymap.Default())
 	res := s.HandleKey("enter")
 	if res.Action != FBActionNone {
 		t.Fatalf("want None (navigation), got %v", res.Action)
@@ -272,7 +274,7 @@ func TestFileBrowserEnterOnFileWithoutMarksSubmitsThatFile(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/x", reader)
+	s.Open("/x", reader, keymap.Default())
 	res := s.HandleKey("enter")
 	if res.Action != FBActionConfirm {
 		t.Fatalf("want Confirm (cursor on file, no marks), got %v", res.Action)
@@ -287,7 +289,7 @@ func TestFileBrowserEnterOnEmptyDirIsNoOp(t *testing.T) {
 		entries: map[string][]os.DirEntry{"/x": {}},
 	}
 	var s FileBrowserState
-	s.Open("/x", reader)
+	s.Open("/x", reader, keymap.Default())
 	res := s.HandleKey("enter")
 	if res.Action != FBActionNone {
 		t.Fatalf("want None (empty dir, no marks), got %v", res.Action)
@@ -296,7 +298,7 @@ func TestFileBrowserEnterOnEmptyDirIsNoOp(t *testing.T) {
 
 func TestFileBrowserEscCancels(t *testing.T) {
 	var s FileBrowserState
-	s.Open("/", &mapDirReader{entries: map[string][]os.DirEntry{"/": nil}})
+	s.Open("/", &mapDirReader{entries: map[string][]os.DirEntry{"/": nil}}, keymap.Default())
 	res := s.HandleKey("esc")
 	if res.Action != FBActionCancel {
 		t.Fatalf("want Cancel, got %v", res.Action)
@@ -314,7 +316,7 @@ func TestFileBrowserSlashOpensFilterAndTypingNarrowsList(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/x", reader)
+	s.Open("/x", reader, keymap.Default())
 	s.HandleKey("/")
 	if !s.FilterInputOpen() {
 		t.Fatalf("after /: want filter input open")
@@ -341,7 +343,7 @@ func TestFileBrowserFilterEnterClosesInputKeepsQuery(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/x", reader)
+	s.Open("/x", reader, keymap.Default())
 	s.HandleKey("/")
 	s.HandleKey("b")
 	s.HandleKey("enter")
@@ -363,7 +365,7 @@ func TestFileBrowserFilterEscapeClearsAndEscapeAgainCancels(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/x", reader)
+	s.Open("/x", reader, keymap.Default())
 	s.HandleKey("/")
 	s.HandleKey("a")
 	// First esc closes the input AND clears the query (single press).
@@ -384,7 +386,7 @@ func TestFileBrowserFilterEscapeClearsAndEscapeAgainCancels(t *testing.T) {
 func TestFileBrowserFilterBackspaceRemovesChar(t *testing.T) {
 	reader := &mapDirReader{entries: map[string][]os.DirEntry{"/x": {fakeDirEntry{name: "a"}}}}
 	var s FileBrowserState
-	s.Open("/x", reader)
+	s.Open("/x", reader, keymap.Default())
 	s.HandleKey("/")
 	s.HandleKey("a")
 	s.HandleKey("b")
@@ -405,7 +407,7 @@ func TestFileBrowserFilterSurvivesAcrossEnterExitButClearsOnDirChange(t *testing
 		},
 	}
 	var s FileBrowserState
-	s.Open("/root", reader)
+	s.Open("/root", reader, keymap.Default())
 	s.HandleKey("/")
 	s.HandleKey("s")
 	s.HandleKey("enter") // closes input, filter stays
@@ -433,7 +435,7 @@ func TestFileBrowserMarkOperatesOnFilteredView(t *testing.T) {
 		},
 	}
 	var s FileBrowserState
-	s.Open("/x", reader)
+	s.Open("/x", reader, keymap.Default())
 	s.HandleKey("/")
 	s.HandleKey("b")
 	s.HandleKey("enter") // close input; "beta.txt" is the only visible

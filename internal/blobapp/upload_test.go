@@ -192,7 +192,7 @@ func TestUploadUsesTypedDestPrefixFromTextInput(t *testing.T) {
 	}
 
 	// Drive the file browser to confirm a single file.
-	model.uploadBrowser.Open(tmp, ui.OSDirReader{})
+	model.uploadBrowser.Open(tmp, ui.OSDirReader{}, model.Keymap)
 	model.uploadBrowser.HandleKey(" ") // mark file.txt
 	updated, _ = model.Update(tea.KeyPressMsg{Code: 13, Text: "enter"})
 	model = updated.(Model)

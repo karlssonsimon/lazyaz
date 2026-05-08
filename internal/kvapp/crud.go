@@ -207,7 +207,7 @@ func (m *Model) openImportCertBrowser() {
 		cwd = "/"
 	}
 	m.certImportBrowser = ui.FileBrowserState{}
-	m.certImportBrowser.Open(cwd, ui.OSDirReader{})
+	m.certImportBrowser.Open(cwd, ui.OSDirReader{}, m.Keymap)
 	m.certImportBrowserActive = true
 }
 
