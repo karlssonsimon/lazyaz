@@ -157,22 +157,43 @@ func (s *FileBrowserState) clampCursor() {
 	}
 }
 
+// halfPageStep matches the overlay's MaxVisible (18) / 2.
+const halfPageStep = 9
+
 // HandleKey processes a single key press. Returns the action plus any
-// selected paths (only populated on Confirm).
+// selected paths (only populated on Confirm). Keys are matched against
+// the keymap captured at Open(); unbound keys are silently ignored.
 func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 	if s.filterInputOpen {
 		return s.handleFilterInputKey(key)
 	}
 
-	switch key {
-	case "/":
+	km := s.km
+	primedG := s.pendingG
+	s.pendingG = false
+
+	switch {
+	case km.FilterInput.Matches(key):
 		s.filterInputOpen = true
-		return FileBrowserResult{Action: FBActionNone}
-	case "j", "down":
+	case km.CursorDown.Matches(key):
 		s.moveCursor(1)
-	case "k", "up":
+	case km.CursorUp.Matches(key):
 		s.moveCursor(-1)
-	case "l", "right":
+	case km.HalfPageDown.Matches(key):
+		s.moveCursor(halfPageStep)
+	case km.HalfPageUp.Matches(key):
+		s.moveCursor(-halfPageStep)
+	case km.JumpBottom.Matches(key):
+		if n := len(s.VisibleEntries()); n > 0 {
+			s.cursor = n - 1
+		}
+	case km.JumpTopPrefix.Matches(key):
+		if primedG {
+			s.cursor = 0
+		} else {
+			s.pendingG = true
+		}
+	case km.OpenFocusedAlt.Matches(key):
 		visible := s.VisibleEntries()
 		if len(visible) == 0 {
 			return FileBrowserResult{Action: FBActionNone}
@@ -184,7 +205,7 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 			s.filterQuery = ""
 			s.loadEntries()
 		}
-	case "enter":
+	case km.OpenFocused.Matches(key):
 		// Marks win: if anything is marked, Enter submits the marks.
 		// Otherwise: a directory under the cursor navigates in (use l/right
 		// for explicit nav with marks held); a file under the cursor
@@ -205,7 +226,7 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 			return FileBrowserResult{Action: FBActionNone}
 		}
 		return FileBrowserResult{Action: FBActionConfirm, Selected: []string{filepath.Join(s.cwd, cur.Name())}}
-	case "esc":
+	case km.Cancel.Matches(key):
 		// Peel filter first (mirrors how the blobs pane handles esc).
 		if s.filterQuery != "" {
 			s.filterQuery = ""
@@ -213,7 +234,7 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 			return FileBrowserResult{Action: FBActionNone}
 		}
 		return FileBrowserResult{Action: FBActionCancel}
-	case "h", "left":
+	case km.NavigateLeft.Matches(key):
 		parent := filepath.Dir(s.cwd)
 		if parent != s.cwd {
 			s.cwd = parent
@@ -221,9 +242,9 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 			s.filterQuery = ""
 			s.loadEntries()
 		}
-	case " ", "space":
+	case km.ToggleMark.Matches(key):
 		s.toggleCurrentMark()
-	case "v", "V":
+	case km.ToggleVisualLine.Matches(key):
 		if s.visual {
 			visible := s.VisibleEntries()
 			lo, hi := s.anchor, s.cursor
@@ -238,6 +259,8 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 			s.anchor = s.cursor
 			s.visual = true
 		}
+	case s.visual && km.VisualSwapAnchor.Matches(key):
+		s.anchor, s.cursor = s.cursor, s.anchor
 	}
 	return FileBrowserResult{Action: FBActionNone}
 }

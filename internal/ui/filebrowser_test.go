@@ -446,6 +446,31 @@ func TestFileBrowserMarkOperatesOnFilteredView(t *testing.T) {
 	}
 }
 
+func TestFileBrowserUsesProvidedKeymap(t *testing.T) {
+	// Custom keymap: 'X' moves cursor down instead of 'j'.
+	km := keymap.Default()
+	km.CursorDown = keymap.New("X")
+	reader := &mapDirReader{
+		entries: map[string][]os.DirEntry{
+			"/x": {
+				fakeDirEntry{name: "a"},
+				fakeDirEntry{name: "b"},
+			},
+		},
+	}
+	var s FileBrowserState
+	s.Open("/x", reader, km)
+	s.HandleKey("X")
+	if s.Cursor() != 1 {
+		t.Fatalf("custom CursorDown=X should have moved cursor to 1, got %d", s.Cursor())
+	}
+	// And 'j' should no longer move because it's not bound.
+	s.HandleKey("j")
+	if s.Cursor() != 1 {
+		t.Fatalf("'j' should be inert under custom keymap, got cursor %d", s.Cursor())
+	}
+}
+
 func namesOf(entries []os.DirEntry) []string {
 	out := make([]string, len(entries))
 	for i, e := range entries {
