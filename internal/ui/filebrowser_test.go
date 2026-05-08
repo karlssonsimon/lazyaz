@@ -446,6 +446,50 @@ func TestFileBrowserMarkOperatesOnFilteredView(t *testing.T) {
 	}
 }
 
+func TestFileBrowserHalfPageDown(t *testing.T) {
+	ents := make([]os.DirEntry, 30)
+	for i := range ents {
+		ents[i] = fakeDirEntry{name: "f" + string(rune('a'+i%26)) + string(rune('0'+i%10))}
+	}
+	reader := &mapDirReader{entries: map[string][]os.DirEntry{"/x": ents}}
+	var s FileBrowserState
+	s.Open("/x", reader, keymap.Default())
+	s.HandleKey("ctrl+d")
+	if s.Cursor() != 9 {
+		t.Fatalf("ctrl+d should move +9 (halfPageStep), got cursor %d", s.Cursor())
+	}
+	s.HandleKey("ctrl+d")
+	if s.Cursor() != 18 {
+		t.Fatalf("second ctrl+d should be at 18, got %d", s.Cursor())
+	}
+	s.HandleKey("ctrl+u")
+	if s.Cursor() != 9 {
+		t.Fatalf("ctrl+u should move -9, got %d", s.Cursor())
+	}
+}
+
+func TestFileBrowserHalfPageClampsAtBounds(t *testing.T) {
+	reader := &mapDirReader{
+		entries: map[string][]os.DirEntry{
+			"/x": {
+				fakeDirEntry{name: "a"},
+				fakeDirEntry{name: "b"},
+				fakeDirEntry{name: "c"},
+			},
+		},
+	}
+	var s FileBrowserState
+	s.Open("/x", reader, keymap.Default())
+	s.HandleKey("ctrl+d")
+	if s.Cursor() != 2 {
+		t.Fatalf("ctrl+d on 3-item list should clamp at 2, got %d", s.Cursor())
+	}
+	s.HandleKey("ctrl+u")
+	if s.Cursor() != 0 {
+		t.Fatalf("ctrl+u from 2 should clamp at 0, got %d", s.Cursor())
+	}
+}
+
 func TestFileBrowserGGJumpsToTop(t *testing.T) {
 	reader := &mapDirReader{
 		entries: map[string][]os.DirEntry{
