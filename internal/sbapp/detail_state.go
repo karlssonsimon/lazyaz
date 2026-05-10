@@ -52,6 +52,45 @@ func (m *Model) clearScopeMarks() {
 	delete(m.markedMessages, scope)
 }
 
+// migrateMarksToLocks rewrites marks set during peek (keyed by MessageID)
+// to be keyed by LockID after a receive-with-lock pulls the same physical
+// messages back. Marks for messages that weren't received are dropped:
+// they reference messages no longer in scope of any operation, and
+// keeping them inflates the visible mark count.
+//
+// Called from handleDLQReceived after m.peekedMessages has been replaced
+// with the locked variants. Without this, re-marking on the locked view
+// (which the user is tempted to do because the visual mark indicators
+// follow LockID, not MessageID) leaves both keys in the marks map and
+// doubles the count — issue #4.
+func (m *Model) migrateMarksToLocks() {
+	scope := m.markScope()
+	marks := m.markedMessages[scope]
+	if len(marks) == 0 {
+		return
+	}
+
+	migrated := make(map[string]struct{}, len(marks))
+	for _, msg := range m.peekedMessages {
+		if msg.LockID == "" {
+			continue
+		}
+		if _, byMessageID := marks[msg.MessageID]; byMessageID {
+			migrated[msg.LockID] = struct{}{}
+			continue
+		}
+		if _, byLockID := marks[msg.LockID]; byLockID {
+			migrated[msg.LockID] = struct{}{}
+		}
+	}
+
+	if len(migrated) == 0 {
+		delete(m.markedMessages, scope)
+		return
+	}
+	m.markedMessages[scope] = migrated
+}
+
 func (m *Model) toggleVisualLineMode() {
 	if m.visualLineMode {
 		m.commitVisualSelection()

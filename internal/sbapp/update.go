@@ -341,6 +341,7 @@ func (m Model) handleDLQReceived(msg dlqReceivedMsg) (Model, tea.Cmd) {
 
 	m.lockedMessages = msg.result
 	m.peekedMessages = msg.result.PeekedMessages()
+	m.migrateMarksToLocks()
 
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(m.messageItems())
