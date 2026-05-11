@@ -1,10 +1,12 @@
 ---
-title: "Key Vault - Browse Secrets, Copy Values to Clipboard from Terminal"
-description: "Browse Azure Key Vault from your terminal with lazyaz. List secrets and version history, yank values to clipboard without displaying them, bulk-export as JSON. Keyboard-driven and secure."
+title: "Key Vault - Browse Secrets, Certificates & Keys from Terminal"
+description: "Browse Azure Key Vault from your terminal with lazyaz. List secrets, certificates, and keys with version history, yank secret values to clipboard or reveal them on screen, bulk-export as JSON. Keyboard-driven."
 ---
 
-The Key Vault view lets you browse vaults, list secrets and their version
-history, and yank secret values to your clipboard.
+The Key Vault view lets you browse vaults and three kinds of vault objects —
+secrets, certificates, and keys — along with their version history. You can
+yank secret values to your clipboard, toggle an on-screen reveal, and create
+or delete objects of each kind.
 
 **Common tasks this replaces:**
 - `az keyvault secret show` to retrieve individual secret values
@@ -14,15 +16,20 @@ history, and yank secret values to your clipboard.
 
 ## Pane layout
 
-**Vaults** → **Secrets** → **Versions**
+**Vaults** → **Kind** → **Items** → **Versions**
+
+The **Kind** column is a fixed three-row chooser between Secrets,
+Certificates, and Keys. Selecting a row drives which collection the items
+column renders; the rest of the view (action menu, versions column, inspect
+strip) follows.
 
 Focus moves between panes with `Tab` / `Shift+Tab`. Press `Enter` or `l` to
 drill in, and `h` or `Left` to go back.
 
-## Browsing secrets
+## Browsing items
 
-Select a vault to load its secrets. Each secret shows its name in the list.
-Press `Enter` on a secret to see its version history — versions are listed
+Select a vault to load the kind picker, pick a kind to load its items, and
+press `Enter` on an item to see its version history. Versions are listed
 with their creation date and status (enabled / disabled).
 
 ## Yanking secret values
@@ -32,59 +39,111 @@ clipboard. The value is never displayed on screen — it goes straight to the
 clipboard and a confirmation toast appears.
 
 For bulk export, mark multiple secrets with `Space` or visual-line mode (`v`),
-then open the action menu (`a`) and select "Yank marked as JSON". This fetches
-all marked secret values and copies them as a JSON object to your clipboard.
+then open the action menu (`a`) and select **Yank marked as JSON**. This
+fetches all marked secret values and copies them as a JSON object to your
+clipboard.
 
-## Creating secrets
+## Revealing values on screen
 
-Press `a` on the secrets pane and choose **Create secret...** to open a
-two-field form: a **Name** (1–127 chars, letters/digits/hyphens) and a
-**Value**. The value field is masked while you type — press `Ctrl+R` to
-toggle reveal.
+Press `R` (default keymap) or `Alt+R` (standard) to fetch the secret value
+and render it in-place. If the inspect strip is hidden it opens
+automatically; the value lands inline and stays visible until you toggle
+reveal off again (the strip stays open with the value masked), navigate to
+a different vault, or switch subscription. Reveal only applies to the
+cursor's secret or version — it does not bulk-reveal marked items.
 
-Submitting calls Azure's `SetSecret`, which creates a new secret or — if a
-secret with that name already exists — adds a new version. The list refreshes
-automatically so the new entry appears without a manual reload.
+Reveal is convenient for sanity checks, but the value enters terminal
+scrollback — clear it (or your scrollback) if you'd rather it not stick
+around.
 
-Update of an existing value is implicit (re-create with the same name = new
-version). Delete and disable aren't supported yet.
+## Creating, deleting & importing
+
+The action menu (`a`) on the items column exposes write operations that vary
+by the active kind:
+
+| Kind | Actions |
+|---|---|
+| Secrets | **Create secret...**, **Add new version...** (versions pane), **Delete secret...** |
+| Certificates | **Import certificate...**, **Delete certificate...** |
+| Keys | **Create key...**, **Delete key...** |
+
+**Create secret** opens a two-field form: a **Name** (1–127 chars,
+letters/digits/hyphens) and a **Value**. The value field is masked while you
+type — press `Ctrl+R` to toggle reveal. Submitting calls Azure's
+`SetSecret`, which creates a new secret or — if a secret with that name
+already exists — adds a new version. **Add new version** is the same form
+without the name field for an existing secret.
+
+**Import certificate** opens a local file browser to pick a PFX file (other
+extensions are rejected with a notification), then prompts for a name and
+(optional) password.
+
+**Create key** opens a two-field form: name and algorithm (one of
+`RSA-2048`, `RSA-3072`, `RSA-4096`, `EC-P256`, `EC-P384`, `EC-P521` —
+defaults to `RSA-2048`).
+
+**Delete** operations confirm before calling Azure's soft-delete — items
+move to the vault's recovery bin and can be purged or recovered through the
+Azure CLI / portal. The list refreshes automatically after each write.
 
 ## Selecting secrets
 
 Mark individual secrets with `Space`, or use visual-line mode for ranges:
 
 1. Press `v` to enter visual-line mode on the secrets pane.
-2. Move the cursor to extend the selection.
-3. Press `v` again to commit, or `Esc` to cancel.
+2. Move the cursor to extend the selection. Press `o` to swap the anchor.
+3. Press `v` again or `Esc` to commit the range to marks.
 
-Marked secrets can be bulk-yanked through the action menu.
+Marked secrets can be bulk-yanked through the action menu. Marking is only
+wired up on the Secrets kind today.
 
 ## Inspect panel
 
-Press `K` to toggle the inspect strip, which shows details for the selected
-vault, secret, or version — including metadata and properties.
+Press `K` to toggle the inspect strip. It renders a fixed set of labelled
+fields for the current selection — vault (name / subscription / resource
+group / URI), kind row, item (name + properties), or version — and shows
+revealed values inline.
 
 ## Actions
 
-Press `a` to open the action menu. Available actions depend on which pane is focused.
+Press `a` to open the action menu. Available actions depend on which pane
+and which kind is focused.
 
-### Secrets pane
+### Secrets — items pane
 
 | Action | Description |
 |---|---|
 | Yank secret name | Copy the secret name to clipboard |
 | Yank secret value | Fetch and copy the secret value to clipboard |
-| Create secret... | Open a two-field form to create a secret (or add a new version of an existing one) |
+| Reveal / Hide secret value | Toggle on-screen reveal in the inspect strip |
+| Create secret... | Open a two-field form (creates or adds a new version) |
+| Delete secret... | Soft-delete the secret under the cursor |
 | Toggle mark | Mark or unmark the current secret |
 | Toggle visual line selection | Enter or exit visual-line mode |
-| Yank marked as JSON (N) | Fetch all marked secrets and copy as a JSON object (shown when marks exist) |
+| Yank marked as JSON (N) | Fetch all marked secrets and copy as JSON (shown when marks exist) |
 | Clear all marks | Remove all marks (shown when marks exist) |
 
-### Versions pane
+### Secrets — versions pane
 
 | Action | Description |
 |---|---|
 | Yank version value | Fetch and copy a specific version's value to clipboard |
+| Reveal / Hide version value | Toggle on-screen reveal of the version's value |
+| Add new version... | Add a new version to the current secret |
+
+### Certificates — items pane
+
+| Action | Description |
+|---|---|
+| Import certificate... | Pick a PFX file and import it as a new certificate |
+| Delete certificate... | Soft-delete the certificate under the cursor |
+
+### Keys — items pane
+
+| Action | Description |
+|---|---|
+| Create key... | Open a form to create a new key |
+| Delete key... | Soft-delete the key under the cursor |
 
 ### Any pane
 
@@ -93,6 +152,8 @@ Press `a` to open the action menu. Available actions depend on which pane is foc
 | Refresh | Reload the current scope |
 | Toggle details panel | Show or hide the inspect strip |
 | Change subscription | Open the subscription picker |
+| Open theme picker | Open the theme picker (standalone only) |
+| Toggle help | Open or close the help overlay (standalone only) |
 
 ## Keybindings
 
@@ -105,8 +166,14 @@ Press `a` to open the action menu. Available actions depend on which pane is foc
 | `Ctrl+D` / `Ctrl+U` | Half-page scroll |
 | `a` | Action menu |
 | `y` | Yank secret value to clipboard |
-| `Space` | Toggle mark |
-| `v` | Visual-line selection |
+| `R` | Toggle on-screen reveal |
+| `Space` | Toggle mark (secrets) |
+| `v` / `V` | Visual-line selection (secrets) |
 | `K` | Toggle inspect panel |
 | `S` | Switch subscription |
 | `r` | Refresh current scope |
+| `d` | Reload subscriptions |
+| `T` | Theme picker |
+| `?` / `F1` | Help |
+| `N` | Notifications history |
+| `F` | Activity overlay |

@@ -65,6 +65,9 @@ If you work with multiple tenants, don't worry — lazyaz supports [switching te
 lazyaz
 ```
 
+`lazyaz --version` (or `-v`) prints the build version. There are no other
+flags or subcommands — everything lives inside the TUI.
+
 ## Your first 60 seconds
 
 lazyaz ships with two keymaps: **vim-style** (default) and **standard**. Switch by setting `keymap` in `~/.config/lazyaz/config.json`:
@@ -85,7 +88,7 @@ lazyaz ships with two keymaps: **vim-style** (default) and **standard**. Switch 
 
 4. **Use the action menu** — press `a` for context-aware actions: download blobs, requeue dead-letter messages, yank secrets.
 
-5. **Open the command palette** — press `Ctrl+P` to search all commands: open new tabs, switch themes, change subscriptions, switch tenants.
+5. **Open the command palette** — press `Ctrl+P` to search all commands: open new tabs, switch themes, switch tenants, browse the activity overlay, and more. (Switching subscriptions has its own top-level shortcut, `S`.)
 
 </Steps>
 </TabItem>
@@ -100,7 +103,7 @@ lazyaz ships with two keymaps: **vim-style** (default) and **standard**. Switch 
 
 4. **Use the action menu** — press `a` for context-aware actions: download blobs, requeue dead-letter messages, yank secrets.
 
-5. **Open the command palette** — press `Ctrl+P` to search all commands: open new tabs, switch themes, change subscriptions, switch tenants.
+5. **Open the command palette** — press `Ctrl+P` to search all commands: open new tabs, switch themes, switch tenants, browse the activity overlay, and more. (Switching subscriptions has its own top-level shortcut, `S`.)
 
 </Steps>
 </TabItem>
@@ -113,6 +116,7 @@ Skip the subscription picker by configuring startup tabs in `~/.config/lazyaz/co
 ```json
 {
   "tabs": [
+    { "kind": "dashboard", "subscription": "your-subscription-id" },
     { "kind": "blob", "subscription": "your-subscription-id" },
     { "kind": "servicebus", "subscription": "your-subscription-id" },
     { "kind": "keyvault" }
@@ -120,7 +124,10 @@ Skip the subscription picker by configuring startup tabs in `~/.config/lazyaz/co
 }
 ```
 
-lazyaz opens directly into these tabs on launch. See [Configuration](/lazyaz/configuration/overview/) for all options.
+lazyaz opens directly into these tabs on launch. If no startup tabs are
+configured, a Dashboard tab is opened by default. Unknown `kind` values are
+skipped with a warning on the first tab's status bar. See
+[Configuration](/lazyaz/configuration/overview/) for all options.
 
 ## Next steps
 

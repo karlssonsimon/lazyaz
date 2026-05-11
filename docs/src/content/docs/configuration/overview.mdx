@@ -13,22 +13,35 @@ The main config file is `config.json`:
 {
   "theme": "Default Dark",
   "download_dir": "~/Downloads",
+  "nerdfonts": true,
   "tabs": [
     { "kind": "blob", "subscription": "<subscription-id>" },
     { "kind": "servicebus", "subscription": "<subscription-id>" },
-    { "kind": "keyvault" }
+    { "kind": "keyvault" },
+    { "kind": "dashboard" }
   ]
 }
 ```
 
-When `tabs` are configured, lazyaz opens directly into those tabs on launch instead of
-showing the subscription picker.
+When `tabs` are configured, lazyaz opens directly into those tabs on launch
+instead of showing the subscription picker. Recognised `kind` values are
+`blob`, `servicebus`, `keyvault`, and `dashboard`.
+
+### `nerdfonts`
+
+Controls whether tab badges use Nerd Font glyphs (default) or terminal-safe
+Unicode fallbacks. Set `"nerdfonts": false` if your terminal isn't using a
+Nerd Font — there's no reliable runtime detection, so the choice is
+config-driven.
 
 ## Themes
 
-Theme files live in `~/.config/lazyaz/themes/` as Base16 YAML schemes. Stock themes
-(Tokyo Night, Rose Pine, Bamboo, and more) are written to this directory on first run.
-You can edit them or add your own — any `.yaml` file in the themes directory is picked up.
+Theme files live in `~/.config/lazyaz/themes/` as Base16 YAML schemes. Stock
+themes (Tokyo Night, Rose Pine, Bamboo, and more — 300+ in total) are
+written to this directory on every launch to pick up format changes, so
+**edits to stock theme files are overwritten**. To customize a stock theme,
+copy it to a new filename first. Any `.yaml` file in the directory whose
+name doesn't collide with a stock theme is picked up untouched.
 
 Switch themes at runtime with `T`.
 

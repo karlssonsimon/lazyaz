@@ -30,15 +30,29 @@ Dashboard**.
 
 The dashboard shows four widgets tiled in a grid:
 
-| Widget | Shows |
-|---|---|
-| **Namespace counts** | Message counts per Service Bus namespace — queues, topics, active and dead-letter totals. Sortable by name, queue count, topic count, active, or DLQ messages |
-| **DLQ alerts** | Entities with dead-letter messages. Sortable by DLQ count (default), namespace, or entity name. Each row drills directly into that entity's DLQ |
-| **Most used Blob** | Your frequently accessed blob containers — based on recent navigation history |
-| **Most used Service Bus** | Your frequently accessed queues and subscriptions — same heuristic |
+| Widget | Shows | Sortable by |
+|---|---|---|
+| **Namespace counts** | Message counts per Service Bus namespace — queues, topics, active and dead-letter totals | Namespace, Queue count, Topic count, Active messages, DLQ messages |
+| **DLQ alerts** | Entities with dead-letter messages; each row drills directly into that entity's DLQ pane | DLQ count (default), Namespace, Entity |
+| **Most used · Blob** | Your most-touched Blob accounts and containers, ranked by cumulative drill-in count from the persistent usage table | Uses, Resource, Kind |
+| **Most used · Service Bus** | Your most-touched namespaces, queues, and topic subscriptions, same ranking | Uses, Resource, Kind |
 
-Widgets auto-refresh every 30 seconds. They share a single cache broker so the
-data is also available instantly to the matching explorer tab.
+Each widget header carries a short context line:
+
+- Namespace counts → `312 total` (or `11 visible · 312 total` while a filter is active)
+- DLQ alerts → `5 · 1 240 msgs` (or `all clear` when no DLQ has messages)
+- Used widgets → `last 7d`
+
+Widgets auto-refresh their counts every 30 seconds. They share a single
+cache broker so the data is also available instantly to the matching
+explorer tab.
+
+### Color coding
+
+Numeric cells use a three-tier scale. Counts (queues / topics) warn at 50
+and turn pink at 200; live message backlogs warn at 1 000 and turn pink at
+5 000; DLQ counts warn at 100 and turn pink at 1 000. Zero is muted. Used
+widgets shade the top-quartile rows warm and pink-highlight the leader.
 
 ## Spatial navigation
 
@@ -67,9 +81,8 @@ like moving around a grid.
 
 ## Scrolling within a widget
 
-Each widget has its own internal scroll state. Use the same keys you'd use in
-a pager — scroll doesn't affect the focused widget position, just the content
-inside it.
+Each widget has its own row cursor and scroll offset. The keys below move
+the row cursor; the view scrolls to keep it visible.
 
 <Tabs syncKey="keymap">
 <TabItem label="Vim (default)">
@@ -97,22 +110,38 @@ inside it.
 ## Drilling into a resource
 
 Press `o` on a row to open the matching explorer with that resource already
-selected. For example, pressing `o` on a DLQ alert row opens a Service Bus tab
-navigated directly to that entity's dead-letter pane. The same action is also
-reachable through the action menu (`a` → choose "Open in...").
+selected. For example, pressing `o` on a DLQ alert row opens a Service Bus
+tab navigated directly to that entity's dead-letter pane. Topic-subscription
+rows in **Most used · Service Bus** likewise open into their DLQ pane,
+matching the dashboard's "fix-the-problem" framing. The same action is also
+reachable through the action menu (`a` → "Open in...").
 
 This works through the same pending-navigation path the jump list uses — if
 the target tab's cache is warm the switch is instant; otherwise it fetches
 just what's needed to land you on the right pane.
 
+## Filtering
+
+Press `/` to open a substring filter for the focused widget. Type to refine,
+`Enter` accepts (the filter persists in the title bar as `filter: <text>`),
+`Esc` clears it. The filter is per-widget and doesn't survive a refresh of
+the underlying data.
+
 ## Widget actions
 
-Some widgets have context-aware actions — open the action menu with `a` while
-a widget is focused. For example, the **DLQ alerts** widget offers sort options
-(by namespace, by entity, by count).
+Each widget exposes a small action menu — open it with `a` while the widget
+is focused. Direct keybinds work without opening the menu:
 
-The action menu shows only the actions relevant to the focused widget. Press
-`a`, navigate with `j`/`k`, `Enter` to confirm.
+| Key | Action | Widgets |
+|---|---|---|
+| `o` | Open in matching explorer tab | All |
+| `s` | Open sort picker | All (widgets that expose `SortFields`) |
+| `x` | Clear usage stats for this widget | Used · Blob / Used · Service Bus |
+
+The action menu shows only the actions relevant to the focused widget.
+Navigate with `j`/`k`, `Enter` or `o` confirms, `Esc` cancels. Pressing the
+direct keybind (e.g. `s`) while the menu is open also fires the matching
+action and closes the menu.
 
 ## Refresh
 

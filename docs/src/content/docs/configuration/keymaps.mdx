@@ -161,7 +161,7 @@ hotkeys. The shortcuts below are the ones with a direct binding.
 | Visual-line mode (messages) | `v` / `V` |
 | Exit visual mode | `Esc` |
 | Swap visual anchor | `o` |
-| Toggle DLQ entity filter (entities pane) | `s` |
+| Sort entities (entities pane) | `s` |
 | Close message preview | `h` / `Left` / `Backspace` / `Esc` |
 </TabItem>
 <TabItem label="Standard">
@@ -171,13 +171,14 @@ hotkeys. The shortcuts below are the ones with a direct binding.
 | Visual-line mode (messages) | `Shift+Down` / `Shift+Up` |
 | Exit visual mode | `Esc` |
 | Swap visual anchor | `o` |
-| Toggle DLQ entity filter (entities pane) | `Ctrl+L` |
+| Sort entities (entities pane) | `Ctrl+L` |
 | Close message preview | `Left` / `Backspace` / `Esc` |
 </TabItem>
 </Tabs>
 
-DLQ operations (requeue, move, complete, abandon) are available through the
-action menu after either peeking or receiving-with-lock. See
+DLQ operations (requeue, move, complete, abandon) and the "Filter: only
+with dead letters" entity filter are available through the action menu
+after either peeking or receiving-with-lock. See
 [Service Bus](/lazyaz/resources/service-bus/) for the full flow.
 
 ## Key Vault
@@ -187,13 +188,24 @@ action menu after either peeking or receiving-with-lock. See
 | Action | Keys |
 |---|---|
 | Yank secret value | `y` |
+| Toggle on-screen reveal | `R` |
+| Toggle mark (secrets) | `Space` |
+| Visual-line mode (secrets) | `v` / `V` |
 </TabItem>
 <TabItem label="Standard">
 | Action | Keys |
 |---|---|
 | Yank secret value | `Ctrl+C` |
+| Toggle on-screen reveal | `Alt+R` |
+| Toggle mark (secrets) | `Space` |
+| Visual-line mode (secrets) | `Shift+Down` / `Shift+Up` |
 </TabItem>
 </Tabs>
+
+The items column switches between **Secrets**, **Certificates**, and
+**Keys** depending on the row picked in the Kind column. Yank, reveal, and
+marking work on secrets; certificates and keys expose create / import /
+delete from the action menu.
 
 ## Dashboard
 
@@ -310,11 +322,16 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
     "preview_previous_focus": ["shift+tab"],
     "preview_down": ["j", "down"],
     "preview_up": ["k", "up"],
-    "preview_bottom": ["G", "end"],
-    "preview_top_prefix": ["g", "home"],
+    "jump_bottom": ["G", "end"],
+    "jump_top_prefix": ["g", "home"],
+    "show_active_queue": ["["],
+    "show_dead_letter_queue": ["]"],
+    "requeue_dlq": ["R"],
+    "delete_duplicate": ["D"],
     "toggle_dlq_filter": ["s"],
     "message_back": ["h", "left", "backspace", "esc"],
     "yank_secret": ["y"],
+    "reveal_secret": ["R"],
     "inspect": ["K"],
     "widget_left": ["ctrl+h", "alt+h"],
     "widget_down": ["ctrl+j", "alt+j"],
@@ -389,11 +406,16 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
     "preview_previous_focus": ["shift+tab"],
     "preview_down": ["down"],
     "preview_up": ["up"],
-    "preview_bottom": ["end"],
-    "preview_top_prefix": ["home"],
+    "jump_bottom": ["end"],
+    "jump_top_prefix": ["home"],
+    "show_active_queue": ["["],
+    "show_dead_letter_queue": ["]"],
+    "requeue_dlq": ["ctrl+r"],
+    "delete_duplicate": ["delete"],
     "toggle_dlq_filter": ["ctrl+l"],
     "message_back": ["left", "backspace", "esc"],
     "yank_secret": ["ctrl+c"],
+    "reveal_secret": ["alt+r"],
     "inspect": ["ctrl+i"],
     "widget_left": ["alt+left", "alt+h"],
     "widget_down": ["alt+down", "alt+j"],

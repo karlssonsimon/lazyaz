@@ -43,16 +43,17 @@ subscription to reach the Active/DLQ picker.
 
 ### Sorting and filtering entities
 
-Press `a` to open the action menu and select **Sort entities** to sort by:
+Press `s` (or `a` → **Sort entities**) on the entities pane to open the
+sort picker:
 
 - Default order
 - Name (ascending / descending)
 - Active messages (ascending / descending)
 - Dead letters (ascending / descending)
 
-The action menu also offers **Filter: only with dead letters** to hide entities
-with zero DLQ messages, and **Show all entities** to clear the filter. Press `s`
-as a shortcut to toggle the DLQ filter.
+The action menu also offers **Filter: only with dead letters** to hide
+entities with zero DLQ messages, and **Show all entities** to clear the
+filter. The filter is action-menu-only — there is no dedicated shortcut.
 
 ## Peeking messages
 
@@ -99,8 +100,10 @@ abandons any held locks automatically.
 ### Receive with lock
 
 To actually change DLQ state, open the action menu and choose **Receive DLQ
-messages (with lock)**. This pulls up to 50 messages from the DLQ and holds
-locks on them. The pane title changes to `DLQ Locked (N)` to indicate the mode.
+messages (with lock)**. This receives up to 50 messages in a single 30-second
+call — often fewer, depending on the broker — and holds locks on them. The
+pane title changes to `DLQ Locked (N)` to indicate the mode. If nothing
+locks (count is `0`), only **Abandon all** is useful.
 
 Once locked, the action menu offers:
 
@@ -116,26 +119,43 @@ Use `Space` or visual-line mode to mark messages before opening the action menu.
 
 ### Bulk operations from the queue type pane
 
-For larger jobs, skip the per-message lock flow and use the action menu on the
-**queue type pane** (Active/DLQ picker):
+For larger jobs, skip the per-message lock flow and use the action menu on
+the **queue type pane** (Active/DLQ picker). Both entries only appear when
+the selected queue type has at least one message.
 
-- **Requeue all DLQ messages (N)** — drains the entire DLQ to the active queue.
-  Receives in batches of 50, sends each, completes each, repeats until empty.
-- **Move all active messages to... (N)** / **Move all DLQ messages to... (N)** —
-  same but sends to a different target you pick. The label includes whether
-  it's the active or DLQ queue based on which one you have open.
+- **Requeue all DLQ messages (N)** — drains the entire DLQ to the active
+  queue. Receives in batches of 50, sends each, completes each, repeats
+  until empty.
+- **Move all active messages to... (N)** / **Move all DLQ messages to...
+  (N)** — same but sends to a different target you pick. The label includes
+  whether it's the active or DLQ queue based on which one you have open.
 
 These are safer than looping locally because they lock each batch before
 processing, and recover if interrupted (unprocessed messages retain their
 original delivery count).
 
+Both bulk operations are bounded by a 120-second window. Very large queues
+may complete partially — the result notification reports how many succeeded
+before the deadline.
+
+### Move targets
+
+Picking **Move ... to...** opens a target picker. The first phase lists
+entities in the current namespace plus a synthetic `Other namespace...`
+entry; selecting that opens a second phase to pick a different namespace,
+then entities within it.
+
+Cross-namespace moves require AAD with `Send` rights on the target — there's
+no connection-string fallback for the target side, so an explicit "Send
+claim required" error means the credential doesn't have the right role.
+
 ### Operation progress
 
-Long-running bulk operations report progress through the **Activity overlay**
-(`F`), which shows in-flight uploads, fetches, requeue/move runs, and lets
-you cancel mid-flight. The overlay also surfaces the most recent finished
-work so you can confirm a job completed without scrolling notification
-history.
+Long-running bulk operations show progress through a spinner and resolve
+with a notification when they finish. The app-level **Activity overlay**
+(`F`) tracks in-flight cache fetches across all tabs, but Service Bus
+requeue/move operations are not currently wired into it — watch the
+notifier and pane status instead.
 
 ## Selecting messages
 
@@ -150,9 +170,11 @@ Visual-line mode behaves like vim:
 
 ## Inspect panel
 
-Press `K` to toggle the inspect strip, which shows details for the selected
-namespace, entity, subscription, or message — including message counts,
-metadata, and properties.
+Press `K` to toggle the inspect strip, which shows a fixed set of fields
+for the current selection: namespace (name / subscription / resource group /
+FQDN), entity (name / kind / active / DLQ counts), topic subscription
+(name / parent topic / active / DLQ counts), or message (ID / enqueued time
+/ body preview).
 
 ## Jump list
 
@@ -174,10 +196,12 @@ Press `a` to open the action menu. Available actions depend on which pane is foc
 
 ### Queue type pane
 
+Both entries only appear when the selected queue type has `count > 0`.
+
 | Action | Description |
 |---|---|
 | Requeue all DLQ messages (N) | Requeue every dead-letter message back to the active queue |
-| Move all messages to... (N) | Move all active or DLQ messages to a different queue or subscription |
+| Move all active / DLQ messages to... (N) | Move all messages of the open type to a different queue or subscription |
 
 ### Messages pane — peek mode
 
@@ -188,6 +212,7 @@ Press `a` to open the action menu. Available actions depend on which pane is foc
 | Peek active / DLQ messages (fresh) | Discard current batch and re-peek |
 | Clear messages | Drop the local snapshot |
 | Receive DLQ messages (with lock) | Lock messages for transactional operations (DLQ only) |
+| Open blob in explorer | Cross-tab jump — shown (here and in the preview pane) when the cursor message is a `Microsoft.Storage.Blob*` Event Grid envelope; opens a Blob tab pre-positioned on that blob |
 | Toggle mark | Mark or unmark the current message |
 | Toggle visual line selection | Enter or exit visual-line mode |
 
@@ -206,9 +231,16 @@ Press `a` to open the action menu. Available actions depend on which pane is foc
 
 | Action | Description |
 |---|---|
-| Refresh | Reload the current scope |
-| Toggle details panel | Show or hide the inspect strip |
+| Refresh | Reload the current scope (hidden from message preview) |
+| Toggle details panel | Show or hide the inspect strip (hidden from message preview) |
 | Change subscription | Open the subscription picker |
+| Open theme picker | Open the theme picker (standalone only) |
+| Toggle help | Open or close the help overlay (standalone only) |
+
+The **Message preview pane** offers only the **Open blob in explorer** entry
+(when the cursor message is an Event Grid blob event) plus subscription /
+theme / help — refresh and inspect are intentionally hidden because they
+have no effect on a single-message view.
 
 ## Keybindings
 
@@ -220,13 +252,13 @@ Press `a` to open the action menu. Available actions depend on which pane is foc
 | `/` | Filter focused pane |
 | `Ctrl+D` / `Ctrl+U` | Half-page scroll |
 | `a` | Action menu |
-| `s` | Toggle DLQ entity filter (entities pane) |
+| `s` | Open sort picker (entities pane) |
 | `Space` | Toggle mark (messages pane) |
 | `v` / `V` | Visual-line selection |
 | `o` | Swap visual anchor |
-| `Esc` | Exit visual mode / close preview |
+| `Esc` | Exit visual mode (commits selection) / close preview / cancel filter or overlay |
 | `K` | Toggle inspect panel |
 | `S` | Switch subscription |
-| `r` | Refresh current scope |
-| `F` | Activity overlay (app-level) |
+| `r` | Refresh — re-fetches entity counts from the queue-type pane; re-peeks from the messages pane (unless DLQ is locked) |
+| `F` | Activity overlay (app-level — currently shows cache fetches only) |
 | `Ctrl+O` / `Ctrl+I` | Jump back / forward in history |

@@ -54,8 +54,9 @@ run a server-side query — this works regardless of container size.
 Press `Enter` on a blob to open the preview pane. The preview uses range
 reads — it doesn't download the entire file, so it's safe to open large blobs.
 
-Syntax highlighting is applied automatically for JSON, XML, and CSV based on
-the blob's content type or file extension.
+Syntax highlighting is applied automatically based on the file extension or
+content type — Chroma covers most common languages (JSON, XML, YAML, Go,
+Python, SQL, shell, HCL, and many more).
 
 | Key | Action |
 |---|---|
@@ -63,7 +64,7 @@ the blob's content type or file extension.
 | `Ctrl+D` / `Ctrl+U` | Half-page scroll |
 | `G` | Jump to bottom |
 | `gg` | Jump to top |
-| `h` / `Esc` | Close preview |
+| `h` / `Left` / `Esc` | Close preview |
 
 You can select text in the preview with the mouse — the selection is copied
 to your clipboard on release.
@@ -76,7 +77,7 @@ Mark individual blobs with `Space`, or use visual-line mode for ranges:
 
 1. Press `v` to enter visual-line mode on the blobs pane.
 2. Move the cursor to extend the selection. Press `o` to extend from the other end.
-3. Press `v` again to commit the selection, or `Esc` to cancel.
+3. Press `v` again or `Esc` to commit the range to marks.
 4. Press `D` to download all marked blobs.
 
 </Steps>
@@ -87,15 +88,16 @@ to `~/Downloads`).
 
 ## Uploading
 
-Press `a` on the blobs pane and choose **Upload files...** to open the file
-browser. Navigate with `j`/`k`/`h`/`l`, mark files or folders with `space` (or
-`v` for visual-line range), and press `enter` to confirm.
+Press `a` on the blobs pane and choose **Upload files...** to open a prompt
+for the destination prefix — it's prefilled with your current folder, but
+you can edit it to upload anywhere (new prefixes are created on the fly).
+Confirm to open the file browser. Navigate with `j`/`k`/`h`/`l`, mark files
+or folders with `space` (or `v` for visual-line range), and press `enter` to
+confirm.
 
-Uploads go to the virtual folder you're currently browsing — navigate to the
-target location in blob storage first, then start the upload.
-
-Folder picks are recursive: `./data/2026/q1/report.csv` becomes
-`<currentFolder>/data/2026/q1/report.csv`. Symlinks are not followed.
+Folder picks are recursive and rooted at the folder's basename: picking
+`./data` uploads as `<dest>/data/2026/q1/report.csv`. Single-file picks land
+at `<dest>/<basename>`. Symlinks are skipped.
 
 **Conflicts.** When a blob already exists, a prompt appears:
 
@@ -120,25 +122,26 @@ Beyond browse and download, the action menu (`a`) exposes write operations:
 - **Delete container...** — available when a container is focused.
 - **Rename blob...** / **Delete blob...** — on any blob (not a virtual folder).
 - **Delete marked (N)...** — bulk delete of marked blobs.
+- **Delete folder...** — on a virtual folder, recursive. Works on both HNS
+  and flat-namespace accounts: HNS uses the atomic Data Lake delete; flat
+  namespace enumerates blobs under the prefix and deletes them in sequence.
 
-For storage accounts with **hierarchical namespace** (Data Lake Gen2), folders
-are first-class resources rather than virtual prefixes, so additional actions
-appear:
+For storage accounts with **hierarchical namespace** (Data Lake Gen2),
+folders are first-class resources, so two additional actions appear:
 
-- **Create folder...**
-- **Rename folder...** (on a folder)
-- **Delete folder...** (on a folder, recursive)
+- **Create folder...** (HNS only)
+- **Rename folder...** (HNS only — atomic via the Data Lake path API)
 
 All write operations open a confirmation or input prompt before they touch
-the storage account. On HNS accounts renames are atomic via the Data Lake
-path API; on non-HNS accounts a blob "rename" is implemented as a server-side
-copy followed by a delete of the original.
+the storage account. On non-HNS accounts a blob "rename" is implemented as a
+server-side copy followed by a delete of the original.
 
 ## Sorting
 
-Press `s` on the blobs pane to open the sort picker:
+Blobs are sorted by **Date descending** (newest first) when a container
+first opens. Press `s` on the blobs pane to open the sort picker:
 
-- Default (Azure order)
+- Default (server / Azure order, no client-side sort)
 - Name (ascending / descending)
 - Size (ascending / descending)
 - Date (ascending / descending)
@@ -149,7 +152,7 @@ The active sort is shown in the pane title.
 
 | Key | Action |
 |---|---|
-| `y` | Yank blob content to clipboard (blobs under 5 MB) |
+| `y` | Yank blob content to clipboard (non-empty blobs under 5 MB) |
 
 You can also yank blob names and content through the action menu (`a`).
 
@@ -184,7 +187,7 @@ Press `a` to open the action menu. Available actions depend on context:
 | Delete marked (N)... | Bulk delete of marked blobs (shown when marks exist) |
 | Create folder... | Create a new folder (HNS-enabled accounts only) |
 | Rename folder... | Rename the current folder (HNS-enabled accounts only) |
-| Delete folder... | Delete the current folder, recursive (HNS-enabled accounts only) |
+| Delete folder... | Delete the current folder, recursive (works on HNS and flat-namespace) |
 
 ### Containers pane
 
@@ -213,14 +216,15 @@ Press `a` to open the action menu. Available actions depend on context:
 | `Tab` / `Shift+Tab` | Cycle pane focus |
 | `Enter` / `l` | Open / drill in |
 | `h` / `Left` | Go back |
-| `Backspace` | Up one folder |
+| `Backspace` | Up one folder (blobs pane, hierarchy mode only) |
 | `/` | Filter current list |
 | `Ctrl+D` / `Ctrl+U` | Half-page scroll |
 | `a` | Action menu |
 | `A` | Toggle load-all mode |
 | `s` | Sort blobs |
 | `Space` | Toggle mark |
-| `v` | Visual-line selection |
+| `v` / `V` | Visual-line selection |
+| `o` | Swap visual anchor |
 | `D` | Download marked blobs |
 | `y` | Yank blob content |
 | `K` | Toggle inspect panel |

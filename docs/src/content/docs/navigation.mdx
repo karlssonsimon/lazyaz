@@ -18,14 +18,19 @@ right and the previous pane becomes the parent column on the left.
 | `Tab` / `Shift+Tab` | Cycle pane focus |
 | `Enter` / `l` / `Right` | Open / drill in |
 | `h` / `Left` | Go back |
-| `Backspace` | Parent folder (blobs) |
+| `Backspace` | Parent folder (blobs pane, hierarchy mode) |
 | `/` | Filter focused pane |
 | `Ctrl+D` / `Ctrl+U` / `PgDown` / `PgUp` | Half-page scroll |
 | `a` | Action menu |
 | `K` | Inspect panel |
 | `S` | Switch subscription |
+| `d` | Reload subscriptions |
+| `r` | Refresh current scope |
+| `T` | Theme picker |
+| `N` | Notifications history |
+| `F` | Activity overlay |
 | `?` / `F1` | Help |
-| `q` / `Ctrl+C` | Quit |
+| `q` / `Ctrl+C` | Quit (`q` is suppressed while a filter or text-input is focused; `Ctrl+C` always works) |
 </TabItem>
 <TabItem label="Standard">
 | Key | Action |
@@ -33,16 +38,27 @@ right and the previous pane becomes the parent column on the left.
 | `Tab` / `Shift+Tab` | Cycle pane focus |
 | `Enter` / `Right` | Open / drill in |
 | `Left` | Go back |
-| `Backspace` | Parent folder (blobs) |
+| `Backspace` | Parent folder (blobs pane, hierarchy mode) |
 | `Ctrl+F` | Filter focused pane |
 | `PgDown` / `PgUp` | Half-page scroll |
 | `a` | Action menu |
 | `Ctrl+I` | Inspect panel |
 | `Ctrl+S` | Switch subscription |
+| `Ctrl+R` | Reload subscriptions |
+| `F5` | Refresh current scope |
+| `Ctrl+T` | Theme picker |
+| `Ctrl+N` | Notifications history |
+| `Ctrl+G` | Activity overlay |
 | `F1` | Help |
 | `Ctrl+Q` / `Ctrl+C` | Quit |
 </TabItem>
 </Tabs>
+
+The **Notifications history** (`N`) overlay keeps the last 1 000 events.
+Transient toasts auto-dismiss after ~1.5 s (or 5 s for errors). The
+**Activity overlay** (`F`) shows in-flight cache fetches across all tabs
+and lets you cancel them mid-flight — note that some long-running
+operations (Service Bus requeue/move) are not yet routed through it.
 
 ## Tabs
 
@@ -81,15 +97,21 @@ execute.
 
 ## Command palette
 
-Press `Ctrl+P` to open the command palette. It lists all available commands —
-open tabs, switch themes, view notifications, and more. Type to filter,
-`Enter` to execute.
+Press `Ctrl+P` to open the command palette. It lists every available
+command grouped by section — new tabs (Blob / Service Bus / Key Vault /
+Dashboard / Azurite preset / Blob-by-connection-string), open tabs (`Go to
+Tab N`), tab management (close / next / previous), the **Azure Login /
+Switch Tenant** flow, theme picker, notifications history, activity
+overlay, help, and quit. Type to fuzzy-filter, `Enter` to execute.
+
+Note: switching subscription is not in the palette — it's the top-level
+shortcut `S` (or `Ctrl+S` in standard).
 
 ## Jump list
 
-lazyaz keeps a vim-style jump list that tracks where you've been across tabs.
-Each time you drill into a namespace, container, or subscription, the position
-is recorded. Switching tabs and navigating into resources is also recorded.
+lazyaz keeps a vim-style jump list that tracks where you've been across
+tabs. Drill-ins (into a container, namespace, vault) plus tab switches and
+new-tab opens are recorded.
 
 | Key | Action |
 |---|---|

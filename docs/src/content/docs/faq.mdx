@@ -68,6 +68,16 @@ In the default hierarchy mode, lazyaz only loads one level of virtual folders at
 
 For local fuzzy filtering on the full blob list, press `A` to switch to load-all mode — but this fetches every blob name, so it can be slow on very large containers.
 
+### Can I browse Azurite or a connection-string-only account?
+
+Yes. Open the command palette (`Ctrl+P`) or new-tab picker (`Ctrl+T`) and
+pick **Azurite (local emulator)** to open a Blob tab pre-bound to the
+well-known Azurite connection string, or **Blob (connection string)** to be
+prompted for a custom one. These tabs are standalone — they bypass AAD,
+share-key out of the connection string, and aren't tied to any Azure
+subscription, so the subscription picker shortcut is a no-op while one is
+focused.
+
 ### Where are downloaded blobs saved?
 
 Downloads go to `<download_dir>/<account>/<container>/...`, preserving the path structure. The default download directory is `~/Downloads`. Change it in `~/.config/lazyaz/config.json`:
@@ -110,13 +120,23 @@ No. When you press `y` to yank a secret, the value goes directly to your clipboa
 
 ### Can I create or update secrets?
 
-Yes. From the secrets pane, press `a` and choose **Create secret...** to open
-a two-field form (name + value). Submitting creates a new secret, or — if a
-secret with that name already exists — adds a new version. The value field is
-masked by default; press `Ctrl+R` to reveal while typing.
+Yes. From the secrets pane, press `a` and choose **Create secret...** to
+open a two-field form (name + value). Submitting creates a new secret, or —
+if a secret with that name already exists — adds a new version. The value
+field is masked by default; press `Ctrl+R` to reveal while typing.
 
-Other write operations (delete, disable, manual version pinning) aren't
-supported yet.
+The action menu also exposes **Add new version...** on the versions pane and
+**Delete secret...** on the items pane (soft-delete — items move to the
+vault's recovery bin). Disable and manual version pinning aren't supported
+yet.
+
+### Can I browse certificates and keys?
+
+Yes. Each vault has a three-row **Kind** picker between the vault list and
+the items list — Secrets, Certificates, Keys. Picking a row switches the
+items column. The action menu adapts: **Create key...**, **Import
+certificate...**, and per-kind delete entries appear when the matching kind
+is active.
 
 ## General
 

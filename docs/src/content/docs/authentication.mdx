@@ -6,27 +6,38 @@ description: "How lazyaz authenticates with Azure using DefaultAzureCredential, 
 ## Credential chain
 
 lazyaz authenticates using Azure's [`DefaultAzureCredential`](https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication)
-chain, which picks up credentials from the Azure CLI, environment variables,
-managed identity, and other standard sources — in that order.
+chain. The Azure SDK tries credentials in this order: environment variables,
+workload identity, managed identity, the Azure CLI, then the Azure Developer
+CLI — stopping at the first one that yields a token.
 
-If you can run `az account show` and see your subscription, you're good to go.
+For local development you'll almost always be using `az login`. If you can
+run `az account show` and see your subscription, you're good to go.
+
+lazyaz also passes `AdditionallyAllowedTenants: ["*"]` so cached tokens can
+be reissued for any tenant your identity has access to — that's what lets
+[multi-tenant switching](/lazyaz/multi-tenant/) work without re-running
+`az login`.
 
 ## How access works
 
-Resource discovery (listing subscriptions, storage accounts, namespaces, vaults) uses
-ARM APIs. Data-plane access uses shared key fallback — similar to how Azure Storage
-Explorer works. lazyaz tries Azure AD first and falls back to shared keys automatically.
+Resource discovery (listing subscriptions, storage accounts, namespaces,
+vaults) uses ARM APIs. For data-plane calls, lazyaz tries Azure AD first
+and only falls back to shared keys (fetched via ARM `ListKeys`) when AAD
+returns a specific data-plane auth error — similar to how Azure Storage
+Explorer behaves. If your account has shared-key access disabled, the AAD
+path must succeed; otherwise lazyaz will surface the auth error.
 
 ## Permissions
 
-A `Contributor` role on the relevant resource groups generally covers Blob Storage
-and Service Bus. Key Vault access policies are managed separately.
-
-In detail:
+A `Contributor` role on the relevant resource groups generally covers Blob
+Storage and Service Bus. Key Vault uses separate role assignments per
+object kind.
 
 | Service | What it needs | Why |
 |---|---|---|
 | Browsing (all) | `Reader` | List subscriptions, accounts, namespaces, vaults via ARM |
-| Blob Storage | `Contributor` or `Storage Account Key Operator` | Calls `ListKeys` for shared key data-plane access |
-| Service Bus | `Contributor` | Calls `ListKeys` on namespace authorization rules |
-| Key Vault | Key Vault access policy or `Key Vault Secrets User` | Reading secret values requires separate vault-level permissions |
+| Blob Storage | `Contributor` or `Storage Account Key Operator` (for shared-key fallback); or `Storage Blob Data Reader/Contributor` (AAD-only accounts) | Read containers, list/download blobs |
+| Service Bus | `Contributor` (or any role that can `ListKeys` the namespace authorization rules); cross-namespace move targets need `Azure Service Bus Data Sender` on the target | Read/peek messages; `Send` claim is AAD-only for cross-namespace moves |
+| Key Vault — Secrets | Vault access policy or `Key Vault Secrets User` | Read secret values |
+| Key Vault — Certificates | Vault access policy or `Key Vault Certificates User` | Import and list certificates |
+| Key Vault — Keys | Vault access policy or `Key Vault Crypto User` | List and inspect keys |

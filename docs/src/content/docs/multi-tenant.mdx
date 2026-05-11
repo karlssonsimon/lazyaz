@@ -44,13 +44,14 @@ If you work with the same subscriptions daily, configure them in `~/.config/lazy
 ```json
 {
   "tabs": [
+    { "kind": "dashboard", "subscription": "sub-id-in-tenant-A" },
     { "kind": "blob", "subscription": "sub-id-in-tenant-A" },
     { "kind": "servicebus", "subscription": "sub-id-in-tenant-B" }
   ]
 }
 ```
 
-Each tab resolves its subscription's tenant automatically. You can have tabs pointing to different tenants side by side.
+Each tab resolves its subscription's tenant automatically. You can have tabs pointing to different tenants side by side. Valid kinds are `blob`, `servicebus`, `keyvault`, and `dashboard`.
 
 ## Troubleshooting
 
