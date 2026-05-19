@@ -271,6 +271,48 @@ func serviceCredential(model any) azcore.TokenCredential {
 	}
 }
 
+// TestConfigTabsDoNotInheritEarlierTabSubscription pins the rule that
+// each config-driven tab applies its own configured subscription rather
+// than inheriting the one the previously-added tab just received. With
+// the subscriptions broker warm, the old behavior had every tab after
+// the first show whatever the first tab landed on.
+func TestConfigTabsDoNotInheritEarlierTabSubscription(t *testing.T) {
+	cred := testCredential{id: "cred"}
+	m := NewModel(blob.NewService(cred), servicebus.NewService(cred), keyvault.NewService(cred), testConfig(), nil, keymap.Default())
+
+	subs := []azure.Subscription{
+		{ID: "sub-A", Name: "A"},
+		{ID: "sub-B", Name: "B"},
+	}
+	// Fresh tabs hydrate at Tenant="" — seed the broker there so
+	// TryApplyPreferredSubscription has data to match against during
+	// addTab construction.
+	m.brokers.subscriptions.Set("", subs)
+
+	m.tabs = nil
+	m.activeIdx = 0
+	m.addTab(TabBlob, "sub-A")
+	m.addTab(TabServiceBus, "sub-B")
+
+	first, ok := m.tabs[0].Model.(subscriptionTab)
+	if !ok {
+		t.Fatalf("tabs[0].Model = %T, want subscriptionTab", m.tabs[0].Model)
+	}
+	got1, has := first.CurrentSubscription()
+	if !has || got1.ID != "sub-A" {
+		t.Fatalf("tabs[0] sub = %v has=%v, want sub-A", got1, has)
+	}
+
+	second, ok := m.tabs[1].Model.(subscriptionTab)
+	if !ok {
+		t.Fatalf("tabs[1].Model = %T, want subscriptionTab", m.tabs[1].Model)
+	}
+	got2, has := second.CurrentSubscription()
+	if !has || got2.ID != "sub-B" {
+		t.Fatalf("tabs[1] sub = %v has=%v, want sub-B (inherited from tabs[0]?)", got2, has)
+	}
+}
+
 func TestPostLoginSubsReappliesMatchedSubscription(t *testing.T) {
 	oldSub := azure.Subscription{ID: "sub", Name: "Old", TenantID: "old-tenant"}
 	matched := azure.Subscription{ID: "sub", Name: "New", TenantID: "new-tenant"}

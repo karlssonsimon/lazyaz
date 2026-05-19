@@ -230,14 +230,20 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 	id := m.nextID
 	m.nextID++
 
-	// Inherit the active tab's subscription so new tabs start in context.
+	// Inherit the active tab's subscription so new tabs opened from the
+	// picker start in context. An explicitly configured preferredSub
+	// (e.g. from the startup tabs config or a dashboard drill-in) wins
+	// over inheritance — otherwise a second config tab would just adopt
+	// the first tab's sub and the per-tab Subscription setting would be
+	// ignored.
 	sub, hasSub := m.activeSubscription()
 
-	// applyInitialSub wires up the tab's starting subscription. The
-	// inherited active-tab sub takes precedence over the configured
-	// preferred sub. If neither matches a known subscription up front,
-	// preferredSub is stashed on the model so handleSubscriptionsLoaded
-	// can apply it once a fetch completes.
+	// applyInitialSub wires up the tab's starting subscription. If a
+	// preferredSub is set and matches a known subscription, apply it
+	// immediately; otherwise stash it on the model so
+	// handleSubscriptionsLoaded can apply it once a fetch completes.
+	// Without an explicit preferred sub, fall back to inheriting from
+	// the active tab.
 	//
 	// Note: SetSubscription must be called on the *outer* app model
 	// pointer (e.g. *blobapp.Model), not the embedded *appshell.Model.
@@ -250,16 +256,15 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		SetPreferredSubscription(string)
 		TryApplyPreferredSubscription() (azure.Subscription, bool)
 	}) {
+		if preferredSub != "" {
+			s.SetPreferredSubscription(preferredSub)
+			if matched, ok := s.TryApplyPreferredSubscription(); ok {
+				s.SetSubscription(matched)
+			}
+			return
+		}
 		if hasSub {
 			s.SetSubscription(sub)
-			return
-		}
-		if preferredSub == "" {
-			return
-		}
-		s.SetPreferredSubscription(preferredSub)
-		if matched, ok := s.TryApplyPreferredSubscription(); ok {
-			s.SetSubscription(matched)
 		}
 	}
 
