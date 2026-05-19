@@ -132,18 +132,22 @@ func (m Model) visualSelectionItems() []secretItem {
 		anchor = current
 	}
 
-	secrets := m.secrets
-	if len(secrets) == 0 {
+	visible := m.secretsList.VisibleItems()
+	if len(visible) == 0 {
 		return nil
 	}
 
 	anchorIdx := -1
 	currentIdx := -1
-	for i, s := range secrets {
-		if anchorIdx < 0 && s.Name == anchor {
+	for i, it := range visible {
+		s, ok := it.(secretItem)
+		if !ok {
+			continue
+		}
+		if anchorIdx < 0 && s.secret.Name == anchor {
 			anchorIdx = i
 		}
-		if currentIdx < 0 && s.Name == current {
+		if currentIdx < 0 && s.secret.Name == current {
 			currentIdx = i
 		}
 	}
@@ -160,8 +164,10 @@ func (m Model) visualSelectionItems() []secretItem {
 	}
 
 	items := make([]secretItem, 0, end-start+1)
-	for _, s := range secrets[start : end+1] {
-		items = append(items, secretItem{secret: s})
+	for _, it := range visible[start : end+1] {
+		if s, ok := it.(secretItem); ok {
+			items = append(items, s)
+		}
 	}
 	return items
 }

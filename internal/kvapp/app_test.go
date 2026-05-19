@@ -599,6 +599,55 @@ func TestOpenAddSecretVersionFormGatesOnSecret(t *testing.T) {
 	}
 }
 
+// TestVisualSelectionRespectsActiveFilter pins the rule that visual-line
+// mode walks the filtered view, not the underlying secrets slice. With
+// a filter applied so only "alpha-*" rows are visible, anchoring on
+// alpha-1 and moving the cursor to alpha-3 must yield the three alpha
+// rows — never the beta rows that sit between them in m.secrets.
+func TestVisualSelectionRespectsActiveFilter(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.hasVault = true
+	m.focus = secretsPane
+	m.kvKind = kvKindSecrets
+	m.secrets = []keyvault.Secret{
+		{Name: "alpha-1"},
+		{Name: "beta-1"},
+		{Name: "alpha-2"},
+		{Name: "beta-2"},
+		{Name: "alpha-3"},
+	}
+	m.refreshSecretItems()
+	m.secretsList.SetFilterText("alpha")
+
+	visible := m.secretsList.VisibleItems()
+	if len(visible) != 3 {
+		t.Fatalf("filter should expose 3 alpha rows, got %d", len(visible))
+	}
+
+	m.secretsList.Select(0) // alpha-1
+	m.toggleVisualLineMode()
+	if !m.visualLineMode {
+		t.Fatal("expected visual line mode on")
+	}
+	m.secretsList.Select(2) // alpha-3
+
+	got := m.visualSelectionItems()
+	wantNames := []string{"alpha-1", "alpha-2", "alpha-3"}
+	if len(got) != len(wantNames) {
+		names := make([]string, 0, len(got))
+		for _, it := range got {
+			names = append(names, it.secret.Name)
+		}
+		t.Fatalf("visualSelectionItems = %v, want %v", names, wantNames)
+	}
+	for i, want := range wantNames {
+		if got[i].secret.Name != want {
+			t.Fatalf("visualSelectionItems[%d] = %q, want %q", i, got[i].secret.Name, want)
+		}
+	}
+}
+
 // TestApplyNavEmptyVaultRestoresFocus ensures the root-pane snapshot
 // restores focus without dispatching a PendingNav drill-in.
 func TestApplyNavEmptyVaultRestoresFocus(t *testing.T) {
