@@ -18,6 +18,7 @@ type actionID int
 
 const (
 	actionLoadAll actionID = iota
+	actionLoadMore
 	actionHierarchy
 	actionPrefixSearch
 	actionSort
@@ -106,6 +107,11 @@ func (m Model) buildActions() []action {
 			actions = append(actions, action{actionHierarchy, "Browse by folder", km.ToggleLoadAll.Short()})
 		} else {
 			actions = append(actions, action{actionLoadAll, "Load all blobs", km.ToggleLoadAll.Short()})
+			// Only offered when the last load stopped at the cap — the
+			// continuation marker doubles as the "there is more" signal.
+			if m.blobNextMarker != "" {
+				actions = append(actions, action{actionLoadMore, fmt.Sprintf("Load %d more", defaultHierarchyBlobLoadLimit), ""})
+			}
 		}
 
 		// Server-side prefix search (only in hierarchy mode).
@@ -196,6 +202,14 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 	switch act.id {
 	case actionLoadAll, actionHierarchy:
 		return m.toggleBlobLoadAllMode()
+
+	case actionLoadMore:
+		if m.blobNextMarker == "" || m.blobLoadAll {
+			return m, nil
+		}
+		m.StartLoading(blobsPane, fmt.Sprintf("Loading up to %d more entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
+		return m, tea.Batch(m.Spinner.Tick,
+			loadMoreBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, m.blobNextMarker, defaultHierarchyBlobLoadLimit))
 
 	case actionPrefixSearch:
 		return m.openPrefixSearchInput()

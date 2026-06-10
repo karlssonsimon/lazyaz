@@ -87,6 +87,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case blobsLoadedMsg:
 		return m.handleBlobsLoaded(msg)
 
+	case moreBlobsLoadedMsg:
+		return m.handleMoreBlobsLoaded(msg)
+
 	case blobsDownloadedMsg:
 		return m.handleBlobsDownloaded(msg)
 
@@ -295,6 +298,8 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	m.refreshItems()
 
 	if msg.done {
+		m.blobNextMarker = msg.nextMarker
+		m.blobsList.Title = m.blobsPaneTitle()
 		elapsed := time.Since(m.LoadingStartedAt).Round(time.Millisecond)
 		var status string
 		if msg.loadAll {
@@ -309,6 +314,57 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	}
 
 	return m, msg.next
+}
+
+// handleMoreBlobsLoaded appends a continuation page to the current view.
+// Same scope guards as handleBlobsLoaded — a "load more" fired in a
+// scope the user has left is dropped.
+func (m Model) handleMoreBlobsLoaded(msg moreBlobsLoadedMsg) (Model, tea.Cmd) {
+	if !m.hasAccount || !m.hasContainer ||
+		!sameAccount(m.currentAccount, msg.account) || m.containerName != msg.container ||
+		m.prefix != msg.prefix || m.blobLoadAll {
+		return m, nil
+	}
+
+	m.ClearLoading()
+	if msg.err != nil {
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load more entries: %s", msg.err.Error()))
+		return m, nil
+	}
+
+	// Markers continue strictly after the last delivered entry, so
+	// duplicates shouldn't occur — dedup defensively anyway.
+	seen := make(map[string]struct{}, len(m.blobs))
+	for _, b := range m.blobs {
+		seen[b.Name] = struct{}{}
+	}
+	added := 0
+	for _, b := range msg.newBlobs {
+		if _, dup := seen[b.Name]; dup {
+			continue
+		}
+		m.blobs = append(m.blobs, b)
+		added++
+	}
+	m.blobNextMarker = msg.nextMarker
+
+	// Keep the broker store in sync so navigating away and back
+	// rehydrates the extended list instead of snapping to the first page.
+	m.cache.blobs.Set(blobsCacheKey(msg.account.SubscriptionID, msg.account.Name, msg.container, msg.prefix, false), m.blobs)
+
+	m.blobsList.Title = m.blobsPaneTitle()
+	m.refreshItems()
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Loaded %d more entries (%d total)", added, len(m.blobs)))
+	return m, nil
+}
+
+// blobsPaneTitle renders the blobs pane title; a trailing "+" marks a
+// truncated listing with more entries available via "Load more".
+func (m Model) blobsPaneTitle() string {
+	if m.blobNextMarker != "" {
+		return fmt.Sprintf("Blobs (%d+)", len(m.blobs))
+	}
+	return fmt.Sprintf("Blobs (%d)", len(m.blobs))
 }
 
 func (m Model) handleBlobsDownloaded(msg blobsDownloadedMsg) (Model, tea.Cmd) {

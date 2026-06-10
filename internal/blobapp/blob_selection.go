@@ -148,6 +148,9 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 
 	savedPrefix := m.filter.prefixQuery
 	m.clearFilter()
+	// The continuation marker belongs to the limited hierarchy view;
+	// mode switches invalidate it (the refetch repopulates it).
+	m.blobNextMarker = ""
 
 	if m.blobLoadAll {
 		// Switching back to hierarchy mode.

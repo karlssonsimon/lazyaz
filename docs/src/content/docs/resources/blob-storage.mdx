@@ -33,6 +33,12 @@ Blobs load in **hierarchy mode** by default — the view shows one level of
 virtual folders and files at a time, similar to a file manager. This is fast
 even on containers with millions of blobs.
 
+Hierarchy mode loads up to 5,000 entries per folder level. When a folder
+holds more, the pane title shows a trailing `+` (e.g. `Blobs (5,000+)`)
+and the action menu (`a`) offers **Load 5000 more**, which appends the
+next chunk without refetching what's already loaded. The entry disappears
+once the listing is exhausted and the title shows the exact count.
+
 Press `A` to switch to **load-all mode**, which fetches every blob in the
 container as a flat list. This enables local fuzzy filtering but can be slow
 on large containers.
@@ -175,6 +181,7 @@ Press `a` to open the action menu. Available actions depend on context:
 |---|---|
 | Upload files... | Open the file browser to upload local files into the current folder |
 | Load all blobs / Browse by folder | Switch between hierarchy and flat load-all mode |
+| Load 5000 more | Append the next chunk of entries (shown when the last load hit the cap) |
 | Search by prefix | Server-side prefix search (hierarchy mode only) |
 | Sort blobs | Open the sort picker |
 | Toggle mark | Mark or unmark the current blob |

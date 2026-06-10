@@ -232,51 +232,48 @@ func (s *Service) listContainersWithClient(ctx context.Context, serviceClient *s
 	return nil
 }
 
-func (s *Service) ListBlobsLimited(ctx context.Context, account Account, containerName, prefix string, limit int, send func([]BlobEntry)) error {
-	return s.withFallback(ctx, account, fmt.Sprintf("list blobs for %s/%s", account.Name, containerName), func(c *service.Client) error {
-		return s.listBlobsWithClient(ctx, c, account, containerName, prefix, limit, send)
+// ListBlobsLimited streams hierarchy entries under prefix, starting from
+// the given continuation marker (empty = from the beginning) and stopping
+// once at least limit entries have been sent. Returns the marker to
+// continue from — empty when the listing is exhausted. The limit is
+// honored at page boundaries (never mid-page), so the returned marker
+// always points at the next unseen entry.
+func (s *Service) ListBlobsLimited(ctx context.Context, account Account, containerName, prefix, marker string, limit int, send func([]BlobEntry)) (string, error) {
+	return runWithAuthFallback(ctx, s, account, fmt.Sprintf("list blobs for %s/%s", account.Name, containerName), func(c *service.Client) (string, error) {
+		return s.listBlobsWithClient(ctx, c, account, containerName, prefix, marker, limit, send)
 	})
 }
 
-func (s *Service) listBlobsWithClient(ctx context.Context, serviceClient *service.Client, account Account, containerName, prefix string, limit int, send func([]BlobEntry)) error {
+func (s *Service) listBlobsWithClient(ctx context.Context, serviceClient *service.Client, account Account, containerName, prefix, marker string, limit int, send func([]BlobEntry)) (string, error) {
 	containerClient := serviceClient.NewContainerClient(containerName)
 
 	options := &container.ListBlobsHierarchyOptions{}
 	if prefix != "" {
 		options.Prefix = &prefix
 	}
+	if marker != "" {
+		options.Marker = &marker
+	}
 
 	total := 0
 	pager := containerClient.NewListBlobsHierarchyPager(hierarchyDelimiter, options)
 	for pager.More() {
-		if limit > 0 && total >= limit {
-			break
-		}
-
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return fmt.Errorf("list blobs for %s/%s with prefix %q: %w", account.Name, containerName, prefix, err)
+			return "", fmt.Errorf("list blobs for %s/%s with prefix %q: %w", account.Name, containerName, prefix, err)
 		}
 
 		var batch []BlobEntry
 		for _, blobPrefix := range page.Segment.BlobPrefixes {
-			if limit > 0 && total+len(batch) >= limit {
-				break
-			}
 			if blobPrefix.Name == nil {
 				continue
 			}
-
 			batch = append(batch, BlobEntry{
 				Name:     *blobPrefix.Name,
 				IsPrefix: true,
 			})
 		}
-
 		for _, blobItem := range page.Segment.BlobItems {
-			if limit > 0 && total+len(batch) >= limit {
-				break
-			}
 			entry, ok := blobItemToEntry(blobItem)
 			if !ok {
 				continue
@@ -288,9 +285,16 @@ func (s *Service) listBlobsWithClient(ctx context.Context, serviceClient *servic
 			send(batch)
 			total += len(batch)
 		}
+
+		if limit > 0 && total >= limit {
+			if page.NextMarker != nil && *page.NextMarker != "" && pager.More() {
+				return *page.NextMarker, nil
+			}
+			return "", nil
+		}
 	}
 
-	return nil
+	return "", nil
 }
 
 // ListAllBlobs streams every blob under prefix (empty = whole container)

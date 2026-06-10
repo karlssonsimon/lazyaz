@@ -25,10 +25,10 @@ var testConfig = ui.Config{
 // accounts, so the action should surface in both cases.
 func TestDeleteFolderActionAvailableOnBothAccountTypes(t *testing.T) {
 	cases := []struct {
-		name        string
-		hnsEnabled  bool
-		wantRename  bool
-		wantCreate  bool
+		name       string
+		hnsEnabled bool
+		wantRename bool
+		wantCreate bool
 	}{
 		{name: "HNS account", hnsEnabled: true, wantRename: true, wantCreate: true},
 		{name: "flat-namespace account", hnsEnabled: false, wantRename: false, wantCreate: false},
@@ -398,5 +398,106 @@ func TestVisualSelectionRespectsActiveFilter(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("visualSelectionBlobNames[%d] = %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+// TestLoadMoreAppendsAndTracksMarker covers the "Load N more" flow: a
+// continuation page appends to the current view (deduped), the marker
+// state follows the response, and the pane title carries a trailing "+"
+// only while more entries remain.
+func TestLoadMoreAppendsAndTracksMarker(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	account := blob.Account{Name: "acct", SubscriptionID: "sub-1"}
+	m.hasAccount = true
+	m.currentAccount = account
+	m.hasContainer = true
+	m.containerName = "data"
+	m.blobs = []blob.BlobEntry{{Name: "a.txt"}, {Name: "b.txt"}}
+	m.blobNextMarker = "marker-1"
+
+	updated, _ := m.handleMoreBlobsLoaded(moreBlobsLoadedMsg{
+		account:    account,
+		container:  "data",
+		newBlobs:   []blob.BlobEntry{{Name: "b.txt"}, {Name: "c.txt"}, {Name: "d.txt"}},
+		nextMarker: "marker-2",
+	})
+	if len(updated.blobs) != 4 {
+		t.Fatalf("blobs = %d entries, want 4 (b.txt deduped)", len(updated.blobs))
+	}
+	if updated.blobNextMarker != "marker-2" {
+		t.Fatalf("blobNextMarker = %q, want marker-2", updated.blobNextMarker)
+	}
+	if updated.blobsList.Title != "Blobs (4+)" {
+		t.Fatalf("title = %q, want Blobs (4+)", updated.blobsList.Title)
+	}
+	if cached, ok := updated.cache.blobs.Get(blobsCacheKey("sub-1", "acct", "data", "", false)); !ok || len(cached) != 4 {
+		t.Fatalf("broker store should hold the extended list, got %d ok=%v", len(cached), ok)
+	}
+
+	// Final page: marker drained, title drops the "+".
+	updated, _ = updated.handleMoreBlobsLoaded(moreBlobsLoadedMsg{
+		account:   account,
+		container: "data",
+		newBlobs:  []blob.BlobEntry{{Name: "e.txt"}},
+	})
+	if updated.blobNextMarker != "" {
+		t.Fatalf("blobNextMarker = %q, want empty after final page", updated.blobNextMarker)
+	}
+	if updated.blobsList.Title != "Blobs (5)" {
+		t.Fatalf("title = %q, want Blobs (5)", updated.blobsList.Title)
+	}
+}
+
+// TestLoadMoreDroppedAfterNavigation: a continuation page landing after
+// the user left the scope must not pollute the new view.
+func TestLoadMoreDroppedAfterNavigation(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	account := blob.Account{Name: "acct", SubscriptionID: "sub-1"}
+	m.hasAccount = true
+	m.currentAccount = account
+	m.hasContainer = true
+	m.containerName = "other" // user moved on
+	m.blobs = []blob.BlobEntry{{Name: "x.txt"}}
+
+	updated, _ := m.handleMoreBlobsLoaded(moreBlobsLoadedMsg{
+		account:    account,
+		container:  "data",
+		newBlobs:   []blob.BlobEntry{{Name: "stale.txt"}},
+		nextMarker: "marker-2",
+	})
+	if len(updated.blobs) != 1 || updated.blobNextMarker != "" {
+		t.Fatalf("stale continuation applied: %d blobs, marker %q", len(updated.blobs), updated.blobNextMarker)
+	}
+}
+
+// TestLoadMoreActionVisibility: the action menu offers "Load N more"
+// only in hierarchy mode with a continuation marker present.
+func TestLoadMoreActionVisibility(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.hasAccount = true
+	m.currentAccount = blob.Account{Name: "acct", SubscriptionID: "sub-1"}
+	m.hasContainer = true
+	m.containerName = "data"
+	m.focus = blobsPane
+
+	hasLoadMore := func(m Model) bool {
+		for _, a := range m.buildActions() {
+			if a.id == actionLoadMore {
+				return true
+			}
+		}
+		return false
+	}
+
+	if hasLoadMore(m) {
+		t.Fatal("Load more should be hidden without a marker")
+	}
+	m.blobNextMarker = "marker-1"
+	if !hasLoadMore(m) {
+		t.Fatal("Load more should appear when a marker exists")
+	}
+	m.blobLoadAll = true
+	if hasLoadMore(m) {
+		t.Fatal("Load more should be hidden in load-all mode")
 	}
 }

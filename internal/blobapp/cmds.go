@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
@@ -32,12 +33,35 @@ func fetchContainersCmd(svc *blob.Service, broker *cache.Broker[blob.ContainerIn
 
 func fetchHierarchyBlobsCmd(svc *blob.Service, broker *cache.Broker[blob.BlobEntry], account blob.Account, containerName, prefix string, limit int, seed []blob.BlobEntry) tea.Cmd {
 	key := blobsCacheKey(account.SubscriptionID, account.Name, containerName, prefix, false)
+	// The continuation marker is only known once the fetch completes;
+	// the atomic hands it from the worker goroutine to the done page's
+	// message (wrapMsg runs on the receive side).
+	var nextMarker atomic.Value
+	nextMarker.Store("")
 	cmd, _ := broker.Subscribe(key, seed, func(ctx context.Context, send func([]blob.BlobEntry)) error {
-		return svc.ListBlobsLimited(ctx, account, containerName, prefix, limit, send)
+		marker, err := svc.ListBlobsLimited(ctx, account, containerName, prefix, "", limit, send)
+		nextMarker.Store(marker)
+		return err
 	}, func(p cache.Page[blob.BlobEntry]) tea.Msg {
-		return blobsLoadedMsg{account: account, container: containerName, prefix: prefix, loadAll: false, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return blobsLoadedMsg{account: account, container: containerName, prefix: prefix, loadAll: false, query: "", blobs: p.Items, done: p.Done, err: p.Err, next: p.Next, nextMarker: nextMarker.Load().(string)}
 	})
 	return cmd
+}
+
+// loadMoreBlobsCmd fetches the next chunk of hierarchy entries from a
+// continuation marker. Runs outside the cache broker on purpose — see
+// moreBlobsLoadedMsg. The handler reconciles the store afterwards.
+func loadMoreBlobsCmd(svc *blob.Service, account blob.Account, containerName, prefix, marker string, limit int) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+
+		var newBlobs []blob.BlobEntry
+		next, err := svc.ListBlobsLimited(ctx, account, containerName, prefix, marker, limit, func(batch []blob.BlobEntry) {
+			newBlobs = append(newBlobs, batch...)
+		})
+		return moreBlobsLoadedMsg{account: account, container: containerName, prefix: prefix, newBlobs: newBlobs, nextMarker: next, err: err}
+	}
 }
 
 func fetchAllBlobsCmd(svc *blob.Service, broker *cache.Broker[blob.BlobEntry], account blob.Account, containerName, prefix string, seed []blob.BlobEntry) tea.Cmd {

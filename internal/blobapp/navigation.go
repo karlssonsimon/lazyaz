@@ -54,6 +54,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.currentAccount = blob.Account{}
 	m.containerName = ""
 	m.prefix = ""
+	m.blobNextMarker = ""
 	m.clearBlobSelectionState()
 	m.resetBlobLoadState()
 	m.resetPreviewState()
@@ -113,6 +114,7 @@ func (m Model) prefixUp() (Model, tea.Cmd) {
 
 	m.transitionTo(blobsPane, true) // exitPane clears filter + visual mode
 	m.prefix = parentPrefix(m.prefix)
+	m.blobNextMarker = ""
 
 	blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
 	if cached, ok := m.cache.blobs.Get(blobsScope); ok {
@@ -167,6 +169,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 
 			m.transitionTo(blobsPane, true) // exitPane clears filter + visual mode
 			m.prefix = item.blob.Name
+			m.blobNextMarker = ""
 
 			blobsScope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
 			if cached, ok := m.cache.blobs.Get(blobsScope); ok {
@@ -280,6 +283,7 @@ func (m Model) selectAccount(account blob.Account) (Model, tea.Cmd) {
 	m.hasContainer = false
 	m.containerName = ""
 	m.prefix = ""
+	m.blobNextMarker = ""
 	m.clearBlobSelectionState()
 	m.resetBlobLoadState()
 	m.resetPreviewState()
@@ -330,6 +334,7 @@ func (m Model) selectContainer(container blob.ContainerInfo) (Model, tea.Cmd) {
 	m.containerName = container.Name
 	m.hasContainer = true
 	m.prefix = ""
+	m.blobNextMarker = ""
 	m.clearBlobSelectionState()
 	m.resetBlobLoadState()
 	m.resetPreviewState()

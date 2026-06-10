@@ -124,12 +124,18 @@ type Model struct {
 	containersHistory map[string]ui.ListState // keyed by sub+account
 	blobsHistory      map[string]ui.ListState // keyed by sub+account+container+prefix+loadAll
 
-	hasAccount      bool
-	currentAccount  blob.Account
-	hasContainer    bool
-	containerName   string
-	prefix          string
-	blobLoadAll     bool
+	hasAccount     bool
+	currentAccount blob.Account
+	hasContainer   bool
+	containerName  string
+	prefix         string
+	blobLoadAll    bool
+	// blobNextMarker is the continuation token where the last limited
+	// hierarchy load stopped for the current account/container/prefix.
+	// Non-empty means more entries exist — the action menu offers
+	// "Load N more" and the pane title shows a trailing "+". Cleared on
+	// every scope change; refreshed by each completed hierarchy load.
+	blobNextMarker  string
 	blobSortField   blobSortField
 	blobSortDesc    bool
 	filter          blobFilter
@@ -238,6 +244,25 @@ type blobsLoadedMsg struct {
 	done      bool
 	err       error
 	next      tea.Cmd
+	// nextMarker is the continuation token where a limited hierarchy
+	// load stopped. Empty when the listing is exhausted (or for
+	// load-all / search results). Only meaningful on the done page.
+	nextMarker string
+}
+
+// moreBlobsLoadedMsg carries one additional page of hierarchy entries
+// fetched from a continuation marker ("Load more"). Unlike
+// blobsLoadedMsg it holds only the NEW entries — the handler appends
+// them to m.blobs. Deliberately bypasses the cache broker: a broker
+// session would Finalize away every already-loaded entry it didn't
+// re-observe.
+type moreBlobsLoadedMsg struct {
+	account    blob.Account
+	container  string
+	prefix     string
+	newBlobs   []blob.BlobEntry
+	nextMarker string
+	err        error
 }
 
 type blobContentClipboardMsg struct {
