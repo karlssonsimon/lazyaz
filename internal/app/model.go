@@ -32,6 +32,10 @@ import (
 // (the ticker self-extinguishes when no toasts are active).
 const toastTickInterval = 100 * time.Millisecond
 
+// activityTickInterval paces the fetch-spinner animation in the
+// activity overlay.
+const activityTickInterval = 120 * time.Millisecond
+
 // Model is the top-level Bubble Tea model that manages tabs.
 type Model struct {
 	tabs      []Tab
@@ -81,7 +85,7 @@ type Model struct {
 	helpOverlay          ui.HelpOverlayState
 	notificationsOverlay ui.NotificationsOverlayState
 	activityOverlay      ui.ActivityOverlayState
-	activityTick         int // render-frame counter for fetch-spinner rotation
+	activityTick         int // fetch-spinner frame, advanced by activityTickMsg while the overlay is open
 
 	cursor           cursor.Model
 	tabPicker        tabPickerState
@@ -862,16 +866,28 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toggleActivityMsg:
 		if m.activityOverlay.Active {
 			m.activityOverlay.Close()
-		} else {
-			m.activityOverlay.Open()
+			return m, nil
 		}
-		return m, nil
+		m.activityOverlay.Open()
+		return m, m.startActivityTick()
 
 	case activityAutoOpenMsg:
 		if !m.activityOverlay.Active {
 			m.activityOverlay.OpenDetail(msg.ActivityID)
+			return m, m.startActivityTick()
 		}
 		return m, nil
+
+	case activityTickMsg:
+		// Spinner animation for the activity overlay; self-extinguishes
+		// when the overlay closes.
+		if !m.activityOverlay.Active {
+			return m, nil
+		}
+		m.activityTick++
+		return m, tea.Tick(activityTickInterval, func(time.Time) tea.Msg {
+			return activityTickMsg{}
+		})
 
 	case activityEventMsg:
 		// Each event causes a re-render by virtue of Update returning.
@@ -930,6 +946,17 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		key := msg.String()
 
+		// Upload conflict prompt takes precedence over every other
+		// overlay — it renders topmost (see View) and is a blocking modal
+		// that needs an answer before the upload can resume, so it must
+		// also get the keys first. Forward to the active tab so its
+		// handleKey can dispatch to resolveConflict.
+		if len(m.tabs) > 0 {
+			if child, ok := m.tabs[m.activeIdx].Model.(uploadConflictTab); ok && child.HasPendingUploadConflict() {
+				return m, m.forwardToActive(msg)
+			}
+		}
+
 		// Command palette overlay.
 		if m.cmdPalette.active {
 			return m.handleCommandPalette(key)
@@ -986,16 +1013,6 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Erase:  m.keymap.BackspaceUp,
 			})
 			return m, nil
-		}
-
-		// Upload conflict prompt takes precedence over every other
-		// overlay — it's a blocking modal that needs an answer before
-		// the upload can resume. Forward to the active tab so its
-		// handleKey can dispatch to resolveConflict.
-		if len(m.tabs) > 0 {
-			if child, ok := m.tabs[m.activeIdx].Model.(uploadConflictTab); ok && child.HasPendingUploadConflict() {
-				return m, m.forwardToActive(msg)
-			}
 		}
 
 		// Activity overlay overlay.
@@ -1107,6 +1124,13 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, m.forwardToActive(msg)
 }
 
+// startActivityTick kicks off the activity overlay's spinner ticker.
+func (m *Model) startActivityTick() tea.Cmd {
+	return tea.Tick(activityTickInterval, func(time.Time) tea.Msg {
+		return activityTickMsg{}
+	})
+}
+
 // maybeStartToastTick starts the self-extinguishing toast ticker if a
 // notification just appeared and we aren't already ticking. Returns nil
 // if no action is needed. The ticker re-renders the view every
@@ -1132,7 +1156,10 @@ func (m *Model) forwardToActive(msg tea.Msg) tea.Cmd {
 	tab := &m.tabs[m.activeIdx]
 	updated, cmd := tab.Model.Update(msg)
 	tab.Model = updated
-	return wrapCmd(tab.ID, cmd)
+	// The child may have pushed a notification during this update (e.g.
+	// a key-triggered yank) — make sure the toast ticker runs so it
+	// expires on time instead of lingering until the next re-render.
+	return tea.Batch(wrapCmd(tab.ID, cmd), m.maybeStartToastTick())
 }
 
 func (m Model) childHeight() int {

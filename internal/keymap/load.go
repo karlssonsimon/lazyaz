@@ -61,11 +61,17 @@ func ensureStockKeymaps(keymapsDir string) {
 		return
 	}
 	for _, e := range entries {
+		path := filepath.Join(keymapsDir, e.Name())
+		// Copy only when missing — users edit these files, and an
+		// unconditional write would clobber their changes on every launch.
+		if _, err := os.Stat(path); err == nil {
+			continue
+		}
 		data, err := stockKeymapsFS.ReadFile("keymaps/" + e.Name())
 		if err != nil {
 			continue
 		}
-		os.WriteFile(filepath.Join(keymapsDir, e.Name()), data, 0o644)
+		os.WriteFile(path, data, 0o644)
 	}
 }
 

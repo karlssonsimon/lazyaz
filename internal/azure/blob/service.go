@@ -106,7 +106,7 @@ func (s *Service) SetCredential(cred azcore.TokenCredential) {
 }
 
 func (s *Service) ListSubscriptions(ctx context.Context, send func([]azure.Subscription)) error {
-	return azure.ListSubscriptions(ctx, s.cred, send)
+	return azure.ListSubscriptions(ctx, s.Credential(), send)
 }
 
 func (s *Service) DiscoverAccounts(ctx context.Context, send func([]Account)) error {
@@ -134,7 +134,7 @@ func (s *Service) DiscoverAccountsForSubscription(ctx context.Context, subscript
 		return fmt.Errorf("subscription ID is required")
 	}
 
-	storageAccountsClient, err := armstorage.NewAccountsClient(id, s.cred, nil)
+	storageAccountsClient, err := armstorage.NewAccountsClient(id, s.Credential(), nil)
 	if err != nil {
 		return fmt.Errorf("create accounts client for subscription %s: %w", id, err)
 	}
@@ -193,7 +193,7 @@ func runWithAuthFallback[T any](ctx context.Context, s *Service, account Account
 		return zero, fmt.Errorf("%s: %w", label, err)
 	}
 	if !isDataPlaneAuthError(err) {
-		return zero, err
+		return zero, fmt.Errorf("%s: %w", label, err)
 	}
 
 	shared, fbErr := s.getSharedKeyServiceClient(ctx, account)
@@ -651,7 +651,7 @@ func (s *Service) fetchAccountKey(ctx context.Context, account Account) (string,
 	}
 	s.mu.Unlock()
 
-	accountsClient, err := armstorage.NewAccountsClient(account.SubscriptionID, s.cred, nil)
+	accountsClient, err := armstorage.NewAccountsClient(account.SubscriptionID, s.Credential(), nil)
 	if err != nil {
 		return "", fmt.Errorf("create ARM accounts client for subscription %s: %w", account.SubscriptionID, err)
 	}

@@ -776,36 +776,26 @@ func (s *Service) resendAll(ctx context.Context, client *azservicebus.Client, re
 	}
 	defer sender.Close(ctx)
 
-	// Service Bus receivers can silently stall — returning zero messages while
-	// the entity still holds more. Retry a few times with growing wait windows
-	// before concluding the source is drained.
-	const maxConsecutiveZero = 3
-	consecutiveZero := 0
 	total := 0
 	for {
-		waitTime := 15 * time.Second
-		if consecutiveZero > 0 {
-			waitTime = time.Duration(20*(consecutiveZero+1)) * time.Second
-		}
-		receiveCtx, receiveCancel := context.WithTimeout(ctx, waitTime)
+		receiveCtx, receiveCancel := context.WithTimeout(ctx, 15*time.Second)
 		messages, err := receiver.ReceiveMessages(receiveCtx, batchSize, &azservicebus.ReceiveMessagesOptions{
 			TimeAfterFirstMessage: 1 * time.Second,
 		})
 		receiveCancel()
 		if err != nil && len(messages) == 0 {
-			if ctx.Err() == nil && total > 0 {
+			// The SDK reports a drained source as DeadlineExceeded on the
+			// per-receive context (it never returns (nil, nil)). Anything
+			// else — auth failure, connection loss, parent cancellation —
+			// is a real error and must not be reported as success.
+			if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
 				break
 			}
 			return total, fmt.Errorf("receive messages: %w", err)
 		}
 		if len(messages) == 0 {
-			consecutiveZero++
-			if consecutiveZero >= maxConsecutiveZero {
-				break
-			}
-			continue
+			break
 		}
-		consecutiveZero = 0
 
 		if err := sendMessagesBatched(ctx, sender, messages); err != nil {
 			return total, err

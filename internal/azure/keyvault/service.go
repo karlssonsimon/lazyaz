@@ -181,11 +181,11 @@ func (s *Service) getKeysClient(vaultURI string) (*azkeys.Client, error) {
 }
 
 func (s *Service) ListSubscriptions(ctx context.Context, send func([]azure.Subscription)) error {
-	return azure.ListSubscriptions(ctx, s.cred, send)
+	return azure.ListSubscriptions(ctx, s.Credential(), send)
 }
 
 func (s *Service) ListVaults(ctx context.Context, subscriptionID string, send func([]Vault)) error {
-	client, err := armkeyvault.NewVaultsClient(subscriptionID, s.cred, nil)
+	client, err := armkeyvault.NewVaultsClient(subscriptionID, s.Credential(), nil)
 	if err != nil {
 		return fmt.Errorf("create vaults client: %w", err)
 	}

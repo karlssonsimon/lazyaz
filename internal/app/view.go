@@ -77,7 +77,6 @@ func (m Model) View() tea.View {
 		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, closeHint, notifierToEntries(m.notifier.Snapshot()), m.styles, &m.keymap, m.width, m.height, view)
 	}
 	if m.activityOverlay.Active {
-		m.activityTick++
 		rows := activityRowsFromRegistry(m.sharedActivities)
 		cfg := ui.ActivityOverlayConfig{
 			Tick:      m.activityTick,

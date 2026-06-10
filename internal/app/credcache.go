@@ -37,7 +37,9 @@ func newCredentialCache(factory credentialFactory) *credentialCache {
 
 // For returns the credential for tenantID, creating it on first call.
 // Repeated calls return the same instance. Concurrent cold-cache
-// callers for the same tenant share one factory invocation.
+// callers for the same tenant share one factory invocation. Failures
+// are not cached — the entry is evicted so the next call retries the
+// factory instead of replaying a transient error until az login.
 func (c *credentialCache) For(tenantID string) (azcore.TokenCredential, error) {
 	c.mu.Lock()
 	entry, ok := c.entries[tenantID]
@@ -55,6 +57,16 @@ func (c *credentialCache) For(tenantID string) (azcore.TokenCredential, error) {
 		}
 		entry.cred = cred
 	})
+
+	if entry.err != nil {
+		c.mu.Lock()
+		// Evict only if the failed entry is still the cached one — a
+		// concurrent caller may have already replaced it.
+		if c.entries[tenantID] == entry {
+			delete(c.entries, tenantID)
+		}
+		c.mu.Unlock()
+	}
 	return entry.cred, entry.err
 }
 

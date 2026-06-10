@@ -67,6 +67,10 @@ type activityEventMsg struct {
 // the toastTickActive flag on Model.
 type toastTickMsg struct{}
 
+// activityTickMsg animates the fetch spinner in the activity overlay.
+// Scheduled while the overlay is open; self-extinguishes on close.
+type activityTickMsg struct{}
+
 // wrapCmd wraps a tea.Cmd so its resulting message is tagged with tabID.
 // It recursively handles tea.BatchMsg to wrap each sub-command.
 func wrapCmd(id int, cmd tea.Cmd) tea.Cmd {

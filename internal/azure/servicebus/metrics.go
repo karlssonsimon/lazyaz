@@ -73,6 +73,9 @@ func (s *Service) GetNamespaceMetrics(ctx context.Context, ns Namespace) ([]Enti
 		Interval:    to.Ptr("PT1M"),
 		Aggregation: to.SliceOfPtrs(azquery.AggregationTypeAverage),
 		Filter:      to.Ptr("EntityName eq '*'"),
+		// With a $filter the API defaults top to 10 time series, silently
+		// truncating namespaces with more than 10 queues/topics.
+		Top: to.Ptr(int32(500)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("query metrics for %s: %w", ns.Name, err)

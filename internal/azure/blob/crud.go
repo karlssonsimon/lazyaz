@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azdatalake/file"
@@ -25,6 +26,11 @@ func (s *Service) DeleteBlob(ctx context.Context, account Account, containerName
 	return s.withFallback(ctx, account, fmt.Sprintf("delete %s from %s/%s", blobName, account.Name, containerName), func(c *service.Client) error {
 		bc := c.NewContainerClient(containerName).NewBlobClient(blobName)
 		_, err := bc.Delete(ctx, nil)
+		if bloberror.HasCode(err, bloberror.BlobNotFound) {
+			// Already gone — the doc contract treats this as success
+			// (matters for folder deletes counting per-blob results).
+			return nil
+		}
 		return err
 	})
 }
@@ -364,7 +370,7 @@ func (s *Service) CreateDirectory(ctx context.Context, account Account, containe
 // flat-namespace withFallback but for azdatalake file clients, which
 // don't share a common type with azblob service clients.
 func (s *Service) withHNSFileFallback(ctx context.Context, account Account, url, label string, op func(*file.Client) error) error {
-	aad, err := file.NewClient(url, s.cred, nil)
+	aad, err := file.NewClient(url, s.Credential(), nil)
 	if err != nil {
 		return fmt.Errorf("create file client: %w", err)
 	}
@@ -393,7 +399,7 @@ func (s *Service) withHNSFileFallback(ctx context.Context, account Account, url,
 // withHNSDirFallback is the directory.Client analogue of
 // withHNSFileFallback.
 func (s *Service) withHNSDirFallback(ctx context.Context, account Account, url, label string, op func(*directory.Client) error) error {
-	aad, err := directory.NewClient(url, s.cred, nil)
+	aad, err := directory.NewClient(url, s.Credential(), nil)
 	if err != nil {
 		return fmt.Errorf("create directory client: %w", err)
 	}

@@ -46,6 +46,13 @@ func (s *Service) ExistingBlobs(ctx context.Context, account Account, containerN
 			if errors.As(err, &respErr) && (respErr.ErrorCode == string(bloberror.BlobNotFound) || respErr.StatusCode == http.StatusNotFound) {
 				continue
 			}
+			// Auth errors must propagate so withFallback retries with the
+			// shared-key client — swallowing them here returns an empty
+			// conflict set while the actual upload succeeds via fallback,
+			// silently skipping the overwrite prompt.
+			if isDataPlaneAuthError(err) {
+				return err
+			}
 			// Any other error for a single blob is ignored (soft degrade).
 		}
 		return nil
