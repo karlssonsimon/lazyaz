@@ -528,7 +528,9 @@ func (m Model) handleSecretCreated(msg secretCreatedMsg) (Model, tea.Cmd) {
 
 	// Refresh the secrets list so the new row shows up. Reuse the
 	// existing fetch cmd; the broker merges the new entry into the list.
-	if !m.hasVault || m.currentVault.Name != msg.vaultName {
+	// The kind check matters: handleSecretsLoaded drops results while
+	// certs/keys are shown, which would leave this spinner unresolved.
+	if !m.hasVault || m.currentVault.Name != msg.vaultName || m.kvKind != kvKindSecrets {
 		return m, nil
 	}
 	m.startLoading(secretsPane, fmt.Sprintf("Refreshing secrets in %s", m.currentVault.Name))

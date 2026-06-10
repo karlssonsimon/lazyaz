@@ -40,8 +40,11 @@ func (m Model) refresh() (Model, tea.Cmd) {
 		m.startLoading(blobsPane, fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName))
 		return m, tea.Batch(m.Spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.blobs))
 	}
-	// Re-run the API prefix search if a filter is active.
+	// Re-run the API prefix search if a filter is active. fetching must be
+	// set so handleBlobsLoaded routes the result to the filter handler
+	// instead of dropping it (which left the spinner unresolved).
 	if m.filter.prefixFetched && m.filter.prefixQuery != "" {
+		m.filter.fetching = true
 		effectivePrefix := blobSearchPrefix(m.prefix, m.filter.prefixQuery)
 		m.startLoading(blobsPane, fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix))
 		return m, tea.Batch(m.Spinner.Tick, fetchSearchBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, m.filter.prefixQuery, defaultBlobPrefixSearchLimit))

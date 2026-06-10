@@ -290,6 +290,13 @@ func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (
 }
 
 func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
+	// Drop results for a scope the user has already left — without this,
+	// an in-flight peek lands in whatever queue/sub is now current.
+	if !m.hasPeekTarget || msg.namespace.Name != m.currentNS.Name ||
+		msg.entityName != m.currentEntity.Name || msg.subName != m.currentSubName ||
+		msg.deadLetter != m.deadLetter {
+		return m, nil
+	}
 	if msg.err != nil {
 		m.ClearLoading()
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to peek messages from %s: %s", msg.source, msg.err.Error()))
@@ -328,6 +335,9 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 }
 
 func (m Model) handleEntitiesRefreshed(msg entitiesRefreshedMsg) (Model, tea.Cmd) {
+	if !m.hasNamespace || msg.namespace.Name != m.currentNS.Name {
+		return m, nil
+	}
 	if msg.err != nil {
 		return m, nil
 	}
@@ -347,6 +357,21 @@ func (m Model) handleEntitiesRefreshed(msg entitiesRefreshedMsg) (Model, tea.Cmd
 }
 
 func (m Model) handleDLQReceived(msg dlqReceivedMsg) (Model, tea.Cmd) {
+	// Stale receive: the user navigated away while the lock receive was in
+	// flight. Release the locks in the background instead of installing
+	// them against whatever scope is now current.
+	if !m.hasPeekTarget || !m.deadLetter || msg.namespace.Name != m.currentNS.Name ||
+		msg.entityName != m.currentEntity.Name || msg.subName != m.currentSubName {
+		if msg.result != nil {
+			locked := msg.result
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				locked.Close(ctx)
+			}()
+		}
+		return m, nil
+	}
 	m.ClearLoading()
 	if msg.err != nil {
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to receive DLQ messages: %s", msg.err.Error()))

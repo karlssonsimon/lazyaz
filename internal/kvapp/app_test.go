@@ -272,13 +272,26 @@ func TestSecretRevealHideRoundTrip(t *testing.T) {
 	if _, masked := m.revealedSecrets["api-key"]; masked {
 		t.Fatal("zero-value model should have nothing revealed")
 	}
+	vault := keyvault.Vault{Name: "v1", SubscriptionID: "sub-1"}
+	m.hasVault = true
+	m.currentVault = vault
 
-	updated, _ := m.handleSecretRevealed(secretRevealedMsg{secretName: "api-key", value: "s3cret"})
+	updated, _ := m.handleSecretRevealed(secretRevealedMsg{vault: vault, secretName: "api-key", value: "s3cret"})
 	if updated.revealedSecrets["api-key"] != "s3cret" {
 		t.Fatalf("revealedSecrets[api-key] = %q, want s3cret", updated.revealedSecrets["api-key"])
 	}
 	if !updated.inspectPanes[secretsPane] {
 		t.Fatal("revealing should auto-open the secrets-pane inspect strip")
+	}
+
+	// A reveal that lands after the user switched vaults must be dropped —
+	// the new vault may share the secret name with different contents.
+	stale, _ := updated.handleSecretRevealed(secretRevealedMsg{
+		vault:      keyvault.Vault{Name: "other", SubscriptionID: "sub-1"},
+		secretName: "db-pass", value: "leaked",
+	})
+	if _, on := stale.revealedSecrets["db-pass"]; on {
+		t.Fatal("stale reveal from another vault should be dropped")
 	}
 
 	// Hide path: clearReveals (called on subscription/vault change) drops

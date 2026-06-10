@@ -103,6 +103,14 @@ func (m *Model) firePrefixSearch() tea.Cmd {
 
 // handleFilterBlobsLoaded processes results from a server prefix search.
 func (m Model) handleFilterBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
+	// Drop results from a search fired in a scope the user has left —
+	// without this an in-flight search from container A lands as the
+	// results of a newer search in container B.
+	if !m.hasAccount || !m.hasContainer ||
+		!sameAccount(m.currentAccount, msg.account) || m.containerName != msg.container ||
+		m.prefix != msg.prefix || msg.query != m.filter.prefixQuery {
+		return m, nil
+	}
 	if msg.err != nil {
 		m.ClearLoading()
 		m.filter.fetching = false

@@ -165,8 +165,9 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (t
 
 func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.subscriptionID != m.CurrentSub.ID {
-		// Stale result from a previous subscription — ignore.
-		return m, msg.next
+		// Stale result from a previous subscription — ignore and stop
+		// pumping the dead stream.
+		return m, nil
 	}
 	if msg.err != nil {
 		m.LastErr = msg.err.Error()
@@ -201,6 +202,11 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (tea.Model, tea.C
 }
 
 func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.subscriptionID != m.CurrentSub.ID {
+		// Stale result from a previous subscription — SetSubscription
+		// already reset pendingFetches, so don't decrement it here.
+		return m, nil
+	}
 	if msg.err != nil {
 		m.LastErr = msg.err.Error()
 		m.pendingFetches--

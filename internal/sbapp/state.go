@@ -209,6 +209,8 @@ type topicSubscriptionsLoadedMsg struct {
 type messagesLoadedMsg struct {
 	namespace      servicebus.Namespace
 	source         string
+	entityName     string
+	subName        string
 	messages       []servicebus.PeekedMessage
 	deadLetter     bool
 	repeek         bool
@@ -217,8 +219,11 @@ type messagesLoadedMsg struct {
 }
 
 type dlqReceivedMsg struct {
-	result *servicebus.ReceivedMessages
-	err    error
+	namespace  servicebus.Namespace
+	entityName string
+	subName    string
+	result     *servicebus.ReceivedMessages
+	err        error
 }
 
 type dlqCompleteMsg struct {
@@ -241,8 +246,9 @@ type dlqRequeueAllMsg struct {
 }
 
 type entitiesRefreshedMsg struct {
-	entities []servicebus.Entity
-	err      error
+	namespace servicebus.Namespace
+	entities  []servicebus.Entity
+	err       error
 }
 
 type moveAllDoneMsg struct {

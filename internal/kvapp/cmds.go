@@ -94,7 +94,7 @@ func revealSecretValueCmd(svc *keyvault.Service, vault keyvault.Vault, secretNam
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		value, err := svc.GetSecretValue(ctx, vault, secretName, version)
-		return secretRevealedMsg{secretName: secretName, version: version, value: value, err: err}
+		return secretRevealedMsg{vault: vault, secretName: secretName, version: version, value: value, err: err}
 	}
 }
 

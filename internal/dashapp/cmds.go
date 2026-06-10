@@ -25,11 +25,12 @@ type namespacesLoadedMsg struct {
 // entitiesLoadedMsg carries entities for a single namespace, as part of
 // the per-namespace fan-out.
 type entitiesLoadedMsg struct {
-	namespace servicebus.Namespace
-	entities  []servicebus.Entity
-	done      bool
-	err       error
-	next      tea.Cmd
+	subscriptionID string
+	namespace      servicebus.Namespace
+	entities       []servicebus.Entity
+	done           bool
+	err            error
+	next           tea.Cmd
 }
 
 func fetchSubscriptionsCmd(svc *servicebus.Service, broker *cache.Broker[azure.Subscription], tenantID string, seed []azure.Subscription) tea.Cmd {
@@ -55,7 +56,7 @@ func fetchEntitiesCmd(svc *servicebus.Service, broker *cache.Broker[servicebus.E
 	cmd, _ := broker.Subscribe(cacheKey, nil, func(ctx context.Context, send func([]servicebus.Entity)) error {
 		return svc.ListEntities(ctx, ns, send)
 	}, func(p cache.Page[servicebus.Entity]) tea.Msg {
-		return entitiesLoadedMsg{namespace: ns, entities: p.Items, done: p.Done, err: p.Err, next: p.Next}
+		return entitiesLoadedMsg{subscriptionID: subscriptionID, namespace: ns, entities: p.Items, done: p.Done, err: p.Err, next: p.Next}
 	})
 	return cmd
 }

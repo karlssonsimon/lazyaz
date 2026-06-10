@@ -288,6 +288,7 @@ type secretValueYankedMsg struct {
 // in revealedSecrets/revealedVersions; on error a notification is shown
 // and the reveal request is dropped silently.
 type secretRevealedMsg struct {
+	vault      keyvault.Vault
 	secretName string
 	version    string
 	value      string

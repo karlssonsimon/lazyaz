@@ -420,6 +420,12 @@ func (m Model) handleKeyVersionsLoaded(msg keyVersionsLoadedMsg) (Model, tea.Cmd
 // auto-opens the inspect strip on the relevant pane so the user actually
 // sees it. On error we notify but don't open inspect (nothing to show).
 func (m Model) handleSecretRevealed(msg secretRevealedMsg) (Model, tea.Cmd) {
+	// Drop reveals that finish after the user switched vaults — otherwise
+	// the old vault's plaintext lands under a name the new vault may share.
+	if !m.hasVault || m.currentVault.Name != msg.vault.Name ||
+		m.currentVault.SubscriptionID != msg.vault.SubscriptionID {
+		return m, nil
+	}
 	m.ClearLoading()
 	if msg.err != nil {
 		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to reveal %s: %s", msg.secretName, msg.err.Error()))

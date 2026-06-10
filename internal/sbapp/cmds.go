@@ -56,7 +56,7 @@ func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queu
 		err := svc.PeekQueueMessages(ctx, ns, queueName, peekMaxMessages, deadLetter, fromSeqNo, func(batch []servicebus.PeekedMessage) {
 			messages = append(messages, batch...)
 		})
-		return messagesLoadedMsg{namespace: ns, source: queueName, messages: messages, deadLetter: deadLetter, repeek: repeek, preserveCursor: preserveCursor, err: err}
+		return messagesLoadedMsg{namespace: ns, source: queueName, entityName: queueName, messages: messages, deadLetter: deadLetter, repeek: repeek, preserveCursor: preserveCursor, err: err}
 	}
 }
 
@@ -68,7 +68,7 @@ func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespac
 		err := svc.PeekSubscriptionMessages(ctx, ns, topicName, subName, peekMaxMessages, deadLetter, fromSeqNo, func(batch []servicebus.PeekedMessage) {
 			messages = append(messages, batch...)
 		})
-		return messagesLoadedMsg{namespace: ns, source: topicName + "/" + subName, messages: messages, deadLetter: deadLetter, repeek: repeek, preserveCursor: preserveCursor, err: err}
+		return messagesLoadedMsg{namespace: ns, source: topicName + "/" + subName, entityName: topicName, subName: subName, messages: messages, deadLetter: deadLetter, repeek: repeek, preserveCursor: preserveCursor, err: err}
 	}
 }
 
@@ -77,7 +77,7 @@ func receiveDLQCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName,
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		result, err := svc.Receive(ctx, ns, entityName, subName, true, maxCount)
-		return dlqReceivedMsg{result: result, err: err}
+		return dlqReceivedMsg{namespace: ns, entityName: entityName, subName: subName, result: result, err: err}
 	}
 }
 
@@ -137,7 +137,7 @@ func refreshEntitiesCmd(svc *servicebus.Service, ns servicebus.Namespace) tea.Cm
 		err := svc.ListEntities(ctx, ns, func(batch []servicebus.Entity) {
 			entities = append(entities, batch...)
 		})
-		return entitiesRefreshedMsg{entities: entities, err: err}
+		return entitiesRefreshedMsg{namespace: ns, entities: entities, err: err}
 	}
 }
 
