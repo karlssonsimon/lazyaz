@@ -97,10 +97,18 @@ func TestActivityOverlayListEscCloses(t *testing.T) {
 	}
 }
 
+// A detail view reached FROM the list backs out to the list — the user
+// walked down the stack, esc walks back up.
 func TestActivityOverlayDetailEscBacksToList(t *testing.T) {
 	var s ActivityOverlayState
-	s.OpenDetail("x")
-	res := s.HandleKey("esc", nil)
+	s.Open()
+	rows := []ActivityRow{{ID: "x"}}
+	s.HandleKey("j", rows) // focus the row
+	s.HandleKey("enter", rows)
+	if s.View != ActivityDetailPane {
+		t.Fatalf("enter should drill into detail")
+	}
+	res := s.HandleKey("esc", rows)
 	if res.Action != ActivityActionBack {
 		t.Fatalf("esc in detail: want Back, got %v", res.Action)
 	}
@@ -109,6 +117,21 @@ func TestActivityOverlayDetailEscBacksToList(t *testing.T) {
 	}
 	if !s.Active {
 		t.Fatalf("detail esc should NOT close the overlay")
+	}
+}
+
+// A detail view auto-opened directly (upload starting) never visited the
+// list — esc closes the whole overlay so the user lands back in the app
+// instead of in a list they never asked for.
+func TestActivityOverlayAutoOpenedDetailEscCloses(t *testing.T) {
+	var s ActivityOverlayState
+	s.OpenDetail("x")
+	res := s.HandleKey("esc", nil)
+	if res.Action != ActivityActionClose {
+		t.Fatalf("esc in auto-opened detail: want Close, got %v", res.Action)
+	}
+	if s.Active {
+		t.Fatalf("auto-opened detail esc should close the overlay")
 	}
 }
 

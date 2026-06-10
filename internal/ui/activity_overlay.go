@@ -46,23 +46,33 @@ type ActivityOverlayState struct {
 	Active    bool
 	View      ActivityPane
 	FocusedID string
+
+	// detailOnly is set when the overlay was auto-opened straight into a
+	// detail view (e.g. an upload starting). Backing out of the detail
+	// then closes the whole overlay — the user never visited the list,
+	// so dropping them into it would be a surprise. A list-opened
+	// overlay keeps the normal detail → list → closed stack.
+	detailOnly bool
 }
 
 func (s *ActivityOverlayState) Open() {
 	s.Active = true
 	s.View = ActivityListPane
+	s.detailOnly = false
 }
 
 func (s *ActivityOverlayState) OpenDetail(id string) {
 	s.Active = true
 	s.View = ActivityDetailPane
 	s.FocusedID = id
+	s.detailOnly = true
 }
 
 func (s *ActivityOverlayState) Close() {
 	s.Active = false
 	s.View = ActivityListPane
 	s.FocusedID = ""
+	s.detailOnly = false
 }
 
 // HandleKey mutates the state based on key and returns an action
@@ -74,6 +84,10 @@ func (s *ActivityOverlayState) HandleKey(key string, rows []ActivityRow) Activit
 	if s.View == ActivityDetailPane {
 		switch key {
 		case "esc", "h", "left":
+			if s.detailOnly {
+				s.Close()
+				return ActivityResult{Action: ActivityActionClose}
+			}
 			s.View = ActivityListPane
 			return ActivityResult{Action: ActivityActionBack}
 		case "x":
@@ -558,9 +572,13 @@ func renderActivityDetail(state *ActivityOverlayState, rows []ActivityRow, cfg A
 	}
 
 	items := buildDetailItems(*focused)
+	closeHint := "h/esc back · x cancel"
+	if state.detailOnly {
+		closeHint = "h/esc close · x cancel"
+	}
 	listCfg := OverlayListConfig{
 		Title:      activityKindLabel(focused.Kind) + " · " + focused.Title,
-		CloseHint:  "h/esc back · x cancel",
+		CloseHint:  closeHint,
 		InnerWidth: 80,
 		MaxVisible: 16,
 		HideSearch: true,
