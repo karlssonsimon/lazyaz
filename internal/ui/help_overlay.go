@@ -9,7 +9,7 @@ import (
 )
 
 type HelpKeyBindings struct {
-	Up, Down, Close, Cancel, Erase KeyMatcher
+	Up, Down, Close, Cancel KeyMatcher
 }
 
 type HelpOverlayState struct {

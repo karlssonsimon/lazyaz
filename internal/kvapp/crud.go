@@ -168,8 +168,6 @@ func (m *Model) openCreateKeyForm() {
 	if !m.hasVault {
 		return
 	}
-	algorithm := FormField("Algorithm")
-	algorithm.Value = "RSA-2048"
 	m.createKey.OpenWithBreadcrumb(
 		"Create key",
 		[]string{m.currentVault.Name},
@@ -190,10 +188,6 @@ func (m *Model) openCreateKeyForm() {
 		},
 	)
 }
-
-// FormField is a typo-safe shorthand for declaring a default ui.FormField
-// — kept private to this file because it's only useful here.
-func FormField(label string) ui.FormField { return ui.FormField{Label: label} }
 
 // openImportCertBrowser launches the file picker for selecting a PFX.
 // When the user confirms a single file, the import form opens with the

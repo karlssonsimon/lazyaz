@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"unicode"
 
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
@@ -292,17 +291,6 @@ func (s *FileBrowserState) handleFilterInputKey(key string) FileBrowserResult {
 		}
 	}
 	return FileBrowserResult{Action: FBActionNone}
-}
-
-func isPrintableKey(key string) bool {
-	if key == "" {
-		return false
-	}
-	runes := []rune(key)
-	if len(runes) != 1 {
-		return false
-	}
-	return unicode.IsPrint(runes[0])
 }
 
 func (s *FileBrowserState) toggleCurrentMark() {

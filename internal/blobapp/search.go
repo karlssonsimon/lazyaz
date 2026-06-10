@@ -184,17 +184,3 @@ func (m Model) renderPrefixSearchOverlay(base string) string {
 
 	return ui.PlaceOverlay(m.Width, m.Height, box, base)
 }
-
-// renderFilterBanner returns a one-line summary for the pane when a
-// prefix search is active. Shows how to clear it.
-func (m Model) renderFilterBanner() string {
-	muted := m.Styles.Muted
-	accent := m.Styles.Accent
-	label := accent.Render("PREFIX · " + m.filter.prefixQuery)
-	count := ""
-	if m.filter.apiCount > 0 {
-		count = muted.Render(fmt.Sprintf(" → %d results", m.filter.apiCount))
-	}
-	hint := muted.Render("  esc clear")
-	return " " + label + count + hint
-}

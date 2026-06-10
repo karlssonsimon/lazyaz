@@ -15,7 +15,7 @@ type widgetViewState struct {
 	sortField   int    // index into Widget.SortFields(); 0 = widget default
 	sortDesc    bool   // sort direction; widget supplies the natural default per field
 	hasSort     bool   // false until the user picks one (avoids "fake default" surprise)
-	filter      string // ephemeral substring filter; reserved for future filter feature
+	filter      string // ephemeral substring filter applied to the widget rows
 	filterCaret int    // rune index of the edit caret within filter
 }
 
@@ -259,15 +259,4 @@ func gridDims(widgets []Widget) (rows, cols int) {
 		}
 	}
 	return
-}
-
-// findWidgetIdx returns the index of the widget at (row, col), or -1.
-func findWidgetIdx(widgets []Widget, row, col int) int {
-	for i, w := range widgets {
-		r, c := w.Position()
-		if r == row && c == col {
-			return i
-		}
-	}
-	return -1
 }

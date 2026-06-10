@@ -2,65 +2,7 @@ package activity
 
 import (
 	"fmt"
-	"time"
 )
-
-// shortFetchGrace is the minimum running duration before a fetch
-// counts toward the status-bar indicator. Keeps sub-second fetches
-// from flickering the UI.
-const shortFetchGrace = 2 * time.Second
-
-// StatusBarItem inspects the registry and returns the headline string
-// for the status bar indicator. The second return is false when nothing
-// noteworthy is running.
-//
-// Rules (in order):
-//  1. Any KindUpload running → "↑ <rate> · <keyHint> for activity"
-//     (if multiple uploads, use the slowest rate — the bottleneck)
-//  2. Any activity running > shortFetchGrace → "N active · <keyHint> for activity"
-//  3. Nothing noteworthy → ok=false
-func StatusBarItem(r *Registry, keyHint string) (value string, ok bool) {
-	if r == nil {
-		return "", false
-	}
-	views := r.Snapshot()
-
-	// Pass 1: find uploads in Running state.
-	var slowestUpload *Snapshot
-	for i := range views {
-		v := &views[i]
-		if v.Activity.Kind() != KindUpload {
-			continue
-		}
-		if v.Snapshot.Status != StatusRunning {
-			continue
-		}
-		if slowestUpload == nil || v.Snapshot.BytesPerSec < slowestUpload.BytesPerSec {
-			s := v.Snapshot
-			slowestUpload = &s
-		}
-	}
-	if slowestUpload != nil {
-		return fmt.Sprintf("↑ %s · %s for activity", FormatDecimalRate(slowestUpload.BytesPerSec), keyHint), true
-	}
-
-	// Pass 2: count running activities older than grace.
-	now := r.clock.Now()
-	count := 0
-	for _, v := range views {
-		if v.Snapshot.Status != StatusRunning {
-			continue
-		}
-		if now.Sub(v.Snapshot.StartedAt) < shortFetchGrace {
-			continue
-		}
-		count++
-	}
-	if count == 0 {
-		return "", false
-	}
-	return fmt.Sprintf("%d active · %s for activity", count, keyHint), true
-}
 
 // FormatDecimalRate formats a bytes-per-second rate using decimal SI
 // units. Exported so the ui package can call it without duplicating.

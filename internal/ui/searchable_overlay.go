@@ -57,10 +57,6 @@ func (s *SearchableOverlay[T]) TypeText(text string) {
 	s.refilter()
 }
 
-func (s *SearchableOverlay[T]) Backspace() {
-	s.HandleQueryKey("backspace")
-}
-
 func (s *SearchableOverlay[T]) Cancel() bool {
 	if s.Query != "" {
 		s.Query = ""

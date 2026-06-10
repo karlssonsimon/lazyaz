@@ -200,7 +200,7 @@ func renderActivityList(state *ActivityOverlayState, rows []ActivityRow, cfg Act
 		bodyRows = bodyRows[:activityMaxBody]
 	}
 
-	out := []string{renderActivityHeader(rows, styles, innerW)}
+	out := []string{renderActivityHeader(rows, cfg.CloseHint, styles, innerW)}
 	out = append(out, ov.Rule.Render(strings.Repeat("─", innerW)))
 	out = append(out, bodyRows...)
 	out = append(out, ov.Rule.Render(strings.Repeat("─", innerW)))
@@ -214,7 +214,7 @@ func renderActivityList(state *ActivityOverlayState, rows []ActivityRow, cfg Act
 // renderActivityHeader builds: ACTIVITY › range  ● N live · ● N attn · ● N done    esc close.
 // Range is omitted (we don't track a window) but the chevron + counters give
 // the same visual rhythm as the mockup.
-func renderActivityHeader(rows []ActivityRow, styles Styles, innerW int) string {
+func renderActivityHeader(rows []ActivityRow, closeHint string, styles Styles, innerW int) string {
 	ov := styles.Overlay
 
 	live, attn, done := 0, 0, 0
@@ -230,7 +230,10 @@ func renderActivityHeader(rows []ActivityRow, styles Styles, innerW int) string 
 	}
 
 	chevron := ov.Hint.Inline(true).Padding(0).Render(overlayChevron)
-	right := ov.Hint.Inline(true).Padding(0).Render("esc close")
+	if closeHint == "" {
+		closeHint = "esc close"
+	}
+	right := ov.Hint.Inline(true).Padding(0).Render(closeHint)
 	badge := ov.HeaderBadge.Render("ACTIVITY")
 	muted := ov.Hint.Inline(true).Padding(0)
 
@@ -349,7 +352,7 @@ func renderActivityRow(r ActivityRow, focused bool, tick int, styles Styles, inn
 		gutter = styles.Warning.Background(ov.Normal.GetBackground()).Render("▍") + " "
 	}
 
-	icon := activityStatusIcon(r, tick, styles).Background(bg).Render(activityStatusGlyph(r, tick))
+	icon := activityStatusIcon(r, styles).Background(bg).Render(activityStatusGlyph(r, tick))
 	kind := muted.Render(padRight(activityKindLabel(r.Kind), activityKindColWidth))
 
 	bar := activityProgressBar(r, styles, bg)
@@ -386,7 +389,7 @@ func padLeftRendered(rendered string, width int) string {
 
 // activityStatusIcon returns a styled icon style; activityStatusGlyph
 // returns the literal char (split so the caller can apply the bg).
-func activityStatusIcon(r ActivityRow, tick int, styles Styles) lipgloss.Style {
+func activityStatusIcon(r ActivityRow, styles Styles) lipgloss.Style {
 	switch r.Status {
 	case activity.StatusErrored:
 		return styles.DangerBold

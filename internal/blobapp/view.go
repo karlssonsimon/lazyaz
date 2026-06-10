@@ -41,7 +41,7 @@ func (m Model) View() tea.View {
 	}
 	footer := func(pane int, l *list.Model) string {
 		f := frame(pane)
-		contentWidth := ui.MillerContentWidth(f)
+		contentWidth := ui.MillerColumnContentWidth(f)
 		base := m.columnFooter(pane)
 		if inspect := m.inspectFooter(pane, contentWidth); inspect != "" {
 			base = lipgloss.JoinVertical(lipgloss.Left, base, inspect)
@@ -82,7 +82,7 @@ func (m Model) View() tea.View {
 	}, m.Styles)
 
 	blobsFrame := frame(blobsPane)
-	blobsContentWidth := ui.MillerContentWidth(blobsFrame)
+	blobsContentWidth := ui.MillerColumnContentWidth(blobsFrame)
 	blobsTableHeader := ""
 	if m.hasContainer {
 		blobsTableHeader = m.Styles.Chrome.RowMeta.Render(blobsColumnHeader(blobsContentWidth))
@@ -203,7 +203,7 @@ func (m Model) View() tea.View {
 		view = ui.RenderConfirmModal(m.confirmModal, m.Styles, m.Width, m.Height, view)
 	}
 	if m.textInput.Active {
-		view = ui.RenderTextInputOverlay(m.textInput, m.Cursor, m.Styles, &m.Keymap, m.Width, m.Height, view)
+		view = ui.RenderTextInputOverlay(m.textInput, m.Cursor, m.Styles, m.Width, m.Height, view)
 	}
 
 	out := tea.NewView(m.RenderOverlays(view))

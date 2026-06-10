@@ -15,7 +15,7 @@ type item struct {
 func itemKey(i item) string { return i.ID }
 
 func TestFetchSession_AppliesNewItems(t *testing.T) {
-	s := NewFetchSession(nil, 1, itemKey)
+	s := NewFetchSession(nil, itemKey)
 
 	s.Apply([]item{{ID: "a", Value: 1}, {ID: "b", Value: 2}})
 
@@ -28,7 +28,7 @@ func TestFetchSession_AppliesNewItems(t *testing.T) {
 
 func TestFetchSession_UpdatesExistingInPlace(t *testing.T) {
 	current := []item{{ID: "a", Value: 1}, {ID: "b", Value: 2}, {ID: "c", Value: 3}}
-	s := NewFetchSession(current, 1, itemKey)
+	s := NewFetchSession(current, itemKey)
 
 	// "b" gets updated, others stay where they are.
 	s.Apply([]item{{ID: "b", Value: 99}})
@@ -42,7 +42,7 @@ func TestFetchSession_UpdatesExistingInPlace(t *testing.T) {
 
 func TestFetchSession_AppendsUnknownItems(t *testing.T) {
 	current := []item{{ID: "a", Value: 1}}
-	s := NewFetchSession(current, 1, itemKey)
+	s := NewFetchSession(current, itemKey)
 
 	s.Apply([]item{{ID: "b", Value: 2}, {ID: "c", Value: 3}})
 
@@ -55,7 +55,7 @@ func TestFetchSession_AppendsUnknownItems(t *testing.T) {
 
 func TestFetchSession_MixedPageUpdatesAndAppends(t *testing.T) {
 	current := []item{{ID: "a", Value: 1}, {ID: "b", Value: 2}}
-	s := NewFetchSession(current, 1, itemKey)
+	s := NewFetchSession(current, itemKey)
 
 	// Page updates "a" and adds "c".
 	s.Apply([]item{{ID: "a", Value: 10}, {ID: "c", Value: 3}})
@@ -68,7 +68,7 @@ func TestFetchSession_MixedPageUpdatesAndAppends(t *testing.T) {
 }
 
 func TestFetchSession_MultiplePagesAccumulate(t *testing.T) {
-	s := NewFetchSession[item](nil, 1, itemKey)
+	s := NewFetchSession[item](nil, itemKey)
 
 	s.Apply([]item{{ID: "a", Value: 1}})
 	s.Apply([]item{{ID: "b", Value: 2}})
@@ -83,7 +83,7 @@ func TestFetchSession_MultiplePagesAccumulate(t *testing.T) {
 
 func TestFetchSession_FinalizeSweepsUnseen(t *testing.T) {
 	current := []item{{ID: "a", Value: 1}, {ID: "b", Value: 2}, {ID: "c", Value: 3}}
-	s := NewFetchSession(current, 1, itemKey)
+	s := NewFetchSession(current, itemKey)
 
 	// Only "a" and "c" arrive; "b" was deleted server-side.
 	s.Apply([]item{{ID: "a", Value: 10}, {ID: "c", Value: 30}})
@@ -97,7 +97,7 @@ func TestFetchSession_FinalizeSweepsUnseen(t *testing.T) {
 
 func TestFetchSession_FinalizeEmptyKeepsNothing(t *testing.T) {
 	current := []item{{ID: "a", Value: 1}, {ID: "b", Value: 2}}
-	s := NewFetchSession(current, 1, itemKey)
+	s := NewFetchSession(current, itemKey)
 
 	// No pages arrived — everything got deleted.
 	final := s.Finalize()
@@ -108,7 +108,7 @@ func TestFetchSession_FinalizeEmptyKeepsNothing(t *testing.T) {
 
 func TestFetchSession_FinalizeWithNoChangesKeepsEverything(t *testing.T) {
 	current := []item{{ID: "a", Value: 1}, {ID: "b", Value: 2}}
-	s := NewFetchSession(current, 1, itemKey)
+	s := NewFetchSession(current, itemKey)
 
 	// Server returned exactly the same things.
 	s.Apply(current)
@@ -119,19 +119,12 @@ func TestFetchSession_FinalizeWithNoChangesKeepsEverything(t *testing.T) {
 	}
 }
 
-func TestFetchSession_GenToken(t *testing.T) {
-	s := NewFetchSession[item](nil, 42, itemKey)
-	if got := s.Gen(); got != 42 {
-		t.Fatalf("Gen() = %d, want 42", got)
-	}
-}
-
 func TestFetchSession_ItemsDuringStreamingIsUnionOfOldAndNew(t *testing.T) {
 	// This is the key UX guarantee: during a multi-page stream, the user
 	// sees their old data plus whatever has arrived so far. Missing items
 	// stay visible until Finalize.
 	current := []item{{ID: "a", Value: 1}, {ID: "b", Value: 2}, {ID: "c", Value: 3}}
-	s := NewFetchSession(current, 1, itemKey)
+	s := NewFetchSession(current, itemKey)
 
 	// First page: only "a" and a new "d" arrive.
 	s.Apply([]item{{ID: "a", Value: 10}, {ID: "d", Value: 4}})
@@ -154,7 +147,7 @@ func TestFetchSession_ItemsDuringStreamingIsUnionOfOldAndNew(t *testing.T) {
 func TestFetchSession_CopiesCurrentSlice(t *testing.T) {
 	// Seeding with a slice must not retain the caller's backing array.
 	current := []item{{ID: "a", Value: 1}}
-	s := NewFetchSession(current, 1, itemKey)
+	s := NewFetchSession(current, itemKey)
 
 	current[0].Value = 999 // mutate caller's slice
 
@@ -165,7 +158,7 @@ func TestFetchSession_CopiesCurrentSlice(t *testing.T) {
 }
 
 func TestFetchSession_EmptyCurrent(t *testing.T) {
-	s := NewFetchSession[item](nil, 1, itemKey)
+	s := NewFetchSession[item](nil, itemKey)
 	if items := s.Items(); len(items) != 0 {
 		t.Fatalf("Items() = %v, want empty", items)
 	}
@@ -190,7 +183,7 @@ func TestFetchSession_LargeStreamCompletesQuickly(t *testing.T) {
 	const totalItems = 100_000
 	const pageSize = 5_000
 
-	s := NewFetchSession[item](nil, 1, itemKey)
+	s := NewFetchSession[item](nil, itemKey)
 
 	start := time.Now()
 	for offset := 0; offset < totalItems; offset += pageSize {

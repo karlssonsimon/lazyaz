@@ -43,7 +43,7 @@ func (m Model) View() tea.View {
 		view = renderTabPickerOverlay(&m.tabPicker, closeHint, m.cursor, m.styles, &m.keymap, m.width, m.height, view)
 	}
 	if m.connStringPrompt.Active {
-		view = ui.RenderTextInputOverlay(m.connStringPrompt, m.cursor, m.styles, &m.keymap, m.width, m.height, view)
+		view = ui.RenderTextInputOverlay(m.connStringPrompt, m.cursor, m.styles, m.width, m.height, view)
 	}
 	if m.tenantPicker.active {
 		title := "Switch Tenant"
@@ -74,7 +74,7 @@ func (m Model) View() tea.View {
 		view = ui.RenderHelpOverlay(m.helpOverlay, closeHint, m.cursor, m.styles, &m.keymap, m.width, m.height, view)
 	}
 	if m.notificationsOverlay.Active {
-		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, closeHint, notifierToEntries(m.notifier.Snapshot()), m.styles, &m.keymap, m.width, m.height, view)
+		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, closeHint, notifierToEntries(m.notifier.Snapshot()), m.styles, m.width, m.height, view)
 	}
 	if m.activityOverlay.Active {
 		rows := activityRowsFromRegistry(m.sharedActivities)

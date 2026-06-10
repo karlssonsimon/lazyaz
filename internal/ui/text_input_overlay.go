@@ -6,7 +6,6 @@ import (
 
 	"charm.land/bubbles/v2/cursor"
 	"charm.land/lipgloss/v2"
-	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
 
 // TextInputAction is the user's response to a text-input overlay.
@@ -134,7 +133,7 @@ const textInputInnerWidth = 72
 // input row with rose gutter, status-bar footer with INPUT pill.
 //
 // km may be nil — when set, footer hints reflect actual bindings.
-func RenderTextInputOverlay(state TextInputState, cur cursor.Model, styles Styles, km *keymap.Keymap, width, height int, base string) string {
+func RenderTextInputOverlay(state TextInputState, cur cursor.Model, styles Styles, width, height int, base string) string {
 	innerW := textInputInnerWidth
 	boxW := innerW + 6
 	if boxW > width-4 {
@@ -157,7 +156,7 @@ func RenderTextInputOverlay(state TextInputState, cur cursor.Model, styles Style
 	}
 	rows = append(rows, "")
 	rows = append(rows, ov.Rule.Render(strings.Repeat("─", innerW)))
-	rows = append(rows, renderTextInputFooter(styles, km, innerW))
+	rows = append(rows, renderTextInputFooter(styles, innerW))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
 	box := ov.Box.Width(boxW).Render(content)
@@ -220,7 +219,7 @@ func renderTextInputBody(state TextInputState, cur cursor.Model, styles Styles, 
 	return row
 }
 
-func renderTextInputFooter(styles Styles, km *keymap.Keymap, innerW int) string {
+func renderTextInputFooter(styles Styles, innerW int) string {
 	chrome := styles.Chrome
 	ov := styles.Overlay
 	parts := []string{chrome.StatusMode.Render("INPUT")}
@@ -236,6 +235,5 @@ func renderTextInputFooter(styles Styles, km *keymap.Keymap, innerW int) string 
 		parts = append(parts, chrome.StatusKey.Render(a.Key)+ov.Hint.Inline(true).Padding(0).Render(label))
 	}
 	left := strings.Join(parts, ov.Hint.Inline(true).Padding(0).Render("  "))
-	_ = km // reserved for future keymap-driven hints
 	return overlayJustifyRow(left, "", innerW, ov)
 }

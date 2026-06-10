@@ -100,10 +100,6 @@ func MillerSideMargin(cols MillerColumns, totalWidth int) int {
 	return (totalWidth - used) / 2
 }
 
-func MillerContentWidth(frame MillerColumnFrame) int {
-	return MillerColumnContentWidth(frame)
-}
-
 func AppBodyHeight(totalHeight int) int {
 	// 1 header + 1 rule + body + 1 rule + 1 status
 	height := totalHeight - AppHeaderHeight - StatusBarHeight - 2

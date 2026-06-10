@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -158,7 +159,7 @@ func TestPlanUploadWindowsSeparatorsNormalized(t *testing.T) {
 
 // TestUploadUsesTypedDestPrefixFromTextInput drives the full two-step
 // flow: a typed destination (which may differ from m.prefix — that's
-// the whole point) becomes uploadProgress.destPrefix. Uses
+// the whole point) is what startUpload receives. Uses
 // uploadDestEnteredMsg directly so the test doesn't depend on the
 // text-input keypress sequence.
 func TestUploadUsesTypedDestPrefixFromTextInput(t *testing.T) {
@@ -191,7 +192,9 @@ func TestUploadUsesTypedDestPrefixFromTextInput(t *testing.T) {
 		t.Fatalf("uploadDest = %q, want newfolder/", model.uploadDest)
 	}
 
-	// Drive the file browser to confirm a single file.
+	// Drive the file browser to confirm a single file. The activity
+	// registry lets us observe which destination startUpload received.
+	model.Activities = activity.NewRegistry()
 	model.uploadBrowser.Open(tmp, ui.OSDirReader{}, model.Keymap)
 	model.uploadBrowser.HandleKey(" ") // mark file.txt
 	updated, _ = model.Update(tea.KeyPressMsg{Code: 13, Text: "enter"})
@@ -199,8 +202,12 @@ func TestUploadUsesTypedDestPrefixFromTextInput(t *testing.T) {
 	if model.uploadProgress == nil {
 		t.Fatalf("upload didn't start (browserActive=%v)", model.uploadBrowserActive)
 	}
-	if model.uploadProgress.destPrefix != "newfolder/" {
-		t.Fatalf("destPrefix = %q, want newfolder/ (typed dest, not m.prefix)", model.uploadProgress.destPrefix)
+	views := model.Activities.Snapshot()
+	if len(views) != 1 {
+		t.Fatalf("want 1 registered upload activity, got %d", len(views))
+	}
+	if title := views[0].Activity.Title(); !strings.Contains(title, "newfolder/") {
+		t.Fatalf("activity title = %q, want typed dest newfolder/ (not m.prefix)", title)
 	}
 	if model.uploadDest != "" {
 		t.Fatalf("uploadDest should be cleared after browser confirm, got %q", model.uploadDest)
@@ -459,7 +466,6 @@ func TestUploadActivitySnapshotReflectsProgress(t *testing.T) {
 		uploadedBytes: 250,
 		total:         5,
 		currentFile:   "a/b.txt",
-		currentIndex:  1,
 		startedAt:     time.Unix(100, 0),
 		bytesPerSec:   42.0,
 	}

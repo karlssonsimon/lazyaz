@@ -193,7 +193,7 @@ func (m *Model) updateParentBlobsList() {
 	parentPrefix := m.prefix
 	// containersPane is the parent slot when in folder mode — it has
 	// a right rule against the focused blobsPane.
-	pw := ui.MillerContentWidth(ui.MillerColumnFrame{
+	pw := ui.MillerColumnContentWidth(ui.MillerColumnFrame{
 		Width:     m.paneWidths[containersPane],
 		RightRule: true,
 	})
@@ -221,7 +221,7 @@ func (m *Model) rebuildParentBlobsList() {
 	pp := parentPrefix(m.prefix)
 	scope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, pp, false)
 	if cached, ok := m.cache.blobs.Get(scope); ok {
-		pw := ui.MillerContentWidth(ui.MillerColumnFrame{
+		pw := ui.MillerColumnContentWidth(ui.MillerColumnFrame{
 			Width:     m.paneWidths[containersPane],
 			RightRule: true,
 		})

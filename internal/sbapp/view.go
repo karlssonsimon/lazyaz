@@ -44,7 +44,7 @@ func (m Model) View() tea.View {
 	}
 	footer := func(pane int, l *list.Model) string {
 		f := frame(pane)
-		contentWidth := ui.MillerContentWidth(f)
+		contentWidth := ui.MillerColumnContentWidth(f)
 		base := m.columnFooter(pane)
 		if inspect := m.inspectFooter(pane, contentWidth); inspect != "" {
 			base = lipgloss.JoinVertical(lipgloss.Left, base, inspect)
@@ -110,7 +110,7 @@ func (m Model) View() tea.View {
 
 	// Message preview pane.
 	if pw[messagePreviewPane] > 0 && m.viewingMessage {
-		contentWidth := ui.MillerContentWidth(frame(messagePreviewPane))
+		contentWidth := ui.MillerColumnContentWidth(frame(messagePreviewPane))
 		msgID := ui.EmptyToDash(m.selectedMessage.MessageID)
 		titleText := fmt.Sprintf("Message: %s", msgID)
 		previewTitle := m.Styles.Accent.Copy().

@@ -37,14 +37,13 @@ type Scheme struct {
 // Styles is the single resolved style collection built from a Scheme.
 // Every render site uses fields from this struct instead of raw colors.
 type Styles struct {
-	Chrome         ChromeStyles
-	Delegate       list.DefaultDelegate
-	DelegateTwoRow list.DefaultDelegate // two-line variant (title + description)
-	List           ListStyles
-	Spinner        lipgloss.Style
-	Syntax         SyntaxStyles
-	Overlay        OverlayStyles
-	TabBar         TabBarStyles
+	Chrome   ChromeStyles
+	Delegate list.DefaultDelegate
+	List     ListStyles
+	Spinner  lipgloss.Style
+	Syntax   SyntaxStyles
+	Overlay  OverlayStyles
+	TabBar   TabBarStyles
 
 	// Bg is the Base00 background color for RenderCanvas.
 	Bg icolor.Color
@@ -57,11 +56,7 @@ type Styles struct {
 	DangerBold         lipgloss.Style // Bold danger (base08)
 	Warning            lipgloss.Style // Warning/filter match (base0A)
 	Ok                 lipgloss.Style // Success/ok text (base0B)
-	FocusBorder        lipgloss.Style // Focused border color (base0B)
 	SelectionHighlight lipgloss.Style // Mouse text selection highlight (base02 bg + base06 fg)
-
-	// StatusBar is the bottom status bar.
-	StatusBar StatusBarStyles
 }
 
 // ListStyles contains all list.Model.Styles fields.
@@ -91,10 +86,8 @@ type OverlayStyles struct {
 	DashedRule   lipgloss.Style // dashed divider after the active row
 	HeaderBadge  lipgloss.Style // lavender pill: "THEMES", "COMMANDS", etc.
 	HeaderCount  lipgloss.Style // muted "5 / 312" counter
-	Prompt       lipgloss.Style
 	Input        lipgloss.Style
 	Normal       lipgloss.Style
-	NormalFull   lipgloss.Style // normal with full width (for help body)
 	Cursor       lipgloss.Style
 	NoMatch      lipgloss.Style
 	Hint         lipgloss.Style
@@ -102,7 +95,6 @@ type OverlayStyles struct {
 	RowHint      lipgloss.Style // muted inline hint for row content (no bg, so cursor row bg shows through)
 	ActiveMarker lipgloss.Style // cyan • for the active/current row
 	Match        lipgloss.Style // matched query chars in item labels
-	BoxBg        icolor.Color   // background color for custom box construction
 	Box          lipgloss.Style
 }
 
@@ -160,11 +152,6 @@ func NewStyles(s Scheme) Styles {
 
 	// --- Chrome ---
 	chrome := ChromeStyles{
-		Header: lipgloss.NewStyle().
-			Foreground(blue).
-			Background(surface).
-			Bold(true).
-			Padding(0, 1),
 		Meta: lipgloss.NewStyle().
 			Foreground(muted).
 			Background(surface).
@@ -173,11 +160,6 @@ func NewStyles(s Scheme) Styles {
 			Foreground(text).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(surface).
-			Padding(0, 1),
-		FocusedPane: lipgloss.NewStyle().
-			Foreground(text).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(green).
 			Padding(0, 1),
 		Status: lipgloss.NewStyle().
 			Foreground(text).
@@ -189,10 +171,6 @@ func NewStyles(s Scheme) Styles {
 			Padding(0, 1),
 		Error: lipgloss.NewStyle().
 			Foreground(danger).
-			Background(surface).
-			Padding(0, 1),
-		FilterHint: lipgloss.NewStyle().
-			Foreground(blue).
 			Background(surface).
 			Padding(0, 1),
 		HeaderBrand: lipgloss.NewStyle().
@@ -236,10 +214,6 @@ func NewStyles(s Scheme) Styles {
 		ColumnFooterFocus: lipgloss.NewStyle().
 			Foreground(text).
 			Background(bg),
-		SelectionGutter: lipgloss.NewStyle().
-			Foreground(warning).
-			Background(bg).
-			Bold(true),
 		RowMeta: lipgloss.NewStyle().
 			Foreground(muted).
 			Background(bg),
@@ -294,12 +268,6 @@ func NewStyles(s Scheme) Styles {
 	delegate.Styles.FilterMatch = lipgloss.NewStyle().
 		Foreground(warning).
 		Underline(true)
-
-	// Two-row delegate: inherits all styles but shows descriptions.
-	delegateTwoRow := delegate
-	delegateTwoRow.SetHeight(2)
-	delegateTwoRow.SetSpacing(0)
-	delegateTwoRow.ShowDescription = true
 
 	// --- List Component Styles ---
 	ls := ListStyles{
@@ -389,9 +357,6 @@ func NewStyles(s Scheme) Styles {
 		HeaderCount: lipgloss.NewStyle().
 			Foreground(muted).
 			Background(bg),
-		Prompt: lipgloss.NewStyle().
-			Foreground(muted).
-			Background(bg),
 		Input: lipgloss.NewStyle().
 			Foreground(text).
 			Background(bg),
@@ -399,9 +364,6 @@ func NewStyles(s Scheme) Styles {
 			Foreground(text).
 			Background(bg).
 			Padding(0, 0, 0, 2),
-		NormalFull: lipgloss.NewStyle().
-			Foreground(text).
-			Background(bg),
 		Cursor: lipgloss.NewStyle().
 			Foreground(selText).
 			Background(selBg).
@@ -428,7 +390,6 @@ func NewStyles(s Scheme) Styles {
 		Match: lipgloss.NewStyle().
 			Foreground(warning).
 			Bold(true),
-		BoxBg: color(s.Base00),
 		Box: lipgloss.NewStyle().
 			Background(bg).
 			Border(lipgloss.NormalBorder()).
@@ -469,14 +430,13 @@ func NewStyles(s Scheme) Styles {
 	}
 
 	return Styles{
-		Chrome:         chrome,
-		Delegate:       delegate,
-		DelegateTwoRow: delegateTwoRow,
-		List:           ls,
-		Spinner:        spinStyle,
-		Syntax:         syntax,
-		Overlay:        overlay,
-		TabBar:         tabBar,
+		Chrome:   chrome,
+		Delegate: delegate,
+		List:     ls,
+		Spinner:  spinStyle,
+		Syntax:   syntax,
+		Overlay:  overlay,
+		TabBar:   tabBar,
 
 		Bg:                 colorRGB(s.Base00),
 		Accent:             lipgloss.NewStyle().Bold(true).Foreground(blue),
@@ -486,27 +446,7 @@ func NewStyles(s Scheme) Styles {
 		DangerBold:         lipgloss.NewStyle().Foreground(danger).Bold(true),
 		Warning:            lipgloss.NewStyle().Foreground(warning),
 		Ok:                 lipgloss.NewStyle().Foreground(green),
-		FocusBorder:        lipgloss.NewStyle().BorderForeground(green),
 		SelectionHighlight: lipgloss.NewStyle().Foreground(selText).Background(selBg).Reverse(true),
-
-		StatusBar: StatusBarStyles{
-			Box: lipgloss.NewStyle().
-				Background(surface).
-				Padding(1, 1),
-			Label: lipgloss.NewStyle().
-				Foreground(text).
-				Background(surface).
-				Bold(true),
-			Value: lipgloss.NewStyle().
-				Foreground(muted).
-				Background(surface),
-			Error: lipgloss.NewStyle().
-				Foreground(danger).
-				Background(surface).
-				Bold(true),
-			Gap: lipgloss.NewStyle().
-				Background(surface),
-		},
 	}
 }
 

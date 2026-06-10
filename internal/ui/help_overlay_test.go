@@ -65,7 +65,6 @@ func TestHelpOverlaySearch(t *testing.T) {
 		Up:    noopMatcher{},
 		Down:  noopMatcher{},
 		Close: noopMatcher{},
-		Erase: keyMatcher{"backspace"},
 	}
 	// Type "down" to filter.
 	state.HandleKey("d", bindings)
@@ -113,7 +112,3 @@ type noopMatcher struct{}
 
 func (noopMatcher) Matches(string) bool { return false }
 
-// keyMatcher matches a specific literal key (for tests).
-type keyMatcher struct{ key string }
-
-func (k keyMatcher) Matches(s string) bool { return s == k.key }

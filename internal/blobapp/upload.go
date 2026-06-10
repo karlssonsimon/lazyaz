@@ -15,7 +15,6 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -162,7 +161,6 @@ func runUpload(ctx context.Context, up uploader, plan uploadPlan, destPrefix str
 			msgs <- uploadStartedMsg{totalBytes: plan.totalBytes, fileCount: len(plan.files)}
 			msgs <- uploadDoneMsg{
 				failed:     []uploadError{{blobName: "(conflict pre-flight check)", err: err}},
-				totalBytes: plan.totalBytes,
 				destPrefix: destPrefix,
 			}
 			return
@@ -170,17 +168,15 @@ func runUpload(ctx context.Context, up uploader, plan uploadPlan, destPrefix str
 		msgs <- uploadStartedMsg{
 			totalBytes: plan.totalBytes,
 			fileCount:  len(plan.files),
-			conflicts:  conflicts,
 		}
 
 		var result uploadDoneMsg
-		result.totalBytes = plan.totalBytes
 		result.destPrefix = destPrefix
 
 		policy := conflictSkip // default; overridden once user picks an "all" answer
 		explicitPolicy := false
 
-		for i, f := range plan.files {
+		for _, f := range plan.files {
 			if ctx.Err() != nil {
 				result.cancelled = true
 				break
@@ -241,9 +237,8 @@ func runUpload(ctx context.Context, up uploader, plan uploadPlan, destPrefix str
 				lastCum = cum
 				select {
 				case msgs <- uploadProgressMsg{
-					currentFile:  f.blobName,
-					currentIndex: i,
-					bytesDelta:   delta,
+					currentFile: f.blobName,
+					bytesDelta:  delta,
 				}:
 				default:
 				}
@@ -283,7 +278,6 @@ type uploadProgress struct {
 	totalBytes        int64
 	uploadedBytes     int64
 	currentFile       string
-	currentIndex      int
 	total             int
 	cancelled         bool
 	done              bool
@@ -291,8 +285,6 @@ type uploadProgress struct {
 	waitingInputSince time.Time // stamped when waitingInput flips to true; zero otherwise
 	errors            []uploadError
 	skipped           int
-	destPrefix        string
-	bar               progress.Model
 
 	// Throughput tracking. lastSampleAt / lastSampleBytes anchor the
 	// instantaneous rate computation; bytesPerSec is an EMA so the
@@ -418,15 +410,11 @@ func (m Model) startUpload(selected []string, destPrefix string) (Model, tea.Cmd
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 	m.uploadCancelFn = cancelFn
-	m.uploadConflictPolicy = conflictSkip
 
-	bar := progress.New(progress.WithWidth(40))
 	now := time.Now()
 	m.uploadProgress = &uploadProgress{
 		totalBytes:   plan.totalBytes,
 		total:        len(plan.files),
-		destPrefix:   destPrefix,
-		bar:          bar,
 		startedAt:    now,
 		lastSampleAt: now,
 	}

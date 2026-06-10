@@ -27,9 +27,9 @@ import (
 )
 
 // toastTickInterval is how often the parent re-renders while toasts
-// are visible. 100ms is well below the 3-second toast lifetime, so
-// expiry feels instant without burning CPU when nothing's happening
-// (the ticker self-extinguishes when no toasts are active).
+// are visible. 100ms is well below the toast lifetimes (1.5s info /
+// 5s error), so expiry feels instant without burning CPU when nothing's
+// happening (the ticker self-extinguishes when no toasts are active).
 const toastTickInterval = 100 * time.Millisecond
 
 // activityTickInterval paces the fetch-spinner animation in the
@@ -130,7 +130,7 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		sbSvc:            sbSvc,
 		kvSvc:            kvSvc,
 		brokers:          newSharedBrokers(db),
-		sharedActivities: activity.NewRegistry(activity.RealClock{}),
+		sharedActivities: activity.NewRegistry(),
 		cfg:              cfg,
 		keymap:           km,
 		cursor:           cur,
@@ -1010,7 +1010,6 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
 				Close:  m.keymap.ToggleHelp,
 				Cancel: m.keymap.Cancel,
-				Erase:  m.keymap.BackspaceUp,
 			})
 			return m, nil
 		}

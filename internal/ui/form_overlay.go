@@ -6,7 +6,6 @@ import (
 
 	"charm.land/bubbles/v2/cursor"
 	"charm.land/lipgloss/v2"
-	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
 
 // FormAction is the user's response to a form overlay.
@@ -210,7 +209,7 @@ const formInnerWidth = 96
 // cur is the shared blinking cursor; its char is set per-field to the
 // rune under the caret so blink-off shows the underlying character.
 // km may be nil — when set, footer hints reflect actual bindings.
-func RenderFormOverlay(state FormOverlayState, cur cursor.Model, styles Styles, km *keymap.Keymap, width, height int, base string) string {
+func RenderFormOverlay(state FormOverlayState, cur cursor.Model, styles Styles, width, height int, base string) string {
 	innerW := formInnerWidth
 	boxW := innerW + 6 // padding(2+2) + border(1+1)
 	if boxW > width-4 {
@@ -253,7 +252,7 @@ func RenderFormOverlay(state FormOverlayState, cur cursor.Model, styles Styles, 
 	// --- Footer ---
 	rows = append(rows, "")
 	rows = append(rows, ov.Rule.Render(strings.Repeat("─", innerW)))
-	rows = append(rows, renderFormFooter(state, styles, km, innerW))
+	rows = append(rows, renderFormFooter(state, styles, innerW))
 
 	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
 	box := ov.Box.Width(boxW).Render(content)
@@ -292,7 +291,7 @@ func renderFormHeader(state FormOverlayState, styles Styles, innerW int) string 
 }
 
 // renderFormFooter builds the row: [INPUT] tab next  ↑tab prev  ↵ confirm …
-func renderFormFooter(state FormOverlayState, styles Styles, km *keymap.Keymap, innerW int) string {
+func renderFormFooter(state FormOverlayState, styles Styles, innerW int) string {
 	chrome := styles.Chrome
 	ov := styles.Overlay
 
@@ -317,7 +316,6 @@ func renderFormFooter(state FormOverlayState, styles Styles, km *keymap.Keymap, 
 	}
 
 	left := strings.Join(parts, ov.Hint.Inline(true).Padding(0).Render("  "))
-	_ = km // reserved for future keymap-driven hints
 	return overlayJustifyRow(left, "", innerW, ov)
 }
 

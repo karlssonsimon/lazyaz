@@ -106,7 +106,7 @@ func New(cfg ui.Config, km keymap.Keymap) Model {
 		Schemes:     cfg.Schemes,
 		LoadingPane: -1,
 		Notifier:    NewNotifier(1000),
-		Activities:  activity.NewRegistry(activity.RealClock{}),
+		Activities:  activity.NewRegistry(),
 		ThemeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},

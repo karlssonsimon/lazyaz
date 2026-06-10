@@ -109,25 +109,6 @@ func (s *Service) ListSubscriptions(ctx context.Context, send func([]azure.Subsc
 	return azure.ListSubscriptions(ctx, s.Credential(), send)
 }
 
-func (s *Service) DiscoverAccounts(ctx context.Context, send func([]Account)) error {
-	var subscriptions []azure.Subscription
-	err := s.ListSubscriptions(ctx, func(batch []azure.Subscription) {
-		subscriptions = append(subscriptions, batch...)
-	})
-	if err != nil {
-		return err
-	}
-
-	for _, subscription := range subscriptions {
-		err := s.DiscoverAccountsForSubscription(ctx, subscription.ID, send)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (s *Service) DiscoverAccountsForSubscription(ctx context.Context, subscriptionID string, send func([]Account)) error {
 	id := strings.TrimSpace(subscriptionID)
 	if id == "" {
@@ -251,10 +232,6 @@ func (s *Service) listContainersWithClient(ctx context.Context, serviceClient *s
 	return nil
 }
 
-func (s *Service) ListBlobs(ctx context.Context, account Account, containerName, prefix string, send func([]BlobEntry)) error {
-	return s.ListBlobsLimited(ctx, account, containerName, prefix, 0, send)
-}
-
 func (s *Service) ListBlobsLimited(ctx context.Context, account Account, containerName, prefix string, limit int, send func([]BlobEntry)) error {
 	return s.withFallback(ctx, account, fmt.Sprintf("list blobs for %s/%s", account.Name, containerName), func(c *service.Client) error {
 		return s.listBlobsWithClient(ctx, c, account, containerName, prefix, limit, send)
@@ -361,58 +338,6 @@ func (s *Service) listBlobsFlatWithClient(ctx context.Context, serviceClient *se
 
 		var batch []BlobEntry
 		for _, blobItem := range page.Segment.BlobItems {
-			entry, ok := blobItemToEntry(blobItem)
-			if !ok {
-				continue
-			}
-			batch = append(batch, entry)
-			if limit > 0 && total+len(batch) >= limit {
-				break
-			}
-		}
-
-		if len(batch) > 0 {
-			send(batch)
-			total += len(batch)
-		}
-	}
-
-	return nil
-}
-
-func (s *Service) SearchBlobsContains(ctx context.Context, account Account, containerName, query string, limit int, send func([]BlobEntry)) error {
-	if strings.TrimSpace(query) == "" {
-		return nil
-	}
-	return s.withFallback(ctx, account, fmt.Sprintf("search blobs in %s/%s", account.Name, containerName), func(c *service.Client) error {
-		return s.searchBlobsContainsWithClient(ctx, c, account, containerName, query, limit, send)
-	})
-}
-
-func (s *Service) searchBlobsContainsWithClient(ctx context.Context, serviceClient *service.Client, account Account, containerName, query string, limit int, send func([]BlobEntry)) error {
-	containerClient := serviceClient.NewContainerClient(containerName)
-	needle := strings.ToLower(query)
-
-	total := 0
-	pager := containerClient.NewListBlobsFlatPager(nil)
-	for pager.More() {
-		if limit > 0 && total >= limit {
-			break
-		}
-
-		page, err := pager.NextPage(ctx)
-		if err != nil {
-			return fmt.Errorf("search blobs in %s/%s for %q: %w", account.Name, containerName, query, err)
-		}
-
-		var batch []BlobEntry
-		for _, blobItem := range page.Segment.BlobItems {
-			if blobItem == nil || blobItem.Name == nil {
-				continue
-			}
-			if !strings.Contains(strings.ToLower(*blobItem.Name), needle) {
-				continue
-			}
 			entry, ok := blobItemToEntry(blobItem)
 			if !ok {
 				continue

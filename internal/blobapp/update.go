@@ -150,7 +150,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.uploadProgress != nil {
 			m.uploadProgress.uploadedBytes += msg.bytesDelta
 			m.uploadProgress.currentFile = msg.currentFile
-			m.uploadProgress.currentIndex = msg.currentIndex
 			m.updateUploadThroughput()
 		}
 		return m, msg.next
@@ -436,10 +435,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.resolveConflict(conflictSkip)
 		case "a":
 			m.resolveConflict(conflictOverwriteAll)
-			m.uploadConflictPolicy = conflictOverwriteAll
 		case "s":
 			m.resolveConflict(conflictSkipAll)
-			m.uploadConflictPolicy = conflictSkipAll
 		case "c", "esc":
 			m.resolveConflict(conflictCancel)
 			if m.uploadCancelFn != nil {
@@ -547,7 +544,7 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs)))
 		return m, nil
 	case m.Keymap.DownloadSelection.Matches(key):
-		return m.startMarkedAction("download")
+		return m.startDownloadMarkedBlobs()
 	case m.Keymap.ToggleMark.Matches(key):
 		m.toggleCurrentBlobMark()
 		return m, nil
@@ -593,7 +590,7 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 		return m, nil
 	case m.Keymap.DownloadSelection.Matches(key):
 		if m.focus == blobsPane {
-			return m.startMarkedAction("download")
+			return m.startDownloadMarkedBlobs()
 		}
 	case m.Keymap.YankBlobContent.Matches(key):
 		if m.focus == blobsPane {

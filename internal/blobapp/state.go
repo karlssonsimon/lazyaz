@@ -198,7 +198,6 @@ type Model struct {
 	uploadProgress       *uploadProgress
 	uploadActivityUnreg  func() // nil when no upload is tracked
 	uploadConflict       *pendingConflict
-	uploadConflictPolicy conflictAnswer
 	uploadCancelFn       context.CancelFunc
 	// uploadDest captures the destination prefix typed at the start of
 	// the upload flow. Survives between the text-input step and the

@@ -47,23 +47,6 @@ func ClampListSelection(l *list.Model) {
 	}
 }
 
-// SetItemsPreserveIndex replaces list items while keeping the cursor
-// at the same index (clamped to the new item count). Use this for
-// background refreshes where the user is already browsing the list.
-func SetItemsPreserveIndex(l *list.Model, items []list.Item) {
-	idx := l.Index()
-	l.SetItems(items)
-	if n := len(items); n == 0 {
-		return
-	} else if idx >= n {
-		idx = n - 1
-	}
-	if idx < 0 {
-		idx = 0
-	}
-	l.Select(idx)
-}
-
 // ListState captures the user-facing state of a [list.Model] at a point
 // in time: where the cursor is (by stable item key) and what the filter
 // text was. Use SnapshotListState and RestoreListState to persist state
@@ -150,8 +133,7 @@ func SelectByKey(l *list.Model, key string, keyOf func(list.Item) string) bool {
 // SetItemsPreserveKey replaces list items while keeping the cursor
 // pointed at the same item by identity (via keyOf), not by numeric index.
 // If the previously selected item is no longer present, the cursor clamps
-// to the same numeric index as before — matching SetItemsPreserveIndex's
-// fallback.
+// to the same numeric index as before.
 //
 // If a filter is active, it is re-applied synchronously against the new
 // items via list.SetFilterText — bubbles list's SetItems otherwise

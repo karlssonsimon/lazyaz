@@ -4,7 +4,6 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	tea "charm.land/bubbletea/v2"
 )
 
 // actionMenuState is the dashboard's lightweight action menu. It opens
@@ -80,11 +79,4 @@ func (m Model) renderActionMenu(base string) string {
 		},
 	}
 	return ui.RenderOverlayList(cfg, items, m.actionMenu.cursor, m.Styles, m.Width, m.Height, base)
-}
-
-// fireAction is what gets called when the menu yields an action — just
-// produces the action's command if any. Lifted out so handleKey can
-// invoke it from both the menu confirm and direct-key paths.
-func fireAction(a Action) tea.Cmd {
-	return a.Cmd
 }

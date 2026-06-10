@@ -50,7 +50,6 @@ func (m *Model) HandleOverlayKeys(key string) OverlayResult {
 			Down:   m.Keymap.ThemeDown,
 			Close:  m.Keymap.ToggleHelp,
 			Cancel: m.Keymap.Cancel,
-			Erase:  m.Keymap.BackspaceUp,
 		})
 		return OverlayResult{Handled: true}
 	}

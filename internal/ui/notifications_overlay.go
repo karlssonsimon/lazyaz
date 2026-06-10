@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
 
 const (
@@ -64,7 +63,7 @@ type NotificationEntry struct {
 // RenderNotificationsOverlay paints the scrollable history (newest first)
 // as a tabular log: NOTIFICATIONS header pill, level counters, WHEN/LEVEL/
 // EVENT columns, footer with LOG mode pill.
-func RenderNotificationsOverlay(state NotificationsOverlayState, closeHint string, entries []NotificationEntry, styles Styles, _ *keymap.Keymap, width, height int, base string) string {
+func RenderNotificationsOverlay(state NotificationsOverlayState, closeHint string, entries []NotificationEntry, styles Styles, width, height int, base string) string {
 	innerW := notifInnerW
 	boxW := innerW + 6
 	if boxW > width-4 {

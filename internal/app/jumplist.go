@@ -154,19 +154,6 @@ func (m *Model) applyNavToTab(idx int, snap jumplist.NavSnapshot) tea.Cmd {
 	return nil
 }
 
-// activeTabSnapshot returns the active tab's current navigable
-// position, or nil if it isn't on one. Used at jump-recording sites
-// that need to capture state before/after a navigation.
-func (m *Model) activeTabSnapshot() jumplist.NavSnapshot {
-	if len(m.tabs) == 0 {
-		return nil
-	}
-	if child, ok := m.tabs[m.activeIdx].Model.(navigationTab); ok {
-		return child.CurrentNav()
-	}
-	return nil
-}
-
 // tabSnapshotForJump returns the best snapshot to use when recording
 // a jump entry pointing at the given tab. Prefers the in-tab position
 // (sbapp/blobapp CurrentNav); falls back to a tabHomeSnapshot so the

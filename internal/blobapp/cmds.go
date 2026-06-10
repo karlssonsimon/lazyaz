@@ -161,17 +161,15 @@ func downloadBlobsCmd(svc *blob.Service, account blob.Account, containerName str
 type uploadStartedMsg struct {
 	totalBytes int64
 	fileCount  int
-	conflicts  map[string]struct{}
 	next       tea.Cmd // receive-next cmd
 }
 
 // uploadProgressMsg fires periodically during upload, per block
 // uploaded. bytesDelta is the bytes since the previous progress event.
 type uploadProgressMsg struct {
-	currentFile  string
-	currentIndex int
-	bytesDelta   int64
-	next         tea.Cmd
+	currentFile string
+	bytesDelta  int64
+	next        tea.Cmd
 }
 
 // uploadConflictMsg fires when an existing blob is hit and a decision
@@ -188,7 +186,6 @@ type uploadDoneMsg struct {
 	skipped       int
 	failed        []uploadError
 	cancelled     bool
-	totalBytes    int64
 	uploadedBytes int64
 	destPrefix    string
 }
@@ -206,13 +203,6 @@ const (
 type uploadError struct {
 	blobName string
 	err      error
-}
-
-// uploadConfirmedMsg is the synthesized message when the user confirms
-// the file browser. Carries the selected paths + final destination prefix.
-type uploadConfirmedMsg struct {
-	selected   []string // absolute paths (files or dirs)
-	destPrefix string
 }
 
 // ActivityAutoOpenRequestMsg bubbles up from a blobapp tab to the

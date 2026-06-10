@@ -6,14 +6,11 @@ const AppHeaderHeight = 1
 
 // ChromeStyles contains the application chrome styles. Built by NewStyles from a Base16 scheme.
 type ChromeStyles struct {
-	Header      lipgloss.Style
-	Meta        lipgloss.Style
-	Pane        lipgloss.Style
-	FocusedPane lipgloss.Style
-	Status      lipgloss.Style
-	Help        lipgloss.Style
-	Error       lipgloss.Style
-	FilterHint  lipgloss.Style
+	Meta   lipgloss.Style
+	Pane   lipgloss.Style
+	Status lipgloss.Style
+	Help   lipgloss.Style
+	Error  lipgloss.Style
 
 	HeaderBrand       lipgloss.Style
 	HeaderPath        lipgloss.Style
@@ -26,7 +23,6 @@ type ChromeStyles struct {
 	ColumnRule        lipgloss.Style
 	ColumnFooter      lipgloss.Style
 	ColumnFooterFocus lipgloss.Style
-	SelectionGutter   lipgloss.Style
 	RowMeta           lipgloss.Style
 	StatusMode        lipgloss.Style
 	StatusKey         lipgloss.Style

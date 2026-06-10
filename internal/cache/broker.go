@@ -73,7 +73,7 @@ type stream[T any] struct {
 //
 // Broker is safe for concurrent use. The underlying Store is only
 // accessed from the worker goroutine (writes) and under the mutex
-// (reads via Get), matching the same safety model as Loader.
+// (reads via Get).
 type Broker[T any] struct {
 	store    Store[T]
 	keyOf    func(T) string
@@ -150,14 +150,14 @@ func (b *Broker[T]) Cancel(key string) {
 	s.status = StreamCancelled
 	s.endedAt = time.Now()
 	b.mu.Unlock()
-	// Do not unregister the activity; the registry's 60s cleanup keeps
-	// the cancelled row visible so the user sees what they just cancelled.
+	// Do not unregister the activity; the registry retains terminal
+	// activities (up to its entry cap) so the cancelled row stays
+	// visible and the user sees what they just cancelled.
 	s.cancel()
 }
 
 // Subscribe joins an existing stream or starts a new one. Returns a
-// tea.Cmd that delivers Page[T] messages via wrapMsg, exactly like
-// Loader.Fetch.
+// tea.Cmd that delivers Page[T] messages via wrapMsg.
 //
 // seed is the currently displayed items. For a new stream it seeds
 // the merge session; for an existing stream it is ignored (the catch-up
@@ -167,7 +167,7 @@ func (b *Broker[T]) Cancel(key string) {
 // key is already active, the subscriber joins it and fetchFn is ignored.
 //
 // The returned int64 is the subscription ID (currently unused — the
-// channel is closed when the worker emits its final Done page).
+// recv chain simply stops after the worker emits its final Done page).
 func (b *Broker[T]) Subscribe(
 	key string,
 	seed []T,
@@ -226,8 +226,8 @@ func (b *Broker[T]) Subscribe(
 	return b.recv(key, subID, ch, wrapMsg), subID
 }
 
-// worker runs the fetch on a background goroutine. Very similar to
-// Loader.worker but fans out snapshots to all subscribers.
+// worker runs the fetch on a background goroutine and fans out
+// snapshots to all subscribers.
 //
 // The worker enforces an idle timeout: if no data arrives within
 // DefaultIdleTimeout the context is cancelled. As long as pages keep
@@ -252,9 +252,8 @@ func (b *Broker[T]) worker(
 		}
 	}()
 
-	session := NewFetchSession(seed, 0, b.keyOf)
+	session := NewFetchSession(seed, b.keyOf)
 	var lastFlush time.Time
-	dirty := false
 
 	emit := func(items []T, done bool, err error) {
 		b.mu.Lock()
@@ -267,10 +266,10 @@ func (b *Broker[T]) worker(
 				s.status = StreamDone
 			}
 			s.endedAt = time.Now()
-			// Do NOT unregister the activity here. The registry keeps
-			// terminal activities for its own 60s cleanup window so
-			// finished fetches stay visible in the Activity overlay,
-			// matching how upload activities linger.
+			// Do NOT unregister the activity here. The registry retains
+			// terminal activities (up to its entry cap) so finished
+			// fetches stay visible in the Activity overlay, matching
+			// how upload activities linger.
 		}
 		// Copy subscriber map under lock — iterate outside.
 		subs := make(map[int64]chan Page[T], len(s.subs))
@@ -288,7 +287,6 @@ func (b *Broker[T]) worker(
 			}
 		}
 		lastFlush = time.Now()
-		dirty = false
 	}
 
 	send := func(items []T) {
@@ -302,7 +300,6 @@ func (b *Broker[T]) worker(
 		idleTimer.Reset(DefaultIdleTimeout)
 
 		session.Apply(items)
-		dirty = true
 		if lastFlush.IsZero() || time.Since(lastFlush) >= CoalesceInterval {
 			snapshot := append([]T(nil), session.Items()...)
 			b.mu.Lock()
@@ -330,7 +327,6 @@ func (b *Broker[T]) worker(
 		final = session.Finalize()
 	} else {
 		final = append([]T(nil), session.Items()...)
-		_ = dirty
 	}
 	b.mu.Lock()
 	b.store.Set(key, final)
@@ -339,7 +335,8 @@ func (b *Broker[T]) worker(
 }
 
 // recv builds the chained tea.Cmd that delivers pages from a
-// subscriber's channel, exactly matching the Loader.recv pattern.
+// subscriber's channel: each delivered page carries a Next cmd that
+// waits for the following page, until the final Done page.
 func (b *Broker[T]) recv(
 	key string,
 	subID int64,
@@ -381,20 +378,4 @@ func (b *Broker[T]) Reset() {
 	for _, u := range unregs {
 		u()
 	}
-}
-
-// ClearStream removes a completed/cancelled/errored stream from the
-// broker's tracking. Active streams are not removed. Used to keep the
-// stream list tidy.
-func (b *Broker[T]) ClearStream(key string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	s, ok := b.streams[key]
-	if !ok {
-		return
-	}
-	if s.status == StreamActive {
-		return
-	}
-	delete(b.streams, key)
 }

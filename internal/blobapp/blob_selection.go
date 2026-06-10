@@ -51,7 +51,7 @@ func (m *Model) refreshItems() {
 	entries := m.displayBlobs()
 	// blobsPane is rightmost only when no child column is rendered;
 	// the layout always reserves the preview slot so RightRule=true.
-	w := ui.MillerContentWidth(ui.MillerColumnFrame{
+	w := ui.MillerColumnContentWidth(ui.MillerColumnFrame{
 		Width:     m.paneWidths[blobsPane],
 		RightRule: m.paneWidths[previewPane] > 0,
 	})
@@ -209,26 +209,6 @@ func blobSortLabel(field blobSortField, desc bool) string {
 		return "Date " + dir
 	default:
 		return "default"
-	}
-}
-
-func blobSortIndicator(field blobSortField, desc bool) string {
-	if field == blobSortNone {
-		return ""
-	}
-	arrow := "\u2191" // ↑
-	if desc {
-		arrow = "\u2193" // ↓
-	}
-	switch field {
-	case blobSortName:
-		return "Name" + arrow
-	case blobSortSize:
-		return "Size" + arrow
-	case blobSortDate:
-		return "Date" + arrow
-	default:
-		return ""
 	}
 }
 
@@ -468,16 +448,6 @@ func (m Model) visualSelectionBlobNames() []string {
 	return names
 }
 
-func (m Model) startMarkedAction(action string) (Model, tea.Cmd) {
-	switch action {
-	case "download":
-		return m.startDownloadMarkedBlobs()
-	default:
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Unknown marked action: %s", action))
-		return m, nil
-	}
-}
-
 func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 	if !m.hasAccount || !m.hasContainer {
 		m.Notify(appshell.LevelInfo, "Open a container before downloading")
@@ -523,19 +493,6 @@ func (m Model) sortedMarkedBlobNames() []string {
 	}
 	names := make([]string, 0, len(m.markedBlobs))
 	for name := range m.markedBlobs {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-func sortedBlobNameSet(values map[string]struct{}) []string {
-	if len(values) == 0 {
-		return nil
-	}
-
-	names := make([]string, 0, len(values))
-	for name := range values {
 		names = append(names, name)
 	}
 	sort.Strings(names)

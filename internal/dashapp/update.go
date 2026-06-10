@@ -294,7 +294,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// enter confirms; esc cancels.
 	if m.actionMenu.active {
 		if a, fired := m.actionMenu.handleKey(key, km); fired {
-			return m, fireAction(a)
+			return m, a.Cmd
 		}
 		return m, nil
 	}

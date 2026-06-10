@@ -13,9 +13,6 @@ package cache
 //  4. On error, discard the session without calling Finalize so that
 //     accumulated state remains visible to the user.
 //
-// The embedded generation token lets callers reject stale pages from a
-// cancelled or superseded fetch — see [FetchSession.Gen].
-//
 // FetchSession is single-use. Create a fresh one for each refresh.
 //
 // The session keeps a key→position index alongside items so that
@@ -23,18 +20,16 @@ package cache
 // O(N) per full stream). Without the index, Apply is O(N) per item and
 // streaming a 100k-item resource locks the UI for minutes.
 type FetchSession[T any] struct {
-	gen   int
 	items []T
 	index map[string]int // key → position in items (first occurrence)
 	seen  map[string]struct{}
 	keyOf func(T) string
 }
 
-// NewFetchSession seeds a session with the currently displayed items and
-// an application-supplied generation token. current is copied — the
-// caller's slice is not retained. keyOf must return a stable identity for
-// each item (e.g. the item's Name field).
-func NewFetchSession[T any](current []T, gen int, keyOf func(T) string) *FetchSession[T] {
+// NewFetchSession seeds a session with the currently displayed items.
+// current is copied — the caller's slice is not retained. keyOf must
+// return a stable identity for each item (e.g. the item's Name field).
+func NewFetchSession[T any](current []T, keyOf func(T) string) *FetchSession[T] {
 	items := make([]T, len(current))
 	copy(items, current)
 	index := make(map[string]int, len(current))
@@ -48,19 +43,12 @@ func NewFetchSession[T any](current []T, gen int, keyOf func(T) string) *FetchSe
 		}
 	}
 	return &FetchSession[T]{
-		gen:   gen,
 		items: items,
 		index: index,
 		seen:  make(map[string]struct{}, len(current)),
 		keyOf: keyOf,
 	}
 }
-
-// Gen returns the session's generation token. Callers should compare this
-// against each incoming page and drop pages whose gen does not match the
-// current session — that's how we ignore late arrivals from a fetch that
-// was cancelled or superseded by a newer refresh.
-func (s *FetchSession[T]) Gen() int { return s.gen }
 
 // Items returns the current merged slice. The returned slice is owned by
 // the session and must not be mutated by the caller. It is safe to read

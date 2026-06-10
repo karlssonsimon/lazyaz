@@ -8,6 +8,7 @@ bin/
 *.test
 *.out
 main
+lazyaz
 
 # Docs
 docs/node_modules/
@@ -25,6 +26,10 @@ downloads/
 
 # Local git worktrees
 .worktrees/
+
+# Plans and specs are never committed
+.superpowers/
+docs/superpowers/
 
 # Editor and OS files
 .vscode/

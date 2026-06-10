@@ -21,8 +21,6 @@ const maxTerminal = 1000
 //
 // Safe for concurrent use. Callers never mutate returned snapshots.
 type Registry struct {
-	clock Clock
-
 	mu         sync.Mutex
 	activities map[string]Activity
 	lastSnap   map[string]Snapshot
@@ -33,11 +31,9 @@ type Registry struct {
 	tickerMu   sync.Mutex // guards tickerStop
 }
 
-// NewRegistry builds a Registry. clock is used for cleanup deadlines.
-// Pass RealClock{} in production.
-func NewRegistry(clock Clock) *Registry {
+// NewRegistry builds a Registry.
+func NewRegistry() *Registry {
 	return &Registry{
-		clock:      clock,
 		activities: make(map[string]Activity),
 		lastSnap:   make(map[string]Snapshot),
 		subs:       make(map[int64]chan Event),
@@ -45,8 +41,9 @@ func NewRegistry(clock Clock) *Registry {
 }
 
 // Register adds a to the registry. The returned unregister func removes
-// a immediately, regardless of status (bypasses the 60s cleanup window).
-// Calling unregister twice is safe; later calls are no-ops.
+// a immediately, regardless of status (bypasses the terminal-activity
+// cap in Cleanup). Calling unregister twice is safe; later calls are
+// no-ops.
 func (r *Registry) Register(a Activity) (unregister func()) {
 	r.mu.Lock()
 	r.activities[a.ID()] = a
@@ -123,13 +120,9 @@ func (r *Registry) Cleanup() {
 		if !snap.Status.Terminal() {
 			continue
 		}
-		fa := snap.FinishedAt
-		if fa.IsZero() {
-			// No FinishedAt stamped — treat the activity as the
-			// oldest possible so it's the first to go if we hit the cap.
-			fa = time.Time{}
-		}
-		terminals = append(terminals, entry{id, fa})
+		// A zero FinishedAt sorts as oldest, so unstamped activities
+		// are the first to go if we hit the cap.
+		terminals = append(terminals, entry{id, snap.FinishedAt})
 	}
 	if len(terminals) <= maxTerminal {
 		r.mu.Unlock()

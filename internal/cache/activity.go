@@ -19,8 +19,8 @@ type BrokerActivityAdapter[T any] struct {
 
 	// Cached terminal info so Snapshot can still report a sensible
 	// FinishedAt if the broker cleaned its internal stream entry
-	// (e.g. user re-subscribed to the same key) before the registry's
-	// 60s cleanup window elapsed.
+	// (e.g. user re-subscribed to the same key) while the registry
+	// still retains this activity.
 	mu             sync.Mutex
 	lastStatus     StreamStatus
 	lastFinishedAt time.Time
@@ -66,9 +66,9 @@ func (a *BrokerActivityAdapter[T]) Snapshot() activity.Snapshot {
 		}
 	}
 	// Stream vanished from broker (cleared, or replaced by a new subscribe).
-	// Report the last-seen terminal state so the registry can age this
-	// activity out of its 60s cleanup window. If we never saw a terminal
-	// snapshot, stamp Now so cleanup can still fire.
+	// Report the last-seen terminal state so the registry's terminal-entry
+	// cap (Cleanup) can order this activity for eviction. If we never saw
+	// a terminal snapshot, stamp Now so it still sorts sensibly.
 	a.mu.Lock()
 	status := a.lastStatus
 	fa := a.lastFinishedAt

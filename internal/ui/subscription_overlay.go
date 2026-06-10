@@ -8,11 +8,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 
 	"charm.land/bubbles/v2/cursor"
-	"charm.land/lipgloss/v2"
 )
-
-// SubscriptionBarHeight is the vertical space reserved for the subscription context bar.
-const SubscriptionBarHeight = 2
 
 // SubscriptionOverlayState manages the subscription picker overlay.
 type SubscriptionOverlayState struct {
@@ -160,20 +156,4 @@ func RenderSubscriptionOverlay(state SubscriptionOverlayState, closeHint string,
 		},
 	}
 	return RenderOverlayList(cfg, items, state.CursorIdx, styles, width, height, base)
-}
-
-// RenderSubscriptionBar renders a 2-line bar showing the current subscription context.
-func RenderSubscriptionBar(sub azure.Subscription, hasSub bool, styles Styles, width int) string {
-	bg := styles.StatusBar.Box.GetBackground()
-	barStyle := lipgloss.NewStyle().Background(bg).Width(width).Padding(0, 1)
-
-	if hasSub {
-		name := styles.Accent.Bold(true).Render(SubscriptionDisplayName(sub))
-		id := styles.Muted.Render(sub.ID)
-		return barStyle.Render(name + "\n" + id)
-	}
-
-	line1 := styles.Muted.Render("No subscription selected")
-	line2 := styles.Muted.Render("Press S to choose")
-	return barStyle.Render(line1 + "\n" + line2)
 }

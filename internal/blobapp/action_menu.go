@@ -205,7 +205,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m, nil
 
 	case actionDownloadMarked:
-		return m.startMarkedAction("download")
+		return m.startDownloadMarkedBlobs()
 
 	case actionClearMarks:
 		count := len(m.markedBlobs)
@@ -250,7 +250,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m, nil
 
 	case actionDownloadSelection:
-		return m.startMarkedAction("download")
+		return m.startDownloadMarkedBlobs()
 
 	case actionRefresh:
 		return m.refresh()

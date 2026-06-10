@@ -50,13 +50,6 @@ func kindItems() []list.Item {
 	}
 }
 
-func kindItemKey(it list.Item) string {
-	if ki, ok := it.(kindItem); ok {
-		return ki.kind.String()
-	}
-	return ""
-}
-
 type secretItem struct {
 	secret keyvault.Secret
 }

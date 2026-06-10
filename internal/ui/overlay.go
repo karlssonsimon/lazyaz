@@ -50,29 +50,11 @@ type OverlayListConfig struct {
 	Center      bool         // center vertically instead of 1/5 from top
 	HideSearch  bool         // suppress the inline filter; treats overlay as a menu
 
-	// Placeholder is shown in the filter slot when Query is empty (italic muted).
-	Placeholder string
-	// Total, when > 0, makes the header counter render as "<filtered>/<Total>"
-	// instead of "<filtered> matches". Caller passes the raw source size.
-	Total int
-	// Breadcrumb is rendered between the badge and the filter, separated by ›.
-	// Use it for context like a tenant domain or path.
-	Breadcrumb []string
-
-	// ModeBadge is the label shown in the footer's mode pill (e.g. "PICKER",
-	// "MENU"). Defaults to "PICKER" when HideSearch is false, "MENU" otherwise.
-	ModeBadge string
-	// Actions overrides the auto-generated footer hints when non-empty.
-	// Most callers leave this nil and pass Bindings instead.
-	Actions []StatusAction
 	// Bindings declares the actual keymap bindings the dialog answers to.
 	// When set, the footer hints are derived from these so a user remapping
 	// e.g. theme_apply propagates to the hint row automatically. When nil,
 	// falls back to opinionated hardcoded defaults.
 	Bindings *OverlayBindings
-	// ActiveLabel is the right-aligned hint shown next to the active row
-	// (defaults to "current"). Set to "-" to suppress.
-	ActiveLabel string
 	// NoActiveMarker drops the 2-col marker slot reserved for the IsActive
 	// indicator. Use it for overlays that never set IsActive — items then
 	// align flush with section headers instead of sitting indented under
@@ -162,25 +144,14 @@ func renderOverlayHeader(cfg OverlayListConfig, filtered int, styles Styles, inn
 
 	left := ov.HeaderBadge.Render(strings.ToUpper(cfg.Title))
 
-	for _, crumb := range cfg.Breadcrumb {
-		if crumb == "" {
-			continue
-		}
-		left = left + chevron + ov.Input.Render(crumb)
-	}
-
 	if !cfg.HideSearch {
 		cur := cfg.Cursor
 
 		var filter string
-		switch {
-		case cfg.Query == "" && cfg.Placeholder != "":
-			cur.SetChar(" ")
-			filter = cur.View() + ov.Hint.Inline(true).Padding(0).Italic(true).Render(cfg.Placeholder)
-		case cfg.Query == "":
+		if cfg.Query == "" {
 			cur.SetChar(" ")
 			filter = cur.View()
-		default:
+		} else {
 			ti := TextInput{Value: cfg.Query, Cursor: cfg.QueryCursor}
 			before, at, after := ti.SplitWithCursor()
 			cur.SetChar(at)
@@ -189,12 +160,7 @@ func renderOverlayHeader(cfg OverlayListConfig, filtered int, styles Styles, inn
 
 		count := ""
 		if cfg.Query != "" {
-			switch {
-			case cfg.Total > 0:
-				count = "  " + ov.HeaderCount.Render(formatInt(filtered)+" / "+formatInt(cfg.Total))
-			default:
-				count = "  " + ov.HeaderCount.Render(formatOverlayCount(filtered))
-			}
+			count = "  " + ov.HeaderCount.Render(formatOverlayCount(filtered))
 		}
 		left = left + chevron + filter + count
 	}
@@ -212,19 +178,12 @@ func renderOverlayFooter(cfg OverlayListConfig, styles Styles, innerW int) strin
 	chrome := styles.Chrome
 	ov := styles.Overlay
 
-	mode := cfg.ModeBadge
-	if mode == "" {
-		if cfg.HideSearch {
-			mode = "MENU"
-		} else {
-			mode = "PICKER"
-		}
+	mode := "PICKER"
+	if cfg.HideSearch {
+		mode = "MENU"
 	}
 
-	actions := cfg.Actions
-	if len(actions) == 0 {
-		actions = defaultOverlayActions(cfg.Bindings, cfg.HideSearch, cfg.Query != "")
-	}
+	actions := defaultOverlayActions(cfg.Bindings, cfg.HideSearch, cfg.Query != "")
 
 	parts := []string{chrome.StatusMode.Render(mode)}
 	for _, a := range actions {
@@ -305,13 +264,7 @@ func defaultOverlayActions(b *OverlayBindings, hideSearch, hasQuery bool) []Stat
 func renderOverlayBodyRows(cfg OverlayListConfig, items []OverlayItem, cursor, start, end, contentW int, normal, cursorStyle lipgloss.Style, ov OverlayStyles, innerW int) []string {
 	var rows []string
 
-	activeLabel := cfg.ActiveLabel
-	if activeLabel == "" {
-		activeLabel = "current"
-	}
-	if activeLabel == "-" {
-		activeLabel = ""
-	}
+	activeLabel := "current"
 
 	rowBg := normal.GetBackground()
 	cursorBg := cursorStyle.GetBackground()
@@ -521,16 +474,6 @@ func highlightFuzzyMatch(label, query string, matchStyle, baseStyle lipgloss.Sty
 		}
 	}
 	return b.String()
-}
-
-// padRightRendered pads `rendered` (which may contain ANSI styling) to the
-// given visual width.
-func padRightRendered(rendered string, width int) string {
-	w := lipgloss.Width(rendered)
-	if w >= width {
-		return rendered
-	}
-	return rendered + strings.Repeat(" ", width-w)
 }
 
 // truncateLabel clamps a plain string to width with a trailing ellipsis when

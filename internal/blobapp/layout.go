@@ -45,7 +45,7 @@ func (m *Model) resize() {
 		rightmostPane = childIdx
 	}
 	contentWidth := func(pane int, w int) int {
-		return ui.MillerContentWidth(ui.MillerColumnFrame{Width: w, RightRule: pane != rightmostPane})
+		return ui.MillerColumnContentWidth(ui.MillerColumnFrame{Width: w, RightRule: pane != rightmostPane})
 	}
 
 	// Size each visible list to its pane width.

@@ -58,21 +58,6 @@ func (m *Model) resetPreviewState() {
 	}
 }
 
-func (p previewState) title(styles ui.Styles) string {
-	if !p.open {
-		return "Preview"
-	}
-
-	label := ui.TrimToWidth(p.blobName, 50)
-	lexer := ui.DetectLexer(p.blobName, p.contentType)
-	lang := lexer.Config().Name
-	meta := fmt.Sprintf("%s | %s", ui.EmptyToDash(lang), humanSize(p.blobSize))
-	if p.binary {
-		meta += " | binary"
-	}
-	return styles.Accent.Render("Preview") + " " + styles.Muted.Render(label+" | "+meta)
-}
-
 func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	if b.IsPrefix {
 		m.Notify(appshell.LevelInfo, "Open a blob file to preview")

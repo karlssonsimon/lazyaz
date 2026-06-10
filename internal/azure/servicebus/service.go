@@ -451,15 +451,6 @@ func (r *ReceivedMessages) hasAvailableMessageLocked(id string) bool {
 	return false
 }
 
-func (r *ReceivedMessages) completeByID(ctx context.Context, id string, complete func(context.Context, *azservicebus.ReceivedMessage) error) error {
-	if r == nil {
-		return fmt.Errorf("complete locked message %q: no locked messages", id)
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.completeByIDLocked(ctx, id, complete)
-}
-
 func (r *ReceivedMessages) completeByIDLocked(ctx context.Context, id string, complete func(context.Context, *azservicebus.ReceivedMessage) error) error {
 	for i := range r.messages {
 		msg := &r.messages[i]
@@ -530,16 +521,6 @@ func (r *ReceivedMessages) Len() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.messages)
-}
-
-// AbandonAll releases locks on all messages.
-func (r *ReceivedMessages) AbandonAll(ctx context.Context) {
-	if r == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.abandonAllLocked(ctx)
 }
 
 func (r *ReceivedMessages) abandonAllLocked(ctx context.Context) {
@@ -672,13 +653,6 @@ func toSendableMessage(orig *azservicebus.ReceivedMessage) *azservicebus.Message
 	return msg
 }
 
-// SendBatch sends multiple messages to a queue or topic using batched sends.
-func (s *Service) SendBatch(ctx context.Context, ns Namespace, queueOrTopicName string, messages []*azservicebus.ReceivedMessage) error {
-	return s.withFallback(ctx, ns, "send batch to "+queueOrTopicName, func(c *azservicebus.Client) error {
-		return s.sendBatch(ctx, c, queueOrTopicName, messages)
-	})
-}
-
 func (s *Service) RequeueLockedByID(ctx context.Context, ns Namespace, queueOrTopicName string, locked *ReceivedMessages, ids map[string]struct{}) ([]string, error) {
 	if locked == nil {
 		return nil, fmt.Errorf("requeue locked messages: no locked messages")
@@ -703,7 +677,10 @@ func (s *Service) RequeueLockedByID(ctx context.Context, ns Namespace, queueOrTo
 		return nil, fmt.Errorf("complete locked message %q: receiver is nil", selectedIDs[0])
 	}
 
-	if err := s.SendBatch(ctx, ns, queueOrTopicName, toRequeue); err != nil {
+	err := s.withFallback(ctx, ns, "send batch to "+queueOrTopicName, func(c *azservicebus.Client) error {
+		return s.sendBatch(ctx, c, queueOrTopicName, toRequeue)
+	})
+	if err != nil {
 		return nil, err
 	}
 

@@ -9,21 +9,6 @@ import (
 
 const StatusBarHeight = 1
 
-// StatusBarItem is a label/value pair displayed in the status bar.
-type StatusBarItem struct {
-	Label string
-	Value string
-}
-
-// StatusBarStyles contains all styles for the status bar.
-type StatusBarStyles struct {
-	Box   lipgloss.Style
-	Label lipgloss.Style
-	Value lipgloss.Style
-	Error lipgloss.Style
-	Gap   lipgloss.Style
-}
-
 // pathSeparator is the breadcrumb glyph between brand/path segments.
 // Chosen to match the visual mockup; falls back gracefully on terminals
 // that lack the glyph since lipgloss treats it as a single-cell rune.
@@ -82,24 +67,6 @@ func RenderStatusLine(cfg StatusLineConfig, styles Styles, width int) string {
 		right = chrome.Help.Render(cfg.Message)
 	}
 	return fitStatusLine(left, right, width, chrome.Help)
-}
-
-// RenderStatusBar keeps the existing call sites working while rendering the new one-line status.
-func RenderStatusBar(styles Styles, items []StatusBarItem, status string, isErr bool, width int) string {
-	actions := make([]StatusAction, 0, len(items))
-	for _, item := range items {
-		if item.Value == "" {
-			continue
-		}
-		key := item.Label
-		label := item.Value
-		if key == "" {
-			key = item.Value
-			label = ""
-		}
-		actions = append(actions, StatusAction{Key: key, Label: label})
-	}
-	return RenderStatusLine(StatusLineConfig{Actions: actions, Message: status, IsError: isErr}, styles, width)
 }
 
 func fitStatusLine(left, right string, width int, fill lipgloss.Style) string {

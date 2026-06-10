@@ -109,7 +109,7 @@ func TestResizeRefreshesBlobItemContentWidth(t *testing.T) {
 	// blobsPane is no longer the rightmost visible column even with
 	// the preview closed — its right rule separates blobs from the
 	// reserved-but-empty preview slot.
-	want := ui.MillerContentWidth(ui.MillerColumnFrame{Width: m.paneWidths[blobsPane], RightRule: true})
+	want := ui.MillerColumnContentWidth(ui.MillerColumnFrame{Width: m.paneWidths[blobsPane], RightRule: true})
 	if got != want {
 		t.Fatalf("blob item contentWidth = %d, want refreshed width %d", got, want)
 	}
@@ -133,7 +133,7 @@ func TestResizeRefreshesParentBlobItemContentWidth(t *testing.T) {
 		t.Fatalf("items len = %d, want 1", len(items))
 	}
 	got := items[0].(blobItem).contentWidth
-	want := ui.MillerContentWidth(ui.MillerColumnFrame{Width: m.paneWidths[containersPane], RightRule: true})
+	want := ui.MillerColumnContentWidth(ui.MillerColumnFrame{Width: m.paneWidths[containersPane], RightRule: true})
 	if got != want {
 		t.Fatalf("parent blob item contentWidth = %d, want refreshed width %d", got, want)
 	}

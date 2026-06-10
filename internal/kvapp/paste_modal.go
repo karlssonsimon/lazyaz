@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -16,11 +15,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 )
-
-// Azure Key Vault secret name: 1-127 chars, [0-9a-zA-Z-]. The portal
-// and SDK enforce the same; reject up front so we don't get a confusing
-// 400 mid-paste.
-var secretNamePattern = regexp.MustCompile(`^[0-9a-zA-Z-]{1,127}$`)
 
 // pasteRow is one secret about to be created in the target vault.
 type pasteRow struct {
@@ -72,7 +66,7 @@ func parsePasteBundle(clipboard string) (map[string]string, error) {
 
 	out := make(map[string]string, len(raw))
 	for name, rawValue := range raw {
-		if !secretNamePattern.MatchString(name) {
+		if !secretNameRe.MatchString(name) {
 			return nil, fmt.Errorf("invalid secret name %q", name)
 		}
 		// Reject null up front — json.Unmarshal of `null` into a string

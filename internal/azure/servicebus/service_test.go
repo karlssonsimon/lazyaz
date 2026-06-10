@@ -416,3 +416,12 @@ func TestIsAuthError(t *testing.T) {
 func strPtr(v string) *string {
 	return &v
 }
+
+// completeByID is a test helper that exercises completeByIDLocked under the
+// same mutex production callers (CompleteByID, RequeueLockedByID) hold,
+// while letting tests inject a fake complete func instead of a real receiver.
+func (r *ReceivedMessages) completeByID(ctx context.Context, id string, complete func(context.Context, *azservicebus.ReceivedMessage) error) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.completeByIDLocked(ctx, id, complete)
+}

@@ -44,7 +44,7 @@ func (f *fakeActivity) Cancel() {
 func (f *fakeActivity) setSnap(s Snapshot) { f.mu.Lock(); f.snap = s; f.mu.Unlock() }
 
 func TestRegistryRegisterListsActivity(t *testing.T) {
-	r := NewRegistry(NewFakeClock(time.Unix(0, 0)))
+	r := NewRegistry()
 	a := newFakeActivity("a1", KindFetch)
 	_ = r.Register(a)
 
@@ -61,7 +61,7 @@ func TestRegistryRegisterListsActivity(t *testing.T) {
 }
 
 func TestRegistryUnregisterRemovesActivity(t *testing.T) {
-	r := NewRegistry(NewFakeClock(time.Unix(0, 0)))
+	r := NewRegistry()
 	a := newFakeActivity("a1", KindFetch)
 	unreg := r.Register(a)
 	unreg()
@@ -72,7 +72,7 @@ func TestRegistryUnregisterRemovesActivity(t *testing.T) {
 }
 
 func TestRegistryEventsFireOnRegister(t *testing.T) {
-	r := NewRegistry(NewFakeClock(time.Unix(0, 0)))
+	r := NewRegistry()
 	ch, cancel := r.Events()
 	defer cancel()
 
@@ -87,7 +87,7 @@ func TestRegistryEventsFireOnRegister(t *testing.T) {
 }
 
 func TestRegistryEventsFireOnSnapshotChange(t *testing.T) {
-	r := NewRegistry(NewFakeClock(time.Unix(0, 0)))
+	r := NewRegistry()
 	a := newFakeActivity("a1", KindFetch)
 	_ = r.Register(a)
 
@@ -105,7 +105,7 @@ func TestRegistryEventsFireOnSnapshotChange(t *testing.T) {
 }
 
 func TestRegistryEventsCoalesce(t *testing.T) {
-	r := NewRegistry(NewFakeClock(time.Unix(0, 0)))
+	r := NewRegistry()
 	a := newFakeActivity("a1", KindFetch)
 	_ = r.Register(a)
 
@@ -133,7 +133,7 @@ func TestRegistryEventsCoalesce(t *testing.T) {
 }
 
 func TestRegistryKeepsAllTerminalsBelowCap(t *testing.T) {
-	r := NewRegistry(NewFakeClock(time.Unix(1000, 0)))
+	r := NewRegistry()
 	for i := 0; i < 5; i++ {
 		a := newFakeActivity(fmt.Sprintf("a%d", i), KindFetch)
 		a.setSnap(Snapshot{
@@ -150,7 +150,7 @@ func TestRegistryKeepsAllTerminalsBelowCap(t *testing.T) {
 }
 
 func TestRegistryDropsOldestTerminalsBeyondCap(t *testing.T) {
-	r := NewRegistry(NewFakeClock(time.Unix(0, 0)))
+	r := NewRegistry()
 	total := maxTerminal + 10
 	for i := 0; i < total; i++ {
 		a := newFakeActivity(fmt.Sprintf("a%d", i), KindFetch)
@@ -177,7 +177,7 @@ func TestRegistryDropsOldestTerminalsBeyondCap(t *testing.T) {
 }
 
 func TestRegistryDoesNotCountRunningTowardCap(t *testing.T) {
-	r := NewRegistry(NewFakeClock(time.Unix(0, 0)))
+	r := NewRegistry()
 	for i := 0; i < maxTerminal+50; i++ {
 		a := newFakeActivity(fmt.Sprintf("r%d", i), KindFetch)
 		_ = r.Register(a)

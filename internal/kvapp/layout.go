@@ -36,15 +36,15 @@ func (m *Model) resize() {
 
 	// Size each visible list to its pane width.
 	if w := m.paneWidths[vaultsPane]; w > 0 {
-		m.vaultsList.SetSize(ui.MillerContentWidth(ui.MillerColumnFrame{Width: w, RightRule: vaultsPane != rightmost}), baseListHeight-m.inspectFooterHeight(vaultsPane))
+		m.vaultsList.SetSize(ui.MillerColumnContentWidth(ui.MillerColumnFrame{Width: w, RightRule: vaultsPane != rightmost}), baseListHeight-m.inspectFooterHeight(vaultsPane))
 	}
 	if w := m.paneWidths[kindPane]; w > 0 {
-		m.kindList.SetSize(ui.MillerContentWidth(ui.MillerColumnFrame{Width: w, RightRule: kindPane != rightmost}), baseListHeight-m.inspectFooterHeight(kindPane))
+		m.kindList.SetSize(ui.MillerColumnContentWidth(ui.MillerColumnFrame{Width: w, RightRule: kindPane != rightmost}), baseListHeight-m.inspectFooterHeight(kindPane))
 	}
 	if w := m.paneWidths[secretsPane]; w > 0 {
-		m.secretsList.SetSize(ui.MillerContentWidth(ui.MillerColumnFrame{Width: w, RightRule: secretsPane != rightmost}), baseListHeight-m.inspectFooterHeight(secretsPane))
+		m.secretsList.SetSize(ui.MillerColumnContentWidth(ui.MillerColumnFrame{Width: w, RightRule: secretsPane != rightmost}), baseListHeight-m.inspectFooterHeight(secretsPane))
 	}
 	if w := m.paneWidths[versionsPane]; w > 0 {
-		m.versionsList.SetSize(ui.MillerContentWidth(ui.MillerColumnFrame{Width: w, RightRule: versionsPane != rightmost}), baseListHeight-m.inspectFooterHeight(versionsPane))
+		m.versionsList.SetSize(ui.MillerColumnContentWidth(ui.MillerColumnFrame{Width: w, RightRule: versionsPane != rightmost}), baseListHeight-m.inspectFooterHeight(versionsPane))
 	}
 }

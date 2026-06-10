@@ -29,7 +29,7 @@ func (m Model) View() tea.View {
 	}
 	footer := func(pane int, l *list.Model) string {
 		f := frame(pane)
-		contentWidth := ui.MillerContentWidth(f)
+		contentWidth := ui.MillerColumnContentWidth(f)
 		base := m.columnFooter(pane)
 		if inspect := m.inspectFooter(pane, contentWidth); inspect != "" {
 			base = lipgloss.JoinVertical(lipgloss.Left, base, inspect)
@@ -140,16 +140,16 @@ func (m Model) View() tea.View {
 		view = m.renderActionMenu(view)
 	}
 	if m.createSecret.Active {
-		view = ui.RenderFormOverlay(m.createSecret, m.Cursor, m.Styles, &m.Keymap, m.Width, m.Height, view)
+		view = ui.RenderFormOverlay(m.createSecret, m.Cursor, m.Styles, m.Width, m.Height, view)
 	}
 	if m.addSecretVersion.Active {
-		view = ui.RenderFormOverlay(m.addSecretVersion, m.Cursor, m.Styles, &m.Keymap, m.Width, m.Height, view)
+		view = ui.RenderFormOverlay(m.addSecretVersion, m.Cursor, m.Styles, m.Width, m.Height, view)
 	}
 	if m.createKey.Active {
-		view = ui.RenderFormOverlay(m.createKey, m.Cursor, m.Styles, &m.Keymap, m.Width, m.Height, view)
+		view = ui.RenderFormOverlay(m.createKey, m.Cursor, m.Styles, m.Width, m.Height, view)
 	}
 	if m.importCert.Active {
-		view = ui.RenderFormOverlay(m.importCert, m.Cursor, m.Styles, &m.Keymap, m.Width, m.Height, view)
+		view = ui.RenderFormOverlay(m.importCert, m.Cursor, m.Styles, m.Width, m.Height, view)
 	}
 	if m.certImportBrowserActive {
 		view = ui.RenderFileBrowser(m.certImportBrowser, m.Styles, m.Width, m.Height, view)
