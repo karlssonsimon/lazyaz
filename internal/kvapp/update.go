@@ -18,7 +18,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text := paste.String()
 		switch {
 		case m.SubOverlay.Active:
-			m.SubOverlay.Query += text
+			ti := ui.TextInput{Value: m.SubOverlay.Query, Cursor: m.SubOverlay.QueryCaret}
+			ti.Insert(text)
+			m.SubOverlay.Query = ti.Value
+			m.SubOverlay.QueryCaret = ti.Cursor
 			m.SubOverlay.Refilter(m.Subscriptions)
 			return m, nil
 		case m.ThemeOverlay.Active:
@@ -32,26 +35,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case m.createSecret.Active:
 			if f := m.createSecret.FocusedField(); f != nil {
-				f.Value += text
-				f.Error = ""
+				f.Insert(text)
 			}
 			return m, nil
 		case m.addSecretVersion.Active:
 			if f := m.addSecretVersion.FocusedField(); f != nil {
-				f.Value += text
-				f.Error = ""
+				f.Insert(text)
 			}
 			return m, nil
 		case m.createKey.Active:
 			if f := m.createKey.FocusedField(); f != nil {
-				f.Value += text
-				f.Error = ""
+				f.Insert(text)
 			}
 			return m, nil
 		case m.importCert.Active:
 			if f := m.importCert.FocusedField(); f != nil {
-				f.Value += text
-				f.Error = ""
+				f.Insert(text)
 			}
 			return m, nil
 		default:

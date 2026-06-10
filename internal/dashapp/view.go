@@ -214,7 +214,8 @@ func (m Model) widgetTitleFor(w Widget, idx int, focused bool) string {
 	title := strings.ToUpper(w.Title())
 	view := m.viewStates[idx]
 	if focused && m.filterInputActive {
-		return title + "  /" + view.filter + "▎"
+		before, cv, after := ui.PrepareCursor(view.filter, view.filterCaret, m.Cursor)
+		return title + "  /" + before + cv + after
 	}
 	if view.filter != "" {
 		return title + "  filter: " + view.filter

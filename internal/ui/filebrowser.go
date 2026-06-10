@@ -51,6 +51,7 @@ type FileBrowserState struct {
 	anchor  int // index into the currently-visible slice at time of v
 
 	filterQuery     string
+	filterCaret     int // rune index of the edit caret within filterQuery
 	filterInputOpen bool
 
 	km       keymap.Keymap
@@ -111,6 +112,7 @@ func (s *FileBrowserState) Open(startDir string, reader DirReader, km keymap.Key
 	s.visual = false
 	s.anchor = 0
 	s.filterQuery = ""
+	s.filterCaret = 0
 	s.filterInputOpen = false
 	s.km = km
 	s.pendingG = false
@@ -275,24 +277,19 @@ func (s *FileBrowserState) handleFilterInputKey(key string) FileBrowserResult {
 	case "esc":
 		// Cancel: clear query and close the input.
 		s.filterQuery = ""
+		s.filterCaret = 0
 		s.filterInputOpen = false
 		s.clampCursor()
 		return FileBrowserResult{Action: FBActionNone}
-	case "backspace":
-		if s.filterQuery != "" {
-			rs := []rune(s.filterQuery)
-			s.filterQuery = string(rs[:len(rs)-1])
+	}
+	ti := TextInput{Value: s.filterQuery, Cursor: s.filterCaret}
+	if ti.HandleKey(key) {
+		changed := ti.Value != s.filterQuery
+		s.filterQuery = ti.Value
+		s.filterCaret = ti.Cursor
+		if changed {
 			s.cursor = 0
 		}
-		return FileBrowserResult{Action: FBActionNone}
-	case "space":
-		s.filterQuery += " "
-		s.cursor = 0
-		return FileBrowserResult{Action: FBActionNone}
-	}
-	if isPrintableKey(key) {
-		s.filterQuery += key
-		s.cursor = 0
 	}
 	return FileBrowserResult{Action: FBActionNone}
 }
@@ -363,12 +360,13 @@ func RenderFileBrowser(state FileBrowserState, styles Styles, width, height int,
 	}
 
 	cfg := OverlayListConfig{
-		Title:      fmt.Sprintf("Select files — %s", title),
-		Query:      state.filterQuery,
-		CloseHint:  hint,
-		MaxVisible: 18,
-		HideSearch: !state.filterInputOpen && state.filterQuery == "",
-		Center:     true,
+		Title:       fmt.Sprintf("Select files — %s", title),
+		Query:       state.filterQuery,
+		QueryCursor: state.filterCaret,
+		CloseHint:   hint,
+		MaxVisible:  18,
+		HideSearch:  !state.filterInputOpen && state.filterQuery == "",
+		Center:      true,
 	}
 	return RenderOverlayList(cfg, items, state.cursor, styles, width, height, base)
 }

@@ -85,6 +85,7 @@ const (
 type blobFilter struct {
 	inputOpen     bool             // prefix search overlay is showing
 	prefixQuery   string           // API prefix query (set via action menu)
+	prefixCaret   int              // rune index of the edit caret within prefixQuery
 	fetching      bool             // API fetch in progress
 	prefixFetched bool             // API fetch completed for current prefix
 	apiResults    []blob.BlobEntry // results from API prefix search

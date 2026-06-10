@@ -630,19 +630,27 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text := paste.String()
 		switch {
 		case m.cmdPalette.active:
-			m.cmdPalette.query += text
+			ti := ui.TextInput{Value: m.cmdPalette.query, Cursor: m.cmdPalette.queryCaret}
+			ti.Insert(text)
+			m.cmdPalette.query = ti.Value
+			m.cmdPalette.queryCaret = ti.Cursor
 			m.cmdPalette.refilter()
 			return m, nil
 		case m.tabPicker.active:
-			m.tabPicker.query += text
+			ti := ui.TextInput{Value: m.tabPicker.query, Cursor: m.tabPicker.queryCaret}
+			ti.Insert(text)
+			m.tabPicker.query = ti.Value
+			m.tabPicker.queryCaret = ti.Cursor
 			m.tabPicker.refilter()
 			return m, nil
 		case m.connStringPrompt.Active:
-			m.connStringPrompt.Value += text
-			m.connStringPrompt.Error = ""
+			m.connStringPrompt.Insert(text)
 			return m, nil
 		case m.tenantPicker.active:
-			m.tenantPicker.query += text
+			ti := ui.TextInput{Value: m.tenantPicker.query, Cursor: m.tenantPicker.queryCaret}
+			ti.Insert(text)
+			m.tenantPicker.query = ti.Value
+			m.tenantPicker.queryCaret = ti.Cursor
 			m.tenantPicker.refilter()
 			return m, nil
 		case m.themeOverlay.Active:

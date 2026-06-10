@@ -4,6 +4,7 @@ import (
 	"strings"
 	"unicode"
 
+	"charm.land/bubbles/v2/cursor"
 	"charm.land/lipgloss/v2"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
@@ -37,6 +38,7 @@ type TextInputState struct {
 	// Placeholder shows in the value slot when Value is empty (italic muted).
 	Placeholder string
 	Value       string
+	Cursor      int
 	Error       string
 	Validate    func(value string) string
 }
@@ -49,8 +51,23 @@ func (s *TextInputState) Open(title, placeholder, initial string, validator func
 	s.Breadcrumb = nil
 	s.Placeholder = placeholder
 	s.Value = initial
+	s.Cursor = runeLen(initial)
 	s.Error = ""
 	s.Validate = validator
+}
+
+// Insert inserts text at the cursor and advances the cursor. Used from
+// paste handlers — direct s.Value += text appends to the end and
+// leaves the cursor stale.
+func (s *TextInputState) Insert(text string) {
+	if text == "" {
+		return
+	}
+	ti := TextInput{Value: s.Value, Cursor: s.Cursor}
+	ti.Insert(text)
+	s.Value = ti.Value
+	s.Cursor = ti.Cursor
+	s.Error = ""
 }
 
 // OpenWithBreadcrumb is Open + sets the header breadcrumb in one call.
@@ -89,20 +106,11 @@ func (s *TextInputState) HandleKey(key string) TextInputResult {
 		val := s.Value
 		s.Close()
 		return TextInputResult{Action: TextInputActionSubmit, Value: val}
-	case "backspace":
-		if s.Value != "" {
-			rs := []rune(s.Value)
-			s.Value = string(rs[:len(rs)-1])
-			s.Error = ""
-		}
-		return TextInputResult{Action: TextInputActionNone, Value: s.Value}
-	case "space":
-		s.Value += " "
-		s.Error = ""
-		return TextInputResult{Action: TextInputActionNone, Value: s.Value}
 	}
-	if isPrintableInputKey(key) {
-		s.Value += key
+	ti := TextInput{Value: s.Value, Cursor: s.Cursor}
+	if ti.HandleKey(key) {
+		s.Value = ti.Value
+		s.Cursor = ti.Cursor
 		s.Error = ""
 	}
 	return TextInputResult{Action: TextInputActionNone, Value: s.Value}
@@ -126,7 +134,7 @@ const textInputInnerWidth = 72
 // input row with rose gutter, status-bar footer with INPUT pill.
 //
 // km may be nil — when set, footer hints reflect actual bindings.
-func RenderTextInputOverlay(state TextInputState, cursorView string, styles Styles, km *keymap.Keymap, width, height int, base string) string {
+func RenderTextInputOverlay(state TextInputState, cur cursor.Model, styles Styles, km *keymap.Keymap, width, height int, base string) string {
 	innerW := textInputInnerWidth
 	boxW := innerW + 6
 	if boxW > width-4 {
@@ -138,16 +146,12 @@ func RenderTextInputOverlay(state TextInputState, cursorView string, styles Styl
 		boxW = innerW + 6
 	}
 
-	if cursorView == "" {
-		cursorView = "█"
-	}
-
 	ov := styles.Overlay
 
 	rows := []string{renderTextInputHeader(state, styles, innerW)}
 	rows = append(rows, ov.Rule.Render(strings.Repeat("─", innerW)))
 	rows = append(rows, "")
-	rows = append(rows, renderTextInputBody(state, cursorView, styles, innerW))
+	rows = append(rows, renderTextInputBody(state, cur, styles, innerW))
 	if state.Error != "" {
 		rows = append(rows, padRowToWidth("  "+styles.Warning.Render(state.Error), innerW, lipgloss.NewStyle().Background(ov.Normal.GetBackground())))
 	}
@@ -188,7 +192,7 @@ func renderTextInputHeader(state TextInputState, styles Styles, innerW int) stri
 
 // renderTextInputBody renders the cursor row with selBg highlight + rose
 // gutter, matching the focused-field pattern from the form overlay.
-func renderTextInputBody(state TextInputState, cursorView string, styles Styles, innerW int) string {
+func renderTextInputBody(state TextInputState, cur cursor.Model, styles Styles, innerW int) string {
 	ov := styles.Overlay
 	bg := ov.Cursor.GetBackground()
 	baseStyle := lipgloss.NewStyle().Background(bg)
@@ -199,9 +203,13 @@ func renderTextInputBody(state TextInputState, cursorView string, styles Styles,
 
 	var value string
 	if state.Value == "" {
-		value = cursorView + muted.Italic(true).Render(state.Placeholder)
+		cur.SetChar(" ")
+		value = cur.View() + muted.Italic(true).Render(state.Placeholder)
 	} else {
-		value = inputStyle.Render(state.Value) + cursorView
+		ti := TextInput{Value: state.Value, Cursor: state.Cursor}
+		before, at, after := ti.SplitWithCursor()
+		cur.SetChar(at)
+		value = inputStyle.Render(before) + cur.View() + inputStyle.Render(after)
 	}
 
 	row := gutter + value

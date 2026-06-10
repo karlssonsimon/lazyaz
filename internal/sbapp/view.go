@@ -54,11 +54,12 @@ func (m Model) View() tea.View {
 		}
 		switch l.FilterState() {
 		case list.Filtering:
-			return ui.RenderFilterLine(l.FilterInput.Value(), m.Cursor.View(),
+			before, cv, after := ui.PrepareCursor(l.FilterInput.Value(), l.FilterInput.Position(), m.Cursor)
+			return ui.RenderFilterLine(before, cv, after, l.FilterInput.Value(),
 				m.Styles, contentWidth, true)
 		case list.FilterApplied:
 			return lipgloss.JoinVertical(lipgloss.Left,
-				ui.RenderFilterLine(l.FilterValue(), "", m.Styles, contentWidth, false),
+				ui.RenderFilterLine("", "", "", l.FilterValue(), m.Styles, contentWidth, false),
 				base)
 		}
 		return base

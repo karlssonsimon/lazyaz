@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"charm.land/bubbles/v2/cursor"
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
@@ -18,19 +19,27 @@ type ThemeOverlayState struct {
 	ActiveThemeIdx int
 	CursorIdx      int
 	Query          string
+	QueryCaret     int // rune index of the edit caret within Query
 	filtered       []int
 }
 
 func (s *ThemeOverlayState) Open() {
 	s.Active = true
 	s.Query = ""
+	s.QueryCaret = 0
 	s.filtered = nil
 	s.CursorIdx = s.ActiveThemeIdx
 }
 
-// PasteText appends pasted text to the query and refilters.
+// PasteText inserts text at the cursor and refilters.
 func (s *ThemeOverlayState) PasteText(text string, schemes []Scheme) {
-	s.Query += text
+	if text == "" {
+		return
+	}
+	ti := TextInput{Value: s.Query, Cursor: s.QueryCaret}
+	ti.Insert(text)
+	s.Query = ti.Value
+	s.QueryCaret = ti.Cursor
 	s.refilter(schemes)
 }
 
@@ -63,43 +72,47 @@ func (s *ThemeOverlayState) HandleKey(key string, bindings ThemeKeyBindings, sch
 		if s.CursorIdx > 0 {
 			s.CursorIdx--
 		}
+		return false
 	case bindings.Down.Matches(key):
 		if s.CursorIdx < len(s.filtered)-1 {
 			s.CursorIdx++
 		}
+		return false
 	case bindings.Apply.Matches(key):
 		if idx, ok := s.selectedThemeIdx(); ok {
 			s.ActiveThemeIdx = idx
 			s.Active = false
 			return true
 		}
+		return false
 	case bindings.Cancel.Matches(key):
 		if s.Query != "" {
 			s.Query = ""
+			s.QueryCaret = 0
 			s.refilter(schemes)
 		} else {
 			s.Active = false
 		}
-	case bindings.Erase != nil && bindings.Erase.Matches(key):
-		if len(s.Query) > 0 {
-			s.Query = s.Query[:len(s.Query)-1]
-			s.refilter(schemes)
-		}
+		return false
 	case key == "ctrl+v":
 		if text := ReadClipboard(); text != "" {
-			s.Query += text
-			s.refilter(schemes)
+			s.PasteText(text, schemes)
 		}
-	default:
-		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			s.Query += key
+		return false
+	}
+	ti := TextInput{Value: s.Query, Cursor: s.QueryCaret}
+	if ti.HandleKey(key) {
+		changed := ti.Value != s.Query
+		s.Query = ti.Value
+		s.QueryCaret = ti.Cursor
+		if changed {
 			s.refilter(schemes)
 		}
 	}
 	return false
 }
 
-func RenderThemeOverlay(state ThemeOverlayState, closeHint, cursorView string, schemes []Scheme, styles Styles, km *keymap.Keymap, width, height int, base string) string {
+func RenderThemeOverlay(state ThemeOverlayState, closeHint string, cur cursor.Model, schemes []Scheme, styles Styles, km *keymap.Keymap, width, height int, base string) string {
 	filtered := state.filtered
 	if filtered == nil {
 		filtered = make([]int, len(schemes))
@@ -117,10 +130,11 @@ func RenderThemeOverlay(state ThemeOverlayState, closeHint, cursorView string, s
 	}
 
 	cfg := OverlayListConfig{
-		Title:      "Themes",
-		Query:      state.Query,
-		CursorView: cursorView,
-		CloseHint:  closeHint,
+		Title:       "Themes",
+		Query:       state.Query,
+		QueryCursor: state.QueryCaret,
+		Cursor:      cur,
+		CloseHint:   closeHint,
 		Bindings: &OverlayBindings{
 			MoveUp:   km.ThemeUp,
 			MoveDown: km.ThemeDown,

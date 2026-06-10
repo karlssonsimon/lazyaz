@@ -373,6 +373,37 @@ func TestPaneName(t *testing.T) {
 	}
 }
 
+// TestListFilterCursorMovesLeftRight pins that cursor movement keys
+// (left/right/home/end) reach the bubbles list filter input while the
+// user is editing a filter query, and that an inserted character lands
+// at the cursor — not at the end of the query.
+func TestListFilterCursorMovesLeftRight(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.focus = vaultsPane
+	m.vaultsList.SetFilterText("abcd")
+	m.vaultsList.SetFilterState(list.Filtering)
+	if m.vaultsList.FilterInput.Position() != 4 {
+		t.Fatalf("after SetFilterText: position=%d, want 4", m.vaultsList.FilterInput.Position())
+	}
+
+	left := tea.KeyPressMsg{Code: tea.KeyLeft}
+	updated, _ := m.Update(left)
+	m = updated.(Model)
+	updated, _ = m.Update(left)
+	m = updated.(Model)
+	if m.vaultsList.FilterInput.Position() != 2 {
+		t.Fatalf("after two lefts: position=%d, want 2", m.vaultsList.FilterInput.Position())
+	}
+
+	// Insert at cursor — should land between 'b' and 'c'.
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'X', Text: "X"})
+	m = updated.(Model)
+	if got := m.vaultsList.FilterInput.Value(); got != "abXcd" {
+		t.Fatalf("after X at cursor 2: filter=%q, want abXcd", got)
+	}
+}
+
 func TestTypingQWhileFilteringDoesNotQuit(t *testing.T) {
 	m := NewModel(nil, testConfig, nil)
 	m.focus = vaultsPane

@@ -12,10 +12,11 @@ import (
 // alongside cursor + offset. Lives on the Model in a slice parallel
 // to widgets. Resets when the tab closes; not persisted to config.
 type widgetViewState struct {
-	sortField int    // index into Widget.SortFields(); 0 = widget default
-	sortDesc  bool   // sort direction; widget supplies the natural default per field
-	hasSort   bool   // false until the user picks one (avoids "fake default" surprise)
-	filter    string // ephemeral substring filter; reserved for future filter feature
+	sortField   int    // index into Widget.SortFields(); 0 = widget default
+	sortDesc    bool   // sort direction; widget supplies the natural default per field
+	hasSort     bool   // false until the user picks one (avoids "fake default" surprise)
+	filter      string // ephemeral substring filter; reserved for future filter feature
+	filterCaret int    // rune index of the edit caret within filter
 }
 
 // SortField describes one column a widget supports sorting by. The

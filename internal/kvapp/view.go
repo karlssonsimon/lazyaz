@@ -39,11 +39,12 @@ func (m Model) View() tea.View {
 		}
 		switch l.FilterState() {
 		case list.Filtering:
-			return ui.RenderFilterLine(l.FilterInput.Value(), m.Cursor.View(),
+			before, cv, after := ui.PrepareCursor(l.FilterInput.Value(), l.FilterInput.Position(), m.Cursor)
+			return ui.RenderFilterLine(before, cv, after, l.FilterInput.Value(),
 				m.Styles, contentWidth, true)
 		case list.FilterApplied:
 			return lipgloss.JoinVertical(lipgloss.Left,
-				ui.RenderFilterLine(l.FilterValue(), "", m.Styles, contentWidth, false),
+				ui.RenderFilterLine("", "", "", l.FilterValue(), m.Styles, contentWidth, false),
 				base)
 		}
 		return base
@@ -139,16 +140,16 @@ func (m Model) View() tea.View {
 		view = m.renderActionMenu(view)
 	}
 	if m.createSecret.Active {
-		view = ui.RenderFormOverlay(m.createSecret, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
+		view = ui.RenderFormOverlay(m.createSecret, m.Cursor, m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
 	if m.addSecretVersion.Active {
-		view = ui.RenderFormOverlay(m.addSecretVersion, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
+		view = ui.RenderFormOverlay(m.addSecretVersion, m.Cursor, m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
 	if m.createKey.Active {
-		view = ui.RenderFormOverlay(m.createKey, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
+		view = ui.RenderFormOverlay(m.createKey, m.Cursor, m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
 	if m.importCert.Active {
-		view = ui.RenderFormOverlay(m.importCert, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
+		view = ui.RenderFormOverlay(m.importCert, m.Cursor, m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
 	if m.certImportBrowserActive {
 		view = ui.RenderFileBrowser(m.certImportBrowser, m.Styles, m.Width, m.Height, view)

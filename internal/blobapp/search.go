@@ -63,21 +63,26 @@ func (m Model) handlePrefixSearchKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.Cursor.Blur()
 			return m, nil
 		}
-		m.filter.prefixQuery = m.filter.prefixQuery[:len(m.filter.prefixQuery)-1]
+		ti := ui.TextInput{Value: m.filter.prefixQuery, Cursor: m.filter.prefixCaret}
+		ti.HandleKey("backspace")
+		m.filter.prefixQuery = ti.Value
+		m.filter.prefixCaret = ti.Cursor
 		return m, nil
 
 	case key == "ctrl+v":
 		if text := ui.ReadClipboard(); text != "" {
-			m.filter.prefixQuery += text
+			ti := ui.TextInput{Value: m.filter.prefixQuery, Cursor: m.filter.prefixCaret}
+			ti.Insert(text)
+			m.filter.prefixQuery = ti.Value
+			m.filter.prefixCaret = ti.Cursor
 		}
 		return m, nil
-	default:
-		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			m.filter.prefixQuery += key
-			return m, nil
-		}
 	}
-
+	ti := ui.TextInput{Value: m.filter.prefixQuery, Cursor: m.filter.prefixCaret}
+	if ti.HandleKey(key) {
+		m.filter.prefixQuery = ti.Value
+		m.filter.prefixCaret = ti.Cursor
+	}
 	return m, nil
 }
 
@@ -161,9 +166,8 @@ func (m Model) renderPrefixSearchOverlay(base string) string {
 	if m.prefix != "" {
 		prompt = styles.Accent2.Render("> " + m.prefix)
 	}
-	query := m.filter.prefixQuery
-	cursor := m.Cursor.View()
-	inputLine := prompt + query + cursor
+	before, cv, after := ui.PrepareCursor(m.filter.prefixQuery, m.filter.prefixCaret, m.Cursor)
+	inputLine := prompt + before + cv + after
 
 	hint := styles.Muted.Render("  enter search · esc cancel")
 

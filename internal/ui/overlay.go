@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/cursor"
 	"charm.land/lipgloss/v2"
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
@@ -39,14 +40,15 @@ type OverlayBindings struct {
 
 // OverlayListConfig configures the dimensions and placement of an overlay list.
 type OverlayListConfig struct {
-	Title      string
-	Query      string
-	CursorView string // rendered cursor; falls back to static "█" if empty
-	CloseHint  string // free text shown right-aligned in the header (e.g. "esc close")
-	InnerWidth int    // content width; 0 = default (60)
-	MaxVisible int    // max visible items; 0 = default (20)
-	Center     bool   // center vertically instead of 1/5 from top
-	HideSearch bool   // suppress the inline filter; treats overlay as a menu
+	Title       string
+	Query       string
+	QueryCursor int          // rune index of the edit caret within Query
+	Cursor      cursor.Model // blinking cursor; its char is set per-render to the rune under the caret
+	CloseHint   string       // free text shown right-aligned in the header (e.g. "esc close")
+	InnerWidth  int          // content width; 0 = default (60)
+	MaxVisible  int          // max visible items; 0 = default (20)
+	Center      bool         // center vertically instead of 1/5 from top
+	HideSearch  bool         // suppress the inline filter; treats overlay as a menu
 
 	// Placeholder is shown in the filter slot when Query is empty (italic muted).
 	Placeholder string
@@ -168,19 +170,21 @@ func renderOverlayHeader(cfg OverlayListConfig, filtered int, styles Styles, inn
 	}
 
 	if !cfg.HideSearch {
-		cursorStr := cfg.CursorView
-		if cursorStr == "" {
-			cursorStr = "█"
-		}
+		cur := cfg.Cursor
 
 		var filter string
 		switch {
 		case cfg.Query == "" && cfg.Placeholder != "":
-			filter = cursorStr + ov.Hint.Inline(true).Padding(0).Italic(true).Render(cfg.Placeholder)
+			cur.SetChar(" ")
+			filter = cur.View() + ov.Hint.Inline(true).Padding(0).Italic(true).Render(cfg.Placeholder)
 		case cfg.Query == "":
-			filter = cursorStr
+			cur.SetChar(" ")
+			filter = cur.View()
 		default:
-			filter = ov.Input.Render(cfg.Query) + cursorStr
+			ti := TextInput{Value: cfg.Query, Cursor: cfg.QueryCursor}
+			before, at, after := ti.SplitWithCursor()
+			cur.SetChar(at)
+			filter = ov.Input.Render(before) + cur.View() + ov.Input.Render(after)
 		}
 
 		count := ""

@@ -70,26 +70,26 @@ func (s *actionMenuState) handleKey(key string, km keymap.Keymap) (selected bool
 	switch {
 	case km.ThemeUp.Matches(key):
 		s.Move(-1)
+		return false, action{}
 	case km.ThemeDown.Matches(key):
 		s.Move(1)
+		return false, action{}
 	case km.ThemeApply.Matches(key):
 		if a, ok := s.Selected(); ok {
 			s.close()
 			return true, a
 		}
+		return false, action{}
 	case km.ThemeCancel.Matches(key):
 		s.Cancel()
-	case km.BackspaceUp.Matches(key):
-		s.Backspace()
+		return false, action{}
 	case key == "ctrl+v":
 		if text := ui.ReadClipboard(); text != "" {
 			s.TypeText(text)
 		}
-	default:
-		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			s.TypeText(key)
-		}
+		return false, action{}
 	}
+	s.HandleQueryKey(key)
 	return false, action{}
 }
 
@@ -441,10 +441,11 @@ func (m Model) renderActionMenu(base string) string {
 		}
 	}
 	cfg := ui.OverlayListConfig{
-		Title:      "Actions",
-		Query:      s.Query,
-		CursorView: m.Cursor.View(),
-		CloseHint:  m.Keymap.Cancel.Short(),
+		Title:       "Actions",
+		Query:       s.Query,
+		QueryCursor: s.QueryCaret,
+		Cursor:      m.Cursor,
+		CloseHint:   m.Keymap.Cancel.Short(),
 		Bindings: &ui.OverlayBindings{
 
 			MoveUp:   m.Keymap.ThemeUp,

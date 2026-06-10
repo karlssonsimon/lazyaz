@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/cursor"
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
@@ -12,13 +13,14 @@ type HelpKeyBindings struct {
 }
 
 type HelpOverlayState struct {
-	Active    bool
-	Title     string
-	CursorIdx int
-	Query     string
-	items     []helpItem
-	visible   []OverlayItem // rebuilt on refilter; what gets rendered
-	maxKeyW   int           // stable column width across queries
+	Active     bool
+	Title      string
+	CursorIdx  int
+	Query      string
+	QueryCaret int // rune index of the edit caret within Query
+	items      []helpItem
+	visible    []OverlayItem // rebuilt on refilter; what gets rendered
+	maxKeyW    int           // stable column width across queries
 }
 
 type helpItem struct {
@@ -36,6 +38,7 @@ func (s *HelpOverlayState) Open(title string, sections []HelpSection) {
 	s.Active = true
 	s.Title = title
 	s.Query = ""
+	s.QueryCaret = 0
 	s.CursorIdx = 0
 	s.items = flattenSections(sections)
 	s.maxKeyW = 0
@@ -60,35 +63,45 @@ func (s *HelpOverlayState) HandleKey(key string, bindings HelpKeyBindings) {
 	case bindings.Close.Matches(key), bindings.Cancel != nil && bindings.Cancel.Matches(key):
 		if s.Query != "" {
 			s.Query = ""
+			s.QueryCaret = 0
 			s.refilter()
 		} else {
 			s.Active = false
 		}
+		return
 	case bindings.Up.Matches(key):
 		s.moveCursor(-1)
+		return
 	case bindings.Down.Matches(key):
 		s.moveCursor(1)
-	case bindings.Erase != nil && bindings.Erase.Matches(key):
-		if len(s.Query) > 0 {
-			s.Query = s.Query[:len(s.Query)-1]
-			s.refilter()
-		}
+		return
 	case key == "ctrl+v":
 		if text := ReadClipboard(); text != "" {
-			s.Query += text
-			s.refilter()
+			s.PasteText(text)
 		}
-	default:
-		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			s.Query += key
+		return
+	}
+	// Editing + cursor movement keys route to the query buffer.
+	ti := TextInput{Value: s.Query, Cursor: s.QueryCaret}
+	if ti.HandleKey(key) {
+		changed := ti.Value != s.Query
+		s.Query = ti.Value
+		s.QueryCaret = ti.Cursor
+		if changed {
 			s.refilter()
 		}
 	}
 }
 
-// PasteText appends pasted text to the query and refilters.
+// PasteText inserts text at the cursor and refilters.
 func (s *HelpOverlayState) PasteText(text string) {
-	s.Query += text
+	if text == "" {
+		return
+	}
+	ti := TextInput{Value: s.Query, Cursor: s.QueryCaret}
+	ti.Insert(text)
+	s.Query = ti.Value
+	s.QueryCaret = ti.Cursor
 	s.refilter()
 }
 
@@ -166,7 +179,7 @@ func parseHelpEntry(s string) (keys, desc string) {
 	return s, ""
 }
 
-func RenderHelpOverlay(state HelpOverlayState, closeHint, cursorView string, styles Styles, km *keymap.Keymap, width, height int, base string) string {
+func RenderHelpOverlay(state HelpOverlayState, closeHint string, cur cursor.Model, styles Styles, km *keymap.Keymap, width, height int, base string) string {
 	if state.visible == nil {
 		state.refilter()
 	}
@@ -211,7 +224,8 @@ func RenderHelpOverlay(state HelpOverlayState, closeHint, cursorView string, sty
 	cfg := OverlayListConfig{
 		Title:          state.Title,
 		Query:          state.Query,
-		CursorView:     cursorView,
+		QueryCursor:    state.QueryCaret,
+		Cursor:         cur,
 		CloseHint:      closeHint,
 		InnerWidth:     innerW,
 		MaxVisible:     maxVis,

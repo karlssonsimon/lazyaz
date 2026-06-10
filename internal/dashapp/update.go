@@ -59,7 +59,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if paste, ok := msg.(tea.PasteMsg); ok {
 		text := paste.String()
 		if m.SubOverlay.Active {
-			m.SubOverlay.Query += text
+			ti := ui.TextInput{Value: m.SubOverlay.Query, Cursor: m.SubOverlay.QueryCaret}
+			ti.Insert(text)
+			m.SubOverlay.Query = ti.Value
+			m.SubOverlay.QueryCaret = ti.Cursor
 			m.SubOverlay.Refilter(m.Subscriptions)
 		}
 		return m, nil
@@ -407,21 +410,15 @@ func (m Model) handleFilterKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
 		vs.filter = ""
+		vs.filterCaret = 0
 		m.filterInputActive = false
 	case "enter":
 		m.filterInputActive = false
-	case "backspace":
-		if len(vs.filter) > 0 {
-			vs.filter = vs.filter[:len(vs.filter)-1]
-		}
 	default:
-		// Single printable character. Multi-byte input arrives as a
-		// >1-rune key string (e.g. "shift+a" = "A"). For our scope
-		// (ASCII substring filter) accepting single-rune keys is
-		// enough — anything else is treated as a no-op.
-		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			vs.filter += key
-		}
+		ti := ui.TextInput{Value: vs.filter, Cursor: vs.filterCaret}
+		ti.HandleKey(key)
+		vs.filter = ti.Value
+		vs.filterCaret = ti.Cursor
 	}
 	m.viewStates[m.focusedIdx] = vs
 	// Filter changed → reset cursor + scroll so the highlight doesn't

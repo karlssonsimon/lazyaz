@@ -7,6 +7,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
+	"charm.land/bubbles/v2/cursor"
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -31,17 +32,19 @@ type commandAction struct {
 // section headers with selectable commands. cmdIndex is parallel to
 // visible: header rows hold -1, item rows hold the index into commands.
 type commandPalette struct {
-	active   bool
-	query    string
-	cursor   int
-	commands []command
-	visible  []ui.OverlayItem
-	cmdIndex []int
+	active     bool
+	query      string
+	queryCaret int
+	cursor     int
+	commands   []command
+	visible    []ui.OverlayItem
+	cmdIndex   []int
 }
 
 func (p *commandPalette) open(commands []command) {
 	p.active = true
 	p.query = ""
+	p.queryCaret = 0
 	p.cursor = 0
 	p.commands = commands
 	p.refilter()
@@ -50,6 +53,7 @@ func (p *commandPalette) open(commands []command) {
 func (p *commandPalette) close() {
 	p.active = false
 	p.query = ""
+	p.queryCaret = 0
 	p.cursor = 0
 	p.visible = nil
 	p.cmdIndex = nil
@@ -124,6 +128,7 @@ func (p *commandPalette) handleKey(key string, km keymap.Keymap) (cmd command, e
 	case km.Cancel.Matches(key), km.CommandPalette.Matches(key):
 		if p.query != "" && !km.CommandPalette.Matches(key) {
 			p.query = ""
+			p.queryCaret = 0
 			p.refilter()
 			return command{}, false, false
 		}
@@ -131,37 +136,44 @@ func (p *commandPalette) handleKey(key string, km keymap.Keymap) (cmd command, e
 		return command{}, false, true
 	case km.ThemeUp.Matches(key):
 		p.moveCursor(-1)
+		return command{}, false, false
 	case km.ThemeDown.Matches(key):
 		p.moveCursor(1)
+		return command{}, false, false
 	case km.OpenFocused.Matches(key):
 		if c, ok := p.selectedCommand(); ok {
 			p.close()
 			return c, true, false
 		}
-	case km.BackspaceUp.Matches(key):
-		if len(p.query) > 0 {
-			p.query = p.query[:len(p.query)-1]
-			p.refilter()
-		}
+		return command{}, false, false
 	case key == "ctrl+v":
 		if text := ui.ReadClipboard(); text != "" {
-			p.query += text
+			ti := ui.TextInput{Value: p.query, Cursor: p.queryCaret}
+			ti.Insert(text)
+			p.query = ti.Value
+			p.queryCaret = ti.Cursor
 			p.refilter()
 		}
-	default:
-		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			p.query += key
+		return command{}, false, false
+	}
+	ti := ui.TextInput{Value: p.query, Cursor: p.queryCaret}
+	if ti.HandleKey(key) {
+		changed := ti.Value != p.query
+		p.query = ti.Value
+		p.queryCaret = ti.Cursor
+		if changed {
 			p.refilter()
 		}
 	}
 	return command{}, false, false
 }
 
-func renderCommandPalette(p *commandPalette, closeHint, cursorView string, styles ui.Styles, km *keymap.Keymap, width, height int, base string) string {
+func renderCommandPalette(p *commandPalette, closeHint string, cur cursor.Model, styles ui.Styles, km *keymap.Keymap, width, height int, base string) string {
 	cfg := ui.OverlayListConfig{
 		Title:          "Commands",
 		Query:          p.query,
-		CursorView:     cursorView,
+		QueryCursor:    p.queryCaret,
+		Cursor:         cur,
 		CloseHint:      closeHint,
 		NoActiveMarker: true,
 		Bindings: &ui.OverlayBindings{

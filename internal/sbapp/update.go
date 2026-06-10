@@ -18,7 +18,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text := paste.String()
 		switch {
 		case m.SubOverlay.Active:
-			m.SubOverlay.Query += text
+			ti := ui.TextInput{Value: m.SubOverlay.Query, Cursor: m.SubOverlay.QueryCaret}
+			ti.Insert(text)
+			m.SubOverlay.Query = ti.Value
+			m.SubOverlay.QueryCaret = ti.Cursor
 			m.SubOverlay.Refilter(m.Subscriptions)
 			return m, nil
 		case m.ThemeOverlay.Active:
@@ -28,11 +31,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.HelpOverlay.PasteText(text)
 			return m, nil
 		case m.entitySortOverlay.active:
-			m.entitySortOverlay.query += text
+			ti := ui.TextInput{Value: m.entitySortOverlay.query, Cursor: m.entitySortOverlay.queryCaret}
+			ti.Insert(text)
+			m.entitySortOverlay.query = ti.Value
+			m.entitySortOverlay.queryCaret = ti.Cursor
 			m.entitySortOverlay.refilter()
 			return m, nil
 		case m.targetPicker.active:
-			m.targetPicker.query += text
+			ti := ui.TextInput{Value: m.targetPicker.query, Cursor: m.targetPicker.queryCaret}
+			ti.Insert(text)
+			m.targetPicker.query = ti.Value
+			m.targetPicker.queryCaret = ti.Cursor
 			m.targetPicker.refilter()
 			return m, nil
 		case m.actionMenu.Active:

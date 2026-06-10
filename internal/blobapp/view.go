@@ -54,11 +54,12 @@ func (m Model) View() tea.View {
 		}
 		switch l.FilterState() {
 		case list.Filtering:
-			return ui.RenderFilterLine(l.FilterInput.Value(), m.Cursor.View(),
+			before, cv, after := ui.PrepareCursor(l.FilterInput.Value(), l.FilterInput.Position(), m.Cursor)
+			return ui.RenderFilterLine(before, cv, after, l.FilterInput.Value(),
 				m.Styles, contentWidth, true)
 		case list.FilterApplied:
 			return lipgloss.JoinVertical(lipgloss.Left,
-				ui.RenderFilterLine(l.FilterValue(), "", m.Styles, contentWidth, false),
+				ui.RenderFilterLine("", "", "", l.FilterValue(), m.Styles, contentWidth, false),
 				base)
 		}
 		return base
@@ -202,7 +203,7 @@ func (m Model) View() tea.View {
 		view = ui.RenderConfirmModal(m.confirmModal, m.Styles, m.Width, m.Height, view)
 	}
 	if m.textInput.Active {
-		view = ui.RenderTextInputOverlay(m.textInput, m.Cursor.View(), m.Styles, &m.Keymap, m.Width, m.Height, view)
+		view = ui.RenderTextInputOverlay(m.textInput, m.Cursor, m.Styles, &m.Keymap, m.Width, m.Height, view)
 	}
 
 	out := tea.NewView(m.RenderOverlays(view))
@@ -377,10 +378,11 @@ func (m Model) renderSortOverlay(base string) string {
 		}
 	}
 	cfg := ui.OverlayListConfig{
-		Title:      "Sort Blobs",
-		Query:      m.sortOverlay.query,
-		CursorView: m.Cursor.View(),
-		CloseHint:  m.Keymap.Cancel.Short(),
+		Title:       "Sort Blobs",
+		Query:       m.sortOverlay.query,
+		QueryCursor: m.sortOverlay.queryCaret,
+		Cursor:      m.Cursor,
+		CloseHint:   m.Keymap.Cancel.Short(),
 		Bindings: &ui.OverlayBindings{
 
 			MoveUp:   m.Keymap.ThemeUp,

@@ -35,10 +35,11 @@ var entitySortOptions = []entitySortOption{
 }
 
 type entitySortOverlayState struct {
-	active    bool
-	cursorIdx int
-	query     string
-	filtered  []int
+	active     bool
+	cursorIdx  int
+	query      string
+	queryCaret int
+	filtered   []int
 }
 
 type entitySortResult struct {
@@ -106,24 +107,29 @@ func (s *entitySortOverlayState) handleKey(key string, km keymap.Keymap) entityS
 	case km.ThemeCancel.Matches(key):
 		if s.query != "" {
 			s.query = ""
+			s.queryCaret = 0
 			s.filtered = nil
 			s.cursorIdx = 0
 		} else {
 			s.active = false
 		}
-	case km.BackspaceUp.Matches(key):
-		if len(s.query) > 0 {
-			s.query = s.query[:len(s.query)-1]
-			s.refilter()
-		}
+		return entitySortResult{}
 	case key == "ctrl+v":
 		if text := ui.ReadClipboard(); text != "" {
-			s.query += text
+			ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
+			ti.Insert(text)
+			s.query = ti.Value
+			s.queryCaret = ti.Cursor
 			s.refilter()
 		}
-	default:
-		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			s.query += key
+		return entitySortResult{}
+	}
+	ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
+	if ti.HandleKey(key) {
+		changed := ti.Value != s.query
+		s.query = ti.Value
+		s.queryCaret = ti.Cursor
+		if changed {
 			s.refilter()
 		}
 	}
@@ -201,10 +207,11 @@ func (m Model) renderEntitySortOverlay(base string) string {
 		}
 	}
 	cfg := ui.OverlayListConfig{
-		Title:      "Sort Entities",
-		Query:      s.query,
-		CursorView: m.Cursor.View(),
-		CloseHint:  m.Keymap.Cancel.Short(),
+		Title:       "Sort Entities",
+		Query:       s.query,
+		QueryCursor: s.queryCaret,
+		Cursor:      m.Cursor,
+		CloseHint:   m.Keymap.Cancel.Short(),
 		Bindings: &ui.OverlayBindings{
 
 			MoveUp:   m.Keymap.ThemeUp,

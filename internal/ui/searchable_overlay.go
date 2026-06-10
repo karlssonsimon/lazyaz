@@ -4,9 +4,10 @@ import "github.com/karlssonsimon/lazyaz/internal/fuzzy"
 
 // SearchableOverlay holds common state for searchable overlay lists.
 type SearchableOverlay[T any] struct {
-	Active    bool
-	CursorIdx int
-	Query     string
+	Active     bool
+	CursorIdx  int
+	Query      string
+	QueryCaret int // rune index of the edit caret within Query
 
 	items    []T
 	filtered []int
@@ -17,6 +18,7 @@ func (s *SearchableOverlay[T]) Open(items []T, key func(T) string) {
 	s.Active = true
 	s.CursorIdx = 0
 	s.Query = ""
+	s.QueryCaret = 0
 	s.items = items
 	s.filtered = nil
 	s.key = key
@@ -26,25 +28,43 @@ func (s *SearchableOverlay[T]) Close() {
 	*s = SearchableOverlay[T]{}
 }
 
+// HandleQueryKey routes one editing key to the query buffer. Returns
+// true if the key was consumed (movement, edit, printable insert). The
+// caller stays responsible for movement of the list cursor (CursorIdx)
+// and for non-text keys like enter/esc.
+func (s *SearchableOverlay[T]) HandleQueryKey(key string) bool {
+	ti := TextInput{Value: s.Query, Cursor: s.QueryCaret}
+	if !ti.HandleKey(key) {
+		return false
+	}
+	changed := ti.Value != s.Query
+	s.Query = ti.Value
+	s.QueryCaret = ti.Cursor
+	if changed {
+		s.refilter()
+	}
+	return true
+}
+
 func (s *SearchableOverlay[T]) TypeText(text string) {
 	if text == "" {
 		return
 	}
-	s.Query += text
+	ti := TextInput{Value: s.Query, Cursor: s.QueryCaret}
+	ti.Insert(text)
+	s.Query = ti.Value
+	s.QueryCaret = ti.Cursor
 	s.refilter()
 }
 
 func (s *SearchableOverlay[T]) Backspace() {
-	if len(s.Query) == 0 {
-		return
-	}
-	s.Query = s.Query[:len(s.Query)-1]
-	s.refilter()
+	s.HandleQueryKey("backspace")
 }
 
 func (s *SearchableOverlay[T]) Cancel() bool {
 	if s.Query != "" {
 		s.Query = ""
+		s.QueryCaret = 0
 		s.filtered = nil
 		s.CursorIdx = 0
 		return false

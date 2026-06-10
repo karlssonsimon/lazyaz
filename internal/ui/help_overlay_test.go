@@ -3,6 +3,8 @@ package ui
 import (
 	"strings"
 	"testing"
+
+	"charm.land/bubbles/v2/cursor"
 )
 
 func countItems(visible []OverlayItem) int {
@@ -43,7 +45,7 @@ func TestRenderHelpOverlayIncludesContent(t *testing.T) {
 	state := HelpOverlayState{}
 	state.Open("Help", []HelpSection{{Title: "General", Items: []string{"tab  next focus", "?  toggle help"}}})
 
-	view := RenderHelpOverlay(state, "esc", "█", styles, nil, 100, 40, "base")
+	view := RenderHelpOverlay(state, "esc", cursor.New(), styles, nil, 100, 40, "base")
 
 	for _, want := range []string{"HELP", "GENERAL", "toggle help", "esc"} {
 		if !strings.Contains(view, want) {

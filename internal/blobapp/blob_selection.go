@@ -75,10 +75,11 @@ func (m *Model) refreshBlobSelectionDisplay() {
 
 // sortOverlayState manages the sort picker popup.
 type sortOverlayState struct {
-	active    bool
-	cursorIdx int
-	query     string
-	filtered  []int // indices into sortOptions
+	active     bool
+	cursorIdx  int
+	query      string
+	queryCaret int
+	filtered   []int // indices into sortOptions
 }
 
 type sortOption struct {
@@ -100,6 +101,7 @@ var sortOptions = []sortOption{
 func (s *sortOverlayState) open(currentField blobSortField, currentDesc bool) {
 	s.active = true
 	s.query = ""
+	s.queryCaret = 0
 	s.filtered = nil
 	s.cursorIdx = 0
 	for i, opt := range sortOptions {
@@ -158,24 +160,29 @@ func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) (applied bool
 	case km.ThemeCancel.Matches(key):
 		if s.query != "" {
 			s.query = ""
+			s.queryCaret = 0
 			s.filtered = nil
 			s.cursorIdx = 0
 		} else {
 			s.active = false
 		}
-	case km.BackspaceUp.Matches(key):
-		if len(s.query) > 0 {
-			s.query = s.query[:len(s.query)-1]
-			s.refilter()
-		}
+		return false, blobSortNone, false
 	case key == "ctrl+v":
 		if text := ui.ReadClipboard(); text != "" {
-			s.query += text
+			ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
+			ti.Insert(text)
+			s.query = ti.Value
+			s.queryCaret = ti.Cursor
 			s.refilter()
 		}
-	default:
-		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			s.query += key
+		return false, blobSortNone, false
+	}
+	ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
+	if ti.HandleKey(key) {
+		changed := ti.Value != s.query
+		s.query = ti.Value
+		s.queryCaret = ti.Cursor
+		if changed {
 			s.refilter()
 		}
 	}

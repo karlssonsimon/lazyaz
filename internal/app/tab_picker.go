@@ -1,6 +1,7 @@
 package app
 
 import (
+	"charm.land/bubbles/v2/cursor"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
@@ -28,15 +29,17 @@ var tabPickerEntries = []tabPickerEntry{
 }
 
 type tabPickerState struct {
-	active    bool
-	cursorIdx int
-	query     string
-	filtered  []int // indices into tabPickerEntries
+	active     bool
+	cursorIdx  int
+	query      string
+	queryCaret int
+	filtered   []int // indices into tabPickerEntries
 }
 
 func (s *tabPickerState) open() {
 	s.active = true
 	s.query = ""
+	s.queryCaret = 0
 	s.cursorIdx = 0
 	s.refilter()
 }
@@ -72,41 +75,47 @@ func (s *tabPickerState) handleKey(key string, bindings ui.ThemeKeyBindings) (fu
 	case bindings.Cancel.Matches(key):
 		if s.query != "" {
 			s.query = ""
+			s.queryCaret = 0
 			s.refilter()
 		} else {
 			s.active = false
 		}
-	case bindings.Erase != nil && bindings.Erase.Matches(key):
-		if len(s.query) > 0 {
-			s.query = s.query[:len(s.query)-1]
-			s.refilter()
-		}
+		return nil, false
 	case key == "ctrl+v":
 		if text := ui.ReadClipboard(); text != "" {
-			s.query += text
+			ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
+			ti.Insert(text)
+			s.query = ti.Value
+			s.queryCaret = ti.Cursor
 			s.refilter()
 		}
-	default:
-		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			s.query += key
+		return nil, false
+	}
+	ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
+	if ti.HandleKey(key) {
+		changed := ti.Value != s.query
+		s.query = ti.Value
+		s.queryCaret = ti.Cursor
+		if changed {
 			s.refilter()
 		}
 	}
 	return nil, false
 }
 
-func renderTabPickerOverlay(s *tabPickerState, closeHint, cursorView string, styles ui.Styles, km *keymap.Keymap, width, height int, base string) string {
+func renderTabPickerOverlay(s *tabPickerState, closeHint string, cur cursor.Model, styles ui.Styles, km *keymap.Keymap, width, height int, base string) string {
 	items := make([]ui.OverlayItem, len(s.filtered))
 	for ci, ti := range s.filtered {
 		items[ci] = ui.OverlayItem{Label: tabPickerEntries[ti].name}
 	}
 
 	cfg := ui.OverlayListConfig{
-		Title:      "New Tab",
-		Query:      s.query,
-		CursorView: cursorView,
-		CloseHint:  closeHint,
-		MaxVisible: len(tabPickerEntries),
+		Title:       "New Tab",
+		Query:       s.query,
+		QueryCursor: s.queryCaret,
+		Cursor:      cur,
+		CloseHint:   closeHint,
+		MaxVisible:  len(tabPickerEntries),
 		Bindings: &ui.OverlayBindings{
 			MoveUp:   km.ThemeUp,
 			MoveDown: km.ThemeDown,

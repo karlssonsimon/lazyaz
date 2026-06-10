@@ -22,7 +22,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text := paste.String()
 		switch {
 		case m.SubOverlay.Active:
-			m.SubOverlay.Query += text
+			ti := ui.TextInput{Value: m.SubOverlay.Query, Cursor: m.SubOverlay.QueryCaret}
+			ti.Insert(text)
+			m.SubOverlay.Query = ti.Value
+			m.SubOverlay.QueryCaret = ti.Cursor
 			m.SubOverlay.Refilter(m.Subscriptions)
 			return m, nil
 		case m.ThemeOverlay.Active:
@@ -32,16 +35,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.HelpOverlay.PasteText(text)
 			return m, nil
 		case m.filter.inputOpen && m.focus == blobsPane:
-			m.filter.prefixQuery += text
+			ti := ui.TextInput{Value: m.filter.prefixQuery, Cursor: m.filter.prefixCaret}
+			ti.Insert(text)
+			m.filter.prefixQuery = ti.Value
+			m.filter.prefixCaret = ti.Cursor
 			return m, nil
 		case m.textInput.Active:
-			m.textInput.Value += text
+			m.textInput.Insert(text)
 			return m, nil
 		case m.actionMenu.Active:
 			m.actionMenu.TypeText(text)
 			return m, nil
 		case m.sortOverlay.active:
-			m.sortOverlay.query += text
+			ti := ui.TextInput{Value: m.sortOverlay.query, Cursor: m.sortOverlay.queryCaret}
+			ti.Insert(text)
+			m.sortOverlay.query = ti.Value
+			m.sortOverlay.queryCaret = ti.Cursor
 			m.sortOverlay.refilter()
 			return m, nil
 		default:

@@ -18,12 +18,13 @@ import (
 // tenantPickerState manages the overlay for choosing a tenant before
 // running az login --tenant <id>.
 type tenantPickerState struct {
-	active   bool
-	loading  bool
-	tenants  []azure.Tenant
-	cursor   int
-	query    string
-	filtered []int
+	active     bool
+	loading    bool
+	tenants    []azure.Tenant
+	cursor     int
+	query      string
+	queryCaret int
+	filtered   []int
 }
 
 func (s *tenantPickerState) open() {
@@ -32,6 +33,7 @@ func (s *tenantPickerState) open() {
 	s.tenants = nil
 	s.cursor = 0
 	s.query = ""
+	s.queryCaret = 0
 	s.filtered = nil
 }
 
@@ -85,29 +87,33 @@ func (s *tenantPickerState) handleKey(key string, bindings ui.ThemeKeyBindings) 
 		if s.cursor > 0 {
 			s.cursor--
 		}
+		return azure.Tenant{}, false
 	case bindings.Down.Matches(key):
 		if s.cursor < count-1 {
 			s.cursor++
 		}
+		return azure.Tenant{}, false
 	case bindings.Apply.Matches(key):
 		if t, ok := s.selected(); ok {
 			return t, true
 		}
+		return azure.Tenant{}, false
 	case bindings.Cancel.Matches(key):
 		if s.query != "" {
 			s.query = ""
+			s.queryCaret = 0
 			s.refilter()
 		} else {
 			s.close()
 		}
-	case bindings.Erase != nil && bindings.Erase.Matches(key):
-		if len(s.query) > 0 {
-			s.query = s.query[:len(s.query)-1]
-			s.refilter()
-		}
-	default:
-		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
-			s.query += key
+		return azure.Tenant{}, false
+	}
+	ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
+	if ti.HandleKey(key) {
+		changed := ti.Value != s.query
+		s.query = ti.Value
+		s.queryCaret = ti.Cursor
+		if changed {
 			s.refilter()
 		}
 	}

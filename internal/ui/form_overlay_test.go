@@ -183,6 +183,40 @@ func TestFormValidatorAllowsSubmit(t *testing.T) {
 	}
 }
 
+func TestFormCursorMoveAndEdit(t *testing.T) {
+	var s FormOverlayState
+	s.Open("title", []FormField{{Label: "a", Value: "abc"}})
+	// Cursor parked at end after Open.
+	s.HandleKey("left")
+	s.HandleKey("left")
+	if s.Fields[0].Cursor != 1 {
+		t.Fatalf("after two lefts: cursor=%d, want 1", s.Fields[0].Cursor)
+	}
+	s.HandleKey("X")
+	if s.Fields[0].Value != "aXbc" {
+		t.Fatalf("insert mid-cursor: %q, want aXbc", s.Fields[0].Value)
+	}
+	s.HandleKey("home")
+	s.HandleKey("backspace") // no-op at start
+	if s.Fields[0].Value != "aXbc" {
+		t.Fatalf("backspace at start: %q, want aXbc", s.Fields[0].Value)
+	}
+	s.HandleKey("delete")
+	if s.Fields[0].Value != "Xbc" {
+		t.Fatalf("delete at start: %q, want Xbc", s.Fields[0].Value)
+	}
+}
+
+func TestFormInsertAtCursor(t *testing.T) {
+	var s FormOverlayState
+	s.Open("title", []FormField{{Label: "a", Value: "hello"}})
+	s.Fields[0].Cursor = 2
+	s.Fields[0].Insert("XX")
+	if s.Fields[0].Value != "heXXllo" || s.Fields[0].Cursor != 4 {
+		t.Fatalf("Insert: %q cursor=%d, want heXXllo cursor=4", s.Fields[0].Value, s.Fields[0].Cursor)
+	}
+}
+
 func TestFormSpaceAppendsToFocused(t *testing.T) {
 	var s FormOverlayState
 	s.Open("title", []FormField{{Label: "a", Value: "x"}})

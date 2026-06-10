@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/cursor"
 	"charm.land/lipgloss/v2"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
@@ -28,10 +29,15 @@ type FormResult struct {
 // FormField describes one row in a FormOverlayState. Validate is
 // optional; when set it is called on Submit and a non-empty return
 // keeps the overlay open with the message stored on the field's Error.
+//
+// Cursor is the rune index of the edit caret within Value. Direct
+// writes to Value (legacy callers, paste handlers) leave Cursor as-is;
+// the render path clamps it, and Insert/HandleKey keep them in sync.
 type FormField struct {
 	Label       string
 	Placeholder string
 	Value       string
+	Cursor      int
 	Error       string
 	Validate    func(value string) string
 
@@ -77,6 +83,12 @@ func (s *FormOverlayState) Open(title string, fields []FormField) {
 	if len(fields) == 0 {
 		return
 	}
+	// Park the cursor at the end of any pre-filled value so users can
+	// immediately type/backspace at the visible end. Callers that want
+	// the cursor elsewhere can override after Open.
+	for i := range fields {
+		fields[i].Cursor = runeLen(fields[i].Value)
+	}
 	s.Active = true
 	s.Title = title
 	s.Fields = fields
@@ -107,6 +119,20 @@ func (s *FormOverlayState) FocusedField() *FormField {
 		return nil
 	}
 	return &s.Fields[s.Focus]
+}
+
+// Insert inserts text at the field's cursor and advances the cursor.
+// Use this from paste handlers — direct f.Value += text writes append
+// to the end and leave the cursor stale.
+func (f *FormField) Insert(text string) {
+	if text == "" {
+		return
+	}
+	ti := TextInput{Value: f.Value, Cursor: f.Cursor}
+	ti.Insert(text)
+	f.Value = ti.Value
+	f.Cursor = ti.Cursor
+	f.Error = ""
 }
 
 // HandleKey processes one key press. tab / shift-tab cycle focus.
@@ -161,23 +187,12 @@ func (s *FormOverlayState) HandleKey(key string) FormResult {
 		}
 		s.Close()
 		return FormResult{Action: FormActionSubmit, Values: values}
-	case "backspace":
-		f := &s.Fields[s.Focus]
-		if f.Value != "" {
-			rs := []rune(f.Value)
-			f.Value = string(rs[:len(rs)-1])
-			f.Error = ""
-		}
-		return FormResult{Action: FormActionNone}
-	case "space":
-		f := &s.Fields[s.Focus]
-		f.Value += " "
-		f.Error = ""
-		return FormResult{Action: FormActionNone}
 	}
-	if isPrintableInputKey(key) {
-		f := &s.Fields[s.Focus]
-		f.Value += key
+	f := &s.Fields[s.Focus]
+	ti := TextInput{Value: f.Value, Cursor: f.Cursor}
+	if ti.HandleKey(key) {
+		f.Value = ti.Value
+		f.Cursor = ti.Cursor
 		f.Error = ""
 	}
 	return FormResult{Action: FormActionNone}
@@ -192,8 +207,10 @@ const formInnerWidth = 96
 // fields with rose gutter on the focused row, helper text below each
 // value, and a status-bar footer with INPUT mode pill + key hints.
 //
+// cur is the shared blinking cursor; its char is set per-field to the
+// rune under the caret so blink-off shows the underlying character.
 // km may be nil — when set, footer hints reflect actual bindings.
-func RenderFormOverlay(state FormOverlayState, cursorView string, styles Styles, km *keymap.Keymap, width, height int, base string) string {
+func RenderFormOverlay(state FormOverlayState, cur cursor.Model, styles Styles, km *keymap.Keymap, width, height int, base string) string {
 	innerW := formInnerWidth
 	boxW := innerW + 6 // padding(2+2) + border(1+1)
 	if boxW > width-4 {
@@ -203,9 +220,6 @@ func RenderFormOverlay(state FormOverlayState, cursorView string, styles Styles,
 	if innerW < 30 {
 		innerW = 30
 		boxW = innerW + 6
-	}
-	if cursorView == "" {
-		cursorView = "█"
 	}
 
 	ov := styles.Overlay
@@ -228,7 +242,7 @@ func RenderFormOverlay(state FormOverlayState, cursorView string, styles Styles,
 		}
 
 		focused := i == state.Focus
-		fieldRows := renderFormField(f, focused, state.Reveal, cursorView, styles, innerW, labelW)
+		fieldRows := renderFormField(f, focused, state.Reveal, cur, styles, innerW, labelW)
 		rows = append(rows, fieldRows...)
 
 		if i < len(state.Fields)-1 {
@@ -308,7 +322,7 @@ func renderFormFooter(state FormOverlayState, styles Styles, km *keymap.Keymap, 
 }
 
 // renderFormField returns the rendered rows for a single field.
-func renderFormField(f FormField, focused, reveal bool, cursorView string, styles Styles, innerW, labelW int) []string {
+func renderFormField(f FormField, focused, reveal bool, cur cursor.Model, styles Styles, innerW, labelW int) []string {
 	ov := styles.Overlay
 
 	// Row backgrounds — focused row uses selBg + rose gutter (matches
@@ -343,9 +357,17 @@ func renderFormField(f FormField, focused, reveal bool, cursorView string, style
 	var valueRendered string
 	switch {
 	case focused && f.Value == "":
-		valueRendered = cursorView + muted.Italic(true).Render(f.Placeholder)
+		cur.SetChar(" ")
+		valueRendered = cur.View() + muted.Italic(true).Render(f.Placeholder)
 	case focused:
-		valueRendered = inputStyle.Render(displayValue) + cursorView
+		// Draw the cursor *on* the rune at the cursor position so blink-off
+		// shows the underlying character. SplitWithCursor returns the rune
+		// the caret sits on; we feed it to cur.SetChar so the blink-off
+		// state renders the real character.
+		ti := TextInput{Value: displayValue, Cursor: f.Cursor}
+		before, at, after := ti.SplitWithCursor()
+		cur.SetChar(at)
+		valueRendered = inputStyle.Render(before) + cur.View() + inputStyle.Render(after)
 	case f.Value == "":
 		valueRendered = muted.Italic(true).Render(f.Placeholder)
 	default:
