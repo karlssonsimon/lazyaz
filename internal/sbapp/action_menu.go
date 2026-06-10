@@ -258,9 +258,24 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if len(targets) == 0 {
 			return m, nil
 		}
-		m.startLoading(m.focus, fmt.Sprintf("Requeuing %d message(s)...", len(targets)))
-		return m, tea.Batch(m.Spinner.Tick,
-			requeueDLQMarkedCmd(m.service, m.currentNS, m.currentEntity.Name, m.lockedMessages, targets))
+		m.confirmModal.OpenWithBreadcrumb(
+			fmt.Sprintf("Requeue %d message(s)", len(targets)),
+			m.entityBreadcrumb(),
+			fmt.Sprintf("%d message(s) will be resent to %s and removed from the DLQ.", len(targets), m.currentEntity.Name),
+			"requeue", "cancel", true)
+		m.confirmAction = func(m Model) (Model, tea.Cmd) {
+			if m.lockedMessages == nil {
+				return m, nil
+			}
+			targets := m.lockedMessageTargets()
+			if len(targets) == 0 {
+				return m, nil
+			}
+			m.startLoading(m.focus, fmt.Sprintf("Requeuing %d message(s)...", len(targets)))
+			return m, tea.Batch(m.Spinner.Tick,
+				requeueDLQMarkedCmd(m.service, m.currentNS, m.currentEntity.Name, m.lockedMessages, targets))
+		}
+		return m, nil
 
 	case actionCompleteCurrent:
 		if m.lockedMessages == nil {
@@ -270,15 +285,39 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if len(targets) == 0 {
 			return m, nil
 		}
-		m.startLoading(m.focus, fmt.Sprintf("Completing %d message(s)...", len(targets)))
-		return m, tea.Batch(m.Spinner.Tick,
-			completeDLQMarkedCmd(m.lockedMessages, targets))
+		m.confirmModal.OpenWithBreadcrumb(
+			fmt.Sprintf("Complete %d message(s)", len(targets)),
+			m.entityBreadcrumb(),
+			fmt.Sprintf("%d message(s) will be permanently removed from the DLQ.", len(targets)),
+			"complete", "cancel", true)
+		m.confirmAction = func(m Model) (Model, tea.Cmd) {
+			if m.lockedMessages == nil {
+				return m, nil
+			}
+			targets := m.lockedMessageTargets()
+			if len(targets) == 0 {
+				return m, nil
+			}
+			m.startLoading(m.focus, fmt.Sprintf("Completing %d message(s)...", len(targets)))
+			return m, tea.Batch(m.Spinner.Tick,
+				completeDLQMarkedCmd(m.lockedMessages, targets))
+		}
+		return m, nil
 
 	case actionRequeueAllDLQ:
-		m.startLoading(m.focus, "Requeuing all DLQ messages...")
 		_, dead := m.currentMessageCounts()
-		return m, tea.Batch(m.Spinner.Tick,
-			requeueAllDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, int(dead)))
+		m.confirmModal.OpenWithBreadcrumb(
+			"Requeue all DLQ messages",
+			m.entityBreadcrumb(),
+			fmt.Sprintf("%d message(s) will be resent to %s and removed from the DLQ.", int(dead), m.currentEntity.Name),
+			"requeue", "cancel", true)
+		m.confirmAction = func(m Model) (Model, tea.Cmd) {
+			m.startLoading(m.focus, "Requeuing all DLQ messages...")
+			_, dead := m.currentMessageCounts()
+			return m, tea.Batch(m.Spinner.Tick,
+				requeueAllDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, int(dead)))
+		}
+		return m, nil
 
 	case actionMoveAll:
 		m.openTargetPicker(actionMoveAll)

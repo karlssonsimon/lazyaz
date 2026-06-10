@@ -106,6 +106,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.MouseClickMsg:
+		// The confirm modal is keyboard-only; swallow clicks so a
+		// double-click can't drill into a list underneath it.
+		if m.confirmModal.Active {
+			return m, nil
+		}
 		if m.viewingMessage {
 			region := m.messageViewportRegion()
 			if m.textSelection.HandleMouseClick(msg, region) {
@@ -517,6 +522,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
 	switch m.inputMode() {
+	case ModeConfirm:
+		switch m.confirmModal.HandleKey(key) {
+		case ui.ConfirmActionConfirm:
+			act := m.confirmAction
+			m.confirmAction = nil
+			if act != nil {
+				return act(m)
+			}
+			return m, nil
+		case ui.ConfirmActionCancel:
+			m.confirmAction = nil
+			return m, nil
+		}
+		return m, nil
+
 	case ModeOverlay:
 		if result := m.HandleOverlayKeys(key); result.Handled {
 			if result.SelectSub != nil {

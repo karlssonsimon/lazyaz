@@ -247,6 +247,8 @@ func (m Model) executeMoveAction(moveAction actionID, result targetPickerResult)
 		targetNS = m.currentNS
 	}
 
+	target := result.targetEntity.Name
+
 	switch moveAction {
 	case actionMoveAll:
 		active, dead := m.currentMessageCounts()
@@ -256,18 +258,51 @@ func (m Model) executeMoveAction(moveAction actionID, result targetPickerResult)
 			label = "DLQ"
 			count = int(dead)
 		}
-		m.startLoading(m.focus, fmt.Sprintf("Moving all %s messages to %s/%s...", label, targetNS.Name, result.targetEntity.Name))
-		return m, tea.Batch(m.Spinner.Tick,
-			moveAllCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, targetNS, result.targetEntity.Name, count))
+		m.confirmModal.OpenWithBreadcrumb(
+			fmt.Sprintf("Move all %s messages", label),
+			m.entityBreadcrumb(),
+			fmt.Sprintf("%d message(s) will be moved to %s/%s.", count, targetNS.Name, target),
+			"move", "cancel", true)
+		m.confirmAction = func(m Model) (Model, tea.Cmd) {
+			m.startLoading(m.focus, fmt.Sprintf("Moving all %s messages to %s/%s...", label, targetNS.Name, target))
+			return m, tea.Batch(m.Spinner.Tick,
+				moveAllCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, targetNS, target, count))
+		}
+		return m, nil
 
 	case actionMoveCurrent:
 		targets := m.lockedMessageTargets()
-		m.startLoading(m.focus, fmt.Sprintf("Moving %d message(s) to %s/%s...", len(targets), targetNS.Name, result.targetEntity.Name))
-		return m, tea.Batch(m.Spinner.Tick,
-			moveMarkedCmd(m.service, targetNS, result.targetEntity.Name, m.lockedMessages, targets))
+		m.confirmModal.OpenWithBreadcrumb(
+			fmt.Sprintf("Move %d message(s)", len(targets)),
+			m.entityBreadcrumb(),
+			fmt.Sprintf("%d message(s) will be moved to %s/%s.", len(targets), targetNS.Name, target),
+			"move", "cancel", true)
+		m.confirmAction = func(m Model) (Model, tea.Cmd) {
+			if m.lockedMessages == nil {
+				return m, nil
+			}
+			targets := m.lockedMessageTargets()
+			if len(targets) == 0 {
+				return m, nil
+			}
+			m.startLoading(m.focus, fmt.Sprintf("Moving %d message(s) to %s/%s...", len(targets), targetNS.Name, target))
+			return m, tea.Batch(m.Spinner.Tick,
+				moveMarkedCmd(m.service, targetNS, target, m.lockedMessages, targets))
+		}
+		return m, nil
 	}
 
 	return m, nil
+}
+
+// entityBreadcrumb is the namespace → entity (→ subscription) path shown
+// in confirm modals, mirroring blob/kv's container/vault breadcrumbs.
+func (m Model) entityBreadcrumb() []string {
+	crumb := []string{m.currentNS.Name, m.currentEntity.Name}
+	if m.currentSubName != "" {
+		crumb = append(crumb, m.currentSubName)
+	}
+	return crumb
 }
 
 // handleTargetEntitiesLoaded populates the picker with entities from the selected namespace.

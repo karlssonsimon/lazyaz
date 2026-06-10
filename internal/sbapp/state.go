@@ -33,6 +33,7 @@ type InputMode int
 
 const (
 	ModeNormal         InputMode = iota // Browsing lists
+	ModeConfirm                         // Destructive-action confirm modal open
 	ModeOverlay                         // Sub/Theme/Help overlay open
 	ModeSortOverlay                     // Entity sort picker open
 	ModeTargetPicker                    // Target entity picker open
@@ -44,6 +45,8 @@ const (
 
 func (m Model) inputMode() InputMode {
 	switch {
+	case m.confirmModal.Active:
+		return ModeConfirm
 	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
 		return ModeOverlay
 	case m.entitySortOverlay.active:
@@ -138,6 +141,12 @@ type Model struct {
 	actionMenu   actionMenuState
 	targetPicker targetPickerState
 	inspectPanes map[int]bool
+
+	// confirmModal guards destructive DLQ operations (complete, requeue,
+	// move) the same way blob/kv guard deletes. confirmAction receives the
+	// model at confirm time so it can start spinners before dispatching.
+	confirmModal  ui.ConfirmModalState
+	confirmAction func(Model) (Model, tea.Cmd)
 
 	loadingSpinnerID int
 
