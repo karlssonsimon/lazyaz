@@ -257,6 +257,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(km.WidgetDown, "focus widget below"),
 				keymap.HelpEntry(km.WidgetLeft, "focus widget left"),
 				keymap.HelpEntry(km.WidgetRight, "focus widget right"),
+				keymap.HelpEntry(km.NextFocus, "cycle widget focus"),
 			},
 		},
 		{
@@ -275,6 +276,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 			Items: []string{
 				keymap.HelpEntry(km.ActionMenu, "open action menu (cursor row)"),
 				"o  open in Service Bus tab",
+				keymap.HelpEntry(km.OpenFocused, "primary action (same as o)"),
 				"s  sort picker (each direction is its own option)",
 				keymap.HelpEntry(km.FilterInput, "filter focused widget"),
 				"x  clear usage stats (on usage widgets)",

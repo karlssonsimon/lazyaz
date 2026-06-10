@@ -51,6 +51,7 @@ func (m *Model) closePreview() {
 	m.viewingMessage = false
 	m.selectedMessage = servicebus.PeekedMessage{}
 	m.textSelection.Reset()
+	m.pendingMessageG = false
 }
 
 func (m Model) messageViewportRegion() ui.ViewportRegion {

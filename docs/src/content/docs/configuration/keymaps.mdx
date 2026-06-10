@@ -127,7 +127,7 @@ lazyaz ships with two keymaps. Set `keymap` in your `config.json` to switch:
 <TabItem label="Vim (default)">
 | Action | Keys |
 |---|---|
-| Close preview | `h` / `Left` / `Esc` |
+| Close preview | `h` / `Left` / `Esc` / `Backspace` |
 | Scroll down | `j` / `Down` |
 | Scroll up | `k` / `Up` |
 | Go to bottom | `G` / `End` |
@@ -138,7 +138,7 @@ lazyaz ships with two keymaps. Set `keymap` in your `config.json` to switch:
 <TabItem label="Standard">
 | Action | Keys |
 |---|---|
-| Close preview | `Left` / `Esc` |
+| Close preview | `Left` / `Esc` / `Backspace` |
 | Scroll down | `Down` |
 | Scroll up | `Up` |
 | Go to bottom | `End` |
@@ -159,9 +159,13 @@ hotkeys. The shortcuts below are the ones with a direct binding.
 |---|---|
 | Toggle mark (messages) | `Space` |
 | Visual-line mode (messages) | `v` / `V` |
-| Exit visual mode | `Esc` |
+| Exit visual mode / clear marks | `Esc` |
 | Swap visual anchor | `o` |
 | Sort entities (entities pane) | `s` |
+| Show active messages | `[` |
+| Show dead-letter messages | `]` |
+| Requeue received DLQ message(s) | `R` |
+| Yank message body | `y` |
 | Close message preview | `h` / `Left` / `Backspace` / `Esc` |
 </TabItem>
 <TabItem label="Standard">
@@ -169,9 +173,13 @@ hotkeys. The shortcuts below are the ones with a direct binding.
 |---|---|
 | Toggle mark (messages) | `Space` |
 | Visual-line mode (messages) | `Shift+Down` / `Shift+Up` |
-| Exit visual mode | `Esc` |
+| Exit visual mode / clear marks | `Esc` |
 | Swap visual anchor | `o` |
 | Sort entities (entities pane) | `Ctrl+L` |
+| Show active messages | `[` |
+| Show dead-letter messages | `]` |
+| Requeue received DLQ message(s) | `Ctrl+R` (in the DLQ messages pane; reloads subscriptions elsewhere) |
+| Yank message body | `Ctrl+C` |
 | Close message preview | `Left` / `Backspace` / `Esc` |
 </TabItem>
 </Tabs>
@@ -189,6 +197,7 @@ after either peeking or receiving-with-lock. See
 |---|---|
 | Yank secret value | `y` |
 | Toggle on-screen reveal | `R` |
+| Paste secrets from clipboard | `p` |
 | Toggle mark (secrets) | `Space` |
 | Visual-line mode (secrets) | `v` / `V` |
 </TabItem>
@@ -197,6 +206,7 @@ after either peeking or receiving-with-lock. See
 |---|---|
 | Yank secret value | `Ctrl+C` |
 | Toggle on-screen reveal | `Alt+R` |
+| Paste secrets from clipboard | `Ctrl+V` |
 | Toggle mark (secrets) | `Space` |
 | Visual-line mode (secrets) | `Shift+Down` / `Shift+Up` |
 </TabItem>
@@ -217,6 +227,8 @@ delete from the action menu.
 | Focus widget down | `Ctrl+J` / `Alt+J` |
 | Focus widget up | `Ctrl+K` / `Alt+K` |
 | Focus widget right | `Ctrl+L` / `Alt+L` |
+| Cycle widget focus | `Tab` |
+| Primary action (same as `o`) | `Enter` |
 | Scroll widget up | `k` / `Up` |
 | Scroll widget down | `j` / `Down` |
 | Jump to top | `gg` |
@@ -229,6 +241,8 @@ delete from the action menu.
 | Focus widget down | `Alt+Down` / `Alt+J` |
 | Focus widget up | `Alt+Up` / `Alt+K` |
 | Focus widget right | `Alt+Right` / `Alt+L` |
+| Cycle widget focus | `Tab` |
+| Primary action (same as `o`) | `Enter` |
 | Scroll widget up | `Up` / `k` |
 | Scroll widget down | `Down` / `j` |
 | Jump to top | `Home` / `g` (chord) |
@@ -317,7 +331,7 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
     "sort_blobs": ["s"],
     "blob_visual_move": ["up", "down", "j", "k", "pgup", "pgdown", "home", "end", "g", "G"],
     "yank_blob_content": ["y"],
-    "preview_back": ["h", "left", "esc"],
+    "preview_back": ["h", "left", "esc", "backspace"],
     "preview_next_focus": ["tab"],
     "preview_previous_focus": ["shift+tab"],
     "preview_down": ["j", "down"],
@@ -327,11 +341,12 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
     "show_active_queue": ["["],
     "show_dead_letter_queue": ["]"],
     "requeue_dlq": ["R"],
-    "delete_duplicate": ["D"],
+    "yank_message_body": ["y"],
     "toggle_dlq_filter": ["s"],
     "message_back": ["h", "left", "backspace", "esc"],
     "yank_secret": ["y"],
     "reveal_secret": ["R"],
+    "paste_secrets": ["p"],
     "inspect": ["K"],
     "widget_left": ["ctrl+h", "alt+h"],
     "widget_down": ["ctrl+j", "alt+j"],
@@ -401,7 +416,7 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
     "sort_blobs": ["ctrl+o"],
     "blob_visual_move": ["up", "down", "pgup", "pgdown", "home", "end"],
     "yank_blob_content": ["ctrl+c"],
-    "preview_back": ["left", "esc"],
+    "preview_back": ["left", "esc", "backspace"],
     "preview_next_focus": ["tab"],
     "preview_previous_focus": ["shift+tab"],
     "preview_down": ["down"],
@@ -411,11 +426,12 @@ The complete keymap files shipped with lazyaz. Copy one as a starting point for 
     "show_active_queue": ["["],
     "show_dead_letter_queue": ["]"],
     "requeue_dlq": ["ctrl+r"],
-    "delete_duplicate": ["delete"],
+    "yank_message_body": ["ctrl+c"],
     "toggle_dlq_filter": ["ctrl+l"],
     "message_back": ["left", "backspace", "esc"],
     "yank_secret": ["ctrl+c"],
     "reveal_secret": ["alt+r"],
+    "paste_secrets": ["ctrl+v"],
     "inspect": ["ctrl+i"],
     "widget_left": ["alt+left", "alt+h"],
     "widget_down": ["alt+down", "alt+j"],

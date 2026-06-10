@@ -251,31 +251,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			receiveDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, peekMaxMessages))
 
 	case actionRequeueCurrent:
-		if m.lockedMessages == nil {
-			return m, nil
-		}
-		targets := m.lockedMessageTargets()
-		if len(targets) == 0 {
-			return m, nil
-		}
-		m.confirmModal.OpenWithBreadcrumb(
-			fmt.Sprintf("Requeue %d message(s)", len(targets)),
-			m.entityBreadcrumb(),
-			fmt.Sprintf("%d message(s) will be resent to %s and removed from the DLQ.", len(targets), m.currentEntity.Name),
-			"requeue", "cancel", true)
-		m.confirmAction = func(m Model) (Model, tea.Cmd) {
-			if m.lockedMessages == nil {
-				return m, nil
-			}
-			targets := m.lockedMessageTargets()
-			if len(targets) == 0 {
-				return m, nil
-			}
-			m.StartLoading(m.focus, fmt.Sprintf("Requeuing %d message(s)...", len(targets)))
-			return m, tea.Batch(m.Spinner.Tick,
-				requeueDLQMarkedCmd(m.service, m.currentNS, m.currentEntity.Name, m.lockedMessages, targets))
-		}
-		return m, nil
+		return m.openRequeueConfirm()
 
 	case actionCompleteCurrent:
 		if m.lockedMessages == nil {
@@ -405,6 +381,38 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	return m, nil
+}
+
+// openRequeueConfirm opens the confirm modal for requeuing the current
+// locked-message targets (marks, or the cursor row when nothing is
+// marked). Shared by the action menu's "Requeue" entry and the
+// RequeueDLQ key.
+func (m Model) openRequeueConfirm() (Model, tea.Cmd) {
+	if m.lockedMessages == nil {
+		return m, nil
+	}
+	targets := m.lockedMessageTargets()
+	if len(targets) == 0 {
+		return m, nil
+	}
+	m.confirmModal.OpenWithBreadcrumb(
+		fmt.Sprintf("Requeue %d message(s)", len(targets)),
+		m.entityBreadcrumb(),
+		fmt.Sprintf("%d message(s) will be resent to %s and removed from the DLQ.", len(targets), m.currentEntity.Name),
+		"requeue", "cancel", true)
+	m.confirmAction = func(m Model) (Model, tea.Cmd) {
+		if m.lockedMessages == nil {
+			return m, nil
+		}
+		targets := m.lockedMessageTargets()
+		if len(targets) == 0 {
+			return m, nil
+		}
+		m.StartLoading(m.focus, fmt.Sprintf("Requeuing %d message(s)...", len(targets)))
+		return m, tea.Batch(m.Spinner.Tick,
+			requeueDLQMarkedCmd(m.service, m.currentNS, m.currentEntity.Name, m.lockedMessages, targets))
+	}
 	return m, nil
 }
 

@@ -171,7 +171,8 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.pendingPreviewG = false
 		return m.jumpPreviewToBottom()
 	case m.Keymap.JumpTopPrefix.Matches(key):
-		if m.pendingPreviewG {
+		// Home jumps immediately; bare g keeps the gg chord.
+		if key == "home" || m.pendingPreviewG {
 			m.pendingPreviewG = false
 			return m.jumpPreviewToTop()
 		}

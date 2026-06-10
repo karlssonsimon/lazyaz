@@ -62,7 +62,7 @@ func Default() Keymap {
 		YankBlobContent:   New("y"),
 
 		// Blob preview.
-		PreviewBack:          New("h", "left", "esc"),
+		PreviewBack:          New("h", "left", "esc", "backspace"),
 		PreviewNextFocus:     New("tab"),
 		PreviewPreviousFocus: New("shift+tab"),
 		PreviewDown:          New("j", "down"),
@@ -74,7 +74,7 @@ func Default() Keymap {
 		ShowActiveQueue:     New("["),
 		ShowDeadLetterQueue: New("]"),
 		RequeueDLQ:          New("R"),
-		DeleteDuplicate:     New("D"),
+		YankMessageBody:     New("y"),
 		ToggleDLQFilter:     New("s"),
 		MessageBack:         New("h", "left", "backspace", "esc"),
 

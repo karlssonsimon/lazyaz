@@ -68,6 +68,7 @@ like moving around a grid.
 | `Ctrl+J` / `Alt+J` | Focus widget below |
 | `Ctrl+K` / `Alt+K` | Focus widget above |
 | `Ctrl+L` / `Alt+L` | Focus widget to the right |
+| `Tab` | Cycle to the next widget |
 </TabItem>
 <TabItem label="Standard">
 | Key | Action |
@@ -76,6 +77,7 @@ like moving around a grid.
 | `Alt+Down` / `Alt+J` | Focus widget below |
 | `Alt+Up` / `Alt+K` | Focus widget above |
 | `Alt+Right` / `Alt+L` | Focus widget to the right |
+| `Tab` | Cycle to the next widget |
 </TabItem>
 </Tabs>
 
@@ -109,8 +111,8 @@ the row cursor; the view scrolls to keep it visible.
 
 ## Drilling into a resource
 
-Press `o` on a row to open the matching explorer with that resource already
-selected. For example, pressing `o` on a DLQ alert row opens a Service Bus
+Press `o` (or `Enter`) on a row to open the matching explorer with that resource
+already selected. For example, pressing `o` on a DLQ alert row opens a Service Bus
 tab navigated directly to that entity's dead-letter pane. Topic-subscription
 rows in **Most used · Service Bus** likewise open into their DLQ pane,
 matching the dashboard's "fix-the-problem" framing. The same action is also
@@ -124,7 +126,7 @@ just what's needed to land you on the right pane.
 
 Press `/` to open a substring filter for the focused widget. Type to refine,
 `Enter` accepts (the filter persists in the title bar as `filter: <text>`),
-`Esc` clears it. The filter is per-widget and doesn't survive a refresh of
+`Esc` clears it (while typing or after it has been applied). The filter is per-widget and doesn't survive a refresh of
 the underlying data.
 
 ## Widget actions

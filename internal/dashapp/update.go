@@ -148,6 +148,7 @@ func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (t
 	if msg.Err != nil {
 		m.ClearLoading()
 		m.LastErr = msg.Err.Error()
+		m.Notify(appshell.LevelError, msg.Err.Error())
 		return m, nil
 	}
 	if !msg.Done {
@@ -171,6 +172,7 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (tea.Model, tea.C
 	}
 	if msg.err != nil {
 		m.LastErr = msg.err.Error()
+		m.Notify(appshell.LevelError, msg.err.Error())
 		m.refreshDone()
 		return m, nil
 	}
@@ -209,6 +211,7 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (tea.Model, tea.Cmd) 
 	}
 	if msg.err != nil {
 		m.LastErr = msg.err.Error()
+		m.Notify(appshell.LevelError, msg.err.Error())
 		m.pendingFetches--
 		m.refreshDone()
 		return m, nil
@@ -234,6 +237,7 @@ func (m Model) handleMetricsLoaded(msg metricsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.refreshDone()
 	if msg.err != nil {
 		m.LastErr = msg.err.Error()
+		m.Notify(appshell.LevelError, msg.err.Error())
 		return m, nil
 	}
 	// Merge counts into the cached entities for this namespace. Unknown
@@ -330,6 +334,35 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.gPrefixActive = false
 
 	switch {
+	case km.Cancel.Matches(key):
+		// Esc in normal mode clears the focused widget's applied filter.
+		if m.focusedIdx >= 0 && m.focusedIdx < len(m.viewStates) && m.viewStates[m.focusedIdx].filter != "" {
+			vs := m.viewStates[m.focusedIdx]
+			vs.filter = ""
+			vs.filterCaret = 0
+			m.viewStates[m.focusedIdx] = vs
+			m.cursors[m.focusedIdx] = 0
+			m.offsets[m.focusedIdx] = 0
+		}
+		return m, nil
+	case km.NextFocus.Matches(key):
+		// Forward cycle through widgets, wrapping at the end.
+		if len(m.widgets) > 0 {
+			m.focusedIdx = (m.focusedIdx + 1) % len(m.widgets)
+		}
+		return m, nil
+	case km.OpenFocused.Matches(key), km.OpenFocusedAlt.Matches(key):
+		// Enter fires the focused widget's primary action — the same
+		// thing its hardcoded "o" action key does. No-op for widgets
+		// without one.
+		if m.focusedIdx >= 0 && m.focusedIdx < len(m.widgets) {
+			for _, a := range m.widgets[m.focusedIdx].Actions(&m, m.focusedCursor()) {
+				if a.Key == "o" && a.Cmd != nil {
+					return m, a.Cmd
+				}
+			}
+		}
+		return m, nil
 	case km.WidgetScrollBottom.Matches(key):
 		m.cursorToBottom()
 		return m, nil

@@ -134,6 +134,11 @@ type Model struct {
 	selectedMessage servicebus.PeekedMessage
 	textSelection   ui.TextSelection
 
+	// pendingMessageG is true between the first and second `g` of the
+	// gg jump-to-top chord in the message preview (mirrors blobapp's
+	// pendingPreviewG).
+	pendingMessageG bool
+
 	markedMessages map[string]map[string]struct{}
 
 	cache sbCache
@@ -298,11 +303,12 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 	queueType.SetShowStatusBar(false)
 	messages := newList(delegate, "message", "messages")
 
-	// Override bubbles list cursor bindings so they follow the user's
-	// configured CursorUp/CursorDown keys.
+	// Override bubbles list cursor and filter bindings so they follow
+	// the user's configured CursorUp/CursorDown/FilterInput keys.
 	for _, l := range []*list.Model{&namespaces, &entities, &subs, &queueType, &messages} {
 		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
 		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
+		l.KeyMap.Filter = km.FilterInput.AsBubbleKey()
 	}
 
 	m := Model{
@@ -404,6 +410,10 @@ func (m Model) HelpSections() []ui.HelpSection {
 			Items: []string{
 				keymap.HelpEntry(km.ActionMenu, "actions (peek, peek more, clear)"),
 				keymap.HelpEntry(km.ToggleDLQFilter, "entity actions (sort, filter)"),
+				keymap.HelpEntry(km.ShowActiveQueue, "show active messages"),
+				keymap.HelpEntry(km.ShowDeadLetterQueue, "show dead-letter messages"),
+				keymap.HelpEntry(km.RequeueDLQ, "requeue received DLQ message(s)"),
+				keymap.HelpEntry(km.YankMessageBody, "yank message body to clipboard"),
 				keymap.HelpEntry(km.MessageBack, "close message preview"),
 			},
 		},

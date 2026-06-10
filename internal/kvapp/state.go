@@ -346,11 +346,12 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 	kindList.SetFilteringEnabled(true)
 	kindList.DisableQuitKeybindings()
 
-	// Override bubbles list cursor bindings so they follow the user's
-	// configured CursorUp/CursorDown keys.
+	// Override bubbles list cursor and filter bindings so they follow
+	// the user's configured CursorUp/CursorDown/FilterInput keys.
 	for _, l := range []*list.Model{&vaults, &secrets, &versionsList, &kindList} {
 		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
 		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
+		l.KeyMap.Filter = km.FilterInput.AsBubbleKey()
 	}
 
 	m := Model{
@@ -449,6 +450,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(km.ActionMenu, "action menu"),
 				keymap.HelpEntry(km.YankSecret, "yank secret value to clipboard"),
 				keymap.HelpEntry(km.RevealSecret, "toggle on-screen secret reveal (note: terminal scrollback may retain it)"),
+				keymap.HelpEntry(km.PasteSecrets, "paste secrets from clipboard"),
 				keymap.HelpEntry(km.ToggleMark, "toggle mark on current secret"),
 				keymap.HelpEntry(km.ToggleVisualLine, "start/end visual-line selection"),
 				keymap.HelpEntry(km.ExitVisualLine, "exit visual mode / clear marks"),

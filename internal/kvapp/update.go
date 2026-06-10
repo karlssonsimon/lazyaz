@@ -705,6 +705,10 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 		m.SubOverlay.Open()
 		m.StartLoading(-1, "Refreshing subscriptions...")
 		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+	case m.Keymap.ReloadSubscriptions.Matches(key):
+		m.SubOverlay.Open()
+		m.StartLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	case m.Keymap.Inspect.Matches(key):
 		m.toggleInspect()
 		return m, nil

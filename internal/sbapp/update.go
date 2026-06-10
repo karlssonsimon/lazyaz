@@ -9,6 +9,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 )
@@ -635,6 +636,17 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 }
 
 func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
+	// Esc peels selection state like a stack on the messages pane:
+	//  1. If the bubbles list has an applied filter → clear it.
+	//  2. If marks exist → clear them (ExitVisualLine case below).
+	//  3. Otherwise fall through.
+	if m.Keymap.Cancel.Matches(key) && m.focus == messagesPane {
+		if m.messageList.FilterState() != list.Unfiltered {
+			m.messageList.ResetFilter()
+			return m, nil
+		}
+	}
+
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
@@ -681,6 +693,22 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 			m.refreshMessageSelectionDisplay()
 			return m, nil
 		}
+	case m.Keymap.ExitVisualLine.Matches(key):
+		if m.focus == messagesPane && len(m.currentMarks()) > 0 {
+			count := len(m.currentMarks())
+			m.clearScopeMarks()
+			m.refreshMessageSelectionDisplay()
+			m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
+			return m, nil
+		}
+	case m.Keymap.YankMessageBody.Matches(key):
+		if m.focus == messagesPane {
+			item, ok := m.messageList.SelectedItem().(messageItem)
+			if !ok {
+				return m, nil
+			}
+			return m.yankMessageBody(item.message.FullBody)
+		}
 	case m.Keymap.ActionMenu.Matches(key):
 		m.actionMenu.open(m.buildActions())
 		return m, nil
@@ -693,7 +721,24 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 			m.entitySortOverlay.open(m.entitySortField, m.entitySortDesc)
 			return m, nil
 		}
+	case m.Keymap.ShowActiveQueue.Matches(key) && m.hasPeekTarget:
+		return m.peekMessages(false)
+	case m.Keymap.ShowDeadLetterQueue.Matches(key) && m.hasPeekTarget:
+		return m.peekMessages(true)
+	// The guard lives in the case condition so the key can fall through
+	// to ReloadSubscriptions when both share a chord (standard keymap
+	// binds ctrl+r to both) and the DLQ context doesn't apply.
+	case m.Keymap.RequeueDLQ.Matches(key) && m.focus == messagesPane && m.deadLetter:
+		if m.lockedMessages == nil {
+			m.Notify(appshell.LevelInfo, "Receive DLQ messages with lock first")
+			return m, nil
+		}
+		return m.openRequeueConfirm()
 	case m.Keymap.SubscriptionPicker.Matches(key):
+		m.SubOverlay.Open()
+		m.StartLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+	case m.Keymap.ReloadSubscriptions.Matches(key):
 		m.SubOverlay.Open()
 		m.StartLoading(-1, "Refreshing subscriptions...")
 		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
@@ -742,20 +787,58 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
 	case m.Keymap.NextFocus.Matches(key):
+		m.pendingMessageG = false
 		m.nextFocus()
 		return m, nil
 	case m.Keymap.PreviousFocus.Matches(key):
+		m.pendingMessageG = false
 		m.previousFocus()
 		return m, nil
 	case m.Keymap.ActionMenu.Matches(key):
+		m.pendingMessageG = false
 		m.actionMenu.open(m.buildActions())
 		return m, nil
+	case m.Keymap.YankMessageBody.Matches(key):
+		m.pendingMessageG = false
+		return m.yankMessageBody(m.selectedMessage.FullBody)
+	case m.Keymap.JumpBottom.Matches(key):
+		m.pendingMessageG = false
+		m.messageViewport.GotoBottom()
+		return m, nil
+	case m.Keymap.JumpTopPrefix.Matches(key):
+		// Home jumps immediately; bare g keeps the gg chord.
+		if key == "home" || m.pendingMessageG {
+			m.pendingMessageG = false
+			m.messageViewport.GotoTop()
+			return m, nil
+		}
+		m.pendingMessageG = true
+		m.Notify(appshell.LevelInfo, "Press g again for top")
+		return m, nil
 	case m.Keymap.MessageBack.Matches(key):
+		m.pendingMessageG = false
 		m.transitionTo(messagesPane)
 		m.Notify(appshell.LevelInfo, "Back to message list")
 		return m, nil
 	}
+	m.pendingMessageG = false
 	var cmd tea.Cmd
 	m.messageViewport, cmd = m.messageViewport.Update(msg)
 	return m, cmd
+}
+
+// yankMessageBody copies a message body to the clipboard via the async
+// clipboardMsg flow shared with mouse text selection. Empty bodies
+// short-circuit with an info toast instead of clobbering the clipboard.
+func (m Model) yankMessageBody(body string) (Model, tea.Cmd) {
+	if body == "" {
+		m.Notify(appshell.LevelInfo, "Message body is empty")
+		return m, nil
+	}
+	return m, func() tea.Msg {
+		if err := ui.WriteClipboard(body); err != nil {
+			return clipboardMsg{err: err}
+		}
+		return clipboardMsg{text: body}
+	}
 }

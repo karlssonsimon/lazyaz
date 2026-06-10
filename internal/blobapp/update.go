@@ -609,6 +609,13 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 		m.SubOverlay.Open()
 		m.StartLoading(-1, "Refreshing subscriptions...")
 		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+	case m.Keymap.ReloadSubscriptions.Matches(key):
+		if m.standalone {
+			return m, nil
+		}
+		m.SubOverlay.Open()
+		m.StartLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	case m.Keymap.Inspect.Matches(key):
 		if m.focus != previewPane {
 			m.toggleInspect()
@@ -617,6 +624,9 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 	case m.Keymap.BackspaceUp.Matches(key):
 		if m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != "" {
 			return m.prefixUp()
+		}
+		if m.focus > accountsPane {
+			return m.navigateLeft()
 		}
 	}
 

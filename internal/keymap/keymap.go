@@ -74,7 +74,7 @@ type Keymap struct {
 	ShowActiveQueue     Binding `json:"show_active_queue"`
 	ShowDeadLetterQueue Binding `json:"show_dead_letter_queue"`
 	RequeueDLQ          Binding `json:"requeue_dlq"`
-	DeleteDuplicate     Binding `json:"delete_duplicate"`
+	YankMessageBody     Binding `json:"yank_message_body"`
 	ToggleDLQFilter     Binding `json:"toggle_dlq_filter"`
 	MessageBack         Binding `json:"message_back"`
 
