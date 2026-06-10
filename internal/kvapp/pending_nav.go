@@ -62,6 +62,12 @@ func (m Model) advancePendingNav() (Model, tea.Cmd) {
 		m.pendingNav = PendingNav{}
 		return m, nil
 	}
+	// The target is a secret, but the vault may still show certs/keys —
+	// without switching kinds, handleSecretsLoaded never fires, the nav
+	// never completes, and hasTarget() suppresses jump recording forever.
+	if m.kvKind != kvKindSecrets {
+		return m.selectKind(kvKindSecrets)
+	}
 	if len(m.secrets) == 0 {
 		return m, nil
 	}
@@ -116,6 +122,16 @@ func (m Model) eagerNavigate() (Model, tea.Cmd) {
 
 	if target.SecretName == "" {
 		m.pendingNav = PendingNav{}
+		return m, batchNavCmds(cmds)
+	}
+	// Secret target with certs/keys showing: switch kinds and let the
+	// async secrets load drive advancePendingNav the rest of the way.
+	if m.kvKind != kvKindSecrets {
+		updated, cmd = m.selectKind(kvKindSecrets)
+		m = updated
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		return m, batchNavCmds(cmds)
 	}
 	if len(m.secrets) == 0 {

@@ -144,6 +144,7 @@ func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) (applied bool
 		if s.cursorIdx > 0 {
 			s.cursorIdx--
 		}
+		return false, blobSortNone, false
 	case km.ThemeDown.Matches(key):
 		n := len(sortOptions)
 		if s.filtered != nil {
@@ -152,11 +153,13 @@ func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) (applied bool
 		if s.cursorIdx < n-1 {
 			s.cursorIdx++
 		}
+		return false, blobSortNone, false
 	case km.ThemeApply.Matches(key):
 		if opt, ok := s.selectedOption(); ok {
 			s.active = false
 			return true, opt.field, opt.desc
 		}
+		return false, blobSortNone, false
 	case km.ThemeCancel.Matches(key):
 		if s.query != "" {
 			s.query = ""
@@ -498,6 +501,13 @@ func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 		blobNames = []string{item.blob.Name}
 	}
 
+	return m.startDownloadBlobs(blobNames)
+}
+
+// startDownloadBlobs dispatches a download for the given blob names
+// without touching marks — "Download current blob" goes through here
+// directly so it can't inflate the marked set.
+func (m Model) startDownloadBlobs(blobNames []string) (Model, tea.Cmd) {
 	if m.downloadDir == "" {
 		m.Notify(appshell.LevelError, "no download directory available — set download_dir in ~/.config/lazyaz/config.json")
 		return m, nil

@@ -7,17 +7,18 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// visiblePanes returns the on-screen pane layout in left-to-right order.
+// visiblePanes returns the on-screen pane layout in left-to-right order,
+// matching the render order in View(): centering margin, then parent,
+// focused, child.
 func (m Model) visiblePanes() []ui.VisiblePane {
 	pw := m.paneWidths
 	var panes []ui.VisiblePane
-	x := 0
+	cols := ui.MillerLayout(m.Styles.Chrome.Pane, m.Width, m.focus > vaultsPane, true)
+	x := ui.MillerSideMargin(cols, m.Width)
 
 	if m.focus > vaultsPane && pw[m.focus-1] > 0 {
 		panes = append(panes, ui.VisiblePane{Index: m.focus - 1, X: x, Width: pw[m.focus-1]})
 		x += pw[m.focus-1]
-	} else if m.focus == vaultsPane {
-		x += m.Width * 20 / 100
 	}
 
 	panes = append(panes, ui.VisiblePane{Index: m.focus, X: x, Width: pw[m.focus]})
@@ -48,11 +49,17 @@ func (m *Model) listForPane(pane int) *list.Model {
 }
 
 // paneAreaY returns the absolute screen Y where the pane area starts.
+// Accounts for the tab bar (when embedded), app header, and the
+// full-width horizontal rule rendered between the header and columns.
 func (m Model) paneAreaY() int {
 	y := ui.AppHeaderHeight
 	if m.EmbeddedMode {
 		y += ui.TabBarHeight
 	}
+	// +1 for the horizontal rule between the header and the columns;
+	// without it, mouse-click rows map one line below where the click
+	// actually landed.
+	y++
 	return y
 }
 

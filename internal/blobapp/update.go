@@ -175,6 +175,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.MouseClickMsg:
+		// Modals and overlays are keyboard-only; swallow clicks so a
+		// double-click can't drill into a list underneath them.
+		switch m.inputMode() {
+		case ModeNormal, ModeListFilter, ModeVisualLine, ModePreview:
+		default:
+			return m, nil
+		}
 		if m.preview.open {
 			region := m.previewViewportRegion()
 			if m.textSelection.HandleMouseClick(msg, region) {
@@ -546,8 +553,12 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 		return m, nil
 	}
 
+	// Cursor movement falls through to the list; refresh the highlight
+	// whenever the cursor actually moved so custom cursor bindings work
+	// too (the old check matched only the stock movement keys).
+	before := m.blobsList.Index()
 	m2, cmd := m.updateFocusedList(msg)
-	if m.Keymap.BlobVisualMove.Matches(key) && m2.focus == blobsPane && m2.visualLineMode {
+	if m2.focus == blobsPane && m2.visualLineMode && m2.blobsList.Index() != before {
 		m2.refreshBlobSelectionDisplay()
 		m2.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m2.visualSelectionBlobNames())))
 	}

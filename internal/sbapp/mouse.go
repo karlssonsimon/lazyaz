@@ -7,18 +7,19 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// visiblePanes returns the on-screen pane layout in left-to-right order.
+// visiblePanes returns the on-screen pane layout in left-to-right order,
+// matching the render order in View(): centering margin, then parent,
+// focused, child.
 func (m Model) visiblePanes() []ui.VisiblePane {
 	pw := m.paneWidths
 	var panes []ui.VisiblePane
-	x := 0
+	cols := ui.MillerLayout(m.Styles.Chrome.Pane, m.Width, m.focus > namespacesPane, true)
+	x := ui.MillerSideMargin(cols, m.Width)
 
 	parentIdx := m.parentPane()
 	if parentIdx >= 0 && pw[parentIdx] > 0 {
 		panes = append(panes, ui.VisiblePane{Index: parentIdx, X: x, Width: pw[parentIdx]})
 		x += pw[parentIdx]
-	} else if m.focus == namespacesPane {
-		x += m.Width * 20 / 100
 	}
 
 	panes = append(panes, ui.VisiblePane{Index: m.focus, X: x, Width: pw[m.focus]})

@@ -33,6 +33,7 @@ type InputMode int
 
 const (
 	ModeNormal     InputMode = iota // Browsing lists
+	ModeConfirm                     // Destructive-action confirm modal open
 	ModeActionMenu                  // Action menu overlay open
 	ModeOverlay                     // Sub/Theme/Help overlay open
 	ModeListFilter                  // User is typing a list filter
@@ -46,6 +47,8 @@ const (
 // and how data handlers should behave.
 func (m Model) inputMode() InputMode {
 	switch {
+	case m.confirmModal.Active:
+		return ModeConfirm
 	case m.createSecret.Active, m.addSecretVersion.Active, m.createKey.Active, m.importCert.Active:
 		return ModeForm
 	case m.certImportBrowserActive:

@@ -34,6 +34,8 @@ func paneLabel(pane int) string {
 	switch pane {
 	case vaultsPane:
 		return "vaults"
+	case kindPane:
+		return "kind"
 	case secretsPane:
 		return "secrets"
 	case versionsPane:

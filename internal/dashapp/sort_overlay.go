@@ -129,6 +129,7 @@ func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) sortResult {
 		if s.cursorIdx > 0 {
 			s.cursorIdx--
 		}
+		return sortResult{}
 	case km.ThemeDown.Matches(key):
 		n := len(s.options)
 		if s.filtered != nil {
@@ -137,6 +138,7 @@ func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) sortResult {
 		if s.cursorIdx < n-1 {
 			s.cursorIdx++
 		}
+		return sortResult{}
 	case km.ThemeApply.Matches(key):
 		if opt, ok := s.selectedOption(); ok {
 			s.close()
@@ -145,6 +147,7 @@ func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) sortResult {
 			}
 			return sortResult{applied: true, field: opt.field, desc: opt.desc}
 		}
+		return sortResult{}
 	case km.ThemeCancel.Matches(key):
 		if s.query != "" {
 			s.query = ""

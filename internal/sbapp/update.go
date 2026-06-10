@@ -106,9 +106,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.MouseClickMsg:
-		// The confirm modal is keyboard-only; swallow clicks so a
-		// double-click can't drill into a list underneath it.
-		if m.confirmModal.Active {
+		// Modals and overlays are keyboard-only; swallow clicks so a
+		// double-click can't drill into a list underneath them.
+		switch m.inputMode() {
+		case ModeNormal, ModeListFilter, ModeVisualLine, ModeMessagePreview:
+		default:
 			return m, nil
 		}
 		if m.viewingMessage {
@@ -475,10 +477,17 @@ func (m *Model) removeLockedMessage(messageKey string) {
 	m.messageList.SetItems(m.messageItems())
 	m.messageList.Title = fmt.Sprintf("DLQ Locked (%d)", len(m.peekedMessages))
 
-	// If no more locked messages, clean up the receiver.
+	// If no more locked messages, clean up the receiver. Close in a
+	// goroutine — it's a network call and this runs on the UI thread
+	// (same pattern as clearLockedMessages).
 	if m.lockedMessages.Len() == 0 {
-		m.lockedMessages.Close(context.Background())
+		locked := m.lockedMessages
 		m.lockedMessages = nil
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			locked.Close(ctx)
+		}()
 	}
 }
 
@@ -643,8 +652,12 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 		return m, nil
 	}
 
+	// Cursor movement falls through to the list; refresh the highlight
+	// whenever the cursor actually moved so custom cursor bindings work
+	// too (the old check matched only the stock movement keys).
+	before := m.messageList.Index()
 	m2, cmd := m.updateFocusedList(msg)
-	if m.Keymap.BlobVisualMove.Matches(key) && m2.focus == messagesPane && m2.visualLineMode {
+	if m2.focus == messagesPane && m2.visualLineMode && m2.messageList.Index() != before {
 		m2.refreshMessageSelectionDisplay()
 		m2.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m2.visualSelectionIDs())))
 	}

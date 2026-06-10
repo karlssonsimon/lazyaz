@@ -32,6 +32,7 @@ type InputMode int
 
 const (
 	ModeNormal       InputMode = iota // Browsing lists
+	ModeModal                         // Confirm / text input / conflict / file browser modal open
 	ModeOverlay                       // Sub/Theme/Help overlay open
 	ModeActionMenu                    // Action menu open
 	ModeSortOverlay                   // Sort picker open
@@ -43,6 +44,9 @@ const (
 
 func (m Model) inputMode() InputMode {
 	switch {
+	case m.confirmModal.Active, m.textInput.Active,
+		m.uploadConflict != nil, m.uploadBrowserActive:
+		return ModeModal
 	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
 		return ModeOverlay
 	case m.actionMenu.Active:

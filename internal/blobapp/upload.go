@@ -154,7 +154,19 @@ func runUpload(ctx context.Context, up uploader, plan uploadPlan, destPrefix str
 	go func() {
 		defer close(msgs)
 
-		conflicts, _ := up.ExistingBlobs(ctx, plan.blobNames())
+		// A failed pre-flight check must abort the batch: a nil conflict
+		// map reads as "no conflicts", which would silently overwrite
+		// every existing blob without prompting.
+		conflicts, err := up.ExistingBlobs(ctx, plan.blobNames())
+		if err != nil {
+			msgs <- uploadStartedMsg{totalBytes: plan.totalBytes, fileCount: len(plan.files)}
+			msgs <- uploadDoneMsg{
+				failed:     []uploadError{{blobName: "(conflict pre-flight check)", err: err}},
+				totalBytes: plan.totalBytes,
+				destPrefix: destPrefix,
+			}
+			return
+		}
 		msgs <- uploadStartedMsg{
 			totalBytes: plan.totalBytes,
 			fileCount:  len(plan.files),
@@ -475,6 +487,12 @@ func (osUploadWalker) Walk(root string, fn func(string, bool, int64, error) erro
 // and emits a summary notification. The panel auto-dismisses after 5s
 // via the returned tea.Tick.
 func (m Model) finishUpload(msg uploadDoneMsg) (Model, tea.Cmd) {
+	// The upload is over — drop any conflict prompt still waiting for an
+	// answer (e.g. the upload was cancelled from the activity overlay).
+	// Leaving it set keeps the modal rendered and swallowing keys for an
+	// upload that no longer exists.
+	m.uploadConflict = nil
+	m.uploadCancelFn = nil
 	if m.uploadProgress != nil {
 		m.uploadProgress.done = true
 		m.uploadProgress.cancelled = msg.cancelled

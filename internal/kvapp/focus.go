@@ -8,7 +8,10 @@ import (
 )
 
 // snapshotCurrentPane saves the focused pane's cursor and filter into
-// the appropriate history map so they survive navigation.
+// the appropriate history map so they survive navigation. The middle and
+// versions panes are kind-aware and use the same history keys as
+// navigation.go's snapshotMiddleColumn — two writers on different keys
+// for the same column would silently lose cursor state.
 func (m *Model) snapshotCurrentPane() {
 	switch m.focus {
 	case vaultsPane:
@@ -17,11 +20,12 @@ func (m *Model) snapshotCurrentPane() {
 		}
 	case secretsPane:
 		if m.hasVault {
-			m.secretsHistory[cache.Key(m.CurrentSub.ID, m.currentVault.Name)] = ui.SnapshotListState(&m.secretsList, secretItemKey)
+			scope := cache.Key(m.CurrentSub.ID, m.currentVault.Name)
+			m.secretsHistory[middleHistoryKey(m.kvKind, scope)] = ui.SnapshotListState(&m.secretsList, middleItemKeyForList(m.kvKind))
 		}
 	case versionsPane:
-		if m.hasSecret {
-			m.versionsHistory[cache.Key(m.CurrentSub.ID, m.currentVault.Name, m.currentSecret.Name)] = ui.SnapshotListState(&m.versionsList, versionItemKey)
+		if name := m.currentVersionOwnerName(); name != "" {
+			m.versionsHistory[cache.Key(m.CurrentSub.ID, m.currentVault.Name, name)] = ui.SnapshotListState(&m.versionsList, versionItemKey)
 		}
 	}
 }
@@ -36,13 +40,35 @@ func (m *Model) restoreCurrentPane() {
 		}
 	case secretsPane:
 		if m.hasVault {
-			ui.RestoreListState(&m.secretsList, m.secretsHistory[cache.Key(m.CurrentSub.ID, m.currentVault.Name)], secretItemKey)
+			scope := cache.Key(m.CurrentSub.ID, m.currentVault.Name)
+			ui.RestoreListState(&m.secretsList, m.secretsHistory[middleHistoryKey(m.kvKind, scope)], middleItemKeyForList(m.kvKind))
 		}
 	case versionsPane:
-		if m.hasSecret {
-			ui.RestoreListState(&m.versionsList, m.versionsHistory[cache.Key(m.CurrentSub.ID, m.currentVault.Name, m.currentSecret.Name)], versionItemKey)
+		if name := m.currentVersionOwnerName(); name != "" {
+			ui.RestoreListState(&m.versionsList, m.versionsHistory[cache.Key(m.CurrentSub.ID, m.currentVault.Name, name)], versionItemKey)
 		}
 	}
+}
+
+// currentVersionOwnerName returns the name of the secret/cert/key whose
+// versions fill the right column, or "" when nothing is selected for
+// the active kind.
+func (m *Model) currentVersionOwnerName() string {
+	switch m.kvKind {
+	case kvKindCertificates:
+		if m.hasCert {
+			return m.currentCert.Name
+		}
+	case kvKindKeys:
+		if m.hasKey {
+			return m.currentKey.Name
+		}
+	default:
+		if m.hasSecret {
+			return m.currentSecret.Name
+		}
+	}
+	return ""
 }
 
 // exitPane cleans up the outgoing pane before a transition.
@@ -126,6 +152,10 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 		} else {
 			target.CursorUp()
 		}
+	}
+
+	if m.focus == secretsPane && m.visualLineMode {
+		m.refreshSecretSelectionDisplay()
 	}
 }
 

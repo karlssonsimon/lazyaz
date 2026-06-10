@@ -10,7 +10,6 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/atotto/clipboard"
 )
 
 // actionID identifies an action in the action menu. Each value
@@ -222,10 +221,10 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if !ok || item.blob.IsPrefix {
 			return m, nil
 		}
-		// Mark it temporarily and download.
-		m.markedBlobs[item.blob.Name] = item.blob
-		m.refreshItems()
-		return m.startMarkedAction("download")
+		if !m.hasAccount || !m.hasContainer {
+			return m, nil
+		}
+		return m.startDownloadBlobs([]string{item.blob.Name})
 
 	case actionYankBlobName:
 		item, ok := m.blobsList.SelectedItem().(blobItem)
@@ -468,7 +467,7 @@ func (m Model) renderActionMenu(base string) string {
 // copyToClipboard copies text to the system clipboard.
 func (m Model) copyToClipboard(text string) (Model, tea.Cmd) {
 	return m, func() tea.Msg {
-		if err := writeClipboard(text); err != nil {
+		if err := ui.WriteClipboard(text); err != nil {
 			return clipboardMsg{err: err}
 		}
 		return clipboardMsg{text: text}
@@ -478,11 +477,4 @@ func (m Model) copyToClipboard(text string) (Model, tea.Cmd) {
 type clipboardMsg struct {
 	text string
 	err  error
-}
-
-// writeClipboard writes to the system clipboard. Extracted for testability.
-func writeClipboard(text string) error {
-	// Use atotto/clipboard if available, otherwise return an error.
-	// For now, use the same package the kvapp uses.
-	return clipboard.WriteAll(text)
 }

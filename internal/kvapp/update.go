@@ -75,6 +75,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.focus {
 		case vaultsPane:
 			m.vaultsList, listCmd = m.vaultsList.Update(msg)
+		case kindPane:
+			m.kindList, listCmd = m.kindList.Update(msg)
 		case secretsPane:
 			m.secretsList, listCmd = m.secretsList.Update(msg)
 		case versionsPane:
@@ -176,6 +178,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.MouseClickMsg:
+		// Modals and overlays are keyboard-only; swallow clicks so a
+		// double-click can't drill into a list underneath them.
+		switch m.inputMode() {
+		case ModeNormal, ModeListFilter, ModeVisualLine:
+		default:
+			return m, nil
+		}
 		if consumed, double := m.handleMouseClick(msg); consumed {
 			if double {
 				return m.handleEnter()
@@ -628,10 +637,14 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 		return m, nil
 	}
 
-	// Cursor movement keys fall through to the list, then refresh visual display.
+	// Cursor movement falls through to the list; refresh the highlight
+	// whenever the cursor actually moved so custom cursor bindings work
+	// too (the old check matched only the stock movement keys).
+	before := m.secretsList.Index()
 	mdl, cmd := m.updateFocusedList(msg)
-	if m.Keymap.BlobVisualMove.Matches(key) {
+	if mdl.visualLineMode && mdl.secretsList.Index() != before {
 		mdl.refreshSecretSelectionDisplay()
+		mdl.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(mdl.visualSelectionNames())))
 	}
 	return mdl, cmd
 }
@@ -673,12 +686,15 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 	case m.Keymap.NavigateLeft.Matches(key):
 		return m.navigateLeft()
 	case m.Keymap.ToggleVisualLine.Matches(key):
-		if m.focus == secretsPane {
+		// Marks and visual selection operate on m.secrets — with the
+		// certs/keys kind shown, exiting visual mode would repopulate the
+		// column with the vault's stale secrets list.
+		if m.focus == secretsPane && m.kvKind == kvKindSecrets {
 			m.toggleVisualLineMode()
 			return m, nil
 		}
 	case m.Keymap.ToggleMark.Matches(key):
-		if m.focus == secretsPane {
+		if m.focus == secretsPane && m.kvKind == kvKindSecrets {
 			m.toggleCurrentSecretMark()
 			return m, nil
 		}

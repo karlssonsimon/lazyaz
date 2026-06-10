@@ -8,17 +8,17 @@ import (
 )
 
 // visiblePanes returns the on-screen pane layout in left-to-right order,
-// matching the render order in View(). Spacer columns are excluded.
+// matching the render order in View(): centering margin, then parent,
+// focused, child. Spacer columns are excluded.
 func (m Model) visiblePanes() []ui.VisiblePane {
 	pw := m.paneWidths
 	var panes []ui.VisiblePane
-	x := 0
+	cols := ui.MillerLayout(m.Styles.Chrome.Pane, m.Width, m.focus > accountsPane, true)
+	x := ui.MillerSideMargin(cols, m.Width)
 
 	if m.focus > accountsPane && pw[m.focus-1] > 0 {
 		panes = append(panes, ui.VisiblePane{Index: m.focus - 1, X: x, Width: pw[m.focus-1]})
 		x += pw[m.focus-1]
-	} else if m.focus == accountsPane {
-		x += m.Width * 20 / 100
 	}
 
 	panes = append(panes, ui.VisiblePane{Index: m.focus, X: x, Width: pw[m.focus]})

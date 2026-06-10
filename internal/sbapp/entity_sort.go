@@ -51,6 +51,7 @@ type entitySortResult struct {
 func (s *entitySortOverlayState) open(currentField entitySortField, currentDesc bool) {
 	s.active = true
 	s.query = ""
+	s.queryCaret = 0
 	s.filtered = nil
 	s.cursorIdx = 0
 	for i, opt := range entitySortOptions {
@@ -91,6 +92,7 @@ func (s *entitySortOverlayState) handleKey(key string, km keymap.Keymap) entityS
 		if s.cursorIdx > 0 {
 			s.cursorIdx--
 		}
+		return entitySortResult{}
 	case km.ThemeDown.Matches(key):
 		n := len(entitySortOptions)
 		if s.filtered != nil {
@@ -99,11 +101,13 @@ func (s *entitySortOverlayState) handleKey(key string, km keymap.Keymap) entityS
 		if s.cursorIdx < n-1 {
 			s.cursorIdx++
 		}
+		return entitySortResult{}
 	case km.ThemeApply.Matches(key):
 		if opt, ok := s.selectedOption(); ok {
 			s.active = false
 			return entitySortResult{applied: true, field: opt.field, desc: opt.desc}
 		}
+		return entitySortResult{}
 	case km.ThemeCancel.Matches(key):
 		if s.query != "" {
 			s.query = ""

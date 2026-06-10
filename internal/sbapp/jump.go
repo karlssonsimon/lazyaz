@@ -131,14 +131,15 @@ func NavSnapshotFromPending(p PendingNav) jumplist.NavSnapshot {
 	if p.Namespace.Name == "" {
 		return nil
 	}
-	// Pick the deepest pane the nav implies so the snapshot records
-	// the same focus the drill-in will land on.
+	// Pick the pane the drill-in actually lands on (see advancePendingNav):
+	// DLQ targets peek messages, non-DLQ entity/sub targets stop at the
+	// queue type picker, bare namespaces stay on the entities list.
 	pane := entitiesPane
 	switch {
-	case p.SubName != "" && p.DeadLetter, p.SubName != "" && !p.DeadLetter:
+	case p.EntityName != "" && p.DeadLetter:
 		pane = messagesPane
 	case p.EntityName != "":
-		pane = entitiesPane
+		pane = queueTypePane
 	}
 	return sbNavSnapshot{
 		namespace:   p.Namespace,

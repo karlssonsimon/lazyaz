@@ -54,6 +54,7 @@ func (m *Model) exitPane() {
 	if m.focus == messagesPane && m.visualLineMode {
 		m.visualLineMode = false
 		m.visualAnchor = ""
+		m.refreshMessageSelectionDisplay()
 	}
 }
 
@@ -158,6 +159,10 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 		} else {
 			target.CursorUp()
 		}
+	}
+
+	if m.focus == messagesPane && m.visualLineMode {
+		m.refreshMessageSelectionDisplay()
 	}
 }
 
