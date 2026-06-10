@@ -96,7 +96,7 @@ func (m *Model) firePrefixSearch() tea.Cmd {
 	m.Cursor.Blur()
 	m.refreshItems()
 	effectivePrefix := blobSearchPrefix(m.prefix, m.filter.prefixQuery)
-	m.startLoading(blobsPane, fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix))
+	m.StartLoading(blobsPane, fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix))
 	return tea.Batch(m.Spinner.Tick,
 		fetchSearchBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, m.filter.prefixQuery, defaultBlobPrefixSearchLimit))
 }

@@ -101,7 +101,7 @@ func (m Model) advancePendingNav() (Model, tea.Cmd) {
 		}
 		m.refreshItems()
 		if len(m.blobs) == 0 {
-			m.startLoading(blobsPane, fmt.Sprintf("Loading entries under %q", displayPrefix(m.prefix)))
+			m.StartLoading(blobsPane, fmt.Sprintf("Loading entries under %q", displayPrefix(m.prefix)))
 			return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 		}
 	}
@@ -216,7 +216,7 @@ func (m Model) eagerNavigate() (Model, tea.Cmd) {
 			m.blobs = cached
 			m.refreshItems()
 		} else {
-			m.startLoading(blobsPane, fmt.Sprintf("Loading entries under %q", displayPrefix(m.prefix)))
+			m.StartLoading(blobsPane, fmt.Sprintf("Loading entries under %q", displayPrefix(m.prefix)))
 			cmds = append(cmds, m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 			return m, batchNavCmds(cmds)
 		}

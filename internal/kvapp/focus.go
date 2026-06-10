@@ -160,18 +160,10 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 }
 
 func (m Model) focusedListSettingFilter() bool {
-	switch m.focus {
-	case vaultsPane:
-		return m.vaultsList.SettingFilter()
-	case kindPane:
-		return m.kindList.SettingFilter()
-	case secretsPane:
-		return m.secretsList.SettingFilter()
-	case versionsPane:
-		return m.versionsList.SettingFilter()
-	default:
-		return false
+	if target := m.listForPane(m.focus); target != nil {
+		return target.SettingFilter()
 	}
+	return false
 }
 
 // IsTextInputActive reports whether the model is currently accepting

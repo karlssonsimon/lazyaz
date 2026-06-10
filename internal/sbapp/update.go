@@ -18,11 +18,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text := paste.String()
 		switch {
 		case m.SubOverlay.Active:
-			ti := ui.TextInput{Value: m.SubOverlay.Query, Cursor: m.SubOverlay.QueryCaret}
-			ti.Insert(text)
-			m.SubOverlay.Query = ti.Value
-			m.SubOverlay.QueryCaret = ti.Cursor
-			m.SubOverlay.Refilter(m.Subscriptions)
+			m.SubOverlay.PasteText(text, m.Subscriptions)
 			return m, nil
 		case m.ThemeOverlay.Active:
 			m.ThemeOverlay.PasteText(text, m.Schemes)
@@ -30,12 +26,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.HelpOverlay.Active:
 			m.HelpOverlay.PasteText(text)
 			return m, nil
-		case m.entitySortOverlay.active:
-			ti := ui.TextInput{Value: m.entitySortOverlay.query, Cursor: m.entitySortOverlay.queryCaret}
-			ti.Insert(text)
-			m.entitySortOverlay.query = ti.Value
-			m.entitySortOverlay.queryCaret = ti.Cursor
-			m.entitySortOverlay.refilter()
+		case m.entitySortOverlay.Active:
+			m.entitySortOverlay.TypeText(text)
 			return m, nil
 		case m.targetPicker.active:
 			ti := ui.TextInput{Value: m.targetPicker.query, Cursor: m.targetPicker.queryCaret}
@@ -184,36 +176,14 @@ type clipboardMsg struct {
 }
 
 func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (Model, tea.Cmd) {
-	if msg.Err != nil {
-		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
-		return m, nil
+	matched, status, selectPreferred, cmd := m.Model.HandleSubscriptionsLoaded(msg, m.cache.subscriptions)
+	if !selectPreferred {
+		return m, cmd
 	}
-
-	m.Subscriptions = msg.Subscriptions
-	if m.SubOverlay.Active {
-		m.SubOverlay.Refilter(m.Subscriptions)
-	}
-
-	if msg.Done {
-		m.cache.subscriptions.Set(m.Tenant, msg.Subscriptions)
-		status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.Subscriptions), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
-		if !m.HasSubscription {
-			if matched, ok := m.TryApplyPreferredSubscription(); ok {
-				m.SubOverlay.Close()
-				next, selectCmd := m.selectSubscription(matched)
-				next.ClearLoading()
-				next.ResolveSpinner(next.loadingSpinnerID, appshell.LevelSuccess, status)
-				return next, selectCmd
-			}
-			m.SubOverlay.Open()
-		}
-		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
-		return m, nil
-	}
-
-	return m, msg.Next
+	next, selectCmd := m.selectSubscription(matched)
+	next.ClearLoading()
+	next.ResolveSpinner(next.LoadingSpinnerID, appshell.LevelSuccess, status)
+	return next, selectCmd
 }
 
 func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) {
@@ -222,7 +192,7 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 	}
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load namespaces in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load namespaces in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
 		return m, nil
 	}
 
@@ -233,7 +203,7 @@ func (m Model) handleNamespacesLoaded(msg namespacesLoadedMsg) (Model, tea.Cmd) 
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d namespaces from %s in %s", len(m.namespaces), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		updated, navCmd := m.advancePendingNav()
 		return updated, navCmd
 	}
@@ -246,7 +216,7 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 	}
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load entities in %s: %s", msg.namespace.Name, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load entities in %s: %s", msg.namespace.Name, msg.err.Error()))
 		return m, nil
 	}
 
@@ -257,7 +227,7 @@ func (m Model) handleEntitiesLoaded(msg entitiesLoadedMsg) (Model, tea.Cmd) {
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d entities from %s in %s", len(m.entities), msg.namespace.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		updated, navCmd := m.advancePendingNav()
 		return updated, navCmd
 	}
@@ -273,7 +243,7 @@ func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (
 	}
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load subscriptions for topic %s: %s", msg.topicName, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load subscriptions for topic %s: %s", msg.topicName, msg.err.Error()))
 		return m, nil
 	}
 
@@ -284,7 +254,7 @@ func (m Model) handleTopicSubscriptionsLoaded(msg topicSubscriptionsLoadedMsg) (
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d subscriptions for topic %s in %s", len(m.subscriptions), msg.topicName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		updated, navCmd := m.advancePendingNav()
 		return updated, navCmd
 	}
@@ -301,7 +271,7 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	}
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to peek messages from %s: %s", msg.source, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to peek messages from %s: %s", msg.source, msg.err.Error()))
 		return m, nil
 	}
 
@@ -332,7 +302,7 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	if msg.deadLetter {
 		label = "DLQ"
 	}
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Peeked %d %s messages from %s", len(msg.messages), label, msg.source))
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Peeked %d %s messages from %s", len(msg.messages), label, msg.source))
 	return m, nil
 }
 
@@ -376,7 +346,7 @@ func (m Model) handleDLQReceived(msg dlqReceivedMsg) (Model, tea.Cmd) {
 	}
 	m.ClearLoading()
 	if msg.err != nil {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to receive DLQ messages: %s", msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to receive DLQ messages: %s", msg.err.Error()))
 		return m, nil
 	}
 
@@ -391,7 +361,7 @@ func (m Model) handleDLQReceived(msg dlqReceivedMsg) (Model, tea.Cmd) {
 	}
 	m.messageList.Title = fmt.Sprintf("DLQ Locked (%d)", len(m.peekedMessages))
 	m.resize()
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Received %d DLQ messages with lock", len(m.peekedMessages)))
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Received %d DLQ messages with lock", len(m.peekedMessages)))
 	return m, nil
 }
 
@@ -402,9 +372,9 @@ func (m Model) handleDLQComplete(msg dlqCompleteMsg) (Model, tea.Cmd) {
 		if len(msg.completed) > 0 {
 			partial = fmt.Sprintf(" (%d completed before error)", len(msg.completed))
 		}
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to complete messages%s: %s", partial, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to complete messages%s: %s", partial, msg.err.Error()))
 	} else {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Completed %d message(s) (removed from DLQ)", len(msg.completed)))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Completed %d message(s) (removed from DLQ)", len(msg.completed)))
 	}
 	for _, id := range msg.completed {
 		m.removeLockedMessage(id)
@@ -424,9 +394,9 @@ func (m Model) handleDLQRequeue(msg dlqRequeueMsg) (Model, tea.Cmd) {
 		if len(msg.requeued) > 0 {
 			partial = fmt.Sprintf(" (%d requeued before error)", len(msg.requeued))
 		}
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to requeue messages%s: %s", partial, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to requeue messages%s: %s", partial, msg.err.Error()))
 	} else {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Requeued %d message(s) to active queue", len(msg.requeued)))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Requeued %d message(s) to active queue", len(msg.requeued)))
 	}
 	for _, id := range msg.requeued {
 		m.removeLockedMessage(id)
@@ -450,9 +420,9 @@ func (m Model) handleDLQAbandon(msg dlqAbandonMsg) (Model, tea.Cmd) {
 		m.closePreview()
 	}
 	if msg.err != nil {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to abandon: %s", msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to abandon: %s", msg.err.Error()))
 	} else {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, "Locks released")
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, "Locks released")
 	}
 	return m, nil
 }
@@ -498,9 +468,9 @@ func (m Model) handleDLQRequeueAll(msg dlqRequeueAllMsg) (Model, tea.Cmd) {
 		if msg.requeued > 0 {
 			partial = fmt.Sprintf(" (%d requeued before error)", msg.requeued)
 		}
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to requeue DLQ messages%s: %s", partial, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to requeue DLQ messages%s: %s", partial, msg.err.Error()))
 	} else {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Requeued all %d DLQ messages to active queue", msg.requeued))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Requeued all %d DLQ messages to active queue", msg.requeued))
 	}
 	// Refresh entity counts to reflect the change.
 	if m.hasNamespace {
@@ -520,9 +490,9 @@ func (m Model) handleMoveAllDone(msg moveAllDoneMsg) (Model, tea.Cmd) {
 		if msg.moved > 0 {
 			partial = fmt.Sprintf(" (%d moved before error)", msg.moved)
 		}
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to move %s messages%s: %s", kind, partial, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to move %s messages%s: %s", kind, partial, msg.err.Error()))
 	} else {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Moved all %d %s messages", msg.moved, kind))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Moved all %d %s messages", msg.moved, kind))
 	}
 	if m.hasNamespace {
 		return m, refreshEntitiesCmd(m.service, m.currentNS)
@@ -537,9 +507,9 @@ func (m Model) handleMoveMarkedDone(msg moveMarkedDoneMsg) (Model, tea.Cmd) {
 		if len(msg.moved) > 0 {
 			partial = fmt.Sprintf(" (%d moved before error)", len(msg.moved))
 		}
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to move messages%s: %s", partial, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to move messages%s: %s", partial, msg.err.Error()))
 	} else {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Moved %d message(s)", len(msg.moved)))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Moved %d message(s)", len(msg.moved)))
 	}
 	for _, id := range msg.moved {
 		m.removeLockedMessage(id)
@@ -725,8 +695,8 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 		}
 	case m.Keymap.SubscriptionPicker.Matches(key):
 		m.SubOverlay.Open()
-		m.startLoading(-1, "Refreshing subscriptions...")
-		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+		m.StartLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):
 		if !m.ThemeOverlay.Active {
 			m.ThemeOverlay.Open()

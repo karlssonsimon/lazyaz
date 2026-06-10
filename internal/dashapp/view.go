@@ -109,7 +109,7 @@ func (m Model) View() tea.View {
 	bottomRule := ui.RenderHorizontalRuleBottom(m.Width, m.Styles, nil)
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, header, topRule, body, bottomRule, statusBar), m.Width, m.Height, m.Styles.Bg)
 
-	if m.sortOverlay.active {
+	if m.sortOverlay.Active {
 		view = m.renderSortOverlay(view)
 	}
 	if m.actionMenu.active {

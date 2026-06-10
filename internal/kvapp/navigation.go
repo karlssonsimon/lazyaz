@@ -83,7 +83,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.secretsList.Title = "Secrets"
 	m.versionsList.Title = "Versions"
 
-	m.startLoading(m.focus, fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(sub)))
+	m.StartLoading(m.focus, fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(sub)))
 	return m, tea.Batch(m.Spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID, m.vaults))
 }
 
@@ -271,7 +271,6 @@ func middleItemKeyForList(kind kvKind) func(it list.Item) string {
 	}
 }
 
-
 // selectCert binds the explorer to a certificate and loads its versions.
 func (m Model) selectCert(cert keyvault.Certificate) (Model, tea.Cmd) {
 	if m.hasCert && m.currentCert.Name == cert.Name {
@@ -299,7 +298,7 @@ func (m Model) selectCert(cert keyvault.Certificate) (Model, tea.Cmd) {
 	}
 	ui.RestoreListState(&m.versionsList, m.versionsHistory[scope], versionItemKey)
 
-	m.startLoading(m.focus, fmt.Sprintf("Loading versions for %s", cert.Name))
+	m.StartLoading(m.focus, fmt.Sprintf("Loading versions for %s", cert.Name))
 	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchCertVersionsCmd(m.service, m.cache.certVersions, m.currentVault, cert.Name, m.certVersions)))
 }
 
@@ -330,7 +329,7 @@ func (m Model) selectKey(key keyvault.Key) (Model, tea.Cmd) {
 	}
 	ui.RestoreListState(&m.versionsList, m.versionsHistory[scope], versionItemKey)
 
-	m.startLoading(m.focus, fmt.Sprintf("Loading versions for %s", key.Name))
+	m.StartLoading(m.focus, fmt.Sprintf("Loading versions for %s", key.Name))
 	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchKeyVersionsCmd(m.service, m.cache.keyVersions, m.currentVault, key.Name, m.keyVersions)))
 }
 
@@ -366,6 +365,6 @@ func (m Model) selectSecret(secret keyvault.Secret) (Model, tea.Cmd) {
 	}
 	ui.RestoreListState(&m.versionsList, m.versionsHistory[versionScope], versionItemKey)
 
-	m.startLoading(m.focus, fmt.Sprintf("Loading versions for %s", secret.Name))
+	m.StartLoading(m.focus, fmt.Sprintf("Loading versions for %s", secret.Name))
 	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, secret.Name, m.versions)))
 }

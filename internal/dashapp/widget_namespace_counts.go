@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/lipgloss/v2"
 )
@@ -25,9 +26,9 @@ func (w namespaceCountsWidget) Context(m *Model, view widgetViewState) string {
 	}
 	visible := w.RowCount(m, view)
 	if visible == total {
-		return fmt.Sprintf("%s total", formatThousands(int64(total)))
+		return fmt.Sprintf("%s total", ui.FormatThousands(int64(total)))
 	}
-	return fmt.Sprintf("%s visible · %s total", formatThousands(int64(visible)), formatThousands(int64(total)))
+	return fmt.Sprintf("%s visible · %s total", ui.FormatThousands(int64(visible)), ui.FormatThousands(int64(total)))
 }
 
 func (namespaceCountsWidget) RowCount(m *Model, view widgetViewState) int {

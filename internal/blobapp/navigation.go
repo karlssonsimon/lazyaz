@@ -79,7 +79,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.containersList.Title = "Containers"
 	m.blobsList.Title = "Blobs"
 
-	m.startLoading(accountsPane, fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(sub)))
+	m.StartLoading(accountsPane, fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(sub)))
 	return m, tea.Batch(m.Spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, sub.ID, m.accounts))
 }
 
@@ -125,7 +125,7 @@ func (m Model) prefixUp() (Model, tea.Cmd) {
 	// Update parent blobs list for the new parent prefix.
 	m.rebuildParentBlobsList()
 
-	m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
+	m.StartLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
 	return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 }
 
@@ -176,7 +176,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			}
 			ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
-			m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
+			m.StartLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
 			return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 		}
 
@@ -306,7 +306,7 @@ func (m Model) selectAccount(account blob.Account) (Model, tea.Cmd) {
 	m.blobsList.SetItems(nil)
 	m.blobsList.Title = "Blobs"
 
-	m.startLoading(containersPane, fmt.Sprintf("Loading containers in %s", account.Name))
+	m.StartLoading(containersPane, fmt.Sprintf("Loading containers in %s", account.Name))
 	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, account, m.containers)))
 }
 
@@ -351,6 +351,6 @@ func (m Model) selectContainer(container blob.ContainerInfo) (Model, tea.Cmd) {
 	}
 	ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
-	m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName))
+	m.StartLoading(blobsPane, fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName))
 	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs)))
 }

@@ -181,7 +181,7 @@ func (m Model) View() tea.View {
 	topRule := ui.RenderHorizontalRule(m.Width, m.Styles, ticks)
 	bottomRule := ui.RenderHorizontalRuleBottom(m.Width, m.Styles, ticks)
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, header, topRule, panes, bottomRule, statusBar), m.Width, m.Height, m.Styles.Bg)
-	if m.sortOverlay.active {
+	if m.sortOverlay.Active {
 		view = m.renderSortOverlay(view)
 	}
 	if m.actionMenu.Active {
@@ -310,7 +310,7 @@ func (m Model) columnTitleMeta(pane int) string {
 	switch pane {
 	case accountsPane:
 		if total := len(m.accounts); total > 0 {
-			return fmt.Sprintf("%s total", formatThousands(total))
+			return fmt.Sprintf("%s total", ui.FormatThousands(int64(total)))
 		}
 	case containersPane:
 		shown := len(m.containersList.VisibleItems())
@@ -319,18 +319,18 @@ func (m Model) columnTitleMeta(pane int) string {
 			return ""
 		}
 		if shown != total {
-			return fmt.Sprintf("%s / %s", formatThousands(shown), formatThousands(total))
+			return fmt.Sprintf("%s / %s", ui.FormatThousands(int64(shown)), ui.FormatThousands(int64(total)))
 		}
-		return fmt.Sprintf("%s total", formatThousands(total))
+		return fmt.Sprintf("%s total", ui.FormatThousands(int64(total)))
 	case blobsPane:
 		shown := len(m.blobsList.VisibleItems())
 		total := len(m.blobs)
 		if total == 0 {
 			return ""
 		}
-		parts := []string{fmt.Sprintf("%s shown", formatThousands(shown))}
+		parts := []string{fmt.Sprintf("%s shown", ui.FormatThousands(int64(shown)))}
 		if shown != total {
-			parts = append(parts, fmt.Sprintf("%s total", formatThousands(total)))
+			parts = append(parts, fmt.Sprintf("%s total", ui.FormatThousands(int64(total))))
 		}
 		if marked := len(m.markedBlobs); marked > 0 {
 			parts = append(parts, fmt.Sprintf("%d selected", marked))
@@ -340,66 +340,37 @@ func (m Model) columnTitleMeta(pane int) string {
 	return ""
 }
 
-// formatThousands inserts a thin space every three digits. Mockup uses
-// space rather than comma; matches typical terminal-app conventions.
-func formatThousands(n int) string {
-	s := fmt.Sprintf("%d", n)
-	if n < 1000 {
-		return s
-	}
-	var b strings.Builder
-	rem := len(s) % 3
-	if rem == 0 {
-		rem = 3
-	}
-	b.WriteString(s[:rem])
-	for i := rem; i < len(s); i += 3 {
-		b.WriteByte(' ')
-		b.WriteString(s[i : i+3])
-	}
-	return b.String()
-}
-
-
 func (m Model) renderSortOverlay(base string) string {
-	indices := m.sortOverlay.filtered
-	if indices == nil {
-		indices = make([]int, len(sortOptions))
-		for i := range sortOptions {
-			indices[i] = i
-		}
-	}
-	items := make([]ui.OverlayItem, len(indices))
-	for ci, si := range indices {
-		opt := sortOptions[si]
-		items[ci] = ui.OverlayItem{
+	visible := m.sortOverlay.Visible()
+	items := make([]ui.OverlayItem, len(visible))
+	for i, opt := range visible {
+		items[i] = ui.OverlayItem{
 			Label:    opt.label,
 			IsActive: opt.field == m.blobSortField && opt.desc == m.blobSortDesc,
 		}
 	}
 	cfg := ui.OverlayListConfig{
 		Title:       "Sort Blobs",
-		Query:       m.sortOverlay.query,
-		QueryCursor: m.sortOverlay.queryCaret,
+		Query:       m.sortOverlay.Query,
+		QueryCursor: m.sortOverlay.QueryCaret,
 		Cursor:      m.Cursor,
 		CloseHint:   m.Keymap.Cancel.Short(),
 		Bindings: &ui.OverlayBindings{
 
-			MoveUp:   m.Keymap.ThemeUp,
+			MoveUp: m.Keymap.ThemeUp,
 
 			MoveDown: m.Keymap.ThemeDown,
 
-			Apply:    m.Keymap.ThemeApply,
+			Apply: m.Keymap.ThemeApply,
 
-			Cancel:   m.Keymap.ThemeCancel,
+			Cancel: m.Keymap.ThemeCancel,
 
-			Erase:    m.Keymap.BackspaceUp,
-
+			Erase: m.Keymap.BackspaceUp,
 		},
 		MaxVisible: len(sortOptions),
 		Center:     true,
 	}
-	return ui.RenderOverlayList(cfg, items, m.sortOverlay.cursorIdx, m.Styles, m.Width, m.Height, base)
+	return ui.RenderOverlayList(cfg, items, m.sortOverlay.CursorIdx, m.Styles, m.Width, m.Height, base)
 }
 
 func humanSize(bytes int64) string {

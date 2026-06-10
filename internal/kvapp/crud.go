@@ -110,7 +110,7 @@ func (m Model) handleFormKey(key string) (Model, tea.Cmd) {
 				return m, nil
 			}
 			name, value := res.Values[0], res.Values[1]
-			m.startLoading(secretsPane, fmt.Sprintf("Creating secret %s in %s...", name, m.currentVault.Name))
+			m.StartLoading(secretsPane, fmt.Sprintf("Creating secret %s in %s...", name, m.currentVault.Name))
 			return m, tea.Batch(m.Spinner.Tick, createSecretCmd(m.service, m.currentVault, name, value))
 		}
 		return m, nil
@@ -122,7 +122,7 @@ func (m Model) handleFormKey(key string) (Model, tea.Cmd) {
 			}
 			value := res.Values[0]
 			name := m.currentSecret.Name
-			m.startLoading(versionsPane, fmt.Sprintf("Adding new version of %s...", name))
+			m.StartLoading(versionsPane, fmt.Sprintf("Adding new version of %s...", name))
 			return m, tea.Batch(m.Spinner.Tick, addSecretVersionCmd(m.service, m.currentVault, name, value))
 		}
 		return m, nil
@@ -134,7 +134,7 @@ func (m Model) handleFormKey(key string) (Model, tea.Cmd) {
 			}
 			name, alg := res.Values[0], strings.ToUpper(strings.TrimSpace(res.Values[1]))
 			kty, size, curve := parseKeyAlgorithm(alg)
-			m.startLoading(secretsPane, fmt.Sprintf("Creating key %s (%s) in %s...", name, alg, m.currentVault.Name))
+			m.StartLoading(secretsPane, fmt.Sprintf("Creating key %s (%s) in %s...", name, alg, m.currentVault.Name))
 			return m, tea.Batch(m.Spinner.Tick, createKeyCmd(m.service, m.currentVault, name, kty, size, curve))
 		}
 		return m, nil
@@ -147,7 +147,7 @@ func (m Model) handleFormKey(key string) (Model, tea.Cmd) {
 			name, password := res.Values[0], res.Values[1]
 			path := m.pendingCertPath
 			m.pendingCertPath = ""
-			m.startLoading(secretsPane, fmt.Sprintf("Importing certificate %s in %s...", name, m.currentVault.Name))
+			m.StartLoading(secretsPane, fmt.Sprintf("Importing certificate %s in %s...", name, m.currentVault.Name))
 			return m, tea.Batch(m.Spinner.Tick, importCertificateCmd(m.service, m.currentVault, name, path, password))
 		}
 		// Cancel path resets the pending cert path so a re-trigger doesn't
@@ -180,10 +180,10 @@ func (m *Model) openCreateKeyForm() {
 				Validate:    validateSecretName,
 			},
 			{
-				Label:       "Algorithm",
-				Value:       "RSA-2048",
-				Help:        "RSA-2048 · RSA-3072 · RSA-4096 · EC-P256 · EC-P384 · EC-P521",
-				Validate:    validateKeyAlgorithm,
+				Label:    "Algorithm",
+				Value:    "RSA-2048",
+				Help:     "RSA-2048 · RSA-3072 · RSA-4096 · EC-P256 · EC-P384 · EC-P521",
+				Validate: validateKeyAlgorithm,
 			},
 		},
 	)
@@ -315,14 +315,14 @@ func createKeyCmd(svc *keyvault.Service, vault keyvault.Vault, name, kty string,
 func (m Model) handleKeyCreated(msg keyCreatedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to create key: %s", msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to create key: %s", msg.err.Error()))
 		return m, nil
 	}
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Created key %s in %s", msg.keyName, msg.vaultName))
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Created key %s in %s", msg.keyName, msg.vaultName))
 	if !m.hasVault || m.currentVault.Name != msg.vaultName || m.kvKind != kvKindKeys {
 		return m, nil
 	}
-	m.startLoading(secretsPane, fmt.Sprintf("Refreshing keys in %s", m.currentVault.Name))
+	m.StartLoading(secretsPane, fmt.Sprintf("Refreshing keys in %s", m.currentVault.Name))
 	return m, tea.Batch(m.Spinner.Tick, fetchKeysCmd(m.service, m.cache.keys, m.currentVault, m.keys))
 }
 
@@ -351,14 +351,14 @@ func importCertificateCmd(svc *keyvault.Service, vault keyvault.Vault, name, pat
 func (m Model) handleCertImported(msg certImportedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to import certificate: %s", msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to import certificate: %s", msg.err.Error()))
 		return m, nil
 	}
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Imported certificate %s into %s", msg.certName, msg.vaultName))
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Imported certificate %s into %s", msg.certName, msg.vaultName))
 	if !m.hasVault || m.currentVault.Name != msg.vaultName || m.kvKind != kvKindCertificates {
 		return m, nil
 	}
-	m.startLoading(secretsPane, fmt.Sprintf("Refreshing certificates in %s", m.currentVault.Name))
+	m.StartLoading(secretsPane, fmt.Sprintf("Refreshing certificates in %s", m.currentVault.Name))
 	return m, tea.Batch(m.Spinner.Tick, fetchCertsCmd(m.service, m.cache.certs, m.currentVault, m.certs))
 }
 
@@ -497,14 +497,14 @@ func addSecretVersionCmd(svc *keyvault.Service, vault keyvault.Vault, name, valu
 func (m Model) handleSecretVersionAdded(msg secretVersionAddedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to add secret version: %s", msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to add secret version: %s", msg.err.Error()))
 		return m, nil
 	}
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Added new version of %s in %s", msg.secretName, msg.vaultName))
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Added new version of %s in %s", msg.secretName, msg.vaultName))
 	if !m.hasVault || !m.hasSecret || m.currentVault.Name != msg.vaultName || m.currentSecret.Name != msg.secretName {
 		return m, nil
 	}
-	m.startLoading(versionsPane, fmt.Sprintf("Refreshing versions of %s", msg.secretName))
+	m.StartLoading(versionsPane, fmt.Sprintf("Refreshing versions of %s", msg.secretName))
 	return m, tea.Batch(m.Spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, m.currentSecret.Name, m.versions))
 }
 
@@ -515,10 +515,10 @@ func (m Model) handleSecretVersionAdded(msg secretVersionAddedMsg) (Model, tea.C
 func (m Model) handleSecretCreated(msg secretCreatedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to create secret: %s", msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to create secret: %s", msg.err.Error()))
 		return m, nil
 	}
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Created secret %s in %s", msg.secretName, msg.vaultName))
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Created secret %s in %s", msg.secretName, msg.vaultName))
 
 	// Refresh the secrets list so the new row shows up. Reuse the
 	// existing fetch cmd; the broker merges the new entry into the list.
@@ -527,6 +527,6 @@ func (m Model) handleSecretCreated(msg secretCreatedMsg) (Model, tea.Cmd) {
 	if !m.hasVault || m.currentVault.Name != msg.vaultName || m.kvKind != kvKindSecrets {
 		return m, nil
 	}
-	m.startLoading(secretsPane, fmt.Sprintf("Refreshing secrets in %s", m.currentVault.Name))
+	m.StartLoading(secretsPane, fmt.Sprintf("Refreshing secrets in %s", m.currentVault.Name))
 	return m, tea.Batch(m.Spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, m.currentVault, m.secrets))
 }

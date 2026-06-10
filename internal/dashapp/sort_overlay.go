@@ -3,7 +3,6 @@ package dashapp
 import (
 	"fmt"
 
-	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
@@ -24,13 +23,8 @@ type sortOption struct {
 // Each (field, direction) combo is a separate selectable entry —
 // matches sbapp's entitySortOverlay pattern instead of toggling.
 type sortOverlayState struct {
-	active     bool
-	cursorIdx  int
-	query      string
-	queryCaret int
-	filtered   []int
-	options    []sortOption
-	widgetIdx  int
+	ui.SearchableOverlay[sortOption]
+	widgetIdx int
 
 	// activeField/activeDesc/hasSort snapshot the widget's view state
 	// at open time so the IsActive marker shows next to the currently
@@ -67,22 +61,21 @@ func (s *sortOverlayState) open(widgetIdx int, fields []SortField, view widgetVi
 	}
 
 	*s = sortOverlayState{
-		active:      len(options) > 0,
-		options:     options,
 		widgetIdx:   widgetIdx,
 		activeField: view.sortField,
 		activeDesc:  view.sortDesc,
 		hasSort:     view.hasSort,
 	}
+	s.Open(options, func(o sortOption) string { return o.label })
 
 	// Land cursor on the currently applied option.
 	if !s.hasSort {
-		s.cursorIdx = 0 // Default
+		s.CursorIdx = 0 // Default
 		return
 	}
 	for i, opt := range options {
 		if !opt.isDefault && opt.field == s.activeField && opt.desc == s.activeDesc {
-			s.cursorIdx = i
+			s.CursorIdx = i
 			return
 		}
 	}
@@ -92,33 +85,6 @@ func (s *sortOverlayState) close() {
 	*s = sortOverlayState{}
 }
 
-func (s *sortOverlayState) refilter() {
-	if s.query == "" {
-		s.filtered = nil
-		return
-	}
-	s.filtered = fuzzy.Filter(s.query, s.options, func(o sortOption) string { return o.label })
-	if s.cursorIdx >= len(s.filtered) {
-		s.cursorIdx = 0
-		if len(s.filtered) > 0 {
-			s.cursorIdx = len(s.filtered) - 1
-		}
-	}
-}
-
-func (s *sortOverlayState) selectedOption() (sortOption, bool) {
-	if s.filtered != nil {
-		if s.cursorIdx >= len(s.filtered) {
-			return sortOption{}, false
-		}
-		return s.options[s.filtered[s.cursorIdx]], true
-	}
-	if s.cursorIdx >= len(s.options) {
-		return sortOption{}, false
-	}
-	return s.options[s.cursorIdx], true
-}
-
 // handleKey mirrors sbapp/entity_sort.go's handler so sort interactions
 // feel identical across both apps. ThemeUp/Down navigate, ThemeApply
 // confirms, ThemeCancel clears the search (or closes if empty),
@@ -126,21 +92,13 @@ func (s *sortOverlayState) selectedOption() (sortOption, bool) {
 func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) sortResult {
 	switch {
 	case km.ThemeUp.Matches(key):
-		if s.cursorIdx > 0 {
-			s.cursorIdx--
-		}
+		s.Move(-1)
 		return sortResult{}
 	case km.ThemeDown.Matches(key):
-		n := len(s.options)
-		if s.filtered != nil {
-			n = len(s.filtered)
-		}
-		if s.cursorIdx < n-1 {
-			s.cursorIdx++
-		}
+		s.Move(1)
 		return sortResult{}
 	case km.ThemeApply.Matches(key):
-		if opt, ok := s.selectedOption(); ok {
+		if opt, ok := s.Selected(); ok {
 			s.close()
 			if opt.isDefault {
 				return sortResult{applied: true, clear: true}
@@ -149,34 +107,18 @@ func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) sortResult {
 		}
 		return sortResult{}
 	case km.ThemeCancel.Matches(key):
-		if s.query != "" {
-			s.query = ""
-			s.queryCaret = 0
-			s.filtered = nil
-			s.cursorIdx = 0
-		} else {
-			s.close()
+		if !s.Cancel() {
+			return sortResult{}
 		}
+		s.close()
 		return sortResult{}
 	case key == "ctrl+v":
 		if text := ui.ReadClipboard(); text != "" {
-			ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
-			ti.Insert(text)
-			s.query = ti.Value
-			s.queryCaret = ti.Cursor
-			s.refilter()
+			s.TypeText(text)
 		}
 		return sortResult{}
 	}
-	ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
-	if ti.HandleKey(key) {
-		changed := ti.Value != s.query
-		s.query = ti.Value
-		s.queryCaret = ti.Cursor
-		if changed {
-			s.refilter()
-		}
-	}
+	s.HandleQueryKey(key)
 	return sortResult{}
 }
 
@@ -185,45 +127,32 @@ func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) sortResult {
 // next to the currently applied combo, centered placement.
 func (m Model) renderSortOverlay(base string) string {
 	s := &m.sortOverlay
-	indices := s.filtered
-	if indices == nil {
-		indices = make([]int, len(s.options))
-		for i := range s.options {
-			indices[i] = i
-		}
-	}
-	items := make([]ui.OverlayItem, len(indices))
-	for ci, oi := range indices {
-		opt := s.options[oi]
+	visible := s.Visible()
+	items := make([]ui.OverlayItem, len(visible))
+	for i, opt := range visible {
 		isActive := false
 		if opt.isDefault {
 			isActive = !s.hasSort
 		} else if s.hasSort {
 			isActive = opt.field == s.activeField && opt.desc == s.activeDesc
 		}
-		items[ci] = ui.OverlayItem{Label: opt.label, IsActive: isActive}
+		items[i] = ui.OverlayItem{Label: opt.label, IsActive: isActive}
 	}
 	cfg := ui.OverlayListConfig{
 		Title:       "Sort",
-		Query:       s.query,
-		QueryCursor: s.queryCaret,
+		Query:       s.Query,
+		QueryCursor: s.QueryCaret,
 		Cursor:      m.Cursor,
 		CloseHint:   m.Keymap.Cancel.Short(),
 		Bindings: &ui.OverlayBindings{
-
 			MoveUp:   m.Keymap.ThemeUp,
-
 			MoveDown: m.Keymap.ThemeDown,
-
 			Apply:    m.Keymap.ThemeApply,
-
 			Cancel:   m.Keymap.ThemeCancel,
-
 			Erase:    m.Keymap.BackspaceUp,
-
 		},
-		MaxVisible: len(s.options),
+		MaxVisible: len(visible),
 		Center:     true,
 	}
-	return ui.RenderOverlayList(cfg, items, s.cursorIdx, m.Styles, m.Width, m.Height, base)
+	return ui.RenderOverlayList(cfg, items, s.CursorIdx, m.Styles, m.Width, m.Height, base)
 }

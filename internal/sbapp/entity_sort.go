@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
-	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
@@ -35,11 +34,7 @@ var entitySortOptions = []entitySortOption{
 }
 
 type entitySortOverlayState struct {
-	active     bool
-	cursorIdx  int
-	query      string
-	queryCaret int
-	filtered   []int
+	ui.SearchableOverlay[entitySortOption]
 }
 
 type entitySortResult struct {
@@ -49,94 +44,39 @@ type entitySortResult struct {
 }
 
 func (s *entitySortOverlayState) open(currentField entitySortField, currentDesc bool) {
-	s.active = true
-	s.query = ""
-	s.queryCaret = 0
-	s.filtered = nil
-	s.cursorIdx = 0
+	s.Open(entitySortOptions, func(o entitySortOption) string { return o.label })
 	for i, opt := range entitySortOptions {
 		if opt.field == currentField && opt.desc == currentDesc {
-			s.cursorIdx = i
+			s.CursorIdx = i
 			break
 		}
 	}
 }
 
-func (s *entitySortOverlayState) refilter() {
-	if s.query == "" {
-		s.filtered = nil
-		return
-	}
-	s.filtered = fuzzy.Filter(s.query, entitySortOptions, func(o entitySortOption) string { return o.label })
-	if s.cursorIdx >= len(s.filtered) {
-		s.cursorIdx = max(0, len(s.filtered)-1)
-	}
-}
-
-func (s *entitySortOverlayState) selectedOption() (entitySortOption, bool) {
-	if s.filtered != nil {
-		if s.cursorIdx >= len(s.filtered) {
-			return entitySortOption{}, false
-		}
-		return entitySortOptions[s.filtered[s.cursorIdx]], true
-	}
-	if s.cursorIdx >= len(entitySortOptions) {
-		return entitySortOption{}, false
-	}
-	return entitySortOptions[s.cursorIdx], true
-}
-
 func (s *entitySortOverlayState) handleKey(key string, km keymap.Keymap) entitySortResult {
 	switch {
 	case km.ThemeUp.Matches(key):
-		if s.cursorIdx > 0 {
-			s.cursorIdx--
-		}
+		s.Move(-1)
 		return entitySortResult{}
 	case km.ThemeDown.Matches(key):
-		n := len(entitySortOptions)
-		if s.filtered != nil {
-			n = len(s.filtered)
-		}
-		if s.cursorIdx < n-1 {
-			s.cursorIdx++
-		}
+		s.Move(1)
 		return entitySortResult{}
 	case km.ThemeApply.Matches(key):
-		if opt, ok := s.selectedOption(); ok {
-			s.active = false
+		if opt, ok := s.Selected(); ok {
+			s.Close()
 			return entitySortResult{applied: true, field: opt.field, desc: opt.desc}
 		}
 		return entitySortResult{}
 	case km.ThemeCancel.Matches(key):
-		if s.query != "" {
-			s.query = ""
-			s.queryCaret = 0
-			s.filtered = nil
-			s.cursorIdx = 0
-		} else {
-			s.active = false
-		}
+		s.Cancel()
 		return entitySortResult{}
 	case key == "ctrl+v":
 		if text := ui.ReadClipboard(); text != "" {
-			ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
-			ti.Insert(text)
-			s.query = ti.Value
-			s.queryCaret = ti.Cursor
-			s.refilter()
+			s.TypeText(text)
 		}
 		return entitySortResult{}
 	}
-	ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
-	if ti.HandleKey(key) {
-		changed := ti.Value != s.query
-		s.query = ti.Value
-		s.queryCaret = ti.Cursor
-		if changed {
-			s.refilter()
-		}
-	}
+	s.HandleQueryKey(key)
 	return entitySortResult{}
 }
 
@@ -195,44 +135,36 @@ func sortAndFilterEntities(entities []servicebus.Entity, field entitySortField, 
 
 func (m Model) renderEntitySortOverlay(base string) string {
 	s := &m.entitySortOverlay
-	indices := s.filtered
-	if indices == nil {
-		indices = make([]int, len(entitySortOptions))
-		for i := range entitySortOptions {
-			indices[i] = i
-		}
-	}
-	items := make([]ui.OverlayItem, len(indices))
-	for ci, si := range indices {
-		opt := entitySortOptions[si]
-		items[ci] = ui.OverlayItem{
+	visible := s.Visible()
+	items := make([]ui.OverlayItem, len(visible))
+	for i, opt := range visible {
+		items[i] = ui.OverlayItem{
 			Label:    opt.label,
 			IsActive: opt.field == m.entitySortField && opt.desc == m.entitySortDesc,
 		}
 	}
 	cfg := ui.OverlayListConfig{
 		Title:       "Sort Entities",
-		Query:       s.query,
-		QueryCursor: s.queryCaret,
+		Query:       s.Query,
+		QueryCursor: s.QueryCaret,
 		Cursor:      m.Cursor,
 		CloseHint:   m.Keymap.Cancel.Short(),
 		Bindings: &ui.OverlayBindings{
 
-			MoveUp:   m.Keymap.ThemeUp,
+			MoveUp: m.Keymap.ThemeUp,
 
 			MoveDown: m.Keymap.ThemeDown,
 
-			Apply:    m.Keymap.ThemeApply,
+			Apply: m.Keymap.ThemeApply,
 
-			Cancel:   m.Keymap.ThemeCancel,
+			Cancel: m.Keymap.ThemeCancel,
 
-			Erase:    m.Keymap.BackspaceUp,
-
+			Erase: m.Keymap.BackspaceUp,
 		},
 		MaxVisible: len(entitySortOptions),
 		Center:     true,
 	}
-	return ui.RenderOverlayList(cfg, items, s.cursorIdx, m.Styles, m.Width, m.Height, base)
+	return ui.RenderOverlayList(cfg, items, s.CursorIdx, m.Styles, m.Width, m.Height, base)
 }
 
 func entitySortLabel(field entitySortField, desc bool, dlqFilter bool) string {

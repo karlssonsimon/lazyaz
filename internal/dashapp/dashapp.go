@@ -242,7 +242,7 @@ func (m Model) WithScheme(scheme ui.Scheme) tea.Model {
 // typed characters and the sort overlay's options are number-prefixed
 // for direct selection.
 func (m Model) IsTextInputActive() bool {
-	return m.filterInputActive || m.actionMenu.active || m.sortOverlay.active
+	return m.filterInputActive || m.actionMenu.active || m.sortOverlay.Active
 }
 
 // HelpSections returns the dashboard's keybindings for the parent

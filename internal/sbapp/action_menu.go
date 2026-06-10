@@ -246,7 +246,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m, nil
 
 	case actionReceiveDLQ:
-		m.startLoading(m.focus, "Receiving DLQ messages with lock...")
+		m.StartLoading(m.focus, "Receiving DLQ messages with lock...")
 		return m, tea.Batch(m.Spinner.Tick,
 			receiveDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, peekMaxMessages))
 
@@ -271,7 +271,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			if len(targets) == 0 {
 				return m, nil
 			}
-			m.startLoading(m.focus, fmt.Sprintf("Requeuing %d message(s)...", len(targets)))
+			m.StartLoading(m.focus, fmt.Sprintf("Requeuing %d message(s)...", len(targets)))
 			return m, tea.Batch(m.Spinner.Tick,
 				requeueDLQMarkedCmd(m.service, m.currentNS, m.currentEntity.Name, m.lockedMessages, targets))
 		}
@@ -298,7 +298,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			if len(targets) == 0 {
 				return m, nil
 			}
-			m.startLoading(m.focus, fmt.Sprintf("Completing %d message(s)...", len(targets)))
+			m.StartLoading(m.focus, fmt.Sprintf("Completing %d message(s)...", len(targets)))
 			return m, tea.Batch(m.Spinner.Tick,
 				completeDLQMarkedCmd(m.lockedMessages, targets))
 		}
@@ -312,7 +312,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			fmt.Sprintf("%d message(s) will be resent to %s and removed from the DLQ.", int(dead), m.currentEntity.Name),
 			"requeue", "cancel", true)
 		m.confirmAction = func(m Model) (Model, tea.Cmd) {
-			m.startLoading(m.focus, "Requeuing all DLQ messages...")
+			m.StartLoading(m.focus, "Requeuing all DLQ messages...")
 			_, dead := m.currentMessageCounts()
 			return m, tea.Batch(m.Spinner.Tick,
 				requeueAllDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, int(dead)))
@@ -338,7 +338,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if m.lockedMessages == nil {
 			return m, nil
 		}
-		m.startLoading(m.focus, "Abandoning locks...")
+		m.StartLoading(m.focus, "Abandoning locks...")
 		return m, tea.Batch(m.Spinner.Tick,
 			abandonDLQCmd(m.lockedMessages))
 
@@ -385,8 +385,8 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 
 	case actionSubscriptionPicker:
 		m.SubOverlay.Open()
-		m.startLoading(-1, "Refreshing subscriptions...")
-		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+		m.StartLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 
 	case actionThemePicker:
 		if !m.EmbeddedMode && !m.ThemeOverlay.Active {
@@ -466,11 +466,11 @@ func (m Model) doPeek(append bool) (Model, tea.Cmd) {
 		label = "DLQ"
 	}
 	if m.currentSubName == "" {
-		m.startLoading(m.focus, fmt.Sprintf("Peeking %s messages from queue %s", label, m.currentEntity.Name))
+		m.StartLoading(m.focus, fmt.Sprintf("Peeking %s messages from queue %s", label, m.currentEntity.Name))
 		return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, append, false, fromSeqNo))
 	}
 
-	m.startLoading(m.focus, fmt.Sprintf("Peeking %s messages from %s/%s", label, m.currentEntity.Name, m.currentSubName))
+	m.StartLoading(m.focus, fmt.Sprintf("Peeking %s messages from %s/%s", label, m.currentEntity.Name, m.currentSubName))
 	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, append, false, fromSeqNo))
 }
 
@@ -492,16 +492,15 @@ func (m Model) renderActionMenu(base string) string {
 		CloseHint:   m.Keymap.Cancel.Short(),
 		Bindings: &ui.OverlayBindings{
 
-			MoveUp:   m.Keymap.ThemeUp,
+			MoveUp: m.Keymap.ThemeUp,
 
 			MoveDown: m.Keymap.ThemeDown,
 
-			Apply:    m.Keymap.ThemeApply,
+			Apply: m.Keymap.ThemeApply,
 
-			Cancel:   m.Keymap.ThemeCancel,
+			Cancel: m.Keymap.ThemeCancel,
 
-			Erase:    m.Keymap.BackspaceUp,
-
+			Erase: m.Keymap.BackspaceUp,
 		},
 		MaxVisible: 10,
 		Center:     true,

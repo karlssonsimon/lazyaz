@@ -159,7 +159,7 @@ func TestPressingSOnEntitiesOpensSortOverlay(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Model, got %T", updated)
 	}
-	if !model.entitySortOverlay.active {
+	if !model.entitySortOverlay.Active {
 		t.Fatal("pressing s on entities pane should open the sort overlay")
 	}
 	if model.actionMenu.Active {

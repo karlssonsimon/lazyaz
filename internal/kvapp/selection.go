@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
-	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
@@ -12,7 +11,7 @@ func (m *Model) clearSecretSelectionState() {
 	m.visualLineMode = false
 	m.visualAnchor = ""
 	if m.markedSecrets == nil {
-		m.markedSecrets = make(map[string]keyvault.Secret)
+		m.markedSecrets = make(map[string]struct{})
 		return
 	}
 	for name := range m.markedSecrets {
@@ -26,9 +25,9 @@ func (m *Model) refreshSecretItems() {
 }
 
 func (m *Model) refreshSecretSelectionDisplay() {
-	d := newSecretDelegate(m.Styles.Delegate, m.Styles)
-	d.marked = m.markedSecrets
-	d.visual = m.visualSelectionNames()
+	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, secretMarkKey)
+	d.Marked = m.markedSecrets
+	d.Visual = m.visualSelectionNames()
 	m.secretsList.SetDelegate(d)
 }
 
@@ -63,7 +62,7 @@ func (m *Model) commitVisualSelection() {
 		return
 	}
 	for _, item := range m.visualSelectionItems() {
-		m.markedSecrets[item.secret.Name] = item.secret
+		m.markedSecrets[item.secret.Name] = struct{}{}
 	}
 }
 
@@ -104,7 +103,7 @@ func (m *Model) toggleCurrentSecretMark() {
 		return
 	}
 
-	m.markedSecrets[item.secret.Name] = item.secret
+	m.markedSecrets[item.secret.Name] = struct{}{}
 	m.refreshSecretSelectionDisplay()
 	m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", item.secret.Name, len(m.markedSecrets)))
 }

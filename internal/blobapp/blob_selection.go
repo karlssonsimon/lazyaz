@@ -7,7 +7,6 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
-	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
@@ -18,7 +17,7 @@ func (m *Model) clearBlobSelectionState() {
 	m.visualLineMode = false
 	m.visualAnchor = ""
 	if m.markedBlobs == nil {
-		m.markedBlobs = make(map[string]blob.BlobEntry)
+		m.markedBlobs = make(map[string]struct{})
 		return
 	}
 	for name := range m.markedBlobs {
@@ -26,22 +25,10 @@ func (m *Model) clearBlobSelectionState() {
 	}
 }
 
-// startLoading dismisses any active spinner, marks the pane as loading,
-// and pushes a new spinner notification. This prevents orphaned spinners
-// when the user navigates away before a load finishes.
-func (m *Model) startLoading(pane int, message string) {
-	if m.Loading {
-		m.ClearLoading()
-		m.DismissSpinner(m.loadingSpinnerID)
-	}
-	m.SetLoading(pane)
-	m.loadingSpinnerID = m.NotifySpinner(message)
-}
-
 func (m *Model) resetBlobLoadState() {
 	if m.Loading {
 		m.ClearLoading()
-		m.DismissSpinner(m.loadingSpinnerID)
+		m.DismissSpinner(m.LoadingSpinnerID)
 	}
 	m.blobLoadAll = false
 	m.clearFilter()
@@ -67,19 +54,15 @@ func (m *Model) refreshItemsWithWidth(entries []blob.BlobEntry, w int) {
 // and re-sets it on the list. This triggers a re-render without
 // rebuilding items or touching the filter state.
 func (m *Model) refreshBlobSelectionDisplay() {
-	d := newBlobDelegate(m.Styles.Delegate, m.Styles)
-	d.marked = m.markedBlobs
-	d.visual = m.visualSelectionNames()
+	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, blobMarkKey)
+	d.Marked = m.markedBlobs
+	d.Visual = m.visualSelectionNames()
 	m.blobsList.SetDelegate(d)
 }
 
 // sortOverlayState manages the sort picker popup.
 type sortOverlayState struct {
-	active     bool
-	cursorIdx  int
-	query      string
-	queryCaret int
-	filtered   []int // indices into sortOptions
+	ui.SearchableOverlay[sortOption]
 }
 
 type sortOption struct {
@@ -99,41 +82,13 @@ var sortOptions = []sortOption{
 }
 
 func (s *sortOverlayState) open(currentField blobSortField, currentDesc bool) {
-	s.active = true
-	s.query = ""
-	s.queryCaret = 0
-	s.filtered = nil
-	s.cursorIdx = 0
+	s.Open(sortOptions, func(o sortOption) string { return o.label })
 	for i, opt := range sortOptions {
 		if opt.field == currentField && opt.desc == currentDesc {
-			s.cursorIdx = i
+			s.CursorIdx = i
 			break
 		}
 	}
-}
-
-func (s *sortOverlayState) refilter() {
-	if s.query == "" {
-		s.filtered = nil
-		return
-	}
-	s.filtered = fuzzy.Filter(s.query, sortOptions, func(o sortOption) string { return o.label })
-	if s.cursorIdx >= len(s.filtered) {
-		s.cursorIdx = max(0, len(s.filtered)-1)
-	}
-}
-
-func (s *sortOverlayState) selectedOption() (sortOption, bool) {
-	if s.filtered != nil {
-		if s.cursorIdx >= len(s.filtered) {
-			return sortOption{}, false
-		}
-		return sortOptions[s.filtered[s.cursorIdx]], true
-	}
-	if s.cursorIdx >= len(sortOptions) {
-		return sortOption{}, false
-	}
-	return sortOptions[s.cursorIdx], true
 }
 
 // handleKey processes a key press in the sort overlay. Returns true if
@@ -141,54 +96,27 @@ func (s *sortOverlayState) selectedOption() (sortOption, bool) {
 func (s *sortOverlayState) handleKey(key string, km keymap.Keymap) (applied bool, field blobSortField, desc bool) {
 	switch {
 	case km.ThemeUp.Matches(key):
-		if s.cursorIdx > 0 {
-			s.cursorIdx--
-		}
+		s.Move(-1)
 		return false, blobSortNone, false
 	case km.ThemeDown.Matches(key):
-		n := len(sortOptions)
-		if s.filtered != nil {
-			n = len(s.filtered)
-		}
-		if s.cursorIdx < n-1 {
-			s.cursorIdx++
-		}
+		s.Move(1)
 		return false, blobSortNone, false
 	case km.ThemeApply.Matches(key):
-		if opt, ok := s.selectedOption(); ok {
-			s.active = false
+		if opt, ok := s.Selected(); ok {
+			s.Close()
 			return true, opt.field, opt.desc
 		}
 		return false, blobSortNone, false
 	case km.ThemeCancel.Matches(key):
-		if s.query != "" {
-			s.query = ""
-			s.queryCaret = 0
-			s.filtered = nil
-			s.cursorIdx = 0
-		} else {
-			s.active = false
-		}
+		s.Cancel()
 		return false, blobSortNone, false
 	case key == "ctrl+v":
 		if text := ui.ReadClipboard(); text != "" {
-			ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
-			ti.Insert(text)
-			s.query = ti.Value
-			s.queryCaret = ti.Cursor
-			s.refilter()
+			s.TypeText(text)
 		}
 		return false, blobSortNone, false
 	}
-	ti := ui.TextInput{Value: s.query, Cursor: s.queryCaret}
-	if ti.HandleKey(key) {
-		changed := ti.Value != s.query
-		s.query = ti.Value
-		s.queryCaret = ti.Cursor
-		if changed {
-			s.refilter()
-		}
-	}
+	s.HandleQueryKey(key)
 	return false, blobSortNone, false
 }
 
@@ -231,7 +159,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 			m.refreshItems()
 		}
 
-		m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
+		m.StartLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
 		return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 	}
 
@@ -242,7 +170,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 		// Prefix was active — load all blobs under that prefix.
 		// Keep showing current data while the fetch runs.
 		effectivePrefix := blobSearchPrefix(m.prefix, savedPrefix)
-		m.startLoading(blobsPane, fmt.Sprintf("Loading all blobs under %q", effectivePrefix))
+		m.StartLoading(blobsPane, fmt.Sprintf("Loading all blobs under %q", effectivePrefix))
 		return m, tea.Batch(m.Spinner.Tick,
 			fetchAllBlobsWithPrefixCmd(m.service, m.currentAccount, m.containerName, m.prefix, savedPrefix))
 	}
@@ -257,7 +185,7 @@ func (m Model) toggleBlobLoadAllMode() (Model, tea.Cmd) {
 	if m.prefix != "" {
 		scope += " under " + m.prefix
 	}
-	m.startLoading(blobsPane, fmt.Sprintf("Loading all blobs in %s", scope))
+	m.StartLoading(blobsPane, fmt.Sprintf("Loading all blobs in %s", scope))
 	return m, tea.Batch(m.Spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.blobs))
 }
 
@@ -296,7 +224,7 @@ func (m *Model) commitVisualSelection() {
 		if item.blob.IsPrefix {
 			continue
 		}
-		m.markedBlobs[item.blob.Name] = item.blob
+		m.markedBlobs[item.blob.Name] = struct{}{}
 	}
 }
 
@@ -345,7 +273,7 @@ func (m *Model) toggleCurrentBlobMark() {
 		return
 	}
 
-	m.markedBlobs[item.blob.Name] = item.blob
+	m.markedBlobs[item.blob.Name] = struct{}{}
 	m.refreshBlobSelectionDisplay()
 	m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", item.displayName, len(m.markedBlobs)))
 }
@@ -483,7 +411,7 @@ func (m Model) startDownloadBlobs(blobNames []string) (Model, tea.Cmd) {
 		return m, nil
 	}
 	destinationRoot := filepath.Join(m.downloadDir, m.currentAccount.Name, m.containerName)
-	m.startLoading(blobsPane, fmt.Sprintf("Downloading %d blob(s) to %s", len(blobNames), destinationRoot))
+	m.StartLoading(blobsPane, fmt.Sprintf("Downloading %d blob(s) to %s", len(blobNames), destinationRoot))
 	return m, tea.Batch(m.Spinner.Tick, downloadBlobsCmd(m.service, m.currentAccount, m.containerName, blobNames, destinationRoot))
 }
 

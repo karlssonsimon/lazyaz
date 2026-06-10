@@ -150,40 +150,14 @@ func NavSnapshotFromPending(p PendingNav) jumplist.NavSnapshot {
 	}
 }
 
-// recordJumpForCurrent returns a Cmd that emits a RecordJumpMsg with
-// the model's CurrentNav snapshot. Called from the drill-in helpers
-// (selectNamespace / selectQueue / selectTopic / selectSubscriptionSub)
-// after they mutate state, so the destination position gets recorded.
-// Returns nil during programmatic restoration (m.applyingNav) so
-// jump-list walks don't re-record the entries they're traversing.
-func recordJumpForCurrent(m Model) tea.Cmd {
-	if m.applyingNav {
-		return nil
-	}
-	// Suppress records while a PendingNav is in flight — the parent
-	// records the destination directly in openSBTabWithNav, so the
-	// intermediate hops emitted by selectNamespace / selectEntity would
-	// just pollute ctrl+o history with phantom stops.
-	if m.pendingNav.hasTarget() {
-		return nil
-	}
-	snap := m.CurrentNav()
-	if snap == nil {
-		return nil
-	}
-	return func() tea.Msg { return jumplist.RecordJumpMsg{Snap: snap} }
-}
-
 // appendJumpRecord batches an existing cmd with a fresh jump record
 // for m's current navigable position. Used at the end of each drill-in
-// helper so callers don't have to remember to do it.
+// helper (selectNamespace / selectQueue / selectTopic /
+// selectSubscriptionSub) so callers don't have to remember to do it.
+// Records are suppressed while a PendingNav is in flight — the parent
+// records the destination directly in openSBTabWithNav, so the
+// intermediate hops emitted by selectNamespace / selectEntity would
+// just pollute ctrl+o history with phantom stops.
 func appendJumpRecord(m Model, cmd tea.Cmd) tea.Cmd {
-	rec := recordJumpForCurrent(m)
-	if rec == nil {
-		return cmd
-	}
-	if cmd == nil {
-		return rec
-	}
-	return tea.Batch(cmd, rec)
+	return jumplist.AppendRecord(m.applyingNav, m.pendingNav.hasTarget(), m.CurrentNav(), cmd)
 }

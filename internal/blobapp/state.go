@@ -51,7 +51,7 @@ func (m Model) inputMode() InputMode {
 		return ModeOverlay
 	case m.actionMenu.Active:
 		return ModeActionMenu
-	case m.sortOverlay.active:
+	case m.sortOverlay.Active:
 		return ModeSortOverlay
 	case m.preview.open && m.focus == previewPane:
 		return ModePreview
@@ -111,7 +111,7 @@ type Model struct {
 	accounts       []blob.Account
 	containers     []blob.ContainerInfo
 	blobs          []blob.BlobEntry
-	markedBlobs    map[string]blob.BlobEntry
+	markedBlobs    map[string]struct{}
 	visualLineMode bool
 	visualAnchor   string
 
@@ -124,21 +124,20 @@ type Model struct {
 	containersHistory map[string]ui.ListState // keyed by sub+account
 	blobsHistory      map[string]ui.ListState // keyed by sub+account+container+prefix+loadAll
 
-	hasAccount       bool
-	currentAccount   blob.Account
-	hasContainer     bool
-	containerName    string
-	prefix           string
-	blobLoadAll      bool
-	blobSortField    blobSortField
-	blobSortDesc     bool
-	filter           blobFilter
-	sortOverlay      sortOverlayState
-	actionMenu       actionMenuState
-	loadingSpinnerID int
-	preview          previewState
-	pendingPreviewG  bool
-	textSelection    ui.TextSelection
+	hasAccount      bool
+	currentAccount  blob.Account
+	hasContainer    bool
+	containerName   string
+	prefix          string
+	blobLoadAll     bool
+	blobSortField   blobSortField
+	blobSortDesc    bool
+	filter          blobFilter
+	sortOverlay     sortOverlayState
+	actionMenu      actionMenuState
+	preview         previewState
+	pendingPreviewG bool
+	textSelection   ui.TextSelection
 
 	// downloadDir is the resolved root directory under which marked
 	// blobs are saved. Set once at construction time from
@@ -193,12 +192,12 @@ type Model struct {
 
 	// Upload state. The browser, conflict prompt, and progress panel are
 	// all driven from these fields. nil/false when no upload is in flight.
-	uploadBrowser        ui.FileBrowserState
-	uploadBrowserActive  bool
-	uploadProgress       *uploadProgress
-	uploadActivityUnreg  func() // nil when no upload is tracked
-	uploadConflict       *pendingConflict
-	uploadCancelFn       context.CancelFunc
+	uploadBrowser       ui.FileBrowserState
+	uploadBrowserActive bool
+	uploadProgress      *uploadProgress
+	uploadActivityUnreg func() // nil when no upload is tracked
+	uploadConflict      *pendingConflict
+	uploadCancelFn      context.CancelFunc
 	// uploadDest captures the destination prefix typed at the start of
 	// the upload flow. Survives between the text-input step and the
 	// file-browser step. Empty = container root.
@@ -280,7 +279,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	delegate := list.NewDefaultDelegate()
 
 	accounts := list.New([]list.Item{}, delegate, 24, 10)
-	accounts.SetShowTitle(false) // title is rendered by ui.RenderMillerListColumn
+	accounts.SetShowTitle(false)  // title is rendered by ui.RenderMillerListColumn
 	accounts.SetShowFilter(false) // filter UI lives in our SubHeader
 	accounts.SetShowHelp(false)
 	accounts.SetShowPagination(false)
@@ -333,7 +332,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 		containersList:    containers,
 		blobsList:         blobs,
 		parentBlobsList:   parentBlobs,
-		markedBlobs:       make(map[string]blob.BlobEntry),
+		markedBlobs:       make(map[string]struct{}),
 		preview:           newPreviewState(),
 		cache:             newCache(db),
 		downloadDir:       cfg.ResolvedDownloadDir(),
@@ -352,7 +351,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	// Open the subscription picker on first run (no subscription yet).
 	if !m.HasSubscription {
 		m.SubOverlay.Open()
-		m.startLoading(-1, "Loading Azure subscriptions...")
+		m.StartLoading(-1, "Loading Azure subscriptions...")
 	}
 	return m
 }
@@ -432,9 +431,9 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 	}, &m.Spinner)
 	// Blobs list uses a custom delegate for mark/visual borders.
 	// Preserve existing mark/visual state across scheme changes.
-	d := newBlobDelegate(m.Styles.Delegate, m.Styles)
-	d.marked = m.markedBlobs
-	d.visual = m.visualSelectionNames()
+	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, blobMarkKey)
+	d.Marked = m.markedBlobs
+	d.Visual = m.visualSelectionNames()
 	m.blobsList.SetDelegate(d)
 }
 
@@ -551,7 +550,7 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.Spinner.Tick, cursor.Blink}
 	// Only fetch subscriptions from Azure if the picker is open.
 	if m.SubOverlay.Active {
-		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+		cmds = append(cmds, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	}
 	// Standalone tabs (connection-string / Azurite) have a fixed single
 	// account seeded at construction — there's nothing to discover.

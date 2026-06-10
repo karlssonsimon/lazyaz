@@ -181,7 +181,7 @@ func (m Model) View() tea.View {
 	topRule := ui.RenderHorizontalRule(m.Width, m.Styles, ticks)
 	bottomRule := ui.RenderHorizontalRuleBottom(m.Width, m.Styles, ticks)
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, header, topRule, panes, bottomRule, statusBar), m.Width, m.Height, m.Styles.Bg)
-	if m.entitySortOverlay.active {
+	if m.entitySortOverlay.Active {
 		view = m.renderEntitySortOverlay(view)
 	} else if m.targetPicker.active {
 		view = m.renderTargetPicker(view)

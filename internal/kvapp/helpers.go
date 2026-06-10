@@ -1,18 +1,6 @@
 package kvapp
 
-// startLoading and paneName are kvapp helpers shared across files.
-
-// startLoading dismisses any active spinner, marks the pane as loading,
-// and pushes a new spinner notification. This prevents orphaned spinners
-// when the user navigates away before a load finishes.
-func (m *Model) startLoading(pane int, message string) {
-	if m.Loading {
-		m.ClearLoading()
-		m.DismissSpinner(m.loadingSpinnerID)
-	}
-	m.SetLoading(pane)
-	m.loadingSpinnerID = m.NotifySpinner(message)
-}
+// paneName is a kvapp helper shared across files.
 
 func paneName(pane int) string {
 	switch pane {
@@ -28,4 +16,3 @@ func paneName(pane int) string {
 		return "items"
 	}
 }
-

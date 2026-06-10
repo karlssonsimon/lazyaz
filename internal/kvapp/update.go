@@ -18,11 +18,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text := paste.String()
 		switch {
 		case m.SubOverlay.Active:
-			ti := ui.TextInput{Value: m.SubOverlay.Query, Cursor: m.SubOverlay.QueryCaret}
-			ti.Insert(text)
-			m.SubOverlay.Query = ti.Value
-			m.SubOverlay.QueryCaret = ti.Cursor
-			m.SubOverlay.Refilter(m.Subscriptions)
+			m.SubOverlay.PasteText(text, m.Subscriptions)
 			return m, nil
 		case m.ThemeOverlay.Active:
 			m.ThemeOverlay.PasteText(text, m.Schemes)
@@ -141,9 +137,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case markedSecretsYankedMsg:
 		m.ClearLoading()
 		if msg.err != nil {
-			m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to yank secrets: %s", msg.err.Error()))
+			m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to yank secrets: %s", msg.err.Error()))
 		} else {
-			m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Yanked %d secrets as JSON to clipboard", msg.count))
+			m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Yanked %d secrets as JSON to clipboard", msg.count))
 		}
 		return m, nil
 
@@ -155,7 +151,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			level = appshell.LevelWarn
 			summary += fmt.Sprintf(", %d failed (%s)", len(msg.errors), msg.errors[0])
 		}
-		m.ResolveSpinner(m.loadingSpinnerID, level, summary)
+		m.ResolveSpinner(m.LoadingSpinnerID, level, summary)
 		// Refresh the secrets list so newly created entries appear.
 		return m.refresh()
 
@@ -210,42 +206,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (Model, tea.Cmd) {
-	if msg.Err != nil {
-		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
-		return m, nil
+	matched, status, selectPreferred, cmd := m.Model.HandleSubscriptionsLoaded(msg, m.cache.subscriptions)
+	if !selectPreferred {
+		return m, cmd
 	}
-
-	m.Subscriptions = msg.Subscriptions
-	// Keep the overlay's filtered view in sync with the streaming results
-	// so new subscriptions matching the user's query appear immediately.
-	if m.SubOverlay.Active {
-		m.SubOverlay.Refilter(m.Subscriptions)
-	}
-
-	if msg.Done {
-		m.cache.subscriptions.Set(m.Tenant, msg.Subscriptions)
-		status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.Subscriptions), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
-		if !m.HasSubscription {
-			if matched, ok := m.TryApplyPreferredSubscription(); ok {
-				// The constructor opened the picker overlay; selectSubscription
-				// drives navigation but doesn't dismiss it (the interactive
-				// path is dismissed inside the overlay's HandleKey). Close
-				// it here so the data loading behind it actually shows.
-				m.SubOverlay.Close()
-				next, selectCmd := m.selectSubscription(matched)
-				next.ClearLoading()
-				next.ResolveSpinner(next.loadingSpinnerID, appshell.LevelSuccess, status)
-				return next, selectCmd
-			}
-			m.SubOverlay.Open()
-		}
-		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
-		return m, nil
-	}
-
-	return m, msg.Next
+	next, selectCmd := m.selectSubscription(matched)
+	next.ClearLoading()
+	next.ResolveSpinner(next.LoadingSpinnerID, appshell.LevelSuccess, status)
+	return next, selectCmd
 }
 
 func (m Model) handleVaultsLoaded(msg vaultsLoadedMsg) (Model, tea.Cmd) {
@@ -255,7 +223,7 @@ func (m Model) handleVaultsLoaded(msg vaultsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load key vaults in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load key vaults in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
 		return m, nil
 	}
 
@@ -266,7 +234,7 @@ func (m Model) handleVaultsLoaded(msg vaultsLoadedMsg) (Model, tea.Cmd) {
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d vaults in %s", len(m.vaults), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		if m.pendingNav.hasTarget() {
 			updated, cmd := m.advancePendingNav()
 			m = updated
@@ -290,7 +258,7 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load secrets in %s: %s", msg.vault.Name, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load secrets in %s: %s", msg.vault.Name, msg.err.Error()))
 		return m, nil
 	}
 
@@ -301,7 +269,7 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d secrets from %s in %s", len(m.secrets), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		if m.pendingNav.hasTarget() {
 			updated, cmd := m.advancePendingNav()
 			m = updated
@@ -323,7 +291,7 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.secretName, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.secretName, msg.err.Error()))
 		return m, nil
 	}
 
@@ -334,7 +302,7 @@ func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d versions for %s in %s", len(m.versions), msg.secretName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		return m, nil
 	}
 
@@ -347,7 +315,7 @@ func (m Model) handleCertsLoaded(msg certsLoadedMsg) (Model, tea.Cmd) {
 	}
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load certificates in %s: %s", msg.vault.Name, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load certificates in %s: %s", msg.vault.Name, msg.err.Error()))
 		return m, nil
 	}
 	m.certs = msg.certs
@@ -356,7 +324,7 @@ func (m Model) handleCertsLoaded(msg certsLoadedMsg) (Model, tea.Cmd) {
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d certificates from %s in %s", len(m.certs), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		return m, nil
 	}
 	return m, msg.next
@@ -368,7 +336,7 @@ func (m Model) handleCertVersionsLoaded(msg certVersionsLoadedMsg) (Model, tea.C
 	}
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.certName, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.certName, msg.err.Error()))
 		return m, nil
 	}
 	m.certVersions = msg.versions
@@ -377,7 +345,7 @@ func (m Model) handleCertVersionsLoaded(msg certVersionsLoadedMsg) (Model, tea.C
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d versions for %s in %s", len(m.certVersions), msg.certName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		return m, nil
 	}
 	return m, msg.next
@@ -389,7 +357,7 @@ func (m Model) handleKeysLoaded(msg keysLoadedMsg) (Model, tea.Cmd) {
 	}
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load keys in %s: %s", msg.vault.Name, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load keys in %s: %s", msg.vault.Name, msg.err.Error()))
 		return m, nil
 	}
 	m.keys = msg.keys
@@ -398,7 +366,7 @@ func (m Model) handleKeysLoaded(msg keysLoadedMsg) (Model, tea.Cmd) {
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d keys from %s in %s", len(m.keys), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		return m, nil
 	}
 	return m, msg.next
@@ -410,7 +378,7 @@ func (m Model) handleKeyVersionsLoaded(msg keyVersionsLoadedMsg) (Model, tea.Cmd
 	}
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.keyName, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load versions for %s: %s", msg.keyName, msg.err.Error()))
 		return m, nil
 	}
 	m.keyVersions = msg.versions
@@ -419,7 +387,7 @@ func (m Model) handleKeyVersionsLoaded(msg keyVersionsLoadedMsg) (Model, tea.Cmd
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d versions for %s in %s", len(m.keyVersions), msg.keyName, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		return m, nil
 	}
 	return m, msg.next
@@ -437,7 +405,7 @@ func (m Model) handleSecretRevealed(msg secretRevealedMsg) (Model, tea.Cmd) {
 	}
 	m.ClearLoading()
 	if msg.err != nil {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to reveal %s: %s", msg.secretName, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to reveal %s: %s", msg.secretName, msg.err.Error()))
 		return m, nil
 	}
 	if msg.version == "" {
@@ -448,7 +416,7 @@ func (m Model) handleSecretRevealed(msg secretRevealedMsg) (Model, tea.Cmd) {
 		m.inspectPanes[versionsPane] = true
 	}
 	m.resize() // inspect strip toggling on changes pane height
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelInfo, fmt.Sprintf("Revealed %s — press R again to hide", msg.secretName))
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelInfo, fmt.Sprintf("Revealed %s — press R again to hide", msg.secretName))
 	return m, nil
 }
 
@@ -474,7 +442,7 @@ func (m Model) toggleSecretReveal() (Model, tea.Cmd) {
 			m.resize()
 			return m, nil
 		}
-		m.startLoading(secretsPane, fmt.Sprintf("Revealing %s...", name))
+		m.StartLoading(secretsPane, fmt.Sprintf("Revealing %s...", name))
 		return m, tea.Batch(m.Spinner.Tick, revealSecretValueCmd(m.service, m.currentVault, name, ""))
 	case versionsPane:
 		item, ok := m.versionsList.SelectedItem().(versionItem)
@@ -487,7 +455,7 @@ func (m Model) toggleSecretReveal() (Model, tea.Cmd) {
 			m.resize()
 			return m, nil
 		}
-		m.startLoading(versionsPane, fmt.Sprintf("Revealing %s @ %s...", m.currentSecret.Name, item.version.Version))
+		m.StartLoading(versionsPane, fmt.Sprintf("Revealing %s @ %s...", m.currentSecret.Name, item.version.Version))
 		return m, tea.Batch(m.Spinner.Tick, revealSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))
 	}
 	return m, nil
@@ -496,7 +464,7 @@ func (m Model) toggleSecretReveal() (Model, tea.Cmd) {
 func (m Model) handleSecretValueYanked(msg secretValueYankedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to yank secret value: %s", msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to yank secret value: %s", msg.err.Error()))
 		return m, nil
 	}
 
@@ -508,7 +476,7 @@ func (m Model) handleSecretValueYanked(msg secretValueYankedMsg) (Model, tea.Cmd
 		}
 		label = fmt.Sprintf("%s@%s", msg.secretName, v)
 	}
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Yanked %s to clipboard", label))
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Yanked %s to clipboard", label))
 	return m, nil
 }
 
@@ -605,7 +573,7 @@ func (m Model) handlePasteModalKey(key string) (Model, tea.Cmd) {
 			m.Notify(appshell.LevelInfo, "Paste cancelled (nothing to do)")
 			return m, nil
 		}
-		m.startLoading(m.focus, fmt.Sprintf("Pasting %d secrets...", len(plan.Apply)))
+		m.StartLoading(m.focus, fmt.Sprintf("Pasting %d secrets...", len(plan.Apply)))
 		return m, tea.Batch(m.Spinner.Tick, pasteSecretsCmd(m.service, vault, plan))
 	}
 	next, _ := m.pasteModal.HandleKey(key, m.Keymap)
@@ -735,8 +703,8 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 		}
 	case m.Keymap.SubscriptionPicker.Matches(key):
 		m.SubOverlay.Open()
-		m.startLoading(-1, "Refreshing subscriptions...")
-		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+		m.StartLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	case m.Keymap.Inspect.Matches(key):
 		m.toggleInspect()
 		return m, nil
@@ -770,7 +738,7 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-		m.startLoading(m.focus, fmt.Sprintf("Fetching secret value for %s...", item.secret.Name))
+		m.StartLoading(m.focus, fmt.Sprintf("Fetching secret value for %s...", item.secret.Name))
 		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, item.secret.Name, ""))
 	}
 
@@ -779,7 +747,7 @@ func (m Model) handleYank() (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-		m.startLoading(m.focus, fmt.Sprintf("Fetching secret value for %s@%s...", m.currentSecret.Name, item.version.Version))
+		m.StartLoading(m.focus, fmt.Sprintf("Fetching secret value for %s@%s...", m.currentSecret.Name, item.version.Version))
 		return m, tea.Batch(m.Spinner.Tick, yankSecretValueCmd(m.service, m.currentVault, m.currentSecret.Name, item.version.Version))
 	}
 

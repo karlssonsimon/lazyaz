@@ -132,7 +132,7 @@ var (
 // muted at zero, amber at the warn threshold, pink at the danger
 // threshold. Returns a styled string ready to drop into renderTable.
 func countCell(n int64, styles ui.Styles, scale severityScale) string {
-	text := formatThousands(n)
+	text := ui.FormatThousands(n)
 	switch {
 	case n == 0:
 		return styles.Muted.Render(text)
@@ -149,7 +149,7 @@ func countCell(n int64, styles ui.Styles, scale severityScale) string {
 // Used by the most-used widgets where there's no absolute "danger" but
 // users want to see what they touch most.
 func usageCountCell(n, max int64, styles ui.Styles) string {
-	text := formatThousands(n)
+	text := ui.FormatThousands(n)
 	if max <= 0 {
 		return text
 	}
@@ -162,38 +162,6 @@ func usageCountCell(n, max int64, styles ui.Styles) string {
 		return styles.Muted.Render(text)
 	}
 	return text
-}
-
-// formatThousands formats n with non-breaking-space thousand separators
-// (e.g. 6051 → "6 051"), matching the Swedish-style numerics in the
-// dashboard mockups. Negative numbers preserve their sign.
-func formatThousands(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [32]byte
-	pos := len(buf)
-	digits := 0
-	for n > 0 {
-		if digits == 3 {
-			pos--
-			buf[pos] = ' '
-			digits = 0
-		}
-		pos--
-		buf[pos] = byte('0' + n%10)
-		n /= 10
-		digits++
-	}
-	if neg {
-		pos--
-		buf[pos] = '-'
-	}
-	return string(buf[pos:])
 }
 
 // dashboardWidgets returns the widgets the dashboard renders, in

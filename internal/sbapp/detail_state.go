@@ -249,9 +249,9 @@ func (m Model) messageContentWidth() int {
 // refreshMessageSelectionDisplay updates the delegate's mark/visual
 // maps without rebuilding items.
 func (m *Model) refreshMessageSelectionDisplay() {
-	d := newMessageDelegate(m.Styles.Delegate, m.Styles)
-	d.marked = m.currentMarks()
-	d.visual = m.visualSelectionSet()
+	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, messageMarkKey)
+	d.Marked = m.currentMarks()
+	d.Visual = m.visualSelectionSet()
 	m.messageList.SetDelegate(d)
 }
 

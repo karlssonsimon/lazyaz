@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/lipgloss/v2"
 )
@@ -26,7 +27,7 @@ func (w dlqAlertsWidget) Context(m *Model, view widgetViewState) string {
 	for _, a := range alerts {
 		msgs += a.count
 	}
-	return fmt.Sprintf("%s · %s msgs", formatThousands(int64(len(alerts))), formatThousands(msgs))
+	return fmt.Sprintf("%s · %s msgs", ui.FormatThousands(int64(len(alerts))), ui.FormatThousands(msgs))
 }
 
 func (dlqAlertsWidget) RowCount(m *Model, view widgetViewState) int {

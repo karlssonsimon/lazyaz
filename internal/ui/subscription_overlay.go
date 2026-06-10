@@ -51,6 +51,18 @@ func (s *SubscriptionOverlayState) Refilter(subs []azure.Subscription) {
 	}
 }
 
+// PasteText inserts text at the cursor and refilters.
+func (s *SubscriptionOverlayState) PasteText(text string, subs []azure.Subscription) {
+	if text == "" {
+		return
+	}
+	ti := TextInput{Value: s.Query, Cursor: s.QueryCaret}
+	ti.Insert(text)
+	s.Query = ti.Value
+	s.QueryCaret = ti.Cursor
+	s.Refilter(subs)
+}
+
 // HandleKey processes a key event. Returns the selected subscription and true
 // if the user confirmed a selection.
 func (s *SubscriptionOverlayState) HandleKey(key string, bindings ThemeKeyBindings, subs []azure.Subscription) (azure.Subscription, bool) {

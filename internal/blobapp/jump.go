@@ -123,32 +123,12 @@ func NavSnapshotFromPending(p PendingNav) jumplist.NavSnapshot {
 	}
 }
 
-func recordJumpForCurrent(m Model) tea.Cmd {
-	if m.applyingNav {
-		return nil
-	}
-	// Suppress jump records while a PendingNav is still in flight. The
-	// parent (app.openBlobTabWithNav) records the final destination
-	// directly; any RecordJumpMsgs that eagerNavigate / advancePendingNav
-	// would emit for intermediate hops are noise the user never actually
-	// traverses, and pollute ctrl+o history with phantom stops.
-	if m.pendingNav.hasTarget() {
-		return nil
-	}
-	snap := m.CurrentNav()
-	if snap == nil {
-		return nil
-	}
-	return func() tea.Msg { return jumplist.RecordJumpMsg{Snap: snap} }
-}
-
+// appendJumpRecord batches cmd with a jump record for m's current
+// position. Records are suppressed while a PendingNav is still in
+// flight: the parent (app.openBlobTabWithNav) records the final
+// destination directly; any RecordJumpMsgs that eagerNavigate /
+// advancePendingNav would emit for intermediate hops are noise the user
+// never actually traverses, and pollute ctrl+o history with phantom stops.
 func appendJumpRecord(m Model, cmd tea.Cmd) tea.Cmd {
-	rec := recordJumpForCurrent(m)
-	if rec == nil {
-		return cmd
-	}
-	if cmd == nil {
-		return rec
-	}
-	return tea.Batch(cmd, rec)
+	return jumplist.AppendRecord(m.applyingNav, m.pendingNav.hasTarget(), m.CurrentNav(), cmd)
 }

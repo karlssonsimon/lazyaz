@@ -6,22 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/karlssonsimon/lazyaz/internal/appshell"
-	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 
 	tea "charm.land/bubbletea/v2"
 )
-
-func fetchSubscriptionsCmd(svc *blob.Service, broker *cache.Broker[azure.Subscription], tenantID string, seed []azure.Subscription) tea.Cmd {
-	cmd, _ := broker.Subscribe(tenantID, seed, func(ctx context.Context, send func([]azure.Subscription)) error {
-		return svc.ListSubscriptions(ctx, send)
-	}, func(p cache.Page[azure.Subscription]) tea.Msg {
-		return appshell.SubscriptionsLoadedMsg{Subscriptions: p.Items, Done: p.Done, Err: p.Err, Next: p.Next}
-	})
-	return cmd
-}
 
 func fetchAccountsCmd(svc *blob.Service, broker *cache.Broker[blob.Account], subscriptionID string, seed []blob.Account) tea.Cmd {
 	cmd, _ := broker.Subscribe(subscriptionID, seed, func(ctx context.Context, send func([]blob.Account)) error {

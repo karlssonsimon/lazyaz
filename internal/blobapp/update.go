@@ -22,11 +22,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		text := paste.String()
 		switch {
 		case m.SubOverlay.Active:
-			ti := ui.TextInput{Value: m.SubOverlay.Query, Cursor: m.SubOverlay.QueryCaret}
-			ti.Insert(text)
-			m.SubOverlay.Query = ti.Value
-			m.SubOverlay.QueryCaret = ti.Cursor
-			m.SubOverlay.Refilter(m.Subscriptions)
+			m.SubOverlay.PasteText(text, m.Subscriptions)
 			return m, nil
 		case m.ThemeOverlay.Active:
 			m.ThemeOverlay.PasteText(text, m.Schemes)
@@ -46,24 +42,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.actionMenu.Active:
 			m.actionMenu.TypeText(text)
 			return m, nil
-		case m.sortOverlay.active:
-			ti := ui.TextInput{Value: m.sortOverlay.query, Cursor: m.sortOverlay.queryCaret}
-			ti.Insert(text)
-			m.sortOverlay.query = ti.Value
-			m.sortOverlay.queryCaret = ti.Cursor
-			m.sortOverlay.refilter()
+		case m.sortOverlay.Active:
+			m.sortOverlay.TypeText(text)
 			return m, nil
 		default:
-			var cmd tea.Cmd
-			switch m.focus {
-			case accountsPane:
-				m.accountsList, cmd = m.accountsList.Update(msg)
-			case containersPane:
-				m.containersList, cmd = m.containersList.Update(msg)
-			case blobsPane:
-				m.blobsList, cmd = m.blobsList.Update(msg)
-			}
-			return m, cmd
+			return m.updateFocusedList(msg)
 		}
 	}
 
@@ -73,14 +56,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Cursor = cursorModel
 		// Also forward to focused list so its built-in filter cursor blinks.
 		var listCmd tea.Cmd
-		switch m.focus {
-		case accountsPane:
-			m.accountsList, listCmd = m.accountsList.Update(msg)
-		case containersPane:
-			m.containersList, listCmd = m.containersList.Update(msg)
-		case blobsPane:
-			m.blobsList, listCmd = m.blobsList.Update(msg)
-		}
+		m, listCmd = m.updateFocusedList(msg)
 		return m, tea.Batch(cursorCmd, listCmd)
 	}
 
@@ -218,57 +194,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Fallthrough: propagate to focused list.
-	var cmd tea.Cmd
-	switch m.focus {
-	case accountsPane:
-		m.accountsList, cmd = m.accountsList.Update(msg)
-	case containersPane:
-		m.containersList, cmd = m.containersList.Update(msg)
-	case blobsPane:
-		m.blobsList, cmd = m.blobsList.Update(msg)
-	case previewPane:
-		cmd = nil
-	}
-	return m, cmd
+	return m.updateFocusedList(msg)
 }
 
 func (m Model) handleSubscriptionsLoaded(msg appshell.SubscriptionsLoadedMsg) (Model, tea.Cmd) {
-	if msg.Err != nil {
-		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load subscriptions: %s", msg.Err.Error()))
-		return m, nil
+	matched, status, selectPreferred, cmd := m.Model.HandleSubscriptionsLoaded(msg, m.cache.subscriptions)
+	if !selectPreferred {
+		return m, cmd
 	}
-
-	m.Subscriptions = msg.Subscriptions
-	// Keep the overlay's filtered view in sync with streaming results
-	// so new subscriptions matching the user's query appear immediately.
-	if m.SubOverlay.Active {
-		m.SubOverlay.Refilter(m.Subscriptions)
-	}
-
-	if msg.Done {
-		m.cache.subscriptions.Set(m.Tenant, msg.Subscriptions)
-		status := fmt.Sprintf("Loaded %d subscriptions in %s", len(msg.Subscriptions), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
-		if !m.HasSubscription {
-			if matched, ok := m.TryApplyPreferredSubscription(); ok {
-				// The constructor opened the picker overlay; selectSubscription
-				// drives navigation but doesn't dismiss it (the interactive
-				// path is dismissed inside the overlay's HandleKey). Close
-				// it here so the data loading behind it actually shows.
-				m.SubOverlay.Close()
-				next, selectCmd := m.selectSubscription(matched)
-				next.ClearLoading()
-				next.ResolveSpinner(next.loadingSpinnerID, appshell.LevelSuccess, status)
-				return next, selectCmd
-			}
-			m.SubOverlay.Open()
-		}
-		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
-		return m, nil
-	}
-
-	return m, msg.Next
+	next, selectCmd := m.selectSubscription(matched)
+	next.ClearLoading()
+	next.ResolveSpinner(next.LoadingSpinnerID, appshell.LevelSuccess, status)
+	return next, selectCmd
 }
 
 func (m Model) handleAccountsLoaded(msg accountsLoadedMsg) (Model, tea.Cmd) {
@@ -278,7 +215,7 @@ func (m Model) handleAccountsLoaded(msg accountsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load storage accounts in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load storage accounts in %s: %s", ui.SubscriptionDisplayName(m.CurrentSub), msg.err.Error()))
 		return m, nil
 	}
 
@@ -289,7 +226,7 @@ func (m Model) handleAccountsLoaded(msg accountsLoadedMsg) (Model, tea.Cmd) {
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d storage accounts from %s in %s", len(m.accounts), ui.SubscriptionDisplayName(m.CurrentSub), time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		updated, navCmd := m.advancePendingNav()
 		return updated, navCmd
 	}
@@ -304,7 +241,7 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (Model, tea.Cmd) 
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load containers for %s: %s", msg.account.Name, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load containers for %s: %s", msg.account.Name, msg.err.Error()))
 		return m, nil
 	}
 
@@ -315,7 +252,7 @@ func (m Model) handleContainersLoaded(msg containersLoadedMsg) (Model, tea.Cmd) 
 	if msg.done {
 		status := fmt.Sprintf("Loaded %d containers from %s in %s", len(m.containers), msg.account.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		updated, navCmd := m.advancePendingNav()
 		return updated, navCmd
 	}
@@ -349,7 +286,7 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 
 	if msg.err != nil {
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load blobs in %s/%s: %s", msg.account.Name, msg.container, msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load blobs in %s/%s: %s", msg.account.Name, msg.container, msg.err.Error()))
 		return m, nil
 	}
 
@@ -366,7 +303,7 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 			status = fmt.Sprintf("Loaded %d entries in %s/%s under %q in %s", len(m.blobs), msg.account.Name, msg.container, displayPrefix(msg.prefix), elapsed)
 		}
 		m.ClearLoading()
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, status)
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 		updated, navCmd := m.advancePendingNav()
 		return updated, navCmd
 	}
@@ -377,17 +314,17 @@ func (m Model) handleBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 func (m Model) handleBlobsDownloaded(msg blobsDownloadedMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
 	if msg.err != nil {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to download blobs: %s", msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to download blobs: %s", msg.err.Error()))
 		return m, nil
 	}
 
 	if msg.failed > 0 {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelWarn, fmt.Sprintf("Downloaded %d/%d blobs to %s — failures: %s",
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelWarn, fmt.Sprintf("Downloaded %d/%d blobs to %s — failures: %s",
 			msg.downloaded, msg.total, msg.destinationRoot, strings.Join(msg.failures, " | ")))
 		return m, nil
 	}
 
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Downloaded %d blob(s) to %s", msg.downloaded, msg.destinationRoot))
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Downloaded %d blob(s) to %s", msg.downloaded, msg.destinationRoot))
 	return m, nil
 }
 
@@ -670,8 +607,8 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.SubOverlay.Open()
-		m.startLoading(-1, "Refreshing subscriptions...")
-		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+		m.StartLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	case m.Keymap.Inspect.Matches(key):
 		if m.focus != previewPane {
 			m.toggleInspect()

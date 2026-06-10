@@ -19,6 +19,10 @@
 // parent intercepts via the standard cross-tab wrap bypass.
 package jumplist
 
+import (
+	tea "charm.land/bubbletea/v2"
+)
+
 // NavSnapshot is an opaque, app-specific snapshot of "where the user
 // is" inside one tab. The parent stores them as interface values; only
 // each app's own ApplyNav knows how to restore them.
@@ -34,4 +38,23 @@ type NavSnapshot interface {
 // ctrl+o.
 type RecordJumpMsg struct {
 	Snap NavSnapshot
+}
+
+// AppendRecord batches cmd with a Cmd that emits a RecordJumpMsg for
+// snap. It returns cmd unchanged (no record) when:
+//   - applying: a programmatic restoration is in progress, so jump-list
+//     walks don't re-record the entries they're traversing;
+//   - pendingTarget: a pending navigation is still in flight — the parent
+//     records the final destination directly, so intermediate hops would
+//     just pollute ctrl+o history with phantom stops;
+//   - snap is nil: there is no navigable position to record.
+func AppendRecord(applying bool, pendingTarget bool, snap NavSnapshot, cmd tea.Cmd) tea.Cmd {
+	if applying || pendingTarget || snap == nil {
+		return cmd
+	}
+	rec := func() tea.Msg { return RecordJumpMsg{Snap: snap} }
+	if cmd == nil {
+		return rec
+	}
+	return tea.Batch(cmd, rec)
 }

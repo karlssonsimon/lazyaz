@@ -4,23 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/karlssonsimon/lazyaz/internal/appshell"
-	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/atotto/clipboard"
 )
-
-func fetchSubscriptionsCmd(svc *keyvault.Service, broker *cache.Broker[azure.Subscription], tenantID string, seed []azure.Subscription) tea.Cmd {
-	cmd, _ := broker.Subscribe(tenantID, seed, func(ctx context.Context, send func([]azure.Subscription)) error {
-		return svc.ListSubscriptions(ctx, send)
-	}, func(p cache.Page[azure.Subscription]) tea.Msg {
-		return appshell.SubscriptionsLoadedMsg{Subscriptions: p.Items, Done: p.Done, Err: p.Err, Next: p.Next}
-	})
-	return cmd
-}
 
 func fetchVaultsCmd(svc *keyvault.Service, broker *cache.Broker[keyvault.Vault], subscriptionID string, seed []keyvault.Vault) tea.Cmd {
 	cmd, _ := broker.Subscribe(subscriptionID, seed, func(ctx context.Context, send func([]keyvault.Vault)) error {

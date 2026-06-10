@@ -3,8 +3,6 @@ package sbapp
 import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
-
-	"charm.land/bubbles/v2/list"
 )
 
 // snapshotCurrentPane saves the focused pane's cursor and filter into
@@ -137,19 +135,8 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 	if direction == 0 {
 		return
 	}
-	var target *list.Model
-	switch m.focus {
-	case namespacesPane:
-		target = &m.namespacesList
-	case entitiesPane:
-		target = &m.entitiesList
-	case subscriptionsPane:
-		target = &m.subscriptionsList
-	case queueTypePane:
-		target = &m.queueTypeList
-	case messagesPane:
-		target = &m.messageList
-	default:
+	target := m.listForPane(m.focus)
+	if target == nil {
 		return
 	}
 	steps := ui.HalfPageStep(*target)

@@ -20,3 +20,15 @@ func (m *Model) ClearLoading() {
 	m.Loading = false
 	m.LoadingPane = -1
 }
+
+// StartLoading dismisses any active spinner, marks the pane as loading,
+// and pushes a new spinner notification. This prevents orphaned spinners
+// when the user navigates away before a load finishes.
+func (m *Model) StartLoading(pane int, message string) {
+	if m.Loading {
+		m.ClearLoading()
+		m.DismissSpinner(m.LoadingSpinnerID)
+	}
+	m.SetLoading(pane)
+	m.LoadingSpinnerID = m.NotifySpinner(message)
+}

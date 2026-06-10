@@ -61,7 +61,7 @@ func TestIsTextInputActiveCoversFuzzyFilterOverlays(t *testing.T) {
 		t.Fatal("action menu active: want text input")
 	}
 	m.actionMenu.active = false
-	m.sortOverlay.active = true
+	m.sortOverlay.Active = true
 	if !m.IsTextInputActive() {
 		t.Fatal("sort overlay active: want text input")
 	}

@@ -49,7 +49,7 @@ func (m Model) inputMode() InputMode {
 		return ModeConfirm
 	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
 		return ModeOverlay
-	case m.entitySortOverlay.active:
+	case m.entitySortOverlay.Active:
 		return ModeSortOverlay
 	case m.targetPicker.active:
 		return ModeTargetPicker
@@ -147,8 +147,6 @@ type Model struct {
 	// model at confirm time so it can start spinners before dispatching.
 	confirmModal  ui.ConfirmModalState
 	confirmAction func(Model) (Model, tea.Cmd)
-
-	loadingSpinnerID int
 
 	clickTracker ui.ClickTracker
 	paneWidths   [6]int // ns, ent, subs, qtype, msg, preview
@@ -327,7 +325,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 	m.HydrateSubscriptionsFromCache(m.cache.subscriptions)
 	if !m.HasSubscription {
 		m.SubOverlay.Open()
-		m.startLoading(-1, "Loading Azure subscriptions...")
+		m.StartLoading(-1, "Loading Azure subscriptions...")
 	}
 	return m
 }
@@ -363,9 +361,9 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 		&m.namespacesList, &m.entitiesList, &m.subscriptionsList,
 		&m.queueTypeList, &m.messageList,
 	}, &m.Spinner)
-	d := newMessageDelegate(m.Styles.Delegate, m.Styles)
-	d.marked = m.currentMarks()
-	d.visual = m.visualSelectionSet()
+	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, messageMarkKey)
+	d.Marked = m.currentMarks()
+	d.Visual = m.visualSelectionSet()
 	m.messageList.SetDelegate(d)
 	m.entitiesList.SetDelegate(newEntityDelegate(m.Styles.Delegate, m.Styles))
 	m.subscriptionsList.SetDelegate(newSubscriptionDelegate(m.Styles.Delegate, m.Styles))
@@ -462,7 +460,7 @@ func (m Model) WithoutSubscription(subs []azure.Subscription) tea.Model {
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.Spinner.Tick, cursor.Blink}
 	if m.SubOverlay.Active {
-		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+		cmds = append(cmds, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	}
 	if m.HasSubscription {
 		cmds = append(cmds, fetchNamespacesCmd(m.service, m.cache.namespaces, m.CurrentSub.ID, m.namespaces))

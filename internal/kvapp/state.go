@@ -137,7 +137,7 @@ type Model struct {
 	certVersions   []keyvault.CertificateVersion
 	keys           []keyvault.Key
 	keyVersions    []keyvault.KeyVersion
-	markedSecrets  map[string]keyvault.Secret
+	markedSecrets  map[string]struct{}
 	visualLineMode bool
 	visualAnchor   string
 
@@ -181,8 +181,8 @@ type Model struct {
 	addSecretVersion ui.FormOverlayState
 	createKey        ui.FormOverlayState
 	importCert       ui.FormOverlayState
-	confirmModal  ui.ConfirmModalState
-	confirmAction func() tea.Cmd
+	confirmModal     ui.ConfirmModalState
+	confirmAction    func() tea.Cmd
 	// certImportBrowser is the local-filesystem picker for selecting the
 	// PFX file to import. Mirrors blobapp.uploadBrowser. Populated when
 	// the user opens "Import certificate..."; the picked path is stashed
@@ -191,8 +191,6 @@ type Model struct {
 	certImportBrowserActive bool
 	pendingCertPath         string
 	cache                   kvCache
-
-	loadingSpinnerID int
 
 	// Per-pane inspect strip toggle. When inspectPanes[pane] is true, the
 	// pane renders an inline detail strip (via ui.RenderInspectStrip) under
@@ -356,18 +354,18 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 	}
 
 	m := Model{
-		Model:           appshell.New(cfg, km),
-		service:         svc,
-		vaultsList:      vaults,
-		secretsList:     secrets,
-		versionsList:    versionsList,
-		kindList:        kindList,
-		markedSecrets:   make(map[string]keyvault.Secret),
-		focus:           vaultsPane,
-		cache:           newCache(db),
-		vaultsHistory:   make(map[string]ui.ListState),
-		secretsHistory:  make(map[string]ui.ListState),
-		versionsHistory: make(map[string]ui.ListState),
+		Model:            appshell.New(cfg, km),
+		service:          svc,
+		vaultsList:       vaults,
+		secretsList:      secrets,
+		versionsList:     versionsList,
+		kindList:         kindList,
+		markedSecrets:    make(map[string]struct{}),
+		focus:            vaultsPane,
+		cache:            newCache(db),
+		vaultsHistory:    make(map[string]ui.ListState),
+		secretsHistory:   make(map[string]ui.ListState),
+		versionsHistory:  make(map[string]ui.ListState),
 		inspectPanes:     make(map[int]bool),
 		revealedSecrets:  make(map[string]string),
 		revealedVersions: make(map[string]string),
@@ -377,7 +375,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 	m.HydrateSubscriptionsFromCache(m.cache.subscriptions)
 	if !m.HasSubscription {
 		m.SubOverlay.Open()
-		m.startLoading(-1, "Loading Azure subscriptions...")
+		m.StartLoading(-1, "Loading Azure subscriptions...")
 	}
 	return m
 }
@@ -412,9 +410,9 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.Styles.ApplyToLists([]*list.Model{
 		&m.vaultsList, &m.kindList, &m.secretsList, &m.versionsList,
 	}, &m.Spinner)
-	d := newSecretDelegate(m.Styles.Delegate, m.Styles)
-	d.marked = m.markedSecrets
-	d.visual = m.visualSelectionNames()
+	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, secretMarkKey)
+	d.Marked = m.markedSecrets
+	d.Visual = m.visualSelectionNames()
 	m.secretsList.SetDelegate(d)
 }
 
@@ -512,7 +510,7 @@ func (m Model) WithoutSubscription(subs []azure.Subscription) tea.Model {
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.Spinner.Tick, cursor.Blink}
 	if m.SubOverlay.Active {
-		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+		cmds = append(cmds, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	}
 	if m.HasSubscription {
 		cmds = append(cmds, fetchVaultsCmd(m.service, m.cache.vaults, m.CurrentSub.ID, m.vaults))

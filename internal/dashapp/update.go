@@ -32,7 +32,7 @@ func scheduleRefreshTick() tea.Cmd {
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.Spinner.Tick, cursor.Blink, scheduleRefreshTick()}
 	if m.SubOverlay.Active || len(m.Subscriptions) == 0 {
-		cmds = append(cmds, fetchSubscriptionsCmd(m.service, m.stores.Subscriptions, m.Tenant, m.Subscriptions))
+		cmds = append(cmds, appshell.FetchSubscriptionsCmd(m.service, m.stores.Subscriptions, m.Tenant, m.Subscriptions))
 	}
 	if m.HasSubscription {
 		cmds = append(cmds, m.kickoffFetches()...)
@@ -282,7 +282,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Sort overlay — owns input while open. Each entry is a fully
 	// specified (field, direction) combo (or "Default" = clear sort).
 	// applySortResult mutates view state directly; no toggle semantics.
-	if m.sortOverlay.active {
+	if m.sortOverlay.Active {
 		if res := m.sortOverlay.handleKey(key, km); res.applied {
 			m.applySortResult(res)
 		}
@@ -365,7 +365,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case km.ReloadSubscriptions.Matches(key):
 		m.Subscriptions = nil
 		m.SubOverlay.Open()
-		return m, fetchSubscriptionsCmd(m.service, m.stores.Subscriptions, m.Tenant, nil)
+		return m, appshell.FetchSubscriptionsCmd(m.service, m.stores.Subscriptions, m.Tenant, nil)
 	}
 
 	// Per-widget action keybinds. Each widget exposes its own actions

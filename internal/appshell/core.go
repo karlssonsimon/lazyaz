@@ -64,6 +64,10 @@ type Model struct {
 	LoadingPane      int
 	LoadingStartedAt time.Time
 
+	// LoadingSpinnerID is the notification ID of the active loading
+	// spinner, set by StartLoading and resolved/dismissed by the apps.
+	LoadingSpinnerID int
+
 	// Status line + most recent error string.
 	Status  string
 	LastErr string

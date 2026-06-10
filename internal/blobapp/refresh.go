@@ -3,6 +3,7 @@ package blobapp
 import (
 	"fmt"
 
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -11,8 +12,8 @@ import (
 func (m Model) refresh() (Model, tea.Cmd) {
 	if !m.HasSubscription {
 		m.SubOverlay.Open()
-		m.startLoading(-1, "Refreshing subscriptions...")
-		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+		m.StartLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	}
 
 	if !m.hasAccount || m.focus == accountsPane {
@@ -23,13 +24,13 @@ func (m Model) refresh() (Model, tea.Cmd) {
 				return m, nil
 			}
 		} else {
-			m.startLoading(accountsPane, fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(m.CurrentSub)))
+			m.StartLoading(accountsPane, fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(m.CurrentSub)))
 			return m, tea.Batch(m.Spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, m.CurrentSub.ID, m.accounts))
 		}
 	}
 
 	if m.focus == containersPane || !m.hasContainer {
-		m.startLoading(containersPane, fmt.Sprintf("Loading containers in %s", m.currentAccount.Name))
+		m.StartLoading(containersPane, fmt.Sprintf("Loading containers in %s", m.currentAccount.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, m.currentAccount, m.containers))
 	}
 	if m.focus == previewPane && m.preview.open {
@@ -37,7 +38,7 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	}
 
 	if m.blobLoadAll {
-		m.startLoading(blobsPane, fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName))
+		m.StartLoading(blobsPane, fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName))
 		return m, tea.Batch(m.Spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.blobs))
 	}
 	// Re-run the API prefix search if a filter is active. fetching must be
@@ -46,9 +47,9 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	if m.filter.prefixFetched && m.filter.prefixQuery != "" {
 		m.filter.fetching = true
 		effectivePrefix := blobSearchPrefix(m.prefix, m.filter.prefixQuery)
-		m.startLoading(blobsPane, fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix))
+		m.StartLoading(blobsPane, fmt.Sprintf("Searching blobs by prefix %q...", effectivePrefix))
 		return m, tea.Batch(m.Spinner.Tick, fetchSearchBlobsCmd(m.service, m.currentAccount, m.containerName, m.prefix, m.filter.prefixQuery, defaultBlobPrefixSearchLimit))
 	}
-	m.startLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
+	m.StartLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
 	return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
 }

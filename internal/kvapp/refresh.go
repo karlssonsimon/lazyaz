@@ -3,6 +3,7 @@ package kvapp
 import (
 	"fmt"
 
+	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,12 +13,12 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	if !m.HasSubscription {
 		// Can't refresh anything without a subscription; open the picker instead.
 		m.SubOverlay.Open()
-		m.startLoading(-1, "Refreshing subscriptions...")
-		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+		m.StartLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 	}
 
 	if !m.hasVault || m.focus == vaultsPane {
-		m.startLoading(m.focus, fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(m.CurrentSub)))
+		m.StartLoading(m.focus, fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(m.CurrentSub)))
 		return m, tea.Batch(m.Spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, m.CurrentSub.ID, m.vaults))
 	}
 
@@ -49,13 +50,13 @@ func (m Model) hasMiddleSelection() bool {
 func (m Model) fetchMiddleColumn() (Model, tea.Cmd) {
 	switch m.kvKind {
 	case kvKindCertificates:
-		m.startLoading(m.focus, fmt.Sprintf("Loading certificates in %s", m.currentVault.Name))
+		m.StartLoading(m.focus, fmt.Sprintf("Loading certificates in %s", m.currentVault.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchCertsCmd(m.service, m.cache.certs, m.currentVault, m.certs))
 	case kvKindKeys:
-		m.startLoading(m.focus, fmt.Sprintf("Loading keys in %s", m.currentVault.Name))
+		m.StartLoading(m.focus, fmt.Sprintf("Loading keys in %s", m.currentVault.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchKeysCmd(m.service, m.cache.keys, m.currentVault, m.keys))
 	default:
-		m.startLoading(m.focus, fmt.Sprintf("Loading secrets in %s", m.currentVault.Name))
+		m.StartLoading(m.focus, fmt.Sprintf("Loading secrets in %s", m.currentVault.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchSecretsCmd(m.service, m.cache.secrets, m.currentVault, m.secrets))
 	}
 }
@@ -65,13 +66,13 @@ func (m Model) fetchMiddleColumn() (Model, tea.Cmd) {
 func (m Model) fetchVersionsForCurrent() (Model, tea.Cmd) {
 	switch m.kvKind {
 	case kvKindCertificates:
-		m.startLoading(m.focus, fmt.Sprintf("Loading versions for %s", m.currentCert.Name))
+		m.StartLoading(m.focus, fmt.Sprintf("Loading versions for %s", m.currentCert.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchCertVersionsCmd(m.service, m.cache.certVersions, m.currentVault, m.currentCert.Name, m.certVersions))
 	case kvKindKeys:
-		m.startLoading(m.focus, fmt.Sprintf("Loading versions for %s", m.currentKey.Name))
+		m.StartLoading(m.focus, fmt.Sprintf("Loading versions for %s", m.currentKey.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchKeyVersionsCmd(m.service, m.cache.keyVersions, m.currentVault, m.currentKey.Name, m.keyVersions))
 	default:
-		m.startLoading(m.focus, fmt.Sprintf("Loading versions for %s", m.currentSecret.Name))
+		m.StartLoading(m.focus, fmt.Sprintf("Loading versions for %s", m.currentSecret.Name))
 		return m, tea.Batch(m.Spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, m.currentSecret.Name, m.versions))
 	}
 }

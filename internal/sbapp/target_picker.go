@@ -226,7 +226,7 @@ func (m Model) updateTargetPicker(msg tea.KeyMsg) (Model, tea.Cmd) {
 	result := m.targetPicker.handleKey(msg.String(), m.Keymap)
 
 	if result.fetchNamespaceEntities {
-		m.startLoading(-1, fmt.Sprintf("Loading entities from %s...", result.selectedNamespace.Name))
+		m.StartLoading(-1, fmt.Sprintf("Loading entities from %s...", result.selectedNamespace.Name))
 		return m, tea.Batch(m.Spinner.Tick,
 			fetchTargetEntitiesCmd(m.service, result.selectedNamespace))
 	}
@@ -264,7 +264,7 @@ func (m Model) executeMoveAction(moveAction actionID, result targetPickerResult)
 			fmt.Sprintf("%d message(s) will be moved to %s/%s.", count, targetNS.Name, target),
 			"move", "cancel", true)
 		m.confirmAction = func(m Model) (Model, tea.Cmd) {
-			m.startLoading(m.focus, fmt.Sprintf("Moving all %s messages to %s/%s...", label, targetNS.Name, target))
+			m.StartLoading(m.focus, fmt.Sprintf("Moving all %s messages to %s/%s...", label, targetNS.Name, target))
 			return m, tea.Batch(m.Spinner.Tick,
 				moveAllCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, targetNS, target, count))
 		}
@@ -285,7 +285,7 @@ func (m Model) executeMoveAction(moveAction actionID, result targetPickerResult)
 			if len(targets) == 0 {
 				return m, nil
 			}
-			m.startLoading(m.focus, fmt.Sprintf("Moving %d message(s) to %s/%s...", len(targets), targetNS.Name, target))
+			m.StartLoading(m.focus, fmt.Sprintf("Moving %d message(s) to %s/%s...", len(targets), targetNS.Name, target))
 			return m, tea.Batch(m.Spinner.Tick,
 				moveMarkedCmd(m.service, targetNS, target, m.lockedMessages, targets))
 		}
@@ -310,13 +310,13 @@ func (m Model) handleTargetEntitiesLoaded(msg targetEntitiesLoadedMsg) (Model, t
 	m.ClearLoading()
 
 	if msg.err != nil {
-		m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelError,
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError,
 			fmt.Sprintf("Failed to load entities from %s: %s", msg.namespace.Name, msg.err))
 		m.targetPicker.close()
 		return m, nil
 	}
 
-	m.ResolveSpinner(m.loadingSpinnerID, appshell.LevelSuccess,
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess,
 		fmt.Sprintf("Loaded %d entities from %s", len(msg.entities), msg.namespace.Name))
 
 	if !m.targetPicker.active {
@@ -408,16 +408,15 @@ func (m Model) renderTargetPicker(base string) string {
 		CloseHint:   m.Keymap.Cancel.Short(),
 		Bindings: &ui.OverlayBindings{
 
-			MoveUp:   m.Keymap.ThemeUp,
+			MoveUp: m.Keymap.ThemeUp,
 
 			MoveDown: m.Keymap.ThemeDown,
 
-			Apply:    m.Keymap.ThemeApply,
+			Apply: m.Keymap.ThemeApply,
 
-			Cancel:   m.Keymap.ThemeCancel,
+			Cancel: m.Keymap.ThemeCancel,
 
-			Erase:    m.Keymap.BackspaceUp,
-
+			Erase: m.Keymap.BackspaceUp,
 		},
 		MaxVisible: 10,
 		Center:     true,

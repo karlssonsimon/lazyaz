@@ -263,8 +263,8 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 
 	case actionSubscriptionPicker:
 		m.SubOverlay.Open()
-		m.startLoading(-1, "Refreshing subscriptions...")
-		return m, tea.Batch(m.Spinner.Tick, fetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
+		m.StartLoading(-1, "Refreshing subscriptions...")
+		return m, tea.Batch(m.Spinner.Tick, appshell.FetchSubscriptionsCmd(m.service, m.cache.subscriptions, m.Tenant, m.Subscriptions))
 
 	case actionThemePicker:
 		if !m.EmbeddedMode && !m.ThemeOverlay.Active {
@@ -447,16 +447,15 @@ func (m Model) renderActionMenu(base string) string {
 		CloseHint:   m.Keymap.Cancel.Short(),
 		Bindings: &ui.OverlayBindings{
 
-			MoveUp:   m.Keymap.ThemeUp,
+			MoveUp: m.Keymap.ThemeUp,
 
 			MoveDown: m.Keymap.ThemeDown,
 
-			Apply:    m.Keymap.ThemeApply,
+			Apply: m.Keymap.ThemeApply,
 
-			Cancel:   m.Keymap.ThemeCancel,
+			Cancel: m.Keymap.ThemeCancel,
 
-			Erase:    m.Keymap.BackspaceUp,
-
+			Erase: m.Keymap.BackspaceUp,
 		},
 		MaxVisible: 10,
 		Center:     true,

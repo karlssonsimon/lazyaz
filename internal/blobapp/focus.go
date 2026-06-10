@@ -7,7 +7,6 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -106,15 +105,8 @@ func (m *Model) blurAllFilters() {
 func (m *Model) commitFocusedFilter() tea.Cmd {
 	m.blurAllFilters()
 
-	switch m.focus {
-	case accountsPane:
-		ui.ApplyFilterState(&m.accountsList)
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
-	case containersPane:
-		ui.ApplyFilterState(&m.containersList)
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
-	case blobsPane:
-		ui.ApplyFilterState(&m.blobsList)
+	if target := m.listForPane(m.focus); target != nil {
+		ui.ApplyFilterState(target)
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Filter applied for %s", paneName(m.focus)))
 	}
 
@@ -126,15 +118,8 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 		return
 	}
 
-	var target *list.Model
-	switch m.focus {
-	case accountsPane:
-		target = &m.accountsList
-	case containersPane:
-		target = &m.containersList
-	case blobsPane:
-		target = &m.blobsList
-	default:
+	target := m.listForPane(m.focus)
+	if target == nil {
 		return
 	}
 
@@ -154,16 +139,10 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 }
 
 func (m Model) focusedListSettingFilter() bool {
-	switch m.focus {
-	case accountsPane:
-		return m.accountsList.SettingFilter()
-	case containersPane:
-		return m.containersList.SettingFilter()
-	case blobsPane:
-		return m.blobsList.SettingFilter()
-	default:
-		return false
+	if target := m.listForPane(m.focus); target != nil {
+		return target.SettingFilter()
 	}
+	return false
 }
 
 // IsTextInputActive reports whether the model is currently accepting

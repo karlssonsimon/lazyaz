@@ -97,27 +97,6 @@ func (m Model) WithAppliedNav(snap jumplist.NavSnapshot) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func recordJumpForCurrent(m Model) tea.Cmd {
-	if m.applyingNav {
-		return nil
-	}
-	if m.pendingNav.hasTarget() {
-		return nil
-	}
-	snap := m.CurrentNav()
-	if snap == nil {
-		return nil
-	}
-	return func() tea.Msg { return jumplist.RecordJumpMsg{Snap: snap} }
-}
-
 func appendJumpRecord(m Model, cmd tea.Cmd) tea.Cmd {
-	rec := recordJumpForCurrent(m)
-	if rec == nil {
-		return cmd
-	}
-	if cmd == nil {
-		return rec
-	}
-	return tea.Batch(cmd, rec)
+	return jumplist.AppendRecord(m.applyingNav, m.pendingNav.hasTarget(), m.CurrentNav(), cmd)
 }
