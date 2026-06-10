@@ -362,3 +362,41 @@ func TestPreviewPaneOverflowDoesNotEatStatusBar(t *testing.T) {
 		t.Errorf("preview details column missing from view")
 	}
 }
+
+// TestVisualSelectionRespectsActiveFilter mirrors kvapp's test of the
+// same name: with a list filter applied so only "alpha-*" rows are
+// visible, a visual range from alpha-1 to alpha-3 must cover exactly
+// the three alpha rows — never the beta rows hidden between them.
+func TestVisualSelectionRespectsActiveFilter(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.focus = blobsPane
+	m.blobs = []blob.BlobEntry{
+		{Name: "alpha-1"},
+		{Name: "beta-1"},
+		{Name: "alpha-2"},
+		{Name: "beta-2"},
+		{Name: "alpha-3"},
+	}
+	m.refreshItems()
+	m.blobsList.SetFilterText("alpha")
+
+	if visible := m.blobsList.VisibleItems(); len(visible) != 3 {
+		t.Fatalf("filter should expose 3 alpha rows, got %d", len(visible))
+	}
+
+	m.blobsList.Select(0) // alpha-1
+	m.visualLineMode = true
+	m.visualAnchor = "alpha-1"
+	m.blobsList.Select(2) // alpha-3
+
+	got := m.visualSelectionBlobNames()
+	want := []string{"alpha-1", "alpha-2", "alpha-3"}
+	if len(got) != len(want) {
+		t.Fatalf("visualSelectionBlobNames = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("visualSelectionBlobNames[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

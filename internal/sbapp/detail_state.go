@@ -165,17 +165,22 @@ func (m Model) visualSelectionIDs() []string {
 		anchor = current
 	}
 
-	// Use the full peeked messages list (not VisibleItems) so the
-	// range includes items hidden by a filter.
-	msgs := m.peekedMessages
-	if len(msgs) == 0 {
+	// Walk the list's visible items so the range covers exactly what
+	// the user sees — with a filter applied, hidden rows between the
+	// endpoints stay unselected (matches kvapp).
+	visible := m.messageList.VisibleItems()
+	if len(visible) == 0 {
 		return nil
 	}
 
 	anchorIdx := -1
 	currentIdx := -1
-	for i, msg := range msgs {
-		key := messageOperationKey(msg)
+	for i, it := range visible {
+		mi, ok := it.(messageItem)
+		if !ok {
+			continue
+		}
+		key := messageOperationKey(mi.message)
 		if anchorIdx < 0 && key == anchor {
 			anchorIdx = i
 		}
@@ -196,8 +201,10 @@ func (m Model) visualSelectionIDs() []string {
 	}
 
 	ids := make([]string, 0, end-start+1)
-	for _, msg := range msgs[start : end+1] {
-		ids = append(ids, messageOperationKey(msg))
+	for _, it := range visible[start : end+1] {
+		if mi, ok := it.(messageItem); ok {
+			ids = append(ids, messageOperationKey(mi.message))
+		}
 	}
 	return ids
 }

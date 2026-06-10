@@ -401,3 +401,42 @@ func isQuitCmd(cmd tea.Cmd) bool {
 	_, ok := cmd().(tea.QuitMsg)
 	return ok
 }
+
+// TestVisualSelectionRespectsActiveFilter mirrors blob/kv's test of the
+// same name: with a list filter applied so only "alpha-*" messages are
+// visible, a visual range from alpha-1 to alpha-3 must cover exactly
+// the three alpha messages — never the beta rows hidden between them.
+func TestVisualSelectionRespectsActiveFilter(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.hasPeekTarget = true
+	m.focus = messagesPane
+	m.peekedMessages = []servicebus.PeekedMessage{
+		{MessageID: "alpha-1"},
+		{MessageID: "beta-1"},
+		{MessageID: "alpha-2"},
+		{MessageID: "beta-2"},
+		{MessageID: "alpha-3"},
+	}
+	m.messageList.SetItems(m.messageItems())
+	m.messageList.SetFilterText("alpha")
+
+	if visible := m.messageList.VisibleItems(); len(visible) != 3 {
+		t.Fatalf("filter should expose 3 alpha rows, got %d", len(visible))
+	}
+
+	m.messageList.Select(0) // alpha-1
+	m.visualLineMode = true
+	m.visualAnchor = "alpha-1"
+	m.messageList.Select(2) // alpha-3
+
+	got := m.visualSelectionIDs()
+	want := []string{"alpha-1", "alpha-2", "alpha-3"}
+	if len(got) != len(want) {
+		t.Fatalf("visualSelectionIDs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("visualSelectionIDs[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

@@ -301,21 +301,25 @@ func (m Model) visualSelectionItems() []blobItem {
 		anchor = current
 	}
 
-	// Use the full sorted blob list (not VisibleItems) so the visual
-	// range includes items hidden by a bubbles list filter — same
-	// mental model as vim visual mode with folds.
-	entries := m.displayBlobs()
-	if len(entries) == 0 {
+	// Walk the list's visible items so the range covers exactly what
+	// the user sees — with a filter applied, hidden rows between the
+	// endpoints stay unselected (matches kvapp).
+	visible := m.blobsList.VisibleItems()
+	if len(visible) == 0 {
 		return nil
 	}
 
 	anchorIdx := -1
 	currentIdx := -1
-	for i, entry := range entries {
-		if anchorIdx < 0 && entry.Name == anchor {
+	for i, it := range visible {
+		b, ok := it.(blobItem)
+		if !ok {
+			continue
+		}
+		if anchorIdx < 0 && b.blob.Name == anchor {
 			anchorIdx = i
 		}
-		if currentIdx < 0 && entry.Name == current {
+		if currentIdx < 0 && b.blob.Name == current {
 			currentIdx = i
 		}
 	}
@@ -332,11 +336,10 @@ func (m Model) visualSelectionItems() []blobItem {
 	}
 
 	items := make([]blobItem, 0, end-start+1)
-	for _, entry := range entries[start : end+1] {
-		items = append(items, blobItem{
-			blob:        entry,
-			displayName: trimPrefixForDisplay(entry.Name, m.prefix),
-		})
+	for _, it := range visible[start : end+1] {
+		if b, ok := it.(blobItem); ok {
+			items = append(items, b)
+		}
 	}
 	return items
 }
