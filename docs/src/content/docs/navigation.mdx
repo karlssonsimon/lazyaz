@@ -112,8 +112,12 @@ shortcut `S` (or `Ctrl+S` in standard).
 ## Jump list
 
 lazyaz keeps a vim-style jump list that tracks where you've been across
-tabs. Drill-ins (into a container, namespace, vault) plus tab switches and
-new-tab opens are recorded.
+tabs, following vim's rules: a jump is a scope change — drilling into a
+different container, folder, vault, kind, namespace, or queue, switching
+subscription, or jumping between tabs. Local motion (cursor moves, pane
+focus changes, scrolling) is never recorded. The position you were at when
+you jumped is what gets recorded, down to the folder and the selected row,
+so `Ctrl+O` puts the cursor back exactly where you left.
 
 | Key | Action |
 |---|---|
@@ -121,7 +125,9 @@ new-tab opens are recorded.
 | `Ctrl+I` / `Ctrl+N` / `Ctrl+]` | Jump forward |
 
 Jumps cross tab boundaries — pressing `Ctrl+O` can return you to a different
-tab you had open. The list holds up to 100 entries and is deduplicated so
+tab you had open (including the dashboard, which restores the focused
+widget). Making a new jump while walked back abandons the forward history,
+exactly like vim. The list holds up to 100 entries and is deduplicated so
 rapid back-and-forth doesn't bloat it.
 
 Some terminal + multiplexer combinations can't distinguish `Ctrl+I` from `Tab`,
