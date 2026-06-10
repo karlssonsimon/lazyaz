@@ -599,6 +599,38 @@ func TestOpenAddSecretVersionFormGatesOnSecret(t *testing.T) {
 	}
 }
 
+// TestPasteSecretsActionAppearsOnSecretsPane confirms the new paste
+// entry surfaces when the secrets kind is active. It should NOT appear
+// on certificates or keys — paste is secrets-only.
+func TestPasteSecretsActionAppearsOnSecretsPane(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.hasVault = true
+	m.focus = secretsPane
+
+	cases := []struct {
+		kind kvKind
+		want bool
+	}{
+		{kvKindSecrets, true},
+		{kvKindCertificates, false},
+		{kvKindKeys, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.kind.String(), func(t *testing.T) {
+			m.kvKind = tc.kind
+			labels := make(map[string]bool)
+			for _, a := range m.buildActions() {
+				labels[a.label] = true
+			}
+			got := labels["Paste secrets from clipboard..."]
+			if got != tc.want {
+				t.Fatalf("kind %s: paste entry present=%v, want %v", tc.kind, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestVisualSelectionRespectsActiveFilter pins the rule that visual-line
 // mode walks the filtered view, not the underlying secrets slice. With
 // a filter applied so only "alpha-*" rows are visible, anchoring on

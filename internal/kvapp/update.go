@@ -146,6 +146,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case pasteResultMsg:
+		m.ClearLoading()
+		summary := fmt.Sprintf("Pasted: %d created, %d new version", msg.created, msg.newVersion)
+		level := appshell.LevelSuccess
+		if len(msg.errors) > 0 {
+			level = appshell.LevelWarn
+			summary += fmt.Sprintf(", %d failed (%s)", len(msg.errors), msg.errors[0])
+		}
+		m.ResolveSpinner(m.loadingSpinnerID, level, summary)
+		// Refresh the secrets list so newly created entries appear.
+		return m.refresh()
+
 	case secretCreatedMsg:
 		return m.handleSecretCreated(msg)
 
@@ -523,6 +535,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case ModePasteModal:
+		return m.handlePasteModalKey(key)
+
 	case ModeOverlay:
 		if result := m.HandleOverlayKeys(key); result.Handled {
 			if result.SelectSub != nil {
@@ -561,6 +576,27 @@ func (m Model) handleListFilterKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 	}
 
 	return m.updateFocusedList(msg)
+}
+
+// handlePasteModalKey routes keys to the paste modal. Submit dispatches
+// the paste command, cancel/esc closes the modal without writing
+// anything.
+func (m Model) handlePasteModalKey(key string) (Model, tea.Cmd) {
+	switch {
+	case m.Keymap.OpenFocused.Matches(key), m.Keymap.OpenFocusedAlt.Matches(key):
+		plan := m.pasteModal.Plan()
+		vault := m.currentVault
+		m.pasteModal = m.pasteModal.close()
+		if len(plan.Apply) == 0 {
+			m.Notify(appshell.LevelInfo, "Paste cancelled (nothing to do)")
+			return m, nil
+		}
+		m.startLoading(m.focus, fmt.Sprintf("Pasting %d secrets...", len(plan.Apply)))
+		return m, tea.Batch(m.Spinner.Tick, pasteSecretsCmd(m.service, vault, plan))
+	}
+	next, _ := m.pasteModal.HandleKey(key, m.Keymap)
+	m.pasteModal = next
+	return m, nil
 }
 
 // handleVisualLineKey handles keys during visual line selection.
@@ -656,6 +692,10 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 		return m, nil
 	case m.Keymap.YankSecret.Matches(key):
 		return m.handleYank()
+	case m.Keymap.PasteSecrets.Matches(key):
+		if m.focus == secretsPane && m.hasVault && m.kvKind == kvKindSecrets {
+			return m.tryOpenPasteModal()
+		}
 	case m.Keymap.RevealSecret.Matches(key):
 		return m.toggleSecretReveal()
 	case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):

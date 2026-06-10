@@ -39,6 +39,7 @@ const (
 	actionDeleteSecret
 	actionDeleteCertificate
 	actionDeleteKey
+	actionPasteSecrets
 )
 
 type action struct {
@@ -117,6 +118,12 @@ func (m Model) buildActions() []action {
 			})
 			actions = append(actions, action{actionClearMarks, "Clear all marks", ""})
 		}
+
+		actions = append(actions, action{
+			actionPasteSecrets,
+			"Paste secrets from clipboard...",
+			km.PasteSecrets.Short(),
+		})
 	}
 
 	if m.focus == versionsPane && m.kvKind == kvKindSecrets && m.hasSecret {
@@ -305,8 +312,33 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.confirmDelete(it.key.Name, "key", deleteKeyCmd(m.service, m.currentVault, it.key.Name))
+
+	case actionPasteSecrets:
+		return m.tryOpenPasteModal()
 	}
 
+	return m, nil
+}
+
+// tryOpenPasteModal validates the clipboard and opens the paste modal
+// on success. On failure the modal stays closed and a status-bar notice
+// describes why — pressing `p` with random clipboard content is a
+// no-op, not an error.
+func (m Model) tryOpenPasteModal() (Model, tea.Cmd) {
+	if m.focus != secretsPane || !m.hasVault || m.kvKind != kvKindSecrets {
+		return m, nil
+	}
+	text, err := clipboard.ReadAll()
+	if err != nil {
+		m.Notify(appshell.LevelInfo, "clipboard unavailable")
+		return m, nil
+	}
+	state, err := newPasteModalState(text, m.secrets)
+	if err != nil {
+		m.Notify(appshell.LevelInfo, err.Error())
+		return m, nil
+	}
+	m.pasteModal = state.withVaultName(m.currentVault.Name)
 	return m, nil
 }
 

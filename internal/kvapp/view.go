@@ -153,6 +153,9 @@ func (m Model) View() tea.View {
 	if m.certImportBrowserActive {
 		view = ui.RenderFileBrowser(m.certImportBrowser, m.Styles, m.Width, m.Height, view)
 	}
+	if m.pasteModal.active {
+		view = m.renderPasteModal(view)
+	}
 	if m.confirmModal.Active {
 		view = ui.RenderConfirmModal(m.confirmModal, m.Styles, m.Width, m.Height, view)
 	}

@@ -38,6 +38,7 @@ const (
 	ModeListFilter                  // User is typing a list filter
 	ModeVisualLine                  // Visual line selection active
 	ModeForm                        // Multi-field form overlay open (e.g., create secret)
+	ModePasteModal                  // Paste-secrets confirmation modal open
 )
 
 // inputMode returns the current interaction mode by checking state
@@ -54,6 +55,8 @@ func (m Model) inputMode() InputMode {
 		return ModeForm
 	case m.actionMenu.Active:
 		return ModeActionMenu
+	case m.pasteModal.active:
+		return ModePasteModal
 	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
 		return ModeOverlay
 	case m.focusedListSettingFilter():
@@ -134,6 +137,8 @@ type Model struct {
 	markedSecrets  map[string]keyvault.Secret
 	visualLineMode bool
 	visualAnchor   string
+
+	pasteModal pasteModalState
 
 	// kvKind picks which child collection the items/versions columns
 	// surface for the current vault. Driven by the cursor position in
