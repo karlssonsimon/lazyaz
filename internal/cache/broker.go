@@ -183,12 +183,11 @@ func (b *Broker[T]) Subscribe(
 	if exists && s.status == StreamActive {
 		// Join existing active stream.
 		s.subs[subID] = ch
-		// Send catch-up snapshot.
+		// Send catch-up snapshot. The channel is fresh, so this never
+		// blocks; pushPage keeps it safe regardless.
 		snapshot := append([]T(nil), s.items...)
 		b.mu.Unlock()
-		go func() {
-			ch <- Page[T]{Key: key, Items: snapshot, Done: false}
-		}()
+		pushPage(ch, Page[T]{Key: key, Items: snapshot, Done: false})
 		return b.recv(key, subID, ch, wrapMsg), subID
 	}
 
@@ -280,11 +279,7 @@ func (b *Broker[T]) worker(
 
 		page := Page[T]{Key: key, Items: items, Done: done, Err: err}
 		for _, ch := range subs {
-			select {
-			case ch <- page:
-			case <-ctx.Done():
-				return
-			}
+			pushPage(ch, page)
 		}
 		lastFlush = time.Now()
 	}
@@ -332,6 +327,31 @@ func (b *Broker[T]) worker(
 	b.store.Set(key, final)
 	b.mu.Unlock()
 	emit(final, true, err)
+}
+
+// pushPage delivers a page without ever blocking the producer: when the
+// buffer is full, the oldest queued page is dropped to make room. Pages
+// are cumulative snapshots, so a dropped intermediate page is superseded
+// by the one replacing it, and the final Done page always lands.
+//
+// This matters because subscribers legitimately stop draining: handlers
+// drop msg.Next for stale scopes and the parent drops pages addressed
+// to closed tabs. Before this, one abandoned subscriber's full channel
+// blocked the worker forever — the stream stayed "active", every later
+// Subscribe for the key joined the wedged stream, and the goroutine
+// leaked.
+func pushPage[T any](ch chan Page[T], page Page[T]) {
+	for {
+		select {
+		case ch <- page:
+			return
+		default:
+		}
+		select {
+		case <-ch:
+		default:
+		}
+	}
 }
 
 // recv builds the chained tea.Cmd that delivers pages from a
