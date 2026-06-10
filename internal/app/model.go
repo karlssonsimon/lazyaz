@@ -372,7 +372,7 @@ func (m Model) openStandaloneBlobTab(account blob.Account, label string) (tea.Mo
 	oldIdx := m.activeIdx
 	m.tabs = append(m.tabs, Tab{ID: id, Kind: TabBlob, Label: label, Model: bm})
 	m.activeIdx = len(m.tabs) - 1
-	m.recordTabChange(oldIdx, m.activeIdx)
+	m.recordTabDeparture(oldIdx)
 
 	tab := &m.tabs[m.activeIdx]
 	initCmd := wrapCmd(tab.ID, tab.Model.Init())
@@ -430,10 +430,6 @@ func (m *Model) openSBTabWithNav(sub azure.Subscription, nav sbapp.PendingNav) (
 		ffCmd = sm.SetPendingNav(nav)
 		tab.Model = sm
 	}
-	// Record the destination as a jump entry so ctrl+o brings the
-	// user back to whatever they were doing before the dashboard
-	// drilled them in here.
-	m.recordJump(tab.ID, sbapp.NavSnapshotFromPending(nav))
 	initCmd := wrapCmd(tab.ID, tab.Model.Init())
 	resizeCmd := m.forwardToActive(tea.WindowSizeMsg{
 		Width:  m.width,
@@ -482,7 +478,6 @@ func (m *Model) openBlobTabWithNav(sub azure.Subscription, nav blobapp.PendingNa
 		ffCmd = bm.SetPendingNav(nav)
 		tab.Model = bm
 	}
-	m.recordJump(tab.ID, blobapp.NavSnapshotFromPending(nav))
 	initCmd := wrapCmd(tab.ID, tab.Model.Init())
 	resizeCmd := m.forwardToActive(tea.WindowSizeMsg{
 		Width:  m.width,
@@ -739,10 +734,8 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tabPicker.active = false
 		oldIdx := m.activeIdx
 		m.addTab(msg.kind, "")
-		// Record both the previous tab's position (so ctrl+o returns
-		// the user there) and the new tab's home (so ctrl+i can come
-		// back forward).
-		m.recordTabChange(oldIdx, m.activeIdx)
+		// Record the previous tab's position so ctrl+o returns there.
+		m.recordTabDeparture(oldIdx)
 		// Init the new tab and send it a resize.
 		tab := &m.tabs[m.activeIdx]
 		initCmd := wrapCmd(tab.ID, tab.Model.Init())
@@ -838,6 +831,12 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case jumpTabMsg:
 		if msg.index >= 0 && msg.index < len(m.tabs) {
+			// A deliberate 1-9 jump records where the user left so
+			// ctrl+o returns there. Plain tab cycling (NextTab/PrevTab)
+			// stays unrecorded — that's browsing, not jumping.
+			if msg.index != m.activeIdx {
+				m.recordTabDeparture(m.activeIdx)
+			}
 			m.activeIdx = msg.index
 			return m, m.resizeAndTickActive()
 		}

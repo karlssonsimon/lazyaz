@@ -7,6 +7,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/azure"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
+	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -499,5 +500,77 @@ func TestLoadMoreActionVisibility(t *testing.T) {
 	m.blobLoadAll = true
 	if hasLoadMore(m) {
 		t.Fatal("Load more should be hidden in load-all mode")
+	}
+}
+
+// TestCurrentNavCapturesExactPosition: snapshots carry the folder
+// prefix and the selected row, not just account/container — without
+// them ctrl+o lands in the right container but at the root on an
+// arbitrary row.
+func TestCurrentNavCapturesExactPosition(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.CurrentSub = azure.Subscription{ID: "sub-1"}
+	m.HasSubscription = true
+	m.hasAccount = true
+	m.currentAccount = blob.Account{Name: "acct", SubscriptionID: "sub-1"}
+	m.hasContainer = true
+	m.containerName = "data"
+	m.prefix = "logs/2026/"
+	m.focus = blobsPane
+	m.blobs = []blob.BlobEntry{
+		{Name: "logs/2026/jan.txt"},
+		{Name: "logs/2026/feb.txt"},
+	}
+	m.refreshItems()
+	m.blobsList.Select(1)
+
+	snap, ok := m.CurrentNav().(blobNavSnapshot)
+	if !ok {
+		t.Fatal("CurrentNav should return a blobNavSnapshot")
+	}
+	if snap.prefix != "logs/2026/" {
+		t.Fatalf("prefix = %q, want logs/2026/", snap.prefix)
+	}
+	if snap.itemKey != "logs/2026/feb.txt" {
+		t.Fatalf("itemKey = %q, want the selected row", snap.itemKey)
+	}
+	if snap.subscriptionID != "sub-1" {
+		t.Fatalf("subscriptionID = %q, want sub-1", snap.subscriptionID)
+	}
+}
+
+// TestApplyNavRestoresExactPosition: with warm caches, restoring a
+// snapshot puts the user back on the same account/container/prefix and
+// the same blob row.
+func TestApplyNavRestoresExactPosition(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.CurrentSub = azure.Subscription{ID: "sub-1"}
+	m.HasSubscription = true
+	account := blob.Account{Name: "acct", SubscriptionID: "sub-1"}
+	m.cache.accounts.Set("sub-1", []blob.Account{account})
+	m.cache.containers.Set(cache.Key("sub-1", "acct"), []blob.ContainerInfo{{Name: "data"}})
+	m.cache.blobs.Set(blobsCacheKey("sub-1", "acct", "data", "logs/", false), []blob.BlobEntry{
+		{Name: "logs/a.txt"},
+		{Name: "logs/b.txt"},
+	})
+
+	m.ApplyNav(blobNavSnapshot{
+		subscriptionID: "sub-1",
+		accountName:    "acct",
+		containerName:  "data",
+		prefix:         "logs/",
+		itemKey:        "logs/b.txt",
+		focusedPane:    blobsPane,
+	})
+
+	if m.currentAccount.Name != "acct" || m.containerName != "data" || m.prefix != "logs/" {
+		t.Fatalf("scope not restored: account=%q container=%q prefix=%q", m.currentAccount.Name, m.containerName, m.prefix)
+	}
+	it, ok := m.blobsList.SelectedItem().(blobItem)
+	if !ok || it.blob.Name != "logs/b.txt" {
+		t.Fatalf("cursor not restored to logs/b.txt, got %+v", m.blobsList.SelectedItem())
+	}
+	if m.pendingNav.hasTarget() {
+		t.Fatal("pendingNav should be drained after a cache-warm restore")
 	}
 }

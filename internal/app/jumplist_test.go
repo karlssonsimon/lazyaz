@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/karlssonsimon/lazyaz/internal/jumplist"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // fakeSnap is a minimal NavSnapshot implementation for testing the
@@ -204,5 +206,76 @@ func TestCleanupJumpsForTabEmpty(t *testing.T) {
 	m.cleanupJumpsForTab(99) // no panic on empty list
 	if len(m.jumps) != 0 || m.jumpIdx != -1 {
 		t.Errorf("unexpected mutation: jumps=%v jumpIdx=%d", m.jumps, m.jumpIdx)
+	}
+}
+
+// fakeNavTab is a minimal tab model implementing navigationTab. pos is
+// the position CurrentNav reports; applied collects every snapshot
+// handed to WithAppliedNav so tests can assert restoration targets.
+type fakeNavTab struct {
+	pos     jumplist.NavSnapshot
+	applied *[]jumplist.NavSnapshot
+}
+
+func (f fakeNavTab) Init() tea.Cmd                       { return nil }
+func (f fakeNavTab) Update(tea.Msg) (tea.Model, tea.Cmd) { return f, nil }
+func (f fakeNavTab) View() tea.View                      { return tea.NewView("") }
+func (f fakeNavTab) CurrentNav() jumplist.NavSnapshot    { return f.pos }
+func (f fakeNavTab) WithAppliedNav(s jumplist.NavSnapshot) (tea.Model, tea.Cmd) {
+	*f.applied = append(*f.applied, s)
+	return f, nil
+}
+
+func newJumpModelWithTab(applied *[]jumplist.NavSnapshot) Model {
+	m := newJumpModel()
+	m.tabs = []Tab{{ID: 1, Kind: TabBlob, Model: fakeNavTab{pos: fakeSnap{"live-pos"}, applied: applied}}}
+	m.activeIdx = 0
+	return m
+}
+
+// Walking back anchors the live position first (so ctrl+i can return),
+// then restores the most recent recorded origin — vim's ctrl+o.
+func TestJumpBackAnchorsLivePositionAndRestoresOrigin(t *testing.T) {
+	var applied []jumplist.NavSnapshot
+	m := newJumpModelWithTab(&applied)
+
+	m.recordJump(1, fakeSnap{"origin-a"})
+	m.jumpBack()
+
+	if len(applied) != 1 || applied[0].Description() != "origin-a" {
+		t.Fatalf("ctrl+o should restore origin-a, applied=%v", applied)
+	}
+	if len(m.jumps) != 2 || m.jumps[1].snap.Description() != "live-pos" {
+		t.Fatalf("expected anchored live position at the tail, jumps=%v", m.jumps)
+	}
+
+	m.jumpForward()
+	if len(applied) != 2 || applied[1].Description() != "live-pos" {
+		t.Fatalf("ctrl+i should return to the anchored position, applied=%v", applied)
+	}
+}
+
+// A new jump made while walked back truncates the abandoned forward
+// history even when the new record dedups against the current entry —
+// jumping again from the exact spot ctrl+o landed on must not leave
+// stale ctrl+i targets behind.
+func TestRecordMidListTruncatesEvenWhenDeduped(t *testing.T) {
+	var applied []jumplist.NavSnapshot
+	m := newJumpModelWithTab(&applied)
+
+	m.recordJump(1, fakeSnap{"a"})
+	m.recordJump(1, fakeSnap{"b"})
+	m.recordJump(1, fakeSnap{"c"})
+	m.jumpBack() // anchors live-pos, lands on c
+	m.jumpBack() // lands on b
+
+	m.recordJump(1, fakeSnap{"b"}) // dedups, but must still truncate
+	for _, e := range m.jumps {
+		if d := e.snap.Description(); d == "c" || d == "live-pos" {
+			t.Fatalf("forward history should be truncated, still contains %q: %v", d, m.jumps)
+		}
+	}
+	if m.jumpIdx != len(m.jumps)-1 {
+		t.Fatalf("jumpIdx = %d, want tail %d", m.jumpIdx, len(m.jumps)-1)
 	}
 }

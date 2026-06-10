@@ -2,6 +2,24 @@
 // app maintain a vim-style ctrl+o / ctrl+i jump list across every
 // child tab.
 //
+// # Semantics (vim's rules)
+//
+// A jump is a SCOPE change: selecting a different account, container,
+// folder prefix, vault, kind, namespace, entity, or tab. Local motion
+// (cursor moves, pane focus changes, half-page scrolls, marking) is
+// not a jump and is never recorded.
+//
+// Records capture the position the user is LEAVING, taken immediately
+// BEFORE the scope mutates — vim records origins, not destinations.
+// The destination of a jump is only recorded when the user later jumps
+// away from it; ctrl+i can still return to the newest position because
+// jumpBack anchors the live position before walking backward. A new
+// jump made while walked back truncates the abandoned forward history.
+//
+// Snapshots should be precise enough to restore the full position:
+// scope, focused pane, and the selected row — ctrl+o that lands on the
+// right list but the wrong row doesn't feel like vim.
+//
 // Each tab Model implements (informally — the parent uses a type
 // switch rather than an interface to avoid pointer/value-receiver
 // awkwardness):

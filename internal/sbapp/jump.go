@@ -5,21 +5,24 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/jumplist"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
 )
 
 // sbNavSnapshot captures the user's position in the Service Bus
-// explorer: namespace + (optionally) entity + (for topics) subscription
-// + DLQ pane flag + which Miller pane is focused. ApplyNav restores this
-// via the existing PendingNav fast-forward path so cache-warmed jumps
-// are instant.
+// explorer: subscription + namespace + (optionally) entity + (for
+// topics) topic subscription + DLQ flag + the selected row + focused
+// pane. ApplyNav restores this via the existing PendingNav fast-forward
+// path so cache-warmed jumps are instant.
 type sbNavSnapshot struct {
-	namespace   servicebus.Namespace
-	entityName  string
-	subName     string
-	deadLetter  bool
-	focusedPane int
+	subscriptionID string
+	namespace      servicebus.Namespace
+	entityName     string
+	subName        string
+	deadLetter     bool
+	itemKey        string // selected row in the focused pane ("" when none)
+	focusedPane    int
 }
 
 func (s sbNavSnapshot) Description() string {
@@ -35,6 +38,9 @@ func (s sbNavSnapshot) Description() string {
 	}
 	if s.deadLetter {
 		parts = append(parts, "DLQ")
+	}
+	if s.itemKey != "" {
+		parts = append(parts, s.itemKey)
 	}
 	parts = append(parts, paneLabel(s.focusedPane))
 	return strings.Join(parts, " / ")
@@ -67,30 +73,45 @@ func (m Model) CurrentNav() jumplist.NavSnapshot {
 	if !m.HasSubscription {
 		return nil
 	}
-	snap := sbNavSnapshot{focusedPane: m.focus}
+	snap := sbNavSnapshot{
+		subscriptionID: m.CurrentSub.ID,
+		focusedPane:    m.focus,
+	}
 	if m.hasNamespace {
 		snap.namespace = m.currentNS
 		snap.entityName = m.currentEntity.Name
 		snap.subName = m.currentSubName
 		snap.deadLetter = m.deadLetter
 	}
+	switch m.focus {
+	case namespacesPane:
+		if it, ok := m.namespacesList.SelectedItem().(namespaceItem); ok {
+			snap.itemKey = it.namespace.Name
+		}
+	case entitiesPane:
+		if it, ok := m.entitiesList.SelectedItem().(entityItem); ok {
+			snap.itemKey = it.entity.Name
+		}
+	case subscriptionsPane:
+		if it, ok := m.subscriptionsList.SelectedItem().(subscriptionItem); ok {
+			snap.itemKey = it.sub.Name
+		}
+	case messagesPane, messagePreviewPane:
+		if it, ok := m.messageList.SelectedItem().(messageItem); ok {
+			snap.itemKey = messageOperationKey(it.message)
+		}
+	}
 	return snap
 }
 
-// ApplyNav restores a captured position. Type-asserts the opaque
-// snapshot back to sbNavSnapshot; foreign snapshots are silently
-// ignored (the parent only routes us snapshots we created, but the
-// extra check costs nothing).
-//
-// The applyingNav flag suppresses RecordJumpMsg emission from the
-// drill-in helpers we're about to call — restoring should not append
-// the destination as a fresh jump entry (that would truncate forward
-// history and trap the user in an oscillation between two adjacent
-// entries).
+// ApplyNav restores a captured position. The applyingNav flag
+// suppresses RecordJumpMsg emission from the drill-in helpers we're
+// about to call — restoring should not append the destination as a
+// fresh jump entry.
 //
 // A snapshot with empty namespace.Name represents the pre-drill state
 // (user was on the namespaces list itself); restoring is just a focus
-// change.
+// change plus a cursor restore.
 func (m *Model) ApplyNav(snap jumplist.NavSnapshot) tea.Cmd {
 	s, ok := snap.(sbNavSnapshot)
 	if !ok {
@@ -98,23 +119,61 @@ func (m *Model) ApplyNav(snap jumplist.NavSnapshot) tea.Cmd {
 	}
 	m.applyingNav = true
 	defer func() { m.applyingNav = false }()
+
+	var cmds []tea.Cmd
+
+	// Best-effort subscription restore when the snapshot was taken
+	// under a different subscription.
+	if s.subscriptionID != "" && (!m.HasSubscription || m.CurrentSub.ID != s.subscriptionID) {
+		found := false
+		for _, sub := range m.Subscriptions {
+			if sub.ID == s.subscriptionID {
+				updated, cmd := m.selectSubscription(sub)
+				*m = updated
+				if cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil
+		}
+	}
+
 	if s.namespace.Name == "" {
 		if s.focusedPane >= namespacesPane && s.focusedPane <= messagePreviewPane {
 			m.transitionTo(s.focusedPane)
 		}
-		return nil
+		ui.SelectByKey(&m.namespacesList, s.itemKey, namespaceItemKey)
+		return batchCmds(cmds)
 	}
-	cmd := m.SetPendingNav(PendingNav{
+
+	if cmd := m.SetPendingNav(PendingNav{
 		Namespace:  s.namespace,
 		EntityName: s.entityName,
 		SubName:    s.subName,
 		DeadLetter: s.deadLetter,
-	})
+	}); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	// Restore pane focus after the drill-in lands.
 	if s.focusedPane >= namespacesPane && s.focusedPane <= messagePreviewPane {
 		m.transitionTo(s.focusedPane)
 	}
-	return cmd
+	// Cache-warm best-effort cursor restores. Messages are not
+	// re-peeked on restore (peek is a deliberate action), so the
+	// message-row key usually has nothing to land on — harmless no-op.
+	switch s.focusedPane {
+	case entitiesPane:
+		ui.SelectByKey(&m.entitiesList, s.itemKey, entityItemKey)
+	case subscriptionsPane:
+		ui.SelectByKey(&m.subscriptionsList, s.itemKey, subscriptionItemKey)
+	case messagesPane, messagePreviewPane:
+		ui.SelectByKey(&m.messageList, s.itemKey, messageItemKey)
+	}
+	return batchCmds(cmds)
 }
 
 func (m Model) WithAppliedNav(snap jumplist.NavSnapshot) (tea.Model, tea.Cmd) {
@@ -122,42 +181,12 @@ func (m Model) WithAppliedNav(snap jumplist.NavSnapshot) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// NavSnapshotFromPending builds a snapshot directly from a PendingNav
-// target. The parent app uses this when creating a tab with pending
-// navigation: the destination snapshot can be recorded immediately
-// even before the eager fast-forward runs (cache might miss, in which
-// case CurrentNav would return nil too early to capture).
-func NavSnapshotFromPending(p PendingNav) jumplist.NavSnapshot {
-	if p.Namespace.Name == "" {
-		return nil
-	}
-	// Pick the pane the drill-in actually lands on (see advancePendingNav):
-	// DLQ targets peek messages, non-DLQ entity/sub targets stop at the
-	// queue type picker, bare namespaces stay on the entities list.
-	pane := entitiesPane
-	switch {
-	case p.EntityName != "" && p.DeadLetter:
-		pane = messagesPane
-	case p.EntityName != "":
-		pane = queueTypePane
-	}
-	return sbNavSnapshot{
-		namespace:   p.Namespace,
-		entityName:  p.EntityName,
-		subName:     p.SubName,
-		deadLetter:  p.DeadLetter,
-		focusedPane: pane,
-	}
-}
-
-// appendJumpRecord batches an existing cmd with a fresh jump record
-// for m's current navigable position. Used at the end of each drill-in
-// helper (selectNamespace / selectQueue / selectTopic /
-// selectSubscriptionSub) so callers don't have to remember to do it.
-// Records are suppressed while a PendingNav is in flight — the parent
-// records the destination directly in openSBTabWithNav, so the
-// intermediate hops emitted by selectNamespace / selectEntity would
-// just pollute ctrl+o history with phantom stops.
-func appendJumpRecord(m Model, cmd tea.Cmd) tea.Cmd {
-	return jumplist.AppendRecord(m.applyingNav, m.pendingNav.hasTarget(), m.CurrentNav(), cmd)
+// recordDeparture batches cmd with a jump record for the position the
+// user is LEAVING (vim records origins, not destinations). Callers
+// capture the snapshot via CurrentNav() BEFORE mutating scope. Records
+// are suppressed during ApplyNav restoration and while a PendingNav is
+// in flight — the parent records the origin side of cross-tab opens
+// directly, so programmatic hops would just pollute ctrl+o history.
+func recordDeparture(m Model, depart jumplist.NavSnapshot, cmd tea.Cmd) tea.Cmd {
+	return jumplist.AppendRecord(m.applyingNav, m.pendingNav.hasTarget(), depart, cmd)
 }

@@ -325,6 +325,11 @@ func (m Model) handleCertsLoaded(msg certsLoadedMsg) (Model, tea.Cmd) {
 		status := fmt.Sprintf("Loaded %d certificates from %s in %s", len(m.certs), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
 		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
+		if m.pendingNav.hasTarget() {
+			updated, cmd := m.advancePendingNav()
+			m = updated
+			return m, cmd
+		}
 		return m, nil
 	}
 	return m, msg.next
@@ -367,6 +372,11 @@ func (m Model) handleKeysLoaded(msg keysLoadedMsg) (Model, tea.Cmd) {
 		status := fmt.Sprintf("Loaded %d keys from %s in %s", len(m.keys), msg.vault.Name, time.Since(m.LoadingStartedAt).Round(time.Millisecond))
 		m.ClearLoading()
 		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
+		if m.pendingNav.hasTarget() {
+			updated, cmd := m.advancePendingNav()
+			m = updated
+			return m, cmd
+		}
 		return m, nil
 	}
 	return m, msg.next

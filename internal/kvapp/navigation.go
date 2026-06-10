@@ -12,17 +12,19 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// navigateLeft moves pane focus one column left. Pure focus moves are
+// local motion, not jumps — they are deliberately not recorded.
 func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case versionsPane:
 		m.transitionTo(secretsPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	case secretsPane:
 		m.transitionTo(kindPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	case kindPane:
 		m.transitionTo(vaultsPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	case vaultsPane:
 		return m, nil
 	default:
@@ -42,6 +44,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	if m.HasSubscription && m.CurrentSub.ID == sub.ID {
 		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	// Snapshot the current vaults list state under the outgoing sub so
 	// navigating back to it later restores the cursor and filter.
@@ -84,7 +87,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.versionsList.Title = "Versions"
 
 	m.StartLoading(m.focus, fmt.Sprintf("Loading key vaults in %s", ui.SubscriptionDisplayName(sub)))
-	return m, tea.Batch(m.Spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID, m.vaults))
+	return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchVaultsCmd(m.service, m.cache.vaults, sub.ID, m.vaults)))
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
@@ -121,8 +124,9 @@ func (m Model) selectVault(vault keyvault.Vault) (Model, tea.Cmd) {
 	// Re-selecting the same vault: just move focus to kindPane.
 	if m.hasVault && m.currentVault.Name == vault.Name {
 		m.transitionTo(kindPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	// Snapshot the outgoing vault's items column so sibling navigation
 	// restores cursor + filter. Snapshot the OUTGOING kind's scope.
@@ -148,7 +152,8 @@ func (m Model) selectVault(vault keyvault.Vault) (Model, tea.Cmd) {
 
 	// Items column reflects the still-active kind so the user sees
 	// what's coming once they Enter, but the fetch waits for selectKind.
-	return m.repopulateMiddleColumn(true /*resetVersions*/)
+	updated, fetch := m.repopulateMiddleColumn(true /*resetVersions*/)
+	return updated, recordDeparture(updated, depart, fetch)
 }
 
 // selectKind sets m.kvKind from a kindPane row, focuses the items
@@ -160,8 +165,9 @@ func (m Model) selectKind(kind kvKind) (Model, tea.Cmd) {
 	// Same kind already active: just move focus.
 	if m.kvKind == kind {
 		m.transitionTo(secretsPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 	// Different kind — snapshot the outgoing kind's items column and
 	// reset per-kind selection state so the right column doesn't keep
 	// stale data from the prior kind.
@@ -174,7 +180,8 @@ func (m Model) selectKind(kind kvKind) (Model, tea.Cmd) {
 	m.currentCert = keyvault.Certificate{}
 	m.currentKey = keyvault.Key{}
 	m.transitionTo(secretsPane)
-	return m.repopulateMiddleColumn(true /*resetVersions*/)
+	updated, fetch := m.repopulateMiddleColumn(true /*resetVersions*/)
+	return updated, recordDeparture(updated, depart, fetch)
 }
 
 // syncKindListCursor moves the kindList cursor onto the row matching
@@ -255,7 +262,7 @@ func (m Model) repopulateMiddleColumn(resetVersions bool) (Model, tea.Cmd) {
 	}
 
 	updated, fetch := m.fetchMiddleColumn()
-	return updated, appendJumpRecord(updated, fetch)
+	return updated, fetch
 }
 
 // middleItemKeyForList returns a list.Item-keyed extractor (the shape
@@ -275,8 +282,9 @@ func middleItemKeyForList(kind kvKind) func(it list.Item) string {
 func (m Model) selectCert(cert keyvault.Certificate) (Model, tea.Cmd) {
 	if m.hasCert && m.currentCert.Name == cert.Name {
 		m.transitionTo(versionsPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 	if m.hasCert {
 		oldKey := cache.Key(m.CurrentSub.ID, m.currentVault.Name, m.currentCert.Name)
 		m.versionsHistory[oldKey] = ui.SnapshotListState(&m.versionsList, versionItemKey)
@@ -299,15 +307,16 @@ func (m Model) selectCert(cert keyvault.Certificate) (Model, tea.Cmd) {
 	ui.RestoreListState(&m.versionsList, m.versionsHistory[scope], versionItemKey)
 
 	m.StartLoading(m.focus, fmt.Sprintf("Loading versions for %s", cert.Name))
-	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchCertVersionsCmd(m.service, m.cache.certVersions, m.currentVault, cert.Name, m.certVersions)))
+	return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchCertVersionsCmd(m.service, m.cache.certVersions, m.currentVault, cert.Name, m.certVersions)))
 }
 
 // selectKey binds the explorer to a key and loads its versions.
 func (m Model) selectKey(key keyvault.Key) (Model, tea.Cmd) {
 	if m.hasKey && m.currentKey.Name == key.Name {
 		m.transitionTo(versionsPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 	if m.hasKey {
 		oldKey := cache.Key(m.CurrentSub.ID, m.currentVault.Name, m.currentKey.Name)
 		m.versionsHistory[oldKey] = ui.SnapshotListState(&m.versionsList, versionItemKey)
@@ -330,7 +339,7 @@ func (m Model) selectKey(key keyvault.Key) (Model, tea.Cmd) {
 	ui.RestoreListState(&m.versionsList, m.versionsHistory[scope], versionItemKey)
 
 	m.StartLoading(m.focus, fmt.Sprintf("Loading versions for %s", key.Name))
-	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchKeyVersionsCmd(m.service, m.cache.keyVersions, m.currentVault, key.Name, m.keyVersions)))
+	return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchKeyVersionsCmd(m.service, m.cache.keyVersions, m.currentVault, key.Name, m.keyVersions)))
 }
 
 // selectSecret binds the explorer to a secret under the active vault
@@ -339,8 +348,9 @@ func (m Model) selectSecret(secret keyvault.Secret) (Model, tea.Cmd) {
 	// Re-selecting the same secret: just move focus.
 	if m.hasSecret && m.currentSecret.Name == secret.Name {
 		m.transitionTo(versionsPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	// Snapshot the current versions list under the outgoing secret.
 	if m.hasSecret {
@@ -366,5 +376,5 @@ func (m Model) selectSecret(secret keyvault.Secret) (Model, tea.Cmd) {
 	ui.RestoreListState(&m.versionsList, m.versionsHistory[versionScope], versionItemKey)
 
 	m.StartLoading(m.focus, fmt.Sprintf("Loading versions for %s", secret.Name))
-	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, secret.Name, m.versions)))
+	return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchVersionsCmd(m.service, m.cache.versions, m.currentVault, secret.Name, m.versions)))
 }

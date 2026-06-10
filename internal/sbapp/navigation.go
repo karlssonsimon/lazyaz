@@ -12,29 +12,31 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// navigateLeft moves pane focus one column left. Pure focus moves are
+// local motion, not jumps — they are deliberately not recorded.
 func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case messagePreviewPane:
 		m.transitionTo(messagesPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	case messagesPane:
 		m.closePreview()
 		cmd := m.abandonLockedIfHeld()
 		m.transitionTo(queueTypePane)
-		return m, appendJumpRecord(m, cmd)
+		return m, cmd
 	case queueTypePane:
 		if m.isTopicSelected() {
 			m.transitionTo(subscriptionsPane)
 		} else {
 			m.transitionTo(entitiesPane)
 		}
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	case subscriptionsPane:
 		m.transitionTo(entitiesPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	case entitiesPane:
 		m.transitionTo(namespacesPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	default:
 		return m, nil
 	}
@@ -75,6 +77,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	if m.HasSubscription && m.CurrentSub.ID == sub.ID {
 		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	if m.HasSubscription {
 		m.namespacesHistory[m.CurrentSub.ID] = ui.SnapshotListState(&m.namespacesList, namespaceItemKey)
@@ -111,7 +114,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.messageList.SetItems(nil)
 
 	m.StartLoading(m.focus, fmt.Sprintf("Loading namespaces in %s", ui.SubscriptionDisplayName(sub)))
-	return m, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID, m.namespaces))
+	return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchNamespacesCmd(m.service, m.cache.namespaces, sub.ID, m.namespaces)))
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
@@ -174,8 +177,9 @@ func (m Model) selectQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 		m.currentNS.Name+" / "+entity.Name)
 	if m.hasPeekTarget && m.currentSubName == "" && m.currentEntity.Name == entity.Name {
 		m.transitionTo(queueTypePane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	m.closePreview()
 	m.currentEntity = entity
@@ -192,7 +196,7 @@ func (m Model) selectQueue(entity servicebus.Entity) (Model, tea.Cmd) {
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(nil)
 
-	return m, appendJumpRecord(m, nil)
+	return m, recordDeparture(m, depart, nil)
 }
 
 // selectTopic loads a topic's subscriptions.
@@ -202,8 +206,9 @@ func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
 		m.currentNS.Name+" / "+entity.Name)
 	if m.currentEntity.Name == entity.Name && m.isTopicSelected() {
 		m.transitionTo(subscriptionsPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	m.closePreview()
 	m.currentEntity = entity
@@ -232,7 +237,7 @@ func (m Model) selectTopic(entity servicebus.Entity) (Model, tea.Cmd) {
 	m.messageList.SetItems(nil)
 
 	m.StartLoading(m.focus, fmt.Sprintf("Loading subscriptions for topic %s", entity.Name))
-	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, entity.Name, cacheKey, m.subscriptions)))
+	return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchTopicSubscriptionsCmd(m.service, m.cache.topicSubs, m.currentNS, entity.Name, cacheKey, m.subscriptions)))
 }
 
 // selectSubscriptionSub binds the queue type picker to a topic subscription.
@@ -242,8 +247,9 @@ func (m Model) selectSubscriptionSub(topicName string, sub servicebus.TopicSubsc
 		m.currentNS.Name+" / "+topicName+"/"+sub.Name)
 	if m.hasPeekTarget && m.currentSubName == sub.Name && m.currentEntity.Name == topicName {
 		m.transitionTo(queueTypePane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	var parent servicebus.Entity
 	for _, e := range m.entities {
@@ -268,7 +274,7 @@ func (m Model) selectSubscriptionSub(topicName string, sub servicebus.TopicSubsc
 	m.messageList.ResetFilter()
 	m.messageList.SetItems(nil)
 
-	return m, appendJumpRecord(m, nil)
+	return m, recordDeparture(m, depart, nil)
 }
 
 // peekMessages navigates to the messages pane for the given queue type.
@@ -277,8 +283,9 @@ func (m Model) selectSubscriptionSub(topicName string, sub servicebus.TopicSubsc
 func (m Model) peekMessages(deadLetter bool) (Model, tea.Cmd) {
 	if m.deadLetter == deadLetter && len(m.peekedMessages) > 0 {
 		m.transitionTo(messagesPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	m.deadLetter = deadLetter
 	m.peekedMessages = nil
@@ -297,7 +304,7 @@ func (m Model) peekMessages(deadLetter bool) (Model, tea.Cmd) {
 	m.messageList.SetItems(nil)
 	m.messageList.Title = m.messagesPaneTitle()
 
-	return m, appendJumpRecord(m, nil)
+	return m, recordDeparture(m, depart, nil)
 }
 
 // recordUsage is a thin wrapper around the persistent cache's usage
@@ -319,8 +326,9 @@ func (m Model) selectNamespace(ns servicebus.Namespace) (Model, tea.Cmd) {
 	m.recordUsage("sb_namespace", m.CurrentSub.ID+"/"+ns.Name, ns.Name)
 	if m.hasNamespace && m.currentNS.Name == ns.Name {
 		m.transitionTo(entitiesPane)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	if m.hasNamespace {
 		oldKey := cache.Key(m.CurrentSub.ID, m.currentNS.Name)
@@ -357,5 +365,5 @@ func (m Model) selectNamespace(ns servicebus.Namespace) (Model, tea.Cmd) {
 	m.messageList.SetItems(nil)
 
 	m.StartLoading(m.focus, fmt.Sprintf("Loading entities in %s", ns.Name))
-	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, ns, entityCacheKey, m.entities)))
+	return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchEntitiesCmd(m.service, m.cache.entities, ns, entityCacheKey, m.entities)))
 }

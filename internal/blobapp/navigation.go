@@ -27,6 +27,7 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	if m.HasSubscription && m.CurrentSub.ID == sub.ID {
 		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	// Snapshot the current accounts list under the outgoing sub.
 	if m.HasSubscription {
@@ -81,23 +82,27 @@ func (m Model) selectSubscription(sub azure.Subscription) (Model, tea.Cmd) {
 	m.blobsList.Title = "Blobs"
 
 	m.StartLoading(accountsPane, fmt.Sprintf("Loading storage accounts in %s", ui.SubscriptionDisplayName(sub)))
-	return m, tea.Batch(m.Spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, sub.ID, m.accounts))
+	return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchAccountsCmd(m.service, m.cache.accounts, sub.ID, m.accounts)))
 }
 
+// navigateLeft moves pane focus one column left. Pure focus moves are
+// local motion, not jumps — they are deliberately not recorded (vim:
+// hjkl never touches the jump list). prefixUp IS a scope change and
+// records its own departure.
 func (m Model) navigateLeft() (Model, tea.Cmd) {
 	switch m.focus {
 	case previewPane:
 		m.transitionTo(blobsPane, false)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	case blobsPane:
 		if m.hasContainer && !m.blobLoadAll && m.prefix != "" {
 			return m.prefixUp()
 		}
 		m.transitionTo(containersPane, false)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	case containersPane:
 		m.transitionTo(accountsPane, false)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	case accountsPane:
 		return m, nil
 	default:
@@ -108,6 +113,7 @@ func (m Model) navigateLeft() (Model, tea.Cmd) {
 // prefixUp navigates up one prefix level within the blobsPane.
 // Precondition: m.focus == blobsPane && m.hasContainer && !m.blobLoadAll && m.prefix != ""
 func (m Model) prefixUp() (Model, tea.Cmd) {
+	depart := m.CurrentNav()
 	// Snapshot current prefix's blobs list before going up.
 	oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, false)
 	m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
@@ -128,7 +134,7 @@ func (m Model) prefixUp() (Model, tea.Cmd) {
 	m.rebuildParentBlobsList()
 
 	m.StartLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
-	return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
+	return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs)))
 }
 
 func (m Model) handleEnter() (Model, tea.Cmd) {
@@ -159,6 +165,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 				m.Notify(appshell.LevelInfo, "Directory navigation is unavailable when all blobs are loaded")
 				return m, nil
 			}
+			depart := m.CurrentNav()
 			// Snapshot the current prefix's blobs list before descending.
 			oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, m.blobLoadAll)
 			m.blobsHistory[oldKey] = ui.SnapshotListState(&m.blobsList, blobItemKey)
@@ -180,7 +187,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
 			m.StartLoading(blobsPane, fmt.Sprintf("Loading up to %d entries under %q", defaultHierarchyBlobLoadLimit, displayPrefix(m.prefix)))
-			return m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs))
+			return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs)))
 		}
 
 		return m.openPreview(item.blob)
@@ -268,10 +275,12 @@ func (m Model) selectAccount(account blob.Account) (Model, tea.Cmd) {
 		m.CurrentSub.ID+"/"+account.Name,
 		account.Name)
 
+	// Re-selecting the bound account is a pure focus move, not a jump.
 	if m.hasAccount && sameAccount(m.currentAccount, account) {
 		m.transitionTo(containersPane, false)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	if m.hasAccount {
 		oldKey := cache.Key(m.CurrentSub.ID, m.currentAccount.Name)
@@ -311,7 +320,7 @@ func (m Model) selectAccount(account blob.Account) (Model, tea.Cmd) {
 	m.blobsList.Title = "Blobs"
 
 	m.StartLoading(containersPane, fmt.Sprintf("Loading containers in %s", account.Name))
-	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, account, m.containers)))
+	return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchContainersCmd(m.service, m.cache.containers, account, m.containers)))
 }
 
 // selectContainer binds the explorer to a container under the active
@@ -321,10 +330,12 @@ func (m Model) selectContainer(container blob.ContainerInfo) (Model, tea.Cmd) {
 		m.CurrentSub.ID+"/"+m.currentAccount.Name+"/"+container.Name,
 		m.currentAccount.Name+" / "+container.Name)
 
+	// Re-selecting the bound container is a pure focus move, not a jump.
 	if m.hasContainer && m.containerName == container.Name {
 		m.transitionTo(blobsPane, false)
-		return m, appendJumpRecord(m, nil)
+		return m, nil
 	}
+	depart := m.CurrentNav()
 
 	if m.hasContainer {
 		oldKey := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, m.prefix, m.blobLoadAll)
@@ -357,5 +368,5 @@ func (m Model) selectContainer(container blob.ContainerInfo) (Model, tea.Cmd) {
 	ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
 	m.StartLoading(blobsPane, fmt.Sprintf("Loading up to %d entries in %s/%s", defaultHierarchyBlobLoadLimit, m.currentAccount.Name, m.containerName))
-	return m, appendJumpRecord(m, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs)))
+	return m, recordDeparture(m, depart, tea.Batch(m.Spinner.Tick, fetchHierarchyBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, defaultHierarchyBlobLoadLimit, m.blobs)))
 }

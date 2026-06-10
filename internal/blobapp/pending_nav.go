@@ -119,15 +119,15 @@ func (m Model) advancePendingNav() (Model, tea.Cmd) {
 	return m, nil
 }
 
-// selectBlobRow positions the cursor on the blob with name
-// "<prefix><leaf>" in the current blobsList. Folder rows are skipped —
-// the target is always a leaf blob. No-op if the row isn't present
-// (e.g. the prefix's blob page hasn't loaded yet).
+// selectBlobRow positions the cursor on the row with name
+// "<prefix><leaf>" in the current blobsList — leaf blobs and folder
+// rows alike (jump restoration can target either). No-op if the row
+// isn't present (e.g. the prefix's blob page hasn't loaded yet).
 func (m *Model) selectBlobRow(prefix, leaf string) {
 	full := prefix + leaf
 	for i, it := range m.blobsList.VisibleItems() {
 		bi, ok := it.(blobItem)
-		if !ok || bi.blob.IsPrefix {
+		if !ok {
 			continue
 		}
 		if bi.blob.Name == full {

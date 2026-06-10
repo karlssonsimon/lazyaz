@@ -32,20 +32,22 @@ const maxJumps = 100
 
 // recordJump appends a snapshot to the jump list, truncating any
 // forward history (vim semantics: making a new jump while walked back
-// drops the to-be-overwritten future). Same snapshot back-to-back is
-// deduped so re-selecting the same row doesn't bloat the list.
+// abandons the to-be-overwritten future). Truncation happens BEFORE the
+// dedup check — jumping again from the position ctrl+o landed on must
+// still drop the forward entries even though the snapshot itself is a
+// duplicate of the current one. Same snapshot back-to-back is deduped
+// so repeated jumps from one spot don't bloat the list.
 func (m *Model) recordJump(tabID int, snap jumplist.NavSnapshot) {
 	if snap == nil {
 		return
+	}
+	if m.jumpIdx >= 0 && m.jumpIdx < len(m.jumps)-1 {
+		m.jumps = m.jumps[:m.jumpIdx+1]
 	}
 	if m.jumpIdx >= 0 && m.jumpIdx < len(m.jumps) {
 		cur := m.jumps[m.jumpIdx]
 		if cur.tabID == tabID && cur.snap.Description() == snap.Description() {
 			return
-		}
-		// Truncate forward history.
-		if m.jumpIdx < len(m.jumps)-1 {
-			m.jumps = m.jumps[:m.jumpIdx+1]
 		}
 	}
 	m.jumps = append(m.jumps, jumpEntry{tabID: tabID, snap: snap})
@@ -172,20 +174,15 @@ func (m *Model) tabSnapshotForJump(idx int) jumplist.NavSnapshot {
 	return tabHomeSnapshot{kind: m.tabs[idx].Kind}
 }
 
-// recordTabChange captures snapshots on both sides of a tab change so
-// ctrl+o can return to the previous tab and ctrl+i can come back to
-// the new one. Called at every place active-tab changes (new tab,
-// next/prev/jump tab, cross-tab open). Dedup in recordJump prevents
-// adjacent duplicates from accumulating during rapid switches.
-func (m *Model) recordTabChange(oldIdx, newIdx int) {
+// recordTabDeparture captures the position the user is LEAVING when the
+// active tab changes (vim records origins, not destinations — the new
+// tab's position gets recorded when the user jumps away from it, and
+// ctrl+i returns there via the anchor jumpBack writes). Called at every
+// place active-tab changes (new tab, jump tab, cross-tab open).
+func (m *Model) recordTabDeparture(oldIdx int) {
 	if oldIdx >= 0 && oldIdx < len(m.tabs) {
 		if snap := m.tabSnapshotForJump(oldIdx); snap != nil {
 			m.recordJump(m.tabs[oldIdx].ID, snap)
-		}
-	}
-	if newIdx >= 0 && newIdx < len(m.tabs) {
-		if snap := m.tabSnapshotForJump(newIdx); snap != nil {
-			m.recordJump(m.tabs[newIdx].ID, snap)
 		}
 	}
 }
