@@ -71,12 +71,10 @@ func Default() Keymap {
 		JumpTopPrefix:        New("g", "home"),
 
 		// Service Bus.
-		ShowActiveQueue:     New("["),
-		ShowDeadLetterQueue: New("]"),
-		RequeueDLQ:          New("R"),
-		YankMessageBody:     New("y"),
-		ToggleDLQFilter:     New("s"),
-		MessageBack:         New("h", "left", "backspace", "esc"),
+		RequeueDLQ:      New("R"),
+		YankMessageBody: New("y"),
+		ToggleDLQFilter: New("s"),
+		MessageBack:     New("h", "left", "backspace", "esc"),
 
 		// Key Vault.
 		YankSecret:   New("y"),

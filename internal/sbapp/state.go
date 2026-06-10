@@ -410,8 +410,6 @@ func (m Model) HelpSections() []ui.HelpSection {
 			Items: []string{
 				keymap.HelpEntry(km.ActionMenu, "actions (peek, peek more, clear)"),
 				keymap.HelpEntry(km.ToggleDLQFilter, "entity actions (sort, filter)"),
-				keymap.HelpEntry(km.ShowActiveQueue, "show active messages"),
-				keymap.HelpEntry(km.ShowDeadLetterQueue, "show dead-letter messages"),
 				keymap.HelpEntry(km.RequeueDLQ, "requeue received DLQ message(s)"),
 				keymap.HelpEntry(km.YankMessageBody, "yank message body to clipboard"),
 				keymap.HelpEntry(km.MessageBack, "close message preview"),

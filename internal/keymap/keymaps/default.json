@@ -56,8 +56,6 @@
     "preview_up": ["k", "up"],
     "jump_bottom": ["G", "end"],
     "jump_top_prefix": ["g", "home"],
-    "show_active_queue": ["["],
-    "show_dead_letter_queue": ["]"],
     "requeue_dlq": ["R"],
     "yank_message_body": ["y"],
     "toggle_dlq_filter": ["s"],

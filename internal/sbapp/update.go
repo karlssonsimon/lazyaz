@@ -721,10 +721,6 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 			m.entitySortOverlay.open(m.entitySortField, m.entitySortDesc)
 			return m, nil
 		}
-	case m.Keymap.ShowActiveQueue.Matches(key) && m.hasPeekTarget:
-		return m.peekMessages(false)
-	case m.Keymap.ShowDeadLetterQueue.Matches(key) && m.hasPeekTarget:
-		return m.peekMessages(true)
 	// The guard lives in the case condition so the key can fall through
 	// to ReloadSubscriptions when both share a chord (standard keymap
 	// binds ctrl+r to both) and the DLQ context doesn't apply.
