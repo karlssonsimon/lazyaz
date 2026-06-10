@@ -574,3 +574,27 @@ func TestApplyNavRestoresExactPosition(t *testing.T) {
 		t.Fatal("pendingNav should be drained after a cache-warm restore")
 	}
 }
+
+// TestStrictAncestorOf pins the drill-path comparison ctrl+o/ctrl+i
+// use to skip h-equivalent stops.
+func TestStrictAncestorOf(t *testing.T) {
+	deep := blobNavSnapshot{subscriptionID: "s", accountName: "a", containerName: "c", prefix: "x/y/"}
+	cases := []struct {
+		name string
+		s    blobNavSnapshot
+		want bool
+	}{
+		{"accounts list is ancestor", blobNavSnapshot{subscriptionID: "s"}, true},
+		{"containers list is ancestor", blobNavSnapshot{subscriptionID: "s", accountName: "a"}, true},
+		{"parent folder is ancestor", blobNavSnapshot{subscriptionID: "s", accountName: "a", containerName: "c", prefix: "x/"}, true},
+		{"equal scope is not", deep, false},
+		{"sibling container is not", blobNavSnapshot{subscriptionID: "s", accountName: "a", containerName: "other"}, false},
+		{"sibling folder is not", blobNavSnapshot{subscriptionID: "s", accountName: "a", containerName: "c", prefix: "z/"}, false},
+		{"other subscription is not", blobNavSnapshot{subscriptionID: "t", accountName: "a"}, false},
+	}
+	for _, tc := range cases {
+		if got := tc.s.StrictAncestorOf(deep); got != tc.want {
+			t.Errorf("%s: StrictAncestorOf = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

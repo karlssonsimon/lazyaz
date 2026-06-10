@@ -67,7 +67,9 @@ func (m *Model) recordJump(tabID int, snap jumplist.NavSnapshot) {
 //     CURRENT position first so ctrl+i can return.
 //   - Then decrement and restore.
 //
-// Skips entries whose tab has been closed (tabIndexByID returns -1).
+// Skips entries whose tab has been closed (tabIndexByID returns -1)
+// and entries that sit on the active tab's current drill path (see
+// entryIsRedundant).
 func (m *Model) jumpBack() tea.Cmd {
 	// Anchor current position so ctrl+i has somewhere to return to.
 	// Only when at/past the end of the list — mid-list ctrl+o
@@ -80,7 +82,7 @@ func (m *Model) jumpBack() tea.Cmd {
 	for m.jumpIdx > 0 {
 		m.jumpIdx--
 		e := m.jumps[m.jumpIdx]
-		if idx := m.tabIndexByID(e.tabID); idx >= 0 {
+		if idx := m.tabIndexByID(e.tabID); idx >= 0 && !m.entryIsRedundant(e) {
 			return m.applyJumpEntry(idx, e)
 		}
 	}
@@ -88,16 +90,38 @@ func (m *Model) jumpBack() tea.Cmd {
 }
 
 // jumpForward walks one step forward through history. Skips entries
-// whose tab has been closed.
+// whose tab has been closed and entries on the current drill path.
 func (m *Model) jumpForward() tea.Cmd {
 	for m.jumpIdx < len(m.jumps)-1 {
 		m.jumpIdx++
 		e := m.jumps[m.jumpIdx]
-		if idx := m.tabIndexByID(e.tabID); idx >= 0 {
+		if idx := m.tabIndexByID(e.tabID); idx >= 0 && !m.entryIsRedundant(e) {
 			return m.applyJumpEntry(idx, e)
 		}
 	}
 	return nil
+}
+
+// entryIsRedundant reports whether restoring e would be an
+// h-equivalent hop: the entry points at the ACTIVE tab and its scope
+// is a strict ancestor of the position the user is already at (e.g.
+// "the containers list of the account I'm inside"). Walking stops
+// there teach the user that ctrl+o is a worse h — skip them. Entries
+// for other tabs always produce a visible tab switch and never skip;
+// equal or sibling scopes always land.
+func (m *Model) entryIsRedundant(e jumpEntry) bool {
+	if len(m.tabs) == 0 || m.tabs[m.activeIdx].ID != e.tabID {
+		return false
+	}
+	anc, ok := e.snap.(jumplist.ScopeAncestor)
+	if !ok {
+		return false
+	}
+	live := m.tabSnapshotForJump(m.activeIdx)
+	if live == nil {
+		return false
+	}
+	return anc.StrictAncestorOf(live)
 }
 
 // cleanupJumpsForTab drops every jump entry pointing at the given tab

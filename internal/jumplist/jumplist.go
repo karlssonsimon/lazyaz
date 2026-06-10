@@ -58,6 +58,22 @@ type RecordJumpMsg struct {
 	Snap NavSnapshot
 }
 
+// ScopeAncestor lets the parent walk past jump entries that would
+// restore a position strictly ABOVE the user's current spot on the
+// same drill path — backing out of a container with ctrl+o shouldn't
+// stop at "the containers list of the account you're already inside"
+// (that's what h does) before crossing to the previous tab. Sibling
+// scopes (a different container, vault, queue) are not ancestors and
+// always land; cross-tab entries are never skipped.
+//
+// StrictAncestorOf must return false for an equal scope — restoring
+// the same scope with a different pane/cursor is a legitimate stop
+// (it's how ctrl+i returns to the exact position the walk anchored).
+type ScopeAncestor interface {
+	NavSnapshot
+	StrictAncestorOf(other NavSnapshot) bool
+}
+
 // AppendRecord batches cmd with a Cmd that emits a RecordJumpMsg for
 // snap. It returns cmd unchanged (no record) when:
 //   - applying: a programmatic restoration is in progress, so jump-list

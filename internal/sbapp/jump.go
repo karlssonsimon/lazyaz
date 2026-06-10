@@ -190,3 +190,35 @@ func (m Model) WithAppliedNav(snap jumplist.NavSnapshot) (tea.Model, tea.Cmd) {
 func recordDeparture(m Model, depart jumplist.NavSnapshot, cmd tea.Cmd) tea.Cmd {
 	return jumplist.AppendRecord(m.applyingNav, m.pendingNav.hasTarget(), depart, cmd)
 }
+
+// StrictAncestorOf reports whether s sits strictly above other on the
+// same drill path (subscription → namespace → entity → topic sub →
+// queue type). Equal scope returns false — pane/cursor differences are
+// legitimate walk stops. Implements jumplist.ScopeAncestor so
+// ctrl+o/ctrl+i walk past h-equivalent hops.
+func (s sbNavSnapshot) StrictAncestorOf(other jumplist.NavSnapshot) bool {
+	o, ok := other.(sbNavSnapshot)
+	if !ok || s.subscriptionID != o.subscriptionID {
+		return false
+	}
+	if s.namespace.Name != "" && s.namespace.Name != o.namespace.Name {
+		return false
+	}
+	if s.entityName != "" {
+		if s.entityName != o.entityName {
+			return false
+		}
+		// At entity depth the Active/DLQ choice is part of the
+		// position — a different queue type is a sibling, not an
+		// ancestor.
+		if s.deadLetter != o.deadLetter {
+			return false
+		}
+	}
+	if s.subName != "" && s.subName != o.subName {
+		return false
+	}
+	sameScope := s.namespace.Name == o.namespace.Name && s.entityName == o.entityName &&
+		s.subName == o.subName && s.deadLetter == o.deadLetter
+	return !sameScope
+}

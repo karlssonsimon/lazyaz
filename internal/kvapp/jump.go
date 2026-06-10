@@ -169,3 +169,25 @@ func (m Model) WithAppliedNav(snap jumplist.NavSnapshot) (tea.Model, tea.Cmd) {
 func recordDeparture(m Model, depart jumplist.NavSnapshot, cmd tea.Cmd) tea.Cmd {
 	return jumplist.AppendRecord(m.applyingNav, m.pendingNav.hasTarget(), depart, cmd)
 }
+
+// StrictAncestorOf reports whether s sits strictly above other on the
+// same drill path (subscription → vault → kind → secret/cert/key).
+// Equal scope returns false — pane/cursor differences are legitimate
+// walk stops. Implements jumplist.ScopeAncestor so ctrl+o/ctrl+i walk
+// past h-equivalent hops.
+func (s kvNavSnapshot) StrictAncestorOf(other jumplist.NavSnapshot) bool {
+	o, ok := other.(kvNavSnapshot)
+	if !ok || s.subscriptionID != o.subscriptionID {
+		return false
+	}
+	if s.vaultName != "" {
+		if s.vaultName != o.vaultName || s.kind != o.kind {
+			return false
+		}
+		if s.itemName != "" && s.itemName != o.itemName {
+			return false
+		}
+	}
+	sameScope := s.vaultName == o.vaultName && s.kind == o.kind && s.itemName == o.itemName
+	return !sameScope
+}

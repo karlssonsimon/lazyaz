@@ -279,3 +279,66 @@ func TestRecordMidListTruncatesEvenWhenDeduped(t *testing.T) {
 		t.Fatalf("jumpIdx = %d, want tail %d", m.jumpIdx, len(m.jumps)-1)
 	}
 }
+
+// fakeScopedSnap implements ScopeAncestor: ancestorOf lists the
+// descriptions of snapshots it is a strict ancestor of.
+type fakeScopedSnap struct {
+	desc       string
+	ancestorOf []string
+}
+
+func (f fakeScopedSnap) Description() string { return f.desc }
+func (f fakeScopedSnap) StrictAncestorOf(other jumplist.NavSnapshot) bool {
+	for _, d := range f.ancestorOf {
+		if d == other.Description() {
+			return true
+		}
+	}
+	return false
+}
+
+// Walking back skips same-tab entries that sit on the current drill
+// path (h-equivalent hops) and lands on the first cross-tab or sibling
+// entry — the "drill twice, ctrl+o goes straight back to the previous
+// tab" behavior.
+func TestJumpBackSkipsAncestorsOfCurrentPosition(t *testing.T) {
+	var applied []jumplist.NavSnapshot
+	m := newJumpModel()
+	live := fakeScopedSnap{desc: "blob-deep"}
+	m.tabs = []Tab{
+		{ID: 1, Kind: TabDashboard, Model: fakeNavTab{pos: fakeSnap{"dash"}, applied: &applied}},
+		{ID: 2, Kind: TabBlob, Model: fakeNavTab{pos: live, applied: &applied}},
+	}
+	m.activeIdx = 1
+
+	m.recordJump(1, fakeSnap{"dash"})
+	// In-tab drill origins — both strict ancestors of the live position.
+	m.recordJump(2, fakeScopedSnap{desc: "accounts-list", ancestorOf: []string{"blob-deep"}})
+	m.recordJump(2, fakeScopedSnap{desc: "containers", ancestorOf: []string{"blob-deep"}})
+
+	m.jumpBack()
+	if len(applied) != 1 || applied[0].Description() != "dash" {
+		t.Fatalf("ctrl+o should skip drill-path ancestors and land on dash, applied=%v", applied)
+	}
+	if m.activeIdx != 0 {
+		t.Fatalf("should have switched to the dashboard tab")
+	}
+}
+
+// Sibling scopes (a different container) are NOT ancestors and must
+// land — that's the most valuable in-tab jump.
+func TestJumpBackLandsOnSiblingScope(t *testing.T) {
+	var applied []jumplist.NavSnapshot
+	m := newJumpModel()
+	m.tabs = []Tab{
+		{ID: 2, Kind: TabBlob, Model: fakeNavTab{pos: fakeScopedSnap{desc: "container-B"}, applied: &applied}},
+	}
+	m.activeIdx = 0
+
+	// Origin in container A: not an ancestor of container B.
+	m.recordJump(2, fakeScopedSnap{desc: "container-A"})
+	m.jumpBack()
+	if len(applied) != 1 || applied[0].Description() != "container-A" {
+		t.Fatalf("sibling scope should land, applied=%v", applied)
+	}
+}
