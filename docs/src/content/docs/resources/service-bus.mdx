@@ -82,7 +82,7 @@ message body. You can select text in the preview with the mouse to copy it.
 |---|---|
 | `Enter` | View message detail |
 | `h` / `Esc` / `Backspace` | Close message preview |
-| `R` | Requeue received DLQ message(s) |
+| `R` | Requeue received DLQ message(s) (opens a confirmation prompt) |
 | `y` | Yank message body to clipboard |
 | `Space` | Mark / unmark message |
 | `v` / `V` | Enter visual-line mode to select a range |
@@ -98,6 +98,12 @@ lock-based flow uses Azure Service Bus's native peek-lock semantics so
 operations are transactional. Closing the messages pane or navigating away
 abandons any held locks automatically.
 </Aside>
+
+Every destructive DLQ operation — requeue (marked or all), complete, and
+move — opens a confirmation prompt showing the affected entity and message
+count before anything executes. `y` / `Enter` confirms, `n` / `Esc`
+cancels. Move operations confirm after you've picked the target entity, so
+the prompt can name the destination.
 
 ### Receive with lock
 
@@ -169,6 +175,9 @@ Visual-line mode behaves like vim:
 1. Press `v` to anchor at the current message.
 2. Move the cursor to extend the selection; press `o` to extend from the other end.
 3. Press `v` again or `Esc` to commit the range to marks.
+
+Visual selection respects an active filter — the range covers exactly the
+rows you see, so messages hidden by the filter are never marked.
 
 ## Inspect panel
 

@@ -55,7 +55,9 @@ right and the previous pane becomes the parent column on the left.
 </Tabs>
 
 The **Notifications history** (`N`) overlay keeps the last 1 000 events.
-Transient toasts auto-dismiss after ~1.5 s (or 5 s for errors). The
+Transient toasts auto-dismiss after ~1.5 s (or 5 s for errors). Errors from
+background fetches land here too — including fetches in tabs you're not
+currently looking at — so a failed refresh is never silently lost. The
 **Activity overlay** (`F`) shows in-flight cache fetches across all tabs
 and lets you cancel them mid-flight — note that some long-running
 operations (Service Bus requeue/move) are not yet routed through it.

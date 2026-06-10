@@ -48,7 +48,10 @@ Switch themes at runtime with `T`.
 ## Keybindings
 
 Keybinding files live in `~/.config/lazyaz/keymaps/` as JSON files. The
-`default.json` keymap uses vim-style navigation and is written on first run.
+stock keymaps (`default.json`, vim-style navigation, and `standard.json`)
+are copied there only when missing — unlike themes, they are never
+overwritten, so you can edit them directly and your changes survive
+restarts.
 
 To switch to a different keymap, set `keymap` in `config.json`:
 

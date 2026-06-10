@@ -124,10 +124,11 @@ just what's needed to land you on the right pane.
 
 ## Filtering
 
-Press `/` to open a substring filter for the focused widget. Type to refine,
-`Enter` accepts (the filter persists in the title bar as `filter: <text>`),
-`Esc` clears it (while typing or after it has been applied). The filter is per-widget and doesn't survive a refresh of
-the underlying data.
+Press `/` (`Ctrl+F` in the standard keymap) to open a substring filter for
+the focused widget. Type to refine, `Enter` accepts (the filter persists in
+the title bar as `filter: <text>`), `Esc` clears it (while typing or after
+it has been applied). The filter is per-widget and doesn't survive a
+refresh of the underlying data.
 
 ## Widget actions
 
@@ -152,6 +153,11 @@ The dashboard auto-refreshes its widgets every 30 seconds, so you usually
 don't need to refresh manually. Press `r` to force an immediate refresh of
 the entire dashboard.
 </Aside>
+
+Fetch errors surface as error toasts and land in the notification history
+(`N`, or `Ctrl+N` in the standard keymap) — they aren't confined to the
+widget footer, so a failed background refresh is visible even if you've
+switched away.
 
 ## Jump list
 

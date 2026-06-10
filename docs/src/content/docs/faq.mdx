@@ -106,6 +106,9 @@ and select **DLQ**. Then:
   Mark messages with `Space` or visual-line mode (`v`) before choosing
   **Requeue**, **Move to...**, or **Complete**.
 
+Each destructive operation opens a confirmation prompt before executing —
+`y` / `Enter` confirms, `n` / `Esc` cancels.
+
 See [Service Bus](/lazyaz/resources/service-bus/) for the full workflow.
 
 ### Can I send messages to a queue?
@@ -146,7 +149,7 @@ Press `T` to open the theme picker. lazyaz ships with 300+ Base16 color schemes.
 
 ### Can I customize keybindings?
 
-Yes. Edit `~/.config/lazyaz/keymaps/default.json` or create a new keymap file. See [Keymaps](/lazyaz/configuration/keymaps/) for the full reference.
+Yes. Edit `~/.config/lazyaz/keymaps/default.json` or create a new keymap file. The stock keymap files are only written when missing, so your edits survive restarts. See [Keymaps](/lazyaz/configuration/keymaps/) for the full reference.
 
 ### How do I open multiple resource types at once?
 

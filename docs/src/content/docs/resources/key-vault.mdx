@@ -94,6 +94,9 @@ Mark individual secrets with `Space`, or use visual-line mode for ranges:
 2. Move the cursor to extend the selection. Press `o` to swap the anchor.
 3. Press `v` again or `Esc` to commit the range to marks.
 
+Visual selection respects an active filter — the range covers exactly the
+rows you see, so secrets hidden by the filter are never marked.
+
 Marked secrets can be bulk-yanked through the action menu. Marking is only
 wired up on the Secrets kind today.
 

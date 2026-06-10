@@ -182,7 +182,9 @@ hotkeys. The shortcuts below are the ones with a direct binding.
 
 DLQ operations (requeue, move, complete, abandon) and the "Filter: only
 with dead letters" entity filter are available through the action menu
-after either peeking or receiving-with-lock. See
+after either peeking or receiving-with-lock. Destructive DLQ operations
+(requeue, complete, move) open a confirmation prompt before executing —
+`y` / `Enter` confirms, `n` / `Esc` cancels. See
 [Service Bus](/lazyaz/resources/service-bus/) for the full flow.
 
 ## Key Vault
@@ -271,6 +273,10 @@ and are the same in both keymaps:
 ## Full JSON reference
 
 The complete keymap files shipped with lazyaz. Copy one as a starting point for your own.
+
+The stock files (`default.json`, `standard.json`) are copied to
+`~/.config/lazyaz/keymaps/` only when missing — they are never regenerated
+or overwritten, so edits you make to them survive restarts.
 
 <Tabs syncKey="keymap">
 <TabItem label="Vim (default)">

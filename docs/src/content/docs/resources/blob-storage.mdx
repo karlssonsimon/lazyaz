@@ -62,8 +62,8 @@ Python, SQL, shell, HCL, and many more).
 |---|---|
 | `j` / `k` | Scroll line by line |
 | `Ctrl+D` / `Ctrl+U` | Half-page scroll |
-| `G` | Jump to bottom |
-| `gg` | Jump to top |
+| `G` / `End` | Jump to bottom |
+| `gg` / `Home` | Jump to top (`Home` jumps in a single press) |
 | `h` / `Left` / `Esc` / `Backspace` | Close preview |
 
 You can select text in the preview with the mouse — the selection is copied
@@ -81,6 +81,9 @@ Mark individual blobs with `Space`, or use visual-line mode for ranges:
 4. Press `D` to download all marked blobs.
 
 </Steps>
+
+Visual selection respects an active filter — the range covers exactly the
+rows you see, so blobs hidden by the filter are never marked.
 
 Downloads are saved to `<download_dir>/<account>/<container>/...`, preserving
 the blob path structure. Configure `download_dir` in `config.json` (defaults
