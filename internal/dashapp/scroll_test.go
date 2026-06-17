@@ -65,6 +65,11 @@ func TestIsTextInputActiveCoversFuzzyFilterOverlays(t *testing.T) {
 	if !m.IsTextInputActive() {
 		t.Fatal("sort overlay active: want text input")
 	}
+	m.sortOverlay.Active = false
+	m.SubOverlay.Active = true
+	if !m.IsTextInputActive() {
+		t.Fatal("subscription picker active: want text input")
+	}
 }
 
 func TestFocusedWidgetDimsTopWidget(t *testing.T) {
