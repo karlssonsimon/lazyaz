@@ -390,15 +390,56 @@ func TestVisualSelectionRespectsActiveFilter(t *testing.T) {
 	m.visualAnchor = "alpha-1"
 	m.blobsList.Select(2) // alpha-3
 
-	got := m.visualSelectionBlobNames()
-	want := []string{"alpha-1", "alpha-2", "alpha-3"}
-	if len(got) != len(want) {
-		t.Fatalf("visualSelectionBlobNames = %v, want %v", got, want)
+	if got := m.visualRangeCount(); got != 3 {
+		t.Fatalf("visualRangeCount = %d, want 3", got)
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("visualSelectionBlobNames[%d] = %q, want %q", i, got[i], want[i])
+
+	m.commitVisualSelection()
+	want := []string{"alpha-1", "alpha-2", "alpha-3"}
+	if len(m.markedBlobs) != len(want) {
+		t.Fatalf("markedBlobs = %v, want %v", m.markedBlobs, want)
+	}
+	for _, name := range want {
+		if _, ok := m.markedBlobs[name]; !ok {
+			t.Fatalf("markedBlobs missing %q, got %v", name, m.markedBlobs)
 		}
+	}
+}
+
+// TestVisualAnchorSurvivesItemRebuild pins the anchor-index cache: a
+// SetItems rebuild shifts every visible index, so the cached anchor
+// position must be re-resolved from the anchor name, not reused.
+func TestVisualAnchorSurvivesItemRebuild(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.focus = blobsPane
+	m.blobs = []blob.BlobEntry{
+		{Name: "b"},
+		{Name: "c"},
+		{Name: "d"},
+	}
+	m.refreshItems()
+
+	m.blobsList.Select(1) // c
+	m.visualLineMode = true
+	m.visualAnchor = "c"
+	m.blobsList.Select(2) // d
+
+	if lo, hi, ok := m.visualRange(); !ok || lo != 1 || hi != 2 {
+		t.Fatalf("visualRange = (%d, %d, %v), want (1, 2, true)", lo, hi, ok)
+	}
+
+	// Prepend an entry: c moves from index 1 to 2, and the cursor key
+	// "d" is preserved by the rebuild at index 3.
+	m.blobs = []blob.BlobEntry{
+		{Name: "a"},
+		{Name: "b"},
+		{Name: "c"},
+		{Name: "d"},
+	}
+	m.refreshItems()
+
+	if lo, hi, ok := m.visualRange(); !ok || lo != 2 || hi != 3 {
+		t.Fatalf("visualRange after rebuild = (%d, %d, %v), want (2, 3, true)", lo, hi, ok)
 	}
 }
 

@@ -28,6 +28,15 @@ type MarkDelegate struct {
 	// the list to trigger a re-render.
 	Marked map[string]struct{}
 	Visual map[string]struct{}
+
+	// VisualRange points at [lo, hi] visual-line bounds in
+	// visible-index space; hi < lo means no range. The pointer lets the
+	// owner move the range on every cursor keypress without re-setting
+	// the delegate (SetDelegate recomputes pagination, which walks the
+	// filtered item list — too expensive at 200k items). Index
+	// comparison also keeps the per-row check O(1), so huge lists don't
+	// need a key set rebuilt per move.
+	VisualRange *[2]int
 }
 
 // NewMarkDelegate builds a MarkDelegate around base. keyOf extracts the
@@ -60,6 +69,8 @@ func (d MarkDelegate) Render(w io.Writer, m list.Model, index int, item list.Ite
 		var prefix string
 		if _, isMarked := d.Marked[key]; isMarked {
 			prefix = d.markedBar
+		} else if d.VisualRange != nil && index >= d.VisualRange[0] && index <= d.VisualRange[1] {
+			prefix = d.visualBar
 		} else if _, isVisual := d.Visual[key]; isVisual {
 			prefix = d.visualBar
 		}

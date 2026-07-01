@@ -16,6 +16,8 @@ import (
 func (m *Model) clearBlobSelectionState() {
 	m.visualLineMode = false
 	m.visualAnchor = ""
+	m.visualAnchorResolved = false
+	m.refreshBlobSelectionDisplay()
 	if m.markedBlobs == nil {
 		m.markedBlobs = make(map[string]struct{})
 		return
@@ -47,17 +49,33 @@ func (m *Model) refreshItems() {
 
 func (m *Model) refreshItemsWithWidth(entries []blob.BlobEntry, w int) {
 	ui.SetItemsPreserveKey(&m.blobsList, blobsToItems(entries, m.prefix, w), blobItemKey)
+	// An item rebuild can shift every index — the anchor cache must
+	// re-resolve from the name.
+	m.visualAnchorResolved = false
 	m.refreshBlobSelectionDisplay()
 }
 
-// refreshBlobSelectionDisplay updates the delegate's mark/visual maps
-// and re-sets it on the list. This triggers a re-render without
-// rebuilding items or touching the filter state.
-func (m *Model) refreshBlobSelectionDisplay() {
+// installBlobDelegate (re)builds the custom mark/visual delegate on the
+// blobs list. Only needed when styles change — selection updates flow
+// through the shared mark map and visual-range pointer, so the delegate
+// itself never has to be re-set for them.
+func (m *Model) installBlobDelegate() {
 	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, blobMarkKey)
 	d.Marked = m.markedBlobs
-	d.Visual = m.visualSelectionNames()
+	d.VisualRange = m.visualRangeDisplay
 	m.blobsList.SetDelegate(d)
+}
+
+// refreshBlobSelectionDisplay recomputes the visual range the delegate
+// renders. It runs on every cursor move in visual mode, so it must not
+// walk the list or touch the bubbles list model (SetDelegate recomputes
+// pagination over all visible items).
+func (m *Model) refreshBlobSelectionDisplay() {
+	lo, hi, ok := m.visualRange()
+	if !ok {
+		lo, hi = 0, -1
+	}
+	m.visualRangeDisplay[0], m.visualRangeDisplay[1] = lo, hi
 }
 
 // sortOverlayState manages the sort picker popup.
@@ -209,48 +227,54 @@ func (m *Model) toggleVisualLineMode() {
 
 	m.visualLineMode = true
 	m.visualAnchor = m.currentBlobName()
+	m.visualAnchorResolved = false
 	m.refreshBlobSelectionDisplay()
 	if m.visualAnchor == "" {
 		m.Notify(appshell.LevelInfo, "Visual mode on. Move up/down to select a range.")
 		return
 	}
-	selectionCount := len(m.visualSelectionBlobNames())
-	m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", selectionCount))
+	m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", m.visualRangeCount()))
 }
 
 // commitVisualSelection merges the current visual range into markedBlobs.
 func (m *Model) commitVisualSelection() {
-	if !m.visualLineMode {
+	lo, hi, ok := m.visualRange()
+	if !ok {
 		return
 	}
-	for _, item := range m.visualSelectionItems() {
-		if item.blob.IsPrefix {
-			continue
+	visible := m.blobsList.VisibleItems()
+	if hi >= len(visible) {
+		hi = len(visible) - 1
+	}
+	for i := lo; i <= hi; i++ {
+		if b, ok := visible[i].(blobItem); ok && !b.blob.IsPrefix {
+			m.markedBlobs[b.blob.Name] = struct{}{}
 		}
-		m.markedBlobs[item.blob.Name] = struct{}{}
 	}
 }
 
 // swapVisualAnchor moves the cursor to the visual anchor position and sets
 // the anchor to the old cursor position. Lets you extend the range from
-// either end.
+// either end. No-op when the anchor is filtered out of view.
 func (m *Model) swapVisualAnchor() {
 	if !m.visualLineMode || m.visualAnchor == "" {
 		return
 	}
-	oldAnchor := m.visualAnchor
-	oldCursor := m.currentBlobName()
-	if oldCursor == "" || oldCursor == oldAnchor {
+	anchorIdx := m.resolvedVisualAnchorIdx()
+	if anchorIdx < 0 {
 		return
 	}
-	// Find index of the anchor in the visible list.
-	for i, it := range m.blobsList.VisibleItems() {
-		if b, ok := it.(blobItem); ok && b.blob.Name == oldAnchor {
-			m.blobsList.Select(i)
-			m.visualAnchor = oldCursor
-			return
-		}
+	newAnchor := m.currentBlobName()
+	if newAnchor == "" || newAnchor == m.visualAnchor {
+		return
 	}
+	newAnchorIdx := m.blobsList.Index()
+	m.blobsList.Select(anchorIdx)
+	m.visualAnchor = newAnchor
+	// The filter didn't change between resolving the old anchor and
+	// here, so the cached signature still holds for the new index.
+	m.visualAnchorIdx = newAnchorIdx
+	m.visualAnchorResolved = true
 }
 
 func (m *Model) toggleCurrentBlobMark() {
@@ -289,97 +313,66 @@ func (m Model) currentBlobName() string {
 	return item.blob.Name
 }
 
-func (m Model) visualSelectionItems() []blobItem {
-	if !m.visualLineMode {
-		return nil
+// visualRange returns the visual selection bounds as indices into the
+// visible list. ok is false when visual mode is off or the list has no
+// items. The range covers exactly what the user sees — with a filter
+// applied, hidden rows between the endpoints stay unselected (matches
+// kvapp) — and an anchor filtered out of view collapses the range to
+// the cursor row.
+func (m *Model) visualRange() (lo, hi int, ok bool) {
+	if !m.visualLineMode || len(m.blobsList.Items()) == 0 {
+		return 0, 0, false
 	}
-
-	current := m.currentBlobName()
-	if current == "" {
-		return nil
+	cursor := m.blobsList.Index()
+	anchor := m.resolvedVisualAnchorIdx()
+	if anchor < 0 {
+		anchor = cursor
 	}
-
-	anchor := m.visualAnchor
-	if anchor == "" {
-		anchor = current
+	if anchor > cursor {
+		return cursor, anchor, true
 	}
-
-	// Walk the list's visible items so the range covers exactly what
-	// the user sees — with a filter applied, hidden rows between the
-	// endpoints stay unselected (matches kvapp).
-	visible := m.blobsList.VisibleItems()
-	if len(visible) == 0 {
-		return nil
-	}
-
-	anchorIdx := -1
-	currentIdx := -1
-	for i, it := range visible {
-		b, ok := it.(blobItem)
-		if !ok {
-			continue
-		}
-		if anchorIdx < 0 && b.blob.Name == anchor {
-			anchorIdx = i
-		}
-		if currentIdx < 0 && b.blob.Name == current {
-			currentIdx = i
-		}
-	}
-	if currentIdx < 0 {
-		return nil
-	}
-	if anchorIdx < 0 {
-		anchorIdx = currentIdx
-	}
-
-	start, end := anchorIdx, currentIdx
-	if start > end {
-		start, end = end, start
-	}
-
-	items := make([]blobItem, 0, end-start+1)
-	for _, it := range visible[start : end+1] {
-		if b, ok := it.(blobItem); ok {
-			items = append(items, b)
-		}
-	}
-	return items
+	return anchor, cursor, true
 }
 
-func (m Model) visualSelectionNames() map[string]struct{} {
-	selectedItems := m.visualSelectionItems()
-	if len(selectedItems) == 0 {
-		return nil
+// resolvedVisualAnchorIdx returns the anchor's index in the visible
+// list, or -1 when no anchor is set or it's filtered out of view.
+// Finding the name is a full scan, so the result is cached and reused
+// while the list filter is unchanged; item rebuilds invalidate the
+// cache in refreshItemsWithWidth.
+func (m *Model) resolvedVisualAnchorIdx() int {
+	if m.visualAnchor == "" {
+		return -1
+	}
+	filterState := m.blobsList.FilterState()
+	filterValue := m.blobsList.FilterValue()
+	if m.visualAnchorResolved &&
+		filterState == m.visualAnchorFilterState &&
+		filterValue == m.visualAnchorFilterValue {
+		return m.visualAnchorIdx
 	}
 
-	selectedNames := make(map[string]struct{}, len(selectedItems))
-	for _, item := range selectedItems {
-		selectedNames[item.blob.Name] = struct{}{}
+	idx := -1
+	for i, it := range m.blobsList.VisibleItems() {
+		if b, ok := it.(blobItem); ok && b.blob.Name == m.visualAnchor {
+			idx = i
+			break
+		}
 	}
-	return selectedNames
+	m.visualAnchorIdx = idx
+	m.visualAnchorResolved = true
+	m.visualAnchorFilterState = filterState
+	m.visualAnchorFilterValue = filterValue
+	return idx
 }
 
-func (m Model) visualSelectionBlobNames() []string {
-	selectedItems := m.visualSelectionItems()
-	if len(selectedItems) == 0 {
-		return nil
+// visualRangeCount is the row count shown in visual-mode notifications.
+// Folder rows count too; commitVisualSelection skips them when marking.
+func (m *Model) visualRangeCount() int {
+	lo, hi, ok := m.visualRange()
+	if !ok {
+		return 0
 	}
-
-	unique := make(map[string]struct{}, len(selectedItems))
-	for _, item := range selectedItems {
-		if item.blob.IsPrefix {
-			continue
-		}
-		unique[item.blob.Name] = struct{}{}
-	}
-
-	names := make([]string, 0, len(unique))
-	for name := range unique {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	return hi - lo + 1
 }
 
 func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
@@ -393,6 +386,7 @@ func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
 		m.commitVisualSelection()
 		m.visualLineMode = false
 		m.visualAnchor = ""
+		m.refreshBlobSelectionDisplay()
 	}
 
 	blobNames := m.sortedMarkedBlobNames()

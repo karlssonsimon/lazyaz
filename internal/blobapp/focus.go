@@ -133,8 +133,8 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 	}
 
 	if m.focus == blobsPane && m.visualLineMode {
-		m.refreshItems()
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionBlobNames())))
+		m.refreshBlobSelectionDisplay()
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", m.visualRangeCount()))
 	}
 }
 

@@ -510,9 +510,18 @@ func (m Model) handleListFilterKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 		return m, tea.Quit
 	case m.Keymap.OpenFocused.Matches(key):
 		cmd := m.commitFocusedFilter()
+		if m.focus == blobsPane && m.visualLineMode {
+			m.refreshBlobSelectionDisplay()
+		}
 		return m, cmd
 	}
-	return m.updateFocusedList(msg)
+	m2, cmd := m.updateFocusedList(msg)
+	// Typing a filter while a visual range is active shifts visible
+	// indices under the highlight — recompute it per keystroke.
+	if m2.focus == blobsPane && m2.visualLineMode {
+		m2.refreshBlobSelectionDisplay()
+	}
+	return m2, cmd
 }
 
 func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
@@ -550,7 +559,7 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 	m2, cmd := m.updateFocusedList(msg)
 	if m2.focus == blobsPane && m2.visualLineMode && m2.blobsList.Index() != before {
 		m2.refreshBlobSelectionDisplay()
-		m2.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m2.visualSelectionBlobNames())))
+		m2.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", m2.visualRangeCount()))
 	}
 	return m2, cmd
 }

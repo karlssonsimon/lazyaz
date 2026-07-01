@@ -114,6 +114,19 @@ type Model struct {
 	markedBlobs    map[string]struct{}
 	visualLineMode bool
 	visualAnchor   string
+	// visualAnchorIdx caches where visualAnchor sits in the visible
+	// list. Resolving the name is a full scan — unacceptable per
+	// keypress at 200k blobs — so the index is reused while the list
+	// filter signature below still matches; item rebuilds invalidate it
+	// by clearing visualAnchorResolved.
+	visualAnchorIdx         int
+	visualAnchorResolved    bool
+	visualAnchorFilterState list.FilterState
+	visualAnchorFilterValue string
+	// visualRangeDisplay is the [lo, hi] range the mark delegate reads
+	// at render time (hi < lo = no range). Shared by pointer so cursor
+	// moves update the highlight without re-setting the delegate.
+	visualRangeDisplay *[2]int
 
 	// Per-scope list state history. The blobs list has its scope change
 	// not just on account/container switches but also every time the
@@ -352,23 +365,24 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	}
 
 	m := Model{
-		Model:             appshell.New(cfg, km),
-		service:           svc,
-		accountsList:      accounts,
-		containersList:    containers,
-		blobsList:         blobs,
-		parentBlobsList:   parentBlobs,
-		markedBlobs:       make(map[string]struct{}),
-		preview:           newPreviewState(),
-		cache:             newCache(db),
-		downloadDir:       cfg.ResolvedDownloadDir(),
-		focus:             accountsPane,
-		blobSortField:     blobSortDate,
-		blobSortDesc:      true,
-		accountsHistory:   make(map[string]ui.ListState),
-		containersHistory: make(map[string]ui.ListState),
-		blobsHistory:      make(map[string]ui.ListState),
-		inspectPanes:      make(map[int]bool),
+		Model:              appshell.New(cfg, km),
+		service:            svc,
+		accountsList:       accounts,
+		containersList:     containers,
+		blobsList:          blobs,
+		parentBlobsList:    parentBlobs,
+		markedBlobs:        make(map[string]struct{}),
+		visualRangeDisplay: &[2]int{0, -1},
+		preview:            newPreviewState(),
+		cache:              newCache(db),
+		downloadDir:        cfg.ResolvedDownloadDir(),
+		focus:              accountsPane,
+		blobSortField:      blobSortDate,
+		blobSortDesc:       true,
+		accountsHistory:    make(map[string]ui.ListState),
+		containersHistory:  make(map[string]ui.ListState),
+		blobsHistory:       make(map[string]ui.ListState),
+		inspectPanes:       make(map[int]bool),
 	}
 	m.applyScheme(cfg.ActiveScheme())
 	// Hydrate subscriptions from cache without hitting Azure. The fetch
@@ -456,11 +470,9 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 		&m.accountsList, &m.containersList, &m.blobsList, &m.parentBlobsList,
 	}, &m.Spinner)
 	// Blobs list uses a custom delegate for mark/visual borders.
-	// Preserve existing mark/visual state across scheme changes.
-	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, blobMarkKey)
-	d.Marked = m.markedBlobs
-	d.Visual = m.visualSelectionNames()
-	m.blobsList.SetDelegate(d)
+	// Mark/visual state survives scheme changes because the delegate
+	// reads it through the shared map and range pointer.
+	m.installBlobDelegate()
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.
