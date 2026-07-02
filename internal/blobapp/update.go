@@ -152,6 +152,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.refresh()
 		return updated, cmd
 
+	case list.FilterMatchesMsg:
+		// Dropped: filtering runs synchronously on each keystroke
+		// (ui.SyncFilter). These async results apply last-writer-wins,
+		// so a stale keystroke's result could overwrite a newer one.
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
@@ -710,16 +716,9 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 }
 
 func (m Model) updateFocusedList(msg tea.Msg) (Model, tea.Cmd) {
-	var cmd tea.Cmd
-	switch m.focus {
-	case accountsPane:
-		m.accountsList, cmd = m.accountsList.Update(msg)
-	case containersPane:
-		m.containersList, cmd = m.containersList.Update(msg)
-	case blobsPane:
-		m.blobsList, cmd = m.blobsList.Update(msg)
-	case previewPane:
-		cmd = nil
+	target := m.listForPane(m.focus)
+	if target == nil {
+		return m, nil
 	}
-	return m, cmd
+	return m, ui.UpdateListSyncFilter(target, msg)
 }

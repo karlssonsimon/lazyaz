@@ -18,8 +18,11 @@ func (i vaultItem) Description() string {
 	return ""
 }
 
+// FilterValue is the visible row text only. Matching hidden metadata
+// (subscription, resource group) makes filter results look wrong —
+// rows appear with no visible reason and no match highlight.
 func (i vaultItem) FilterValue() string {
-	return i.vault.Name + " " + i.vault.SubscriptionID + " " + i.vault.ResourceGroup
+	return i.vault.Name
 }
 
 // kindItem is a row in the kindPane list. Three of them ever exist
@@ -65,8 +68,9 @@ func (i secretItem) Description() string {
 	return ""
 }
 
+// FilterValue is the visible row text only (see vaultItem).
 func (i secretItem) FilterValue() string {
-	return i.secret.Name + " " + i.secret.ContentType
+	return i.secret.Name
 }
 
 type versionItem struct {
@@ -103,7 +107,8 @@ func (i certItem) Description() string {
 	}
 	return ""
 }
-func (i certItem) FilterValue() string { return i.cert.Name + " " + i.cert.Thumbprint }
+// FilterValue is the visible row text only (see vaultItem).
+func (i certItem) FilterValue() string { return i.cert.Name }
 
 type certVersionItem struct {
 	version keyvault.CertificateVersion

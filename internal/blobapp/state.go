@@ -348,7 +348,6 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	blobs.SetShowStatusBar(false)
 	blobs.SetStatusBarItemName("entry", "entries")
 	blobs.SetFilteringEnabled(true)
-	blobs.Filter = blobListFilter
 	blobs.DisableQuitKeybindings()
 
 	parentBlobs := list.New([]list.Item{}, delegate, 20, 10)
@@ -366,7 +365,11 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
 		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
 		l.KeyMap.Filter = km.FilterInput.AsBubbleKey()
+		l.Filter = ui.ListFilter
 	}
+	// Blob titles carry an icon prefix the filter must offset past —
+	// re-set after the loop so the wrapper wins.
+	blobs.Filter = blobListFilter
 
 	m := Model{
 		Model:              appshell.New(cfg, km),

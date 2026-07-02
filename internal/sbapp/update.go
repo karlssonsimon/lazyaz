@@ -149,6 +149,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Notify(appshell.LevelSuccess, fmt.Sprintf("Copied to clipboard: %s", ui.TrimToWidth(msg.text, 60)))
 		}
 		return m, nil
+
+	case list.FilterMatchesMsg:
+		// Dropped: filtering runs synchronously on each keystroke
+		// (ui.SyncFilter). These async results apply last-writer-wins,
+		// so a stale keystroke's result could overwrite a newer one.
+		return m, nil
 	}
 
 	return m.updateFocusedList(msg)
@@ -158,15 +164,15 @@ func (m Model) updateFocusedList(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch m.focus {
 	case namespacesPane:
-		m.namespacesList, cmd = m.namespacesList.Update(msg)
+		cmd = ui.UpdateListSyncFilter(&m.namespacesList, msg)
 	case entitiesPane:
-		m.entitiesList, cmd = m.entitiesList.Update(msg)
+		cmd = ui.UpdateListSyncFilter(&m.entitiesList, msg)
 	case subscriptionsPane:
-		m.subscriptionsList, cmd = m.subscriptionsList.Update(msg)
+		cmd = ui.UpdateListSyncFilter(&m.subscriptionsList, msg)
 	case queueTypePane:
-		m.queueTypeList, cmd = m.queueTypeList.Update(msg)
+		cmd = ui.UpdateListSyncFilter(&m.queueTypeList, msg)
 	case messagesPane:
-		m.messageList, cmd = m.messageList.Update(msg)
+		cmd = ui.UpdateListSyncFilter(&m.messageList, msg)
 		if m.viewingMessage {
 			m.syncPreviewToSelection()
 		}

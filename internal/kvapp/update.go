@@ -137,6 +137,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case list.FilterMatchesMsg:
+		// Dropped: filtering runs synchronously on each keystroke
+		// (ui.SyncFilter). These async results apply last-writer-wins,
+		// so a stale keystroke's result could overwrite a newer one.
+		return m, nil
+
 	case markedSecretsYankedMsg:
 		m.ClearLoading()
 		if msg.err != nil {
@@ -746,13 +752,13 @@ func (m Model) updateFocusedList(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch m.focus {
 	case vaultsPane:
-		m.vaultsList, cmd = m.vaultsList.Update(msg)
+		cmd = ui.UpdateListSyncFilter(&m.vaultsList, msg)
 	case kindPane:
-		m.kindList, cmd = m.kindList.Update(msg)
+		cmd = ui.UpdateListSyncFilter(&m.kindList, msg)
 	case secretsPane:
-		m.secretsList, cmd = m.secretsList.Update(msg)
+		cmd = ui.UpdateListSyncFilter(&m.secretsList, msg)
 	case versionsPane:
-		m.versionsList, cmd = m.versionsList.Update(msg)
+		cmd = ui.UpdateListSyncFilter(&m.versionsList, msg)
 	}
 	return m, cmd
 }

@@ -356,6 +356,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
 		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
 		l.KeyMap.Filter = km.FilterInput.AsBubbleKey()
+		l.Filter = ui.ListFilter
 	}
 
 	m := Model{

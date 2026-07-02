@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/list"
 	"github.com/charmbracelet/x/ansi"
@@ -25,8 +26,11 @@ func (i namespaceItem) Description() string {
 	return ""
 }
 
+// FilterValue is the visible row text only. Matching hidden metadata
+// (subscription, resource group) makes filter results look wrong —
+// rows appear with no visible reason and no match highlight.
 func (i namespaceItem) FilterValue() string {
-	return i.namespace.Name + " " + i.namespace.SubscriptionID + " " + i.namespace.ResourceGroup
+	return i.namespace.Name
 }
 
 type entityItem struct {
@@ -48,17 +52,14 @@ func (i entityItem) FilterValue() string {
 	return i.entity.Name
 }
 
-// entityListFilter wraps list.DefaultFilter and adjusts matched character
-// indices so the underline lands on the correct characters in the title.
-// Entity titles start with "◇ " or "≡ " (2 runes) that is not part of
-// FilterValue — shift every index by 2.
+// entityListFilter wraps ui.ListFilter and shifts matched rune indices
+// past the "◇ " / "≡ " title prefix (2 runes) that is not part of
+// FilterValue, so the underline lands on the correct characters.
 func entityListFilter(term string, targets []string) []list.Rank {
-	ranks := list.DefaultFilter(term, targets)
+	ranks := ui.ListFilter(term, targets)
 	for i, r := range ranks {
-		target := targets[r.Index]
-		for j, byteIdx := range r.MatchedIndexes {
-			runeIdx := utf8.RuneCountInString(target[:byteIdx])
-			ranks[i].MatchedIndexes[j] = runeIdx + 2
+		for j := range r.MatchedIndexes {
+			ranks[i].MatchedIndexes[j] += 2
 		}
 	}
 	return ranks
@@ -140,6 +141,10 @@ func (i messageItem) Description() string {
 	return ""
 }
 
+// FilterValue deliberately includes the body preview even though the
+// row shows only the ID — finding a message by its content is the
+// main reason to filter messages at all. Documented in the filtering
+// docs as the one filter that searches beyond the visible text.
 func (i messageItem) FilterValue() string {
 	return i.message.MessageID + " " + i.message.BodyPreview
 }

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 )
 
@@ -64,18 +65,17 @@ func (s *FileBrowserState) Cwd() string { return s.cwd }
 // for what the user is actually seeing.
 func (s *FileBrowserState) Entries() []os.DirEntry { return s.entries }
 
-// VisibleEntries returns entries filtered by the current query. When
-// no query is set it returns the full listing.
+// VisibleEntries returns entries filtered by the current query (fzf
+// matching and syntax, best match first). When no query is set it
+// returns the full listing.
 func (s *FileBrowserState) VisibleEntries() []os.DirEntry {
 	if s.filterQuery == "" {
 		return s.entries
 	}
-	q := strings.ToLower(s.filterQuery)
-	out := make([]os.DirEntry, 0, len(s.entries))
-	for _, e := range s.entries {
-		if strings.Contains(strings.ToLower(e.Name()), q) {
-			out = append(out, e)
-		}
+	idx := fuzzy.Filter(s.filterQuery, s.entries, func(e os.DirEntry) string { return e.Name() })
+	out := make([]os.DirEntry, len(idx))
+	for i, j := range idx {
+		out[i] = s.entries[j]
 	}
 	return out
 }

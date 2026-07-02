@@ -444,24 +444,25 @@ func highlightFuzzyMatch(label, query string, matchStyle, baseStyle lipgloss.Sty
 		return baseStyle.Render(label)
 	}
 	res := fuzzy.Match(query, label)
-	if res.Score == 0 || len(res.Pos) == 0 {
+	if !res.Matched || len(res.Pos) == 0 {
 		return baseStyle.Render(label)
 	}
 	pos := make(map[int]bool, len(res.Pos))
 	for _, p := range res.Pos {
 		pos[p] = true
 	}
+	// Positions are rune indices, so chunk by runes.
+	runes := []rune(label)
 	var b strings.Builder
-	bytes := []byte(label)
 	chunkStart := 0
 	inMatch := false
-	for i := 0; i <= len(bytes); i++ {
+	for i := 0; i <= len(runes); i++ {
 		var matched bool
-		if i < len(bytes) {
+		if i < len(runes) {
 			matched = pos[i]
 		}
-		if i == len(bytes) || matched != inMatch {
-			chunk := string(bytes[chunkStart:i])
+		if i == len(runes) || matched != inMatch {
+			chunk := string(runes[chunkStart:i])
 			if chunk != "" {
 				if inMatch {
 					b.WriteString(matchStyle.Render(chunk))

@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
+	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/lipgloss/v2"
@@ -26,8 +26,11 @@ func (i accountItem) Description() string {
 	return ""
 }
 
+// FilterValue is the visible row text only. Matching hidden metadata
+// (subscription, resource group) makes filter results look wrong —
+// rows appear with no visible reason and no match highlight.
 func (i accountItem) FilterValue() string {
-	return i.account.Name + " " + i.account.SubscriptionID + " " + i.account.ResourceGroup
+	return i.account.Name
 }
 
 type containerItem struct {
@@ -392,20 +395,14 @@ func fileIcon(name string) string {
 	}
 }
 
-// blobListFilter wraps list.DefaultFilter and adjusts matched character
-// indices so the underline lands on the correct characters in the
-// title. Two adjustments are needed:
-//  1. sahilm/fuzzy returns byte indices but lipgloss.StyleRunes
-//     expects rune indices — convert via RuneCount.
-//  2. Blob titles start with "icon " (2 runes) that is not part of
-//     FilterValue — shift every index by 2.
+// blobListFilter wraps ui.ListFilter and shifts matched rune indices
+// past the "icon " title prefix (2 runes) that is not part of
+// FilterValue, so the underline lands on the correct characters.
 func blobListFilter(term string, targets []string) []list.Rank {
-	ranks := list.DefaultFilter(term, targets)
+	ranks := ui.ListFilter(term, targets)
 	for i, r := range ranks {
-		target := targets[r.Index]
-		for j, byteIdx := range r.MatchedIndexes {
-			runeIdx := utf8.RuneCountInString(target[:byteIdx])
-			ranks[i].MatchedIndexes[j] = runeIdx + 2
+		for j := range r.MatchedIndexes {
+			ranks[i].MatchedIndexes[j] += 2
 		}
 	}
 	return ranks

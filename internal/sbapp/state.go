@@ -300,7 +300,6 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 
 	namespaces := newList(delegate, "namespace", "namespaces")
 	entities := newList(delegate, "entity", "entities")
-	entities.Filter = entityListFilter
 	subs := newList(delegate, "subscription", "subscriptions")
 	queueType := newList(delegate, "queue", "queues")
 	queueType.SetFilteringEnabled(false)
@@ -313,7 +312,11 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
 		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
 		l.KeyMap.Filter = km.FilterInput.AsBubbleKey()
+		l.Filter = ui.ListFilter
 	}
+	// Entity titles carry a kind glyph the filter must offset past —
+	// re-set after the loop so the wrapper wins.
+	entities.Filter = entityListFilter
 
 	m := Model{
 		Model:                appshell.New(cfg, km),

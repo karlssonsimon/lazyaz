@@ -90,6 +90,31 @@ own subscription context.
 </TabItem>
 </Tabs>
 
+## Filtering
+
+Every filter in the app — pane filters (`/`), overlay pickers, the command
+palette, the file browser — uses fzf's matching algorithm and understands
+fzf's extended-search syntax. Matching is case-insensitive.
+
+| Pattern | Matches |
+|---|---|
+| `logs` | fuzzy match |
+| `'logs` | exact substring |
+| `^data` | prefix |
+| `.json$` | suffix |
+| `^app$` | exact equal |
+| `!tmp` | does not contain `tmp` (also `!^data`, `!.tmp$`) |
+| `^data .json$` | AND — all space-separated terms must match |
+| `'parquet \| 'avro` | OR — pipe joins alternatives |
+
+Use `\ ` (backslash-space) to match a literal space. Note: the Blob tab's
+*server prefix search* sends a literal prefix to the Azure API and does not
+use this syntax.
+
+Filters match the visible row text. One exception: the Service Bus
+*messages* pane also matches the message body preview, so you can find a
+message by its content.
+
 ## Action menu
 
 Press `a` to open a context-aware action menu for the current pane. The menu
