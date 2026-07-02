@@ -114,7 +114,9 @@ func (m Model) handleFilterBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		m.ClearLoading()
 		m.filter.fetching = false
-		m.Notify(appshell.LevelError, fmt.Sprintf("Search failed: %s", msg.err.Error()))
+		// ResolveSpinner, not Notify: the StartLoading spinner toast
+		// never auto-expires, so it must be explicitly replaced here.
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Search failed: %s", msg.err.Error()))
 		return m, nil
 	}
 
@@ -127,7 +129,7 @@ func (m Model) handleFilterBlobsLoaded(msg blobsLoadedMsg) (Model, tea.Cmd) {
 		m.filter.fetching = false
 		m.filter.prefixFetched = true
 		effectivePrefix := blobSearchPrefix(m.prefix, m.filter.prefixQuery)
-		m.Notify(appshell.LevelSuccess, fmt.Sprintf("Found %d blobs by prefix %q", len(msg.blobs), effectivePrefix))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Found %d blobs by prefix %q", len(msg.blobs), effectivePrefix))
 	}
 
 	return m, msg.next

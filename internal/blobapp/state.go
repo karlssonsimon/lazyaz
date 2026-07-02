@@ -414,8 +414,11 @@ func NewStandaloneModel(svc *blob.Service, cfg ui.Config, km keymap.Keymap, acco
 	m.standaloneLabel = label
 
 	// The base constructor opens the subscription overlay when no sub is
-	// set; this tab never picks one, so undo that.
+	// set; this tab never picks one, so undo that. The spinner pushed by
+	// that StartLoading must be dismissed too — spinner toasts never
+	// auto-expire.
 	m.SubOverlay.Close()
+	m.DismissSpinner(m.LoadingSpinnerID)
 	m.ClearLoading()
 
 	// Synthetic subscription scoped by endpoint+name so cache keys
