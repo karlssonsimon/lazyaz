@@ -25,6 +25,7 @@ type Keymap struct {
 	ToggleHelp          Binding `json:"toggle_help"`
 	ToggleNotifications Binding `json:"toggle_notifications"`
 	ToggleActivity      Binding `json:"toggle_activity"`
+	CopyPalette         Binding `json:"copy_palette"`
 
 	// Overlay navigation — reused by theme, subscription, tab pickers.
 	ThemeUp     Binding `json:"theme_up"`

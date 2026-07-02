@@ -21,6 +21,7 @@
     "toggle_help": ["?", "f1"],
     "toggle_notifications": ["N"],
     "toggle_activity": ["F"],
+    "copy_palette": ["Y"],
     "theme_up": ["up", "ctrl+k"],
     "theme_down": ["down", "ctrl+j"],
     "theme_apply": ["enter"],

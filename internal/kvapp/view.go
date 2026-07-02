@@ -139,6 +139,9 @@ func (m Model) View() tea.View {
 	if m.actionMenu.Active {
 		view = m.renderActionMenu(view)
 	}
+	if m.copyOverlay.Active {
+		view = ui.RenderCopyOverlay(m.copyOverlay, m.Keymap, m.Cursor, m.Styles, m.Width, m.Height, view)
+	}
 	if m.createSecret.Active {
 		view = ui.RenderFormOverlay(m.createSecret, m.Cursor, m.Styles, m.Width, m.Height, view)
 	}

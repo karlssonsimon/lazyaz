@@ -32,14 +32,15 @@ const (
 type InputMode int
 
 const (
-	ModeNormal     InputMode = iota // Browsing lists
-	ModeConfirm                     // Destructive-action confirm modal open
-	ModeActionMenu                  // Action menu overlay open
-	ModeOverlay                     // Sub/Theme/Help overlay open
-	ModeListFilter                  // User is typing a list filter
-	ModeVisualLine                  // Visual line selection active
-	ModeForm                        // Multi-field form overlay open (e.g., create secret)
-	ModePasteModal                  // Paste-secrets confirmation modal open
+	ModeNormal      InputMode = iota // Browsing lists
+	ModeConfirm                      // Destructive-action confirm modal open
+	ModeActionMenu                   // Action menu overlay open
+	ModeOverlay                      // Sub/Theme/Help overlay open
+	ModeListFilter                   // User is typing a list filter
+	ModeVisualLine                   // Visual line selection active
+	ModeForm                         // Multi-field form overlay open (e.g., create secret)
+	ModePasteModal                   // Paste-secrets confirmation modal open
+	ModeCopyPalette                  // Copy palette overlay open
 )
 
 // inputMode returns the current interaction mode by checking state
@@ -60,6 +61,8 @@ func (m Model) inputMode() InputMode {
 		return ModeActionMenu
 	case m.pasteModal.active:
 		return ModePasteModal
+	case m.copyOverlay.Active:
+		return ModeCopyPalette
 	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
 		return ModeOverlay
 	case m.focusedListSettingFilter():
@@ -177,6 +180,7 @@ type Model struct {
 	applyingNav bool
 
 	actionMenu       actionMenuState
+	copyOverlay      ui.CopyOverlay
 	createSecret     ui.FormOverlayState
 	addSecretVersion ui.FormOverlayState
 	createKey        ui.FormOverlayState
@@ -448,6 +452,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 			Title: "Secrets",
 			Items: []string{
 				keymap.HelpEntry(km.ActionMenu, "action menu"),
+				keymap.HelpEntry(km.CopyPalette, "copy palette (names, vault URI)"),
 				keymap.HelpEntry(km.YankSecret, "yank secret value to clipboard"),
 				keymap.HelpEntry(km.RevealSecret, "toggle on-screen secret reveal (note: terminal scrollback may retain it)"),
 				keymap.HelpEntry(km.PasteSecrets, "paste secrets from clipboard"),

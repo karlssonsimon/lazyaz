@@ -40,6 +40,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.actionMenu.Active:
 			m.actionMenu.TypeText(text)
 			return m, nil
+		case m.copyOverlay.Active:
+			m.copyOverlay.TypeText(text)
+			return m, nil
 		default:
 			return m.updateFocusedList(msg)
 		}
@@ -566,6 +569,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case ModeTargetPicker:
 		return m.updateTargetPicker(msg)
 
+	case ModeCopyPalette:
+		if target, picked := m.copyOverlay.HandleKey(key, m.Keymap); picked {
+			return m.copyToClipboard(target.Value)
+		}
+		return m, nil
+
 	case ModeActionMenu:
 		if selected, act := m.actionMenu.handleKey(key, m.Keymap); selected {
 			return m.executeAction(act)
@@ -709,6 +718,8 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 			}
 			return m.yankMessageBody(item.message.FullBody)
 		}
+	case m.Keymap.CopyPalette.Matches(key):
+		return m.openCopyPalette()
 	case m.Keymap.ActionMenu.Matches(key):
 		m.actionMenu.open(m.buildActions())
 		return m, nil
@@ -797,6 +808,9 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 	case m.Keymap.YankMessageBody.Matches(key):
 		m.pendingMessageG = false
 		return m.yankMessageBody(m.selectedMessage.FullBody)
+	case m.Keymap.CopyPalette.Matches(key):
+		m.pendingMessageG = false
+		return m.openCopyPalette()
 	case m.Keymap.JumpBottom.Matches(key):
 		m.pendingMessageG = false
 		m.messageViewport.GotoBottom()

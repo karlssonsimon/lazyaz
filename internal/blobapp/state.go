@@ -40,6 +40,7 @@ const (
 	ModePrefixSearch                  // Server prefix search input open
 	ModeListFilter                    // User is typing a list filter
 	ModeVisualLine                    // Visual line selection active
+	ModeCopyPalette                   // Copy palette overlay open
 )
 
 func (m Model) inputMode() InputMode {
@@ -53,6 +54,8 @@ func (m Model) inputMode() InputMode {
 		return ModeActionMenu
 	case m.sortOverlay.Active:
 		return ModeSortOverlay
+	case m.copyOverlay.Active:
+		return ModeCopyPalette
 	case m.preview.open && m.focus == previewPane:
 		return ModePreview
 	case m.filter.inputOpen && m.focus == blobsPane:
@@ -153,6 +156,7 @@ type Model struct {
 	blobSortDesc    bool
 	filter          blobFilter
 	sortOverlay     sortOverlayState
+	copyOverlay     ui.CopyOverlay
 	actionMenu      actionMenuState
 	preview         previewState
 	pendingPreviewG bool
@@ -507,6 +511,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 			Title: "Blob Actions",
 			Items: []string{
 				keymap.HelpEntry(km.ActionMenu, "action menu"),
+				keymap.HelpEntry(km.CopyPalette, "copy palette (paths, names, URLs)"),
 				keymap.HelpEntry(km.SortBlobs, "sort blobs"),
 				keymap.HelpEntry(km.ToggleLoadAll, "toggle load-all blobs"),
 				keymap.HelpEntry(km.ToggleMark, "toggle mark on current blob"),

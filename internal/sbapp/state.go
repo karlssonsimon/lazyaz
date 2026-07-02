@@ -41,6 +41,7 @@ const (
 	ModeMessagePreview                  // Viewing message detail
 	ModeListFilter                      // User is typing a list filter
 	ModeVisualLine                      // Visual line selection active
+	ModeCopyPalette                     // Copy palette overlay open
 )
 
 func (m Model) inputMode() InputMode {
@@ -53,6 +54,8 @@ func (m Model) inputMode() InputMode {
 		return ModeSortOverlay
 	case m.targetPicker.active:
 		return ModeTargetPicker
+	case m.copyOverlay.Active:
+		return ModeCopyPalette
 	case m.actionMenu.Active:
 		return ModeActionMenu
 	case m.viewingMessage && m.focus == messagePreviewPane:
@@ -144,6 +147,7 @@ type Model struct {
 	cache sbCache
 
 	actionMenu   actionMenuState
+	copyOverlay  ui.CopyOverlay
 	targetPicker targetPickerState
 	inspectPanes map[int]bool
 
@@ -412,6 +416,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(km.ToggleDLQFilter, "entity actions (sort, filter)"),
 				keymap.HelpEntry(km.RequeueDLQ, "requeue received DLQ message(s)"),
 				keymap.HelpEntry(km.YankMessageBody, "yank message body to clipboard"),
+				keymap.HelpEntry(km.CopyPalette, "copy palette (IDs, names, body)"),
 				keymap.HelpEntry(km.MessageBack, "close message preview"),
 			},
 		},

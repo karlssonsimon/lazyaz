@@ -29,6 +29,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.actionMenu.Active:
 			m.actionMenu.TypeText(text)
 			return m, nil
+		case m.copyOverlay.Active:
+			m.copyOverlay.TypeText(text)
+			return m, nil
 		case m.createSecret.Active:
 			if f := m.createSecret.FocusedField(); f != nil {
 				f.Insert(text)
@@ -530,6 +533,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case ModePasteModal:
 		return m.handlePasteModalKey(key)
 
+	case ModeCopyPalette:
+		if target, picked := m.copyOverlay.HandleKey(key, m.Keymap); picked {
+			return m.copyToClipboard(target.Value)
+		}
+		return m, nil
+
 	case ModeOverlay:
 		if result := m.HandleOverlayKeys(key); result.Handled {
 			if result.SelectSub != nil {
@@ -691,6 +700,8 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 		return m, nil
 	case m.Keymap.YankSecret.Matches(key):
 		return m.handleYank()
+	case m.Keymap.CopyPalette.Matches(key):
+		return m.openCopyPalette()
 	case m.Keymap.PasteSecrets.Matches(key):
 		if m.focus == secretsPane && m.hasVault && m.kvKind == kvKindSecrets {
 			return m.tryOpenPasteModal()

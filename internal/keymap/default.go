@@ -26,6 +26,7 @@ func Default() Keymap {
 		ToggleHelp:          New("?", "f1"),
 		ToggleNotifications: New("N"),
 		ToggleActivity:      New("F"),
+		CopyPalette:         New("Y"),
 
 		// Overlay navigation.
 		ThemeUp:     New("up", "ctrl+k"),

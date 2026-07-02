@@ -184,6 +184,9 @@ func (m Model) View() tea.View {
 	if m.sortOverlay.Active {
 		view = m.renderSortOverlay(view)
 	}
+	if m.copyOverlay.Active {
+		view = ui.RenderCopyOverlay(m.copyOverlay, m.Keymap, m.Cursor, m.Styles, m.Width, m.Height, view)
+	}
 	if m.actionMenu.Active {
 		view = m.renderActionMenu(view)
 	}
