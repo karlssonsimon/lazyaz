@@ -61,12 +61,12 @@ func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespac
 	}
 }
 
-func receiveDLQCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName, subName string, maxCount int) tea.Cmd {
+func receiveCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName, subName string, deadLetter bool, maxCount int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		result, err := svc.Receive(ctx, ns, entityName, subName, true, maxCount)
-		return dlqReceivedMsg{namespace: ns, entityName: entityName, subName: subName, result: result, err: err}
+		result, err := svc.Receive(ctx, ns, entityName, subName, deadLetter, maxCount)
+		return messagesReceivedMsg{namespace: ns, entityName: entityName, subName: subName, deadLetter: deadLetter, result: result, err: err}
 	}
 }
 

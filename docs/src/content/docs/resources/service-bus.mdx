@@ -107,23 +107,30 @@ the prompt can name the destination.
 
 ### Receive with lock
 
-To actually change DLQ state, open the action menu and choose **Receive DLQ
-messages (with lock)**. This receives up to 50 messages in a single 30-second
+To actually change queue state, open the action menu and choose **Receive
+DLQ messages (with lock)** — or **Receive active messages (with lock)** on
+the active queue. This receives up to 50 messages in a single 30-second
 call — often fewer, depending on the broker — and holds locks on them. The
-pane title changes to `DLQ Locked (N)` to indicate the mode. If nothing
-locks (count is `0`), only **Abandon all** is useful.
+pane title changes to `DLQ Locked (N)` / `Locked (N)` to indicate the mode.
+If nothing locks (count is `0`), only **Abandon all** is useful.
 
 Once locked, the action menu offers:
 
-- **Requeue N message(s)** — send each locked message to the active queue,
-  then complete it from the DLQ
+- **Requeue N message(s)** — DLQ only: send each locked message to the
+  active queue, then complete it from the DLQ
 - **Move N message(s) to...** — send each locked message to a different target
-  queue or subscription (picker opens), then complete from DLQ
-- **Complete N message(s) (remove from DLQ)** — complete without re-sending
-- **Abandon all (release locks)** — release all locks, messages stay in DLQ
+  queue or subscription (picker opens), then complete it from the source
+- **Complete N message(s) (remove from DLQ/queue)** — complete without
+  re-sending; on the active queue this is how you delete specific messages
+- **Abandon all (release locks)** — release all locks, messages stay put
 
 `N` is the number of marked messages, or `1` (the cursor) if nothing is marked.
 Use `Space` or visual-line mode to mark messages before opening the action menu.
+
+Receiving from the **active** queue competes with real consumers: locked
+messages are invisible to them until you abandon or the lock expires, and
+every receive+abandon cycle increments the delivery count — enough cycles
+can push a message over its max delivery count into the DLQ.
 
 ### Bulk operations from the queue type pane
 
@@ -222,7 +229,7 @@ Both entries only appear when the selected queue type has `count > 0`.
 | Peek more active / DLQ messages | Append another batch |
 | Peek active / DLQ messages (fresh) | Discard current batch and re-peek |
 | Clear messages | Drop the local snapshot |
-| Receive DLQ messages (with lock) | Lock messages for transactional operations (DLQ only) |
+| Receive active / DLQ messages (with lock) | Lock messages for transactional operations; label depends on the open queue |
 | Open blob in explorer | Cross-tab jump — shown (here and in the preview pane) when the cursor message is a `Microsoft.Storage.Blob*` Event Grid envelope; opens a Blob tab pre-positioned on that blob |
 | Toggle mark | Mark or unmark the current message |
 | Toggle visual line selection | Enter or exit visual-line mode |

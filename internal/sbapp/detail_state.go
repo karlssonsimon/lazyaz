@@ -58,7 +58,7 @@ func (m *Model) clearScopeMarks() {
 // they reference messages no longer in scope of any operation, and
 // keeping them inflates the visible mark count.
 //
-// Called from handleDLQReceived after m.peekedMessages has been replaced
+// Called from handleMessagesReceived after m.peekedMessages has been replaced
 // with the locked variants. Without this, re-marking on the locked view
 // (which the user is tempted to do because the visual mark indicators
 // follow LockID, not MessageID) leaves both keys in the marks map and

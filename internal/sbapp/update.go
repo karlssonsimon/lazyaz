@@ -79,8 +79,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleTopicSubscriptionsLoaded(msg)
 	case messagesLoadedMsg:
 		return m.handleMessagesLoaded(msg)
-	case dlqReceivedMsg:
-		return m.handleDLQReceived(msg)
+	case messagesReceivedMsg:
+		return m.handleMessagesReceived(msg)
 	case dlqCompleteMsg:
 		return m.handleDLQComplete(msg)
 	case dlqRequeueMsg:
@@ -338,11 +338,12 @@ func (m Model) handleEntitiesRefreshed(msg entitiesRefreshedMsg) (Model, tea.Cmd
 	return m, nil
 }
 
-func (m Model) handleDLQReceived(msg dlqReceivedMsg) (Model, tea.Cmd) {
-	// Stale receive: the user navigated away while the lock receive was in
-	// flight. Release the locks in the background instead of installing
-	// them against whatever scope is now current.
-	if !m.hasPeekTarget || !m.deadLetter || msg.namespace.Name != m.currentNS.Name ||
+func (m Model) handleMessagesReceived(msg messagesReceivedMsg) (Model, tea.Cmd) {
+	// Stale receive: the user navigated away (or switched between the
+	// active queue and the DLQ) while the lock receive was in flight.
+	// Release the locks in the background instead of installing them
+	// against whatever scope is now current.
+	if !m.hasPeekTarget || m.deadLetter != msg.deadLetter || msg.namespace.Name != m.currentNS.Name ||
 		msg.entityName != m.currentEntity.Name || msg.subName != m.currentSubName {
 		if msg.result != nil {
 			locked := msg.result
@@ -354,9 +355,15 @@ func (m Model) handleDLQReceived(msg dlqReceivedMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	scope := "active"
+	title := "Locked"
+	if msg.deadLetter {
+		scope = "DLQ"
+		title = "DLQ Locked"
+	}
 	m.ClearLoading()
 	if msg.err != nil {
-		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to receive DLQ messages: %s", msg.err.Error()))
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to receive %s messages: %s", scope, msg.err.Error()))
 		return m, nil
 	}
 
@@ -369,9 +376,9 @@ func (m Model) handleDLQReceived(msg dlqReceivedMsg) (Model, tea.Cmd) {
 	if len(m.peekedMessages) > 0 {
 		m.messageList.Select(0)
 	}
-	m.messageList.Title = fmt.Sprintf("DLQ Locked (%d)", len(m.peekedMessages))
+	m.messageList.Title = fmt.Sprintf("%s (%d)", title, len(m.peekedMessages))
 	m.resize()
-	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Received %d DLQ messages with lock", len(m.peekedMessages)))
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Received %d %s messages with lock", len(m.peekedMessages), scope))
 	return m, nil
 }
 
@@ -384,7 +391,11 @@ func (m Model) handleDLQComplete(msg dlqCompleteMsg) (Model, tea.Cmd) {
 		}
 		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to complete messages%s: %s", partial, msg.err.Error()))
 	} else {
-		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Completed %d message(s) (removed from DLQ)", len(msg.completed)))
+		queueWord := "queue"
+		if m.deadLetter {
+			queueWord = "DLQ"
+		}
+		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Completed %d message(s) (removed from %s)", len(msg.completed), queueWord))
 	}
 	for _, id := range msg.completed {
 		m.removeLockedMessage(id)

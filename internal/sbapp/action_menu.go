@@ -19,7 +19,7 @@ const (
 	actionPeekMore
 	actionClearMessages
 	actionOpenBlobReference
-	actionReceiveDLQ
+	actionReceiveMessages
 	actionRequeueCurrent
 	actionCompleteCurrent
 	actionAbandonAll
@@ -161,22 +161,27 @@ func (m Model) buildActions() []action {
 			}
 		}
 
-		// DLQ receive-with-lock actions.
-		if m.deadLetter {
-			if m.lockedMessages == nil {
-				actions = append(actions, action{actionReceiveDLQ, "Receive DLQ messages (with lock)", ""})
-			} else {
-				n := len(m.currentMarks())
-				if n == 0 {
-					n = 1
-				}
-				actions = append(actions,
-					action{actionRequeueCurrent, fmt.Sprintf("Requeue %d message(s)", n), ""},
-					action{actionMoveCurrent, fmt.Sprintf("Move %d message(s) to...", n), ""},
-					action{actionCompleteCurrent, fmt.Sprintf("Complete %d message(s) (remove from DLQ)", n), ""},
-					action{actionAbandonAll, "Abandon all (release locks)", ""},
-				)
+		// Receive-with-lock actions — available for both the active
+		// queue and the DLQ. Requeue only exists in DLQ mode: from the
+		// active queue it would degenerate into "re-send to the same
+		// queue and complete the original", i.e. move-to-back.
+		if m.lockedMessages == nil {
+			actions = append(actions, action{actionReceiveMessages, fmt.Sprintf("Receive %s messages (with lock)", label), ""})
+		} else {
+			n := len(m.currentMarks())
+			if n == 0 {
+				n = 1
 			}
+			queueWord := "queue"
+			if m.deadLetter {
+				queueWord = "DLQ"
+				actions = append(actions, action{actionRequeueCurrent, fmt.Sprintf("Requeue %d message(s)", n), ""})
+			}
+			actions = append(actions,
+				action{actionMoveCurrent, fmt.Sprintf("Move %d message(s) to...", n), ""},
+				action{actionCompleteCurrent, fmt.Sprintf("Complete %d message(s) (remove from %s)", n, queueWord), ""},
+				action{actionAbandonAll, "Abandon all (release locks)", ""},
+			)
 		}
 
 		// Selection.
@@ -245,10 +250,14 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		m.Notify(appshell.LevelInfo, "Messages cleared")
 		return m, nil
 
-	case actionReceiveDLQ:
-		m.StartLoading(m.focus, "Receiving DLQ messages with lock...")
+	case actionReceiveMessages:
+		scope := "active"
+		if m.deadLetter {
+			scope = "DLQ"
+		}
+		m.StartLoading(m.focus, fmt.Sprintf("Receiving %s messages with lock...", scope))
 		return m, tea.Batch(m.Spinner.Tick,
-			receiveDLQCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, peekMaxMessages))
+			receiveCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, peekMaxMessages))
 
 	case actionRequeueCurrent:
 		return m.openRequeueConfirm()
@@ -261,10 +270,14 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if len(targets) == 0 {
 			return m, nil
 		}
+		queueWord := "queue"
+		if m.deadLetter {
+			queueWord = "DLQ"
+		}
 		m.confirmModal.OpenWithBreadcrumb(
 			fmt.Sprintf("Complete %d message(s)", len(targets)),
 			m.entityBreadcrumb(),
-			fmt.Sprintf("%d message(s) will be permanently removed from the DLQ.", len(targets)),
+			fmt.Sprintf("%d message(s) will be permanently removed from the %s.", len(targets), queueWord),
 			"complete", "cancel", true)
 		m.confirmAction = func(m Model) (Model, tea.Cmd) {
 			if m.lockedMessages == nil {

@@ -225,10 +225,11 @@ type messagesLoadedMsg struct {
 	err            error
 }
 
-type dlqReceivedMsg struct {
+type messagesReceivedMsg struct {
 	namespace  servicebus.Namespace
 	entityName string
 	subName    string
+	deadLetter bool
 	result     *servicebus.ReceivedMessages
 	err        error
 }
