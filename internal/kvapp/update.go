@@ -270,7 +270,10 @@ func (m Model) handleSecretsLoaded(msg secretsLoadedMsg) (Model, tea.Cmd) {
 }
 
 func (m Model) handleVersionsLoaded(msg versionsLoadedMsg) (Model, tea.Cmd) {
-	if !m.hasSecret || m.currentSecret.Name != msg.secretName {
+	// Explicit kind guard to match the cert/key siblings — hasSecret
+	// happens to be reset on kind switches today, but the shared
+	// versions list must not depend on that indirection.
+	if m.kvKind != kvKindSecrets || !m.hasSecret || m.currentSecret.Name != msg.secretName {
 		return m, nil
 	}
 	if m.currentVault.Name != msg.vault.Name {

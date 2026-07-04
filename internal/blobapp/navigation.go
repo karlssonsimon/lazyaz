@@ -127,6 +127,12 @@ func (m Model) prefixUp() (Model, tea.Cmd) {
 		m.blobs = cached
 		m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 		m.refreshItems()
+	} else {
+		// No cache for the parent prefix — clear, or the pane keeps
+		// showing the folder we just left until the fetch lands.
+		m.blobs = nil
+		m.blobsList.SetItems(nil)
+		m.blobsList.Title = "Blobs"
 	}
 	ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
@@ -183,6 +189,12 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 				m.blobs = cached
 				m.blobsList.Title = fmt.Sprintf("Blobs (%d)", len(cached))
 				m.refreshItems()
+			} else {
+				// First visit to this folder — clear, or the pane keeps
+				// showing the parent listing until the fetch lands.
+				m.blobs = nil
+				m.blobsList.SetItems(nil)
+				m.blobsList.Title = "Blobs"
 			}
 			ui.RestoreListState(&m.blobsList, m.blobsHistory[blobsScope], blobItemKey)
 
@@ -230,19 +242,24 @@ func (m *Model) rebuildParentBlobsList() {
 	}
 	pp := parentPrefix(m.prefix)
 	scope := blobsCacheKey(m.CurrentSub.ID, m.currentAccount.Name, m.containerName, pp, false)
-	if cached, ok := m.cache.blobs.Get(scope); ok {
-		pw := ui.MillerColumnContentWidth(ui.MillerColumnFrame{
-			Width:     m.paneWidths[containersPane],
-			RightRule: true,
-		})
-		items := blobsToItems(cached, pp, pw)
-		m.parentBlobsList.SetItems(items)
-		// Position cursor on the current prefix folder.
-		for i, it := range m.parentBlobsList.VisibleItems() {
-			if bi, ok := it.(blobItem); ok && bi.blob.Name == m.prefix {
-				m.parentBlobsList.Select(i)
-				break
-			}
+	cached, ok := m.cache.blobs.Get(scope)
+	if !ok {
+		// Parent level not cached — clear rather than keep showing
+		// whatever level the column held before.
+		m.parentBlobsList.SetItems(nil)
+		return
+	}
+	pw := ui.MillerColumnContentWidth(ui.MillerColumnFrame{
+		Width:     m.paneWidths[containersPane],
+		RightRule: true,
+	})
+	items := blobsToItems(cached, pp, pw)
+	m.parentBlobsList.SetItems(items)
+	// Position cursor on the current prefix folder.
+	for i, it := range m.parentBlobsList.VisibleItems() {
+		if bi, ok := it.(blobItem); ok && bi.blob.Name == m.prefix {
+			m.parentBlobsList.Select(i)
+			break
 		}
 	}
 }

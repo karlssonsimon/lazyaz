@@ -179,6 +179,11 @@ func (m Model) selectKind(kind kvKind) (Model, tea.Cmd) {
 	m.currentSecret = keyvault.Secret{}
 	m.currentCert = keyvault.Certificate{}
 	m.currentKey = keyvault.Key{}
+	// Marks, visual state, and revealed values are per-kind context —
+	// without this, plaintext revealed under Secrets reappears in the
+	// inspect strip after a Secrets → Keys → Secrets round-trip.
+	m.clearSecretSelectionState()
+	m.clearReveals()
 	m.transitionTo(secretsPane)
 	updated, fetch := m.repopulateMiddleColumn(true /*resetVersions*/)
 	return updated, recordDeparture(updated, depart, fetch)

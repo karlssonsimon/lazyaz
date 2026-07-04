@@ -314,11 +314,10 @@ func (m Model) columnTitleMeta(pane int) string {
 		if shown != total {
 			parts[0] = fmt.Sprintf("%d / %d", shown, total)
 		}
-		marked := 0
-		for _, ids := range m.markedMessages {
-			marked += len(ids)
-		}
-		if marked > 0 {
+		// Count only the current scope's marks — marks persist per
+		// scope, and summing across scopes shows phantom counts after
+		// switching entity or queue type.
+		if marked := len(m.currentMarks()); marked > 0 {
 			parts = append(parts, fmt.Sprintf("%d marked", marked))
 		}
 		return strings.Join(parts, " · ")

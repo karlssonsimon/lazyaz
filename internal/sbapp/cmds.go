@@ -81,11 +81,11 @@ func completeDLQMarkedCmd(locked *servicebus.ReceivedMessages, markedIDs map[str
 				continue
 			}
 			if err := locked.CompleteByID(ctx, key); err != nil {
-				return dlqCompleteMsg{completed: completed, err: err}
+				return dlqCompleteMsg{locked: locked, completed: completed, err: err}
 			}
 			completed = append(completed, key)
 		}
-		return dlqCompleteMsg{completed: completed}
+		return dlqCompleteMsg{locked: locked, completed: completed}
 	}
 }
 
@@ -95,7 +95,7 @@ func requeueDLQMarkedCmd(svc *servicebus.Service, ns servicebus.Namespace, entit
 		defer cancel()
 
 		requeued, err := svc.RequeueLockedByID(ctx, ns, entityName, locked, markedIDs)
-		return dlqRequeueMsg{requeued: requeued, err: err}
+		return dlqRequeueMsg{locked: locked, requeued: requeued, err: err}
 	}
 }
 
@@ -104,7 +104,7 @@ func abandonDLQCmd(locked *servicebus.ReceivedMessages) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		locked.Close(ctx)
-		return dlqAbandonMsg{}
+		return dlqAbandonMsg{locked: locked}
 	}
 }
 
@@ -150,7 +150,7 @@ func moveMarkedCmd(svc *servicebus.Service, targetNS servicebus.Namespace, targe
 		defer cancel()
 
 		moved, err := svc.RequeueLockedByID(ctx, targetNS, targetEntity, locked, markedIDs)
-		return moveMarkedDoneMsg{moved: moved, err: err}
+		return moveMarkedDoneMsg{locked: locked, moved: moved, err: err}
 	}
 }
 

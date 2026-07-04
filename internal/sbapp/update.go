@@ -397,11 +397,15 @@ func (m Model) handleDLQComplete(msg dlqCompleteMsg) (Model, tea.Cmd) {
 		}
 		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Completed %d message(s) (removed from %s)", len(msg.completed), queueWord))
 	}
-	for _, id := range msg.completed {
-		m.removeLockedMessage(id)
+	// Only mutate the view when the result belongs to the lock session
+	// still on screen (see handleDLQAbandon).
+	if msg.locked == m.lockedMessages {
+		for _, id := range msg.completed {
+			m.removeLockedMessage(id)
+		}
+		m.clearScopeMarks()
+		m.refreshMessageSelectionDisplay()
 	}
-	m.clearScopeMarks()
-	m.refreshMessageSelectionDisplay()
 	if len(msg.completed) > 0 && m.hasNamespace {
 		return m, refreshEntitiesCmd(m.service, m.currentNS)
 	}
@@ -419,11 +423,16 @@ func (m Model) handleDLQRequeue(msg dlqRequeueMsg) (Model, tea.Cmd) {
 	} else {
 		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Requeued %d message(s) to active queue", len(msg.requeued)))
 	}
-	for _, id := range msg.requeued {
-		m.removeLockedMessage(id)
+	// Only mutate the view when the result belongs to the lock session
+	// still on screen — a late result from a scope the user has left
+	// must not touch the current one.
+	if msg.locked == m.lockedMessages {
+		for _, id := range msg.requeued {
+			m.removeLockedMessage(id)
+		}
+		m.clearScopeMarks()
+		m.refreshMessageSelectionDisplay()
 	}
-	m.clearScopeMarks()
-	m.refreshMessageSelectionDisplay()
 	if len(msg.requeued) > 0 && m.hasNamespace {
 		return m, refreshEntitiesCmd(m.service, m.currentNS)
 	}
@@ -432,13 +441,20 @@ func (m Model) handleDLQRequeue(msg dlqRequeueMsg) (Model, tea.Cmd) {
 
 func (m Model) handleDLQAbandon(msg dlqAbandonMsg) (Model, tea.Cmd) {
 	m.ClearLoading()
-	m.lockedMessages = nil // receiver already closed by the command
-	m.peekedMessages = nil
-	m.messageList.ResetFilter()
-	m.messageList.SetItems(nil)
-	m.messageList.Title = "Messages"
-	if m.viewingMessage {
-		m.closePreview()
+	// Abandon also fires when the user navigates away from a locked
+	// view (abandonLockedIfHeld nils lockedMessages first). Only clear
+	// the pane when the released session is the one still displayed —
+	// otherwise this late result would wipe whatever the user opened
+	// since, including a fresh lock session on another entity.
+	if msg.locked == m.lockedMessages {
+		m.lockedMessages = nil // receiver already closed by the command
+		m.peekedMessages = nil
+		m.messageList.ResetFilter()
+		m.messageList.SetItems(nil)
+		m.messageList.Title = "Messages"
+		if m.viewingMessage {
+			m.closePreview()
+		}
 	}
 	if msg.err != nil {
 		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to abandon: %s", msg.err.Error()))
@@ -532,11 +548,15 @@ func (m Model) handleMoveMarkedDone(msg moveMarkedDoneMsg) (Model, tea.Cmd) {
 	} else {
 		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Moved %d message(s)", len(msg.moved)))
 	}
-	for _, id := range msg.moved {
-		m.removeLockedMessage(id)
+	// Only mutate the view when the result belongs to the lock session
+	// still on screen (see handleDLQAbandon).
+	if msg.locked == m.lockedMessages {
+		for _, id := range msg.moved {
+			m.removeLockedMessage(id)
+		}
+		m.clearScopeMarks()
+		m.refreshMessageSelectionDisplay()
 	}
-	m.clearScopeMarks()
-	m.refreshMessageSelectionDisplay()
 	if len(msg.moved) > 0 && m.hasNamespace {
 		return m, refreshEntitiesCmd(m.service, m.currentNS)
 	}

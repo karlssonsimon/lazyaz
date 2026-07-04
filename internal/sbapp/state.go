@@ -234,18 +234,26 @@ type messagesReceivedMsg struct {
 	err        error
 }
 
+// The lock-mutation results carry the lock session they operated on so
+// their handlers can tell whether that session is still the one on
+// screen. Locks are released by navigating away, and a new session may
+// be installed before a late result lands — matching by pointer
+// identity keeps stale results from mutating the wrong view.
 type dlqCompleteMsg struct {
+	locked    *servicebus.ReceivedMessages
 	completed []string
 	err       error
 }
 
 type dlqRequeueMsg struct {
+	locked   *servicebus.ReceivedMessages
 	requeued []string
 	err      error
 }
 
 type dlqAbandonMsg struct {
-	err error
+	locked *servicebus.ReceivedMessages
+	err    error
 }
 
 type dlqRequeueAllMsg struct {
@@ -266,8 +274,9 @@ type moveAllDoneMsg struct {
 }
 
 type moveMarkedDoneMsg struct {
-	moved []string
-	err   error
+	locked *servicebus.ReceivedMessages
+	moved  []string
+	err    error
 }
 
 type targetEntitiesLoadedMsg struct {
