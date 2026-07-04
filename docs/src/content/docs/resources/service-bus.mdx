@@ -190,9 +190,14 @@ rows you see, so messages hidden by the filter are never marked.
 
 Press `K` to toggle the inspect strip, which shows a fixed set of fields
 for the current selection: namespace (name / subscription / resource group /
-FQDN), entity (name / kind / active / DLQ counts), topic subscription
-(name / parent topic / active / DLQ counts), or message (ID / enqueued time
-/ body preview).
+FQDN), entity (name / kind / active / DLQ counts), or topic subscription
+(name / parent topic / active / DLQ counts).
+
+For messages the strip is the place for debugging and fault inspection: ID,
+enqueued time, delivery count, content type, correlation ID, subject,
+session, the sender's custom application properties, and — in the DLQ view —
+the dead-letter reason and error description the broker recorded, plus the
+body preview.
 
 ## Jump list
 

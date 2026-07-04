@@ -61,6 +61,55 @@ type PeekedMessage struct {
 	EnqueuedAt     time.Time
 	BodyPreview    string
 	FullBody       string
+
+	// Broker metadata for debugging and fault inspection. The
+	// DeadLetter* fields are set by the broker when a message is
+	// dead-lettered; AppProperties are the sender's custom headers
+	// with values stringified for display.
+	ContentType           string
+	CorrelationID         string
+	Subject               string
+	SessionID             string
+	DeadLetterReason      string
+	DeadLetterDescription string
+	DeadLetterSource      string
+	AppProperties         map[string]string
+}
+
+// peekedFromReceived converts an SDK message into the display type,
+// dereferencing the SDK's optional pointers.
+func peekedFromReceived(msg *azservicebus.ReceivedMessage) PeekedMessage {
+	entry := PeekedMessage{
+		MessageID:     msg.MessageID,
+		DeliveryCount: msg.DeliveryCount,
+		FullBody:      string(msg.Body),
+		BodyPreview:   truncateBody(msg.Body, maxBodyPreview),
+	}
+	if msg.SequenceNumber != nil {
+		entry.SequenceNumber = *msg.SequenceNumber
+	}
+	if msg.EnqueuedTime != nil {
+		entry.EnqueuedAt = *msg.EnqueuedTime
+	}
+	setIfPtr := func(dst *string, src *string) {
+		if src != nil {
+			*dst = *src
+		}
+	}
+	setIfPtr(&entry.ContentType, msg.ContentType)
+	setIfPtr(&entry.CorrelationID, msg.CorrelationID)
+	setIfPtr(&entry.Subject, msg.Subject)
+	setIfPtr(&entry.SessionID, msg.SessionID)
+	setIfPtr(&entry.DeadLetterReason, msg.DeadLetterReason)
+	setIfPtr(&entry.DeadLetterDescription, msg.DeadLetterErrorDescription)
+	setIfPtr(&entry.DeadLetterSource, msg.DeadLetterSource)
+	if len(msg.ApplicationProperties) > 0 {
+		entry.AppProperties = make(map[string]string, len(msg.ApplicationProperties))
+		for k, v := range msg.ApplicationProperties {
+			entry.AppProperties[k] = fmt.Sprintf("%v", v)
+		}
+	}
+	return entry
 }
 
 type Service struct {
@@ -563,20 +612,9 @@ func (r *ReceivedMessages) PeekedMessages() []PeekedMessage {
 			peeked = append(peeked, PeekedMessage{MessageID: locked.ID, LockID: locked.LockID})
 			continue
 		}
-		msg := locked.raw
-		entry := PeekedMessage{
-			MessageID:     locked.ID,
-			LockID:        locked.LockID,
-			DeliveryCount: msg.DeliveryCount,
-			FullBody:      string(msg.Body),
-			BodyPreview:   truncateBody(msg.Body, maxBodyPreview),
-		}
-		if msg.SequenceNumber != nil {
-			entry.SequenceNumber = *msg.SequenceNumber
-		}
-		if msg.EnqueuedTime != nil {
-			entry.EnqueuedAt = *msg.EnqueuedTime
-		}
+		entry := peekedFromReceived(locked.raw)
+		entry.MessageID = locked.ID
+		entry.LockID = locked.LockID
 		peeked = append(peeked, entry)
 	}
 	return peeked
@@ -892,19 +930,7 @@ func peekMessages(ctx context.Context, receiver *azservicebus.Receiver, maxCount
 
 	messages := make([]PeekedMessage, 0, len(peeked))
 	for _, msg := range peeked {
-		entry := PeekedMessage{
-			MessageID:     msg.MessageID,
-			DeliveryCount: msg.DeliveryCount,
-		}
-		if msg.SequenceNumber != nil {
-			entry.SequenceNumber = *msg.SequenceNumber
-		}
-		if msg.EnqueuedTime != nil {
-			entry.EnqueuedAt = *msg.EnqueuedTime
-		}
-		entry.FullBody = string(msg.Body)
-		entry.BodyPreview = truncateBody(msg.Body, maxBodyPreview)
-		messages = append(messages, entry)
+		messages = append(messages, peekedFromReceived(msg))
 	}
 
 	if len(messages) > 0 {
