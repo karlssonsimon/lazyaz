@@ -53,35 +53,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		default:
-			var cmd tea.Cmd
-			switch m.focus {
-			case vaultsPane:
-				m.vaultsList, cmd = m.vaultsList.Update(msg)
-			case kindPane:
-				m.kindList, cmd = m.kindList.Update(msg)
-			case secretsPane:
-				m.secretsList, cmd = m.secretsList.Update(msg)
-			case versionsPane:
-				m.versionsList, cmd = m.versionsList.Update(msg)
-			}
-			return m, cmd
+			return m.updateFocusedList(msg)
 		}
 	}
 
 	if cursorModel, cursorCmd := m.Cursor.Update(msg); cursorCmd != nil {
 		m.Cursor = cursorModel
-		var listCmd tea.Cmd
-		switch m.focus {
-		case vaultsPane:
-			m.vaultsList, listCmd = m.vaultsList.Update(msg)
-		case kindPane:
-			m.kindList, listCmd = m.kindList.Update(msg)
-		case secretsPane:
-			m.secretsList, listCmd = m.secretsList.Update(msg)
-		case versionsPane:
-			m.versionsList, listCmd = m.versionsList.Update(msg)
-		}
-		return m, tea.Batch(cursorCmd, listCmd)
+		m2, listCmd := m.updateFocusedList(msg)
+		return m2, tea.Batch(cursorCmd, listCmd)
 	}
 
 	switch msg := msg.(type) {

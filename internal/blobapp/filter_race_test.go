@@ -107,14 +107,11 @@ func TestAccountFilterMatchesVisibleTextOnly(t *testing.T) {
 	}
 }
 
-// TestPaneFilterStaleAsyncResultIgnored replays the race that showed
-// the full unfiltered list under an exact query: bubbles runs each
-// keystroke's filterItems in its own goroutine and applies results
-// last-writer-wins, so the quote-only prefix result (a match-all under
-// fzf syntax) could arrive after the final one and stick. The app now
-// filters synchronously and drops FilterMatchesMsg, so even an
-// adversarial delivery order must not disturb the visible set.
-func TestPaneFilterStaleAsyncResultIgnored(t *testing.T) {
+// TestPaneFilterSpawnsNoAsyncWork pins that filtering happens entirely
+// synchronously: bubbles' per-keystroke async filter pass (whose
+// last-writer-wins delivery caused stale results to stick) is dropped
+// at the source, so typing must produce zero in-flight filter results.
+func TestPaneFilterSpawnsNoAsyncWork(t *testing.T) {
 	m := filterRaceModel()
 
 	var pending []tea.Msg
@@ -122,15 +119,30 @@ func TestPaneFilterStaleAsyncResultIgnored(t *testing.T) {
 	for _, r := range "'htg" {
 		m = sendCollect(m, tea.KeyPressMsg{Code: r, Text: string(r)}, &pending)
 	}
-	if len(pending) == 0 {
-		t.Fatal("expected in-flight async filter results to exist")
+
+	if len(pending) != 0 {
+		t.Fatalf("typing spawned %d async filter results, want 0", len(pending))
+	}
+	if got := len(m.accountsList.VisibleItems()); got != 13 {
+		t.Fatalf("visible = %d for query %q, want 13", got, m.accountsList.FilterValue())
+	}
+}
+
+// TestPaneFilterStaleAsyncResultIgnored keeps the belt-and-suspenders
+// swallow honest: even if a FilterMatchesMsg somehow reaches the app
+// (a stale in-flight result from before a mode change, a future
+// bubbles version emitting them from a new path), it must not disturb
+// the synchronously-filtered view.
+func TestPaneFilterStaleAsyncResultIgnored(t *testing.T) {
+	m := filterRaceModel()
+	m = sendCollect(m, tea.KeyPressMsg{Code: '/', Text: "/"}, nil)
+	for _, r := range "'htg" {
+		m = sendCollect(m, tea.KeyPressMsg{Code: r, Text: string(r)}, nil)
 	}
 
-	// Deliver newest first so the stale quote-only result lands last.
-	for i := len(pending) - 1; i >= 0; i-- {
-		updated, _ := m.Update(pending[i])
-		m = updated.(Model)
-	}
+	// An empty result set would blank the pane if it were applied.
+	updated, _ := m.Update(list.FilterMatchesMsg{})
+	m = updated.(Model)
 
 	if got := len(m.accountsList.VisibleItems()); got != 13 {
 		t.Fatalf("stale filter result disturbed the view: visible = %d for query %q, want 13",

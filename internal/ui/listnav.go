@@ -158,6 +158,13 @@ func SetItemsPreserveKey(l *list.Model, items []list.Item, keyOf func(list.Item)
 		if wasFiltering {
 			l.SetFilterState(list.Filtering)
 		}
+	} else if wasFiltering {
+		// Filtering with an empty query shows everything, but SetItems
+		// nulled the list's filtered view and we dropped its async
+		// refill — rebuild it synchronously or the pane renders blank
+		// until the next keystroke.
+		l.SetFilterText("")
+		l.SetFilterState(list.Filtering)
 	}
 
 	visible := l.VisibleItems()

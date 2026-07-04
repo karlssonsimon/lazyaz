@@ -43,6 +43,12 @@ func UpdateListSyncFilter(l *list.Model, msg tea.Msg) tea.Cmd {
 	*l = updated
 	if updated.FilterInput.Value() != before {
 		SyncFilter(l)
+		// On an input change, the cmd bubbles returned carries its own
+		// async filter pass (redundant — the line above just filtered)
+		// and a blink for its filter input (never rendered; every list
+		// runs with SetShowFilter(false)). Drop it: at large item
+		// counts the background pass is a full re-filter for nothing.
+		return nil
 	}
 	return cmd
 }
