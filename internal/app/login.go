@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
@@ -151,9 +152,17 @@ type postLoginSubsMsg struct {
 
 // -- Commands --
 
+// loginFetchTimeout bounds the ARM lookups that run right after a
+// credential swap. These sit on the startup path, so without a deadline
+// a stalled connection leaves the tenant picker spinning with no way
+// back.
+const loginFetchTimeout = 60 * time.Second
+
 func listTenantsCmd(cred azcore.TokenCredential) tea.Cmd {
 	return func() tea.Msg {
-		tenants, err := azure.ListTenants(context.Background(), cred)
+		ctx, cancel := context.WithTimeout(context.Background(), loginFetchTimeout)
+		defer cancel()
+		tenants, err := azure.ListTenants(ctx, cred)
 		return tenantsLoadedMsg{tenants: tenants, err: err}
 	}
 }
@@ -172,8 +181,10 @@ func (m *Model) switchTenantCmd(tenantID string) tea.Cmd {
 
 func fetchPostLoginSubsCmd(cred azcore.TokenCredential) tea.Cmd {
 	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), loginFetchTimeout)
+		defer cancel()
 		var all []azure.Subscription
-		err := azure.ListSubscriptions(context.Background(), cred, func(batch []azure.Subscription) {
+		err := azure.ListSubscriptions(ctx, cred, func(batch []azure.Subscription) {
 			all = append(all, batch...)
 		})
 		return postLoginSubsMsg{subs: all, err: err}

@@ -3,12 +3,30 @@ package blobapp
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 
 	tea "charm.land/bubbletea/v2"
 )
+
+// crudTimeout bounds a single blob or container mutation. Without a
+// deadline a stalled connection leaves the command goroutine parked
+// forever and the pane's spinner never resolves.
+const crudTimeout = 30 * time.Second
+
+// perBlobDeleteBudget scales the bulk-delete deadline with the size of
+// the batch, since DeleteBlobs walks the names sequentially. A flat
+// timeout would abort a large but healthy selection midway.
+const perBlobDeleteBudget = 10 * time.Second
+
+// longCrudTimeout covers the mutations whose duration scales with the
+// data rather than being a single API call: renaming a blob on a
+// flat-namespace account polls an async server-side copy, and deleting a
+// virtual folder there enumerates and deletes every blob under the
+// prefix one by one.
+const longCrudTimeout = 15 * time.Minute
 
 // crudDoneMsg is emitted when a CRUD command finishes. Carries the
 // user-facing summary line and the level so Update can Notify + refresh.
@@ -20,7 +38,9 @@ type crudDoneMsg struct {
 // deleteBlobCmd deletes a single blob.
 func deleteBlobCmd(svc *blob.Service, account blob.Account, containerName, blobName string) tea.Cmd {
 	return func() tea.Msg {
-		err := svc.DeleteBlob(context.Background(), account, containerName, blobName)
+		ctx, cancel := context.WithTimeout(context.Background(), crudTimeout)
+		defer cancel()
+		err := svc.DeleteBlob(ctx, account, containerName, blobName)
 		if err != nil {
 			return crudDoneMsg{level: appshell.LevelError, message: fmt.Sprintf("Delete %s failed: %v", blobName, err)}
 		}
@@ -32,7 +52,14 @@ func deleteBlobCmd(svc *blob.Service, account blob.Account, containerName, blobN
 // per-blob breakdown as a single summary line.
 func deleteMarkedBlobsCmd(svc *blob.Service, account blob.Account, containerName string, names []string) tea.Cmd {
 	return func() tea.Msg {
-		results, err := svc.DeleteBlobs(context.Background(), account, containerName, names)
+		timeout := time.Duration(len(names)) * perBlobDeleteBudget
+		if timeout < crudTimeout {
+			timeout = crudTimeout
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		results, err := svc.DeleteBlobs(ctx, account, containerName, names)
 		if err != nil {
 			return crudDoneMsg{level: appshell.LevelError, message: fmt.Sprintf("Delete aborted: %v", err)}
 		}
@@ -54,7 +81,9 @@ func deleteMarkedBlobsCmd(svc *blob.Service, account blob.Account, containerName
 
 func renameBlobCmd(svc *blob.Service, account blob.Account, containerName, oldName, newName string) tea.Cmd {
 	return func() tea.Msg {
-		err := svc.RenameBlob(context.Background(), account, containerName, oldName, newName)
+		ctx, cancel := context.WithTimeout(context.Background(), longCrudTimeout)
+		defer cancel()
+		err := svc.RenameBlob(ctx, account, containerName, oldName, newName)
 		if err != nil {
 			return crudDoneMsg{level: appshell.LevelError, message: fmt.Sprintf("Rename failed: %v", err)}
 		}
@@ -64,7 +93,9 @@ func renameBlobCmd(svc *blob.Service, account blob.Account, containerName, oldNa
 
 func createContainerCmd(svc *blob.Service, account blob.Account, containerName string) tea.Cmd {
 	return func() tea.Msg {
-		err := svc.CreateContainer(context.Background(), account, containerName)
+		ctx, cancel := context.WithTimeout(context.Background(), crudTimeout)
+		defer cancel()
+		err := svc.CreateContainer(ctx, account, containerName)
 		if err != nil {
 			return crudDoneMsg{level: appshell.LevelError, message: fmt.Sprintf("Create container failed: %v", err)}
 		}
@@ -74,7 +105,9 @@ func createContainerCmd(svc *blob.Service, account blob.Account, containerName s
 
 func deleteContainerCmd(svc *blob.Service, account blob.Account, containerName string) tea.Cmd {
 	return func() tea.Msg {
-		err := svc.DeleteContainer(context.Background(), account, containerName)
+		ctx, cancel := context.WithTimeout(context.Background(), crudTimeout)
+		defer cancel()
+		err := svc.DeleteContainer(ctx, account, containerName)
 		if err != nil {
 			return crudDoneMsg{level: appshell.LevelError, message: fmt.Sprintf("Delete container failed: %v", err)}
 		}
@@ -84,7 +117,9 @@ func deleteContainerCmd(svc *blob.Service, account blob.Account, containerName s
 
 func createDirectoryCmd(svc *blob.Service, account blob.Account, containerName, directoryPath string) tea.Cmd {
 	return func() tea.Msg {
-		err := svc.CreateDirectory(context.Background(), account, containerName, directoryPath)
+		ctx, cancel := context.WithTimeout(context.Background(), crudTimeout)
+		defer cancel()
+		err := svc.CreateDirectory(ctx, account, containerName, directoryPath)
 		if err != nil {
 			return crudDoneMsg{level: appshell.LevelError, message: fmt.Sprintf("Create folder failed: %v", err)}
 		}
@@ -94,7 +129,9 @@ func createDirectoryCmd(svc *blob.Service, account blob.Account, containerName, 
 
 func deleteDirectoryCmd(svc *blob.Service, account blob.Account, containerName, directoryPath string) tea.Cmd {
 	return func() tea.Msg {
-		err := svc.DeleteDirectory(context.Background(), account, containerName, directoryPath)
+		ctx, cancel := context.WithTimeout(context.Background(), longCrudTimeout)
+		defer cancel()
+		err := svc.DeleteDirectory(ctx, account, containerName, directoryPath)
 		if err != nil {
 			return crudDoneMsg{level: appshell.LevelError, message: fmt.Sprintf("Delete folder failed: %v", err)}
 		}
@@ -104,7 +141,9 @@ func deleteDirectoryCmd(svc *blob.Service, account blob.Account, containerName, 
 
 func renameDirectoryCmd(svc *blob.Service, account blob.Account, containerName, oldPath, newPath string) tea.Cmd {
 	return func() tea.Msg {
-		err := svc.RenameDirectory(context.Background(), account, containerName, oldPath, newPath)
+		ctx, cancel := context.WithTimeout(context.Background(), crudTimeout)
+		defer cancel()
+		err := svc.RenameDirectory(ctx, account, containerName, oldPath, newPath)
 		if err != nil {
 			return crudDoneMsg{level: appshell.LevelError, message: fmt.Sprintf("Rename folder failed: %v", err)}
 		}
