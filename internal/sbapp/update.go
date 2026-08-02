@@ -814,6 +814,21 @@ func (m *Model) syncPreviewToSelection() {
 	m.messageViewport.GotoTop()
 }
 
+// rehighlightSelectedMessage re-renders the message body against the
+// current styles. HighlightJSON bakes colors into the string when the
+// selection changes, so without this the detail pane keeps painting the
+// previous theme until a different message is picked. Scroll position
+// is preserved — a theme switch shouldn't move the reader.
+func (m *Model) rehighlightSelectedMessage() {
+	if _, ok := m.messageList.SelectedItem().(messageItem); !ok {
+		m.messageViewport.SetContent(m.Styles.Muted.Render("(no message selected)"))
+		return
+	}
+	offset := m.messageViewport.YOffset()
+	m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(m.selectedMessage.FullBody))
+	m.messageViewport.SetYOffset(offset)
+}
+
 func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):

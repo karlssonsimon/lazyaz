@@ -483,6 +483,26 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 	// Mark/visual state survives scheme changes because the delegate
 	// reads it through the shared map and range pointer.
 	m.installBlobDelegate()
+	m.rehighlightPreview()
+}
+
+// rehighlightPreview re-renders the open preview against the current
+// styles. Syntax highlighting bakes colors into the string when the
+// window loads, so without this the pane keeps painting the previous
+// theme until the blob is reloaded.
+func (m *Model) rehighlightPreview() {
+	if !m.preview.open || len(m.preview.windowData) == 0 {
+		return
+	}
+	m.preview.rendered = renderPreviewContent(
+		m.preview.windowData,
+		m.preview.blobName,
+		m.preview.contentType,
+		m.preview.binary,
+		m.Styles,
+	)
+	m.preview.viewport.SetContent(m.preview.rendered)
+	m.preview.viewport.SetYOffset(m.previewLocalLine())
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.

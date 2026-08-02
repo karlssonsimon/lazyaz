@@ -390,6 +390,7 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.messageList.SetDelegate(d)
 	m.entitiesList.SetDelegate(newEntityDelegate(m.Styles.Delegate, m.Styles))
 	m.subscriptionsList.SetDelegate(newSubscriptionDelegate(m.Styles.Delegate, m.Styles))
+	m.rehighlightSelectedMessage()
 }
 
 // ApplyScheme applies the given scheme to all lists and spinner.
