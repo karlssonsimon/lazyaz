@@ -22,6 +22,12 @@ jobs:
           go-version: "1.25"
           cache: true
 
+      # Tags are cut from master, but a tag can point anywhere — gate the
+      # release on the suite rather than assuming CI already ran on this
+      # commit.
+      - name: Test
+        run: go test ./...
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
