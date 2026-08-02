@@ -5,6 +5,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/karlssonsimon/lazyaz/internal/safego"
 )
 
 // tickInterval is how often the ticker polls activities for snapshot
@@ -187,7 +189,7 @@ func (r *Registry) maybeStartTicker() {
 
 	stop := make(chan struct{})
 	r.tickerStop = stop
-	go func() {
+	safego.Go(func() {
 		t := time.NewTicker(tickInterval)
 		defer t.Stop()
 		for {
@@ -198,7 +200,7 @@ func (r *Registry) maybeStartTicker() {
 				return
 			}
 		}
-	}()
+	})
 }
 
 func (r *Registry) maybeStopTicker() {

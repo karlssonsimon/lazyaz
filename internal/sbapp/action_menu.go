@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
+	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
+	"github.com/karlssonsimon/lazyaz/internal/safego"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -444,18 +446,32 @@ func (m Model) lockedMessageTargets() map[string]struct{} {
 	return map[string]struct{}{messageOperationKey(item.message): {}}
 }
 
+// lockReleaseTimeout bounds the AMQP round-trip that abandons and closes
+// a receiver. Releasing locks is fire-and-forget cleanup, so it gets a
+// shorter leash than an operation the user is waiting on.
+const lockReleaseTimeout = 10 * time.Second
+
+// closeLockedAsync abandons and closes a set of locked messages off the
+// UI thread. Close is a network call, and every caller reaches this
+// point having already detached locked from the model, so there is
+// nothing left to report back to.
+func closeLockedAsync(locked *servicebus.ReceivedMessages) {
+	if locked == nil {
+		return
+	}
+	safego.Go(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), lockReleaseTimeout)
+		defer cancel()
+		locked.Close(ctx)
+	})
+}
+
 // clearLockedMessages abandons and closes any active locked messages
 // asynchronously to avoid blocking the UI thread.
 func (m *Model) clearLockedMessages() {
-	if m.lockedMessages != nil {
-		locked := m.lockedMessages
-		m.lockedMessages = nil
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			locked.Close(ctx)
-		}()
-	}
+	locked := m.lockedMessages
+	m.lockedMessages = nil
+	closeLockedAsync(locked)
 }
 
 // abandonLockedIfHeld returns a tea.Cmd that abandons and closes any

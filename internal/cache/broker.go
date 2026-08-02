@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/karlssonsimon/lazyaz/internal/activity"
+	"github.com/karlssonsimon/lazyaz/internal/safego"
 )
 
 // StreamStatus describes the lifecycle of a broker stream.
@@ -220,7 +221,7 @@ func (b *Broker[T]) Subscribe(
 		unreg()
 	}
 
-	go b.worker(ctx, key, seed, fetchFn, s)
+	safego.Go(func() { b.worker(ctx, key, seed, fetchFn, s) })
 
 	return b.recv(key, subID, ch, wrapMsg), subID
 }

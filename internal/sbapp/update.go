@@ -1,7 +1,6 @@
 package sbapp
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -345,14 +344,7 @@ func (m Model) handleMessagesReceived(msg messagesReceivedMsg) (Model, tea.Cmd) 
 	// against whatever scope is now current.
 	if !m.hasPeekTarget || m.deadLetter != msg.deadLetter || msg.namespace.Name != m.currentNS.Name ||
 		msg.entityName != m.currentEntity.Name || msg.subName != m.currentSubName {
-		if msg.result != nil {
-			locked := msg.result
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
-				locked.Close(ctx)
-			}()
-		}
+		closeLockedAsync(msg.result)
 		return m, nil
 	}
 	scope := "active"
@@ -490,11 +482,7 @@ func (m *Model) removeLockedMessage(messageKey string) {
 	if m.lockedMessages.Len() == 0 {
 		locked := m.lockedMessages
 		m.lockedMessages = nil
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			locked.Close(ctx)
-		}()
+		closeLockedAsync(locked)
 	}
 }
 

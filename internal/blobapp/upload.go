@@ -13,6 +13,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
+	"github.com/karlssonsimon/lazyaz/internal/safego"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
 	tea "charm.land/bubbletea/v2"
@@ -150,7 +151,7 @@ type uploader interface {
 // Each message includes a `next` tea.Cmd so the model's handler can
 // chain the receive loop (same pattern as cache.Broker.recv).
 func runUpload(ctx context.Context, up uploader, plan uploadPlan, destPrefix string, cancel context.CancelFunc, msgs chan<- tea.Msg) {
-	go func() {
+	safego.Go(func() {
 		defer close(msgs)
 
 		// A failed pre-flight check must abort the batch: a nil conflict
@@ -252,7 +253,7 @@ func runUpload(ctx context.Context, up uploader, plan uploadPlan, destPrefix str
 		}
 
 		msgs <- result
-	}()
+	})
 }
 
 // serviceUploader adapts *blob.Service to the uploader interface used
