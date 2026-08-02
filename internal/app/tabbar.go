@@ -15,7 +15,7 @@ const (
 
 // renderTabBar paints a single-line bar:
 //
-//	 1 ▦ Dashboard    2 ▲ Blob    3 ⌬ Key Vault    4 ⇄ Service Bus
+//	1 ▦ Dashboard    2 ▲ Blob    3 ⌬ Key Vault    4 ⇄ Service Bus
 //
 // Active tab is marked by a selBg-highlighted card + bold name +
 // accent-colored icon. Inactive tabs sit muted on the bar bg.

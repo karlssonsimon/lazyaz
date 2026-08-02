@@ -90,13 +90,13 @@ type KeyVersion struct {
 }
 
 // Key functions for cache deduplication.
-func VaultKey(v Vault) string                       { return v.Name }
-func SecretKey(s Secret) string                     { return s.Name }
-func VersionKey(v SecretVersion) string             { return v.Version }
-func CertificateKey(c Certificate) string           { return c.Name }
+func VaultKey(v Vault) string                           { return v.Name }
+func SecretKey(s Secret) string                         { return s.Name }
+func VersionKey(v SecretVersion) string                 { return v.Version }
+func CertificateKey(c Certificate) string               { return c.Name }
 func CertificateVersionKey(v CertificateVersion) string { return v.Version }
-func KvKeyKey(k Key) string                         { return k.Name }
-func KeyVersionKey(v KeyVersion) string             { return v.Version }
+func KvKeyKey(k Key) string                             { return k.Name }
+func KeyVersionKey(v KeyVersion) string                 { return v.Version }
 
 type Service struct {
 	cred azcore.TokenCredential

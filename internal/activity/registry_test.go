@@ -27,9 +27,9 @@ func newFakeActivity(id string, k Kind) *fakeActivity {
 	}
 }
 
-func (f *fakeActivity) ID() string       { return f.id }
-func (f *fakeActivity) Kind() Kind       { return f.kind }
-func (f *fakeActivity) Title() string    { f.mu.Lock(); defer f.mu.Unlock(); return f.title }
+func (f *fakeActivity) ID() string    { return f.id }
+func (f *fakeActivity) Kind() Kind    { return f.kind }
+func (f *fakeActivity) Title() string { f.mu.Lock(); defer f.mu.Unlock(); return f.title }
 func (f *fakeActivity) Snapshot() Snapshot {
 	f.mu.Lock()
 	defer f.mu.Unlock()

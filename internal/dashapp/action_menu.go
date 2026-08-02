@@ -3,7 +3,6 @@ package dashapp
 import (
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
-
 )
 
 // actionMenuState is the dashboard's lightweight action menu. It opens

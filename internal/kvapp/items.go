@@ -107,6 +107,7 @@ func (i certItem) Description() string {
 	}
 	return ""
 }
+
 // FilterValue is the visible row text only (see vaultItem).
 func (i certItem) FilterValue() string { return i.cert.Name }
 
@@ -224,13 +225,13 @@ func keyVersionsToItems(versions []keyvault.KeyVersion) []list.Item {
 // ui.SetItemsPreserveKey. Names are unique within a scope (subscription,
 // vault, secret), which is all the merge semantics require.
 
-func vaultKey(v keyvault.Vault) string                          { return v.Name }
-func secretKey(s keyvault.Secret) string                        { return s.Name }
-func versionKey(v keyvault.SecretVersion) string                { return v.Version }
-func certKey(c keyvault.Certificate) string                     { return c.Name }
-func certVersionKey(v keyvault.CertificateVersion) string       { return v.Version }
-func kvKeyKey(k keyvault.Key) string                            { return k.Name }
-func keyVersionKey(v keyvault.KeyVersion) string                { return v.Version }
+func vaultKey(v keyvault.Vault) string                    { return v.Name }
+func secretKey(s keyvault.Secret) string                  { return s.Name }
+func versionKey(v keyvault.SecretVersion) string          { return v.Version }
+func certKey(c keyvault.Certificate) string               { return c.Name }
+func certVersionKey(v keyvault.CertificateVersion) string { return v.Version }
+func kvKeyKey(k keyvault.Key) string                      { return k.Name }
+func keyVersionKey(v keyvault.KeyVersion) string          { return v.Version }
 
 func vaultItemKey(it list.Item) string {
 	if vi, ok := it.(vaultItem); ok {

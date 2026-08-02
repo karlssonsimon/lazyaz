@@ -44,8 +44,8 @@ type Snapshot struct {
 	FinishedAt  time.Time // zero while running
 	TotalBytes  int64     // 0 if not meaningful (fetches)
 	DoneBytes   int64
-	Items       int       // for fetches; uploads leave 0
-	Skipped     int       // for uploads with conflict-skips; fetches leave 0
+	Items       int // for fetches; uploads leave 0
+	Skipped     int // for uploads with conflict-skips; fetches leave 0
 	BytesPerSec float64
 	Detail      string
 	Err         error

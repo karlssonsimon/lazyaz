@@ -25,4 +25,3 @@ func SpinnerFrameAt(elapsed time.Duration) string {
 	idx := int(elapsed/spinnerFPS) % len(spinnerFrames)
 	return spinnerFrames[idx]
 }
-

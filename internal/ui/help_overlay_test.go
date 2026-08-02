@@ -111,4 +111,3 @@ func TestHelpOverlaySearchBySection(t *testing.T) {
 type noopMatcher struct{}
 
 func (noopMatcher) Matches(string) bool { return false }
-

@@ -1180,9 +1180,9 @@ func (m *Model) resizeAndTickActive() tea.Cmd {
 
 func (m *Model) buildCommands() []command {
 	const (
-		secTabs   = "Tabs"
-		secOpen   = "Open Tabs"
-		secApp    = "Application"
+		secTabs = "Tabs"
+		secOpen = "Open Tabs"
+		secApp  = "Application"
 	)
 	cmds := []command{
 		{name: "New Tab: Blob Storage", hint: "ctrl+t", section: secTabs, action: func() commandAction {

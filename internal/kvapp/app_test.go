@@ -28,12 +28,12 @@ func TestValidateKeyAlgorithmAcceptsAllSixAndRejectsOthers(t *testing.T) {
 		}
 	}
 	bad := map[string]string{
-		"":           "algorithm is required",
-		"RSA-1024":   "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
-		"DSA-1024":   "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
-		"EC-P25":     "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
-		"RSA":        "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
-		"RSA 2048":   "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
+		"":         "algorithm is required",
+		"RSA-1024": "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
+		"DSA-1024": "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
+		"EC-P25":   "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
+		"RSA":      "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
+		"RSA 2048": "expected RSA-2048/3072/4096 or EC-P256/P384/P521",
 	}
 	for v, want := range bad {
 		if got := validateKeyAlgorithm(v); got != want {
@@ -112,27 +112,27 @@ func TestCreateActionsFollowKvKind(t *testing.T) {
 // item is actually selected, and never across kinds.
 func TestDeleteActionFollowsCursorAndKvKind(t *testing.T) {
 	cases := []struct {
-		kind       kvKind
-		seedItems  []list.Item
-		wantLabel  string
+		kind        kvKind
+		seedItems   []list.Item
+		wantLabel   string
 		otherLabels []string
 	}{
 		{
-			kind:       kvKindSecrets,
-			seedItems:  []list.Item{secretItem{secret: keyvault.Secret{Name: "api-key"}}},
-			wantLabel:  "Delete secret (api-key)...",
+			kind:        kvKindSecrets,
+			seedItems:   []list.Item{secretItem{secret: keyvault.Secret{Name: "api-key"}}},
+			wantLabel:   "Delete secret (api-key)...",
 			otherLabels: []string{"Delete certificate", "Delete key"},
 		},
 		{
-			kind:       kvKindCertificates,
-			seedItems:  []list.Item{certItem{cert: keyvault.Certificate{Name: "tls-cert"}}},
-			wantLabel:  "Delete certificate (tls-cert)...",
+			kind:        kvKindCertificates,
+			seedItems:   []list.Item{certItem{cert: keyvault.Certificate{Name: "tls-cert"}}},
+			wantLabel:   "Delete certificate (tls-cert)...",
 			otherLabels: []string{"Delete secret", "Delete key"},
 		},
 		{
-			kind:       kvKindKeys,
-			seedItems:  []list.Item{keyItem{key: keyvault.Key{Name: "signing"}}},
-			wantLabel:  "Delete key (signing)...",
+			kind:        kvKindKeys,
+			seedItems:   []list.Item{keyItem{key: keyvault.Key{Name: "signing"}}},
+			wantLabel:   "Delete key (signing)...",
 			otherLabels: []string{"Delete secret", "Delete certificate"},
 		},
 	}

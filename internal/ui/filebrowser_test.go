@@ -250,8 +250,8 @@ func TestFileBrowserEnterOnDirWithoutMarksStillNavigates(t *testing.T) {
 	// Convenience preserved: with no marks, Enter on a directory navigates in.
 	reader := &mapDirReader{
 		entries: map[string][]os.DirEntry{
-			"/start":                          {fakeDirEntry{name: "sub", isDir: true}},
-			filepath.Join("/start", "sub"):    {fakeDirEntry{name: "inner.txt", isDir: false}},
+			"/start":                       {fakeDirEntry{name: "sub", isDir: true}},
+			filepath.Join("/start", "sub"): {fakeDirEntry{name: "inner.txt", isDir: false}},
 		},
 	}
 	var s FileBrowserState
