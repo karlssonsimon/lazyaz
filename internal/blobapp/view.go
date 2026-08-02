@@ -18,10 +18,6 @@ func (m Model) View() tea.View {
 		return v
 	}
 
-	if m.preview.open {
-		m.preview.viewport.SetContent(m.preview.rendered)
-	}
-
 	ui.ClampListSelection(&m.accountsList)
 	ui.ClampListSelection(&m.containersList)
 	ui.ClampListSelection(&m.blobsList)

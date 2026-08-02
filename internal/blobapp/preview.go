@@ -76,6 +76,7 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.preview.windowData = nil
 	m.preview.lineStarts = nil
 	m.preview.rendered = m.Styles.Muted.Render("Loading preview...")
+	m.preview.viewport.SetContent(m.preview.rendered)
 	m.preview.requestID++
 	m.pendingPreviewG = false
 	m.transitionTo(previewPane, false)
