@@ -24,7 +24,7 @@ func navItems(names ...string) []list.Item {
 // Repro: user presses "/" (Filtering, empty query), then a background
 // refresh replaces the items via SetItemsPreserveKey.
 func TestSetItemsPreserveKeyDuringEmptyFiltering(t *testing.T) {
-	l := list.New(navItems("alpha", "beta"), list.NewDefaultDelegate(), 40, 20)
+	l := NewList(navItems("alpha", "beta"), list.NewDefaultDelegate(), 40, 20)
 	l.SetFilteringEnabled(true)
 
 	m2, _ := l.Update(tea.KeyPressMsg{Code: '/', Text: "/"})

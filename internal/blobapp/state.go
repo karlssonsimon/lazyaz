@@ -104,12 +104,15 @@ type Model struct {
 
 	service *blob.Service
 
-	accountsList    list.Model
-	containersList  list.Model
-	blobsList       list.Model
-	parentBlobsList list.Model // parent folder view (display-only, never focused)
+	accountsList    ui.List
+	containersList  ui.List
+	blobsList       ui.List
+	parentBlobsList ui.List // parent folder view (display-only, never focused)
 
 	focus int
+
+	// pendingScrollZ holds a half-typed `z` chord between keystrokes.
+	pendingScrollZ bool
 
 	accounts       []blob.Account
 	containers     []blob.ContainerInfo
@@ -320,7 +323,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	}
 	delegate := list.NewDefaultDelegate()
 
-	accounts := list.New([]list.Item{}, delegate, 24, 10)
+	accounts := ui.NewList([]list.Item{}, delegate, 24, 10)
 	accounts.SetShowTitle(false)  // title is rendered by ui.RenderMillerListColumn
 	accounts.SetShowFilter(false) // filter UI lives in our SubHeader
 	accounts.SetShowHelp(false)
@@ -330,7 +333,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	accounts.SetFilteringEnabled(true)
 	accounts.DisableQuitKeybindings()
 
-	containers := list.New([]list.Item{}, delegate, 24, 10)
+	containers := ui.NewList([]list.Item{}, delegate, 24, 10)
 	containers.SetShowTitle(false)
 	containers.SetShowFilter(false)
 	containers.SetShowHelp(false)
@@ -340,7 +343,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	containers.SetFilteringEnabled(true)
 	containers.DisableQuitKeybindings()
 
-	blobs := list.New([]list.Item{}, delegate, 40, 10)
+	blobs := ui.NewList([]list.Item{}, delegate, 40, 10)
 	blobs.SetShowTitle(false)
 	blobs.SetShowFilter(false)
 	blobs.SetShowHelp(false)
@@ -350,7 +353,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	blobs.SetFilteringEnabled(true)
 	blobs.DisableQuitKeybindings()
 
-	parentBlobs := list.New([]list.Item{}, delegate, 20, 10)
+	parentBlobs := ui.NewList([]list.Item{}, delegate, 20, 10)
 	parentBlobs.SetShowTitle(false)
 	parentBlobs.SetShowHelp(false)
 	parentBlobs.SetShowPagination(false)
@@ -361,11 +364,12 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 	// Override bubbles list cursor and filter bindings so they follow
 	// the user's configured CursorUp/CursorDown/FilterInput keys instead
 	// of the bubbles defaults (k/up, j/down, /).
-	for _, l := range []*list.Model{&accounts, &containers, &blobs, &parentBlobs} {
+	for _, l := range []*ui.List{&accounts, &containers, &blobs, &parentBlobs} {
 		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
 		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
 		l.KeyMap.Filter = km.FilterInput.AsBubbleKey()
 		l.Filter = ui.ListFilter
+		l.SetScrolloff(cfg.ScrolloffValue())
 	}
 	// Blob titles carry an icon prefix the filter must offset past —
 	// re-set after the loop so the wrapper wins.
@@ -476,7 +480,7 @@ func (m Model) WithNotification(level appshell.NotificationLevel, message string
 
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.SetScheme(scheme)
-	m.Styles.ApplyToLists([]*list.Model{
+	m.Styles.ApplyToLists([]*ui.List{
 		&m.accountsList, &m.containersList, &m.blobsList, &m.parentBlobsList,
 	}, &m.Spinner)
 	// Blobs list uses a custom delegate for mark/visual borders.

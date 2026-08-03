@@ -638,6 +638,8 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
+	case m.scrollMotion(key):
+		return m, nil
 	case m.Keymap.HalfPageDown.Matches(key):
 		m.scrollFocusedHalfPage(1)
 		return m, nil
@@ -684,6 +686,8 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
+	case m.scrollMotion(key):
+		return m, nil
 	case m.Keymap.HalfPageDown.Matches(key):
 		m.scrollFocusedHalfPage(1)
 		return m, nil
@@ -854,6 +858,24 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 	case m.Keymap.JumpBottom.Matches(key):
 		m.pendingMessageG = false
 		m.messageViewport.GotoBottom()
+		return m, nil
+	case m.Keymap.FullPageDown.Matches(key):
+		m.pendingMessageG = false
+		m.messageViewport.PageDown()
+		return m, nil
+	case m.Keymap.FullPageUp.Matches(key):
+		m.pendingMessageG = false
+		m.messageViewport.PageUp()
+		return m, nil
+	// The message body scrolls without a cursor, so ctrl+e / ctrl+y move
+	// the view a single line — the plain vim meaning.
+	case m.Keymap.ScrollLineDown.Matches(key):
+		m.pendingMessageG = false
+		m.messageViewport.ScrollDown(1)
+		return m, nil
+	case m.Keymap.ScrollLineUp.Matches(key):
+		m.pendingMessageG = false
+		m.messageViewport.ScrollUp(1)
 		return m, nil
 	case m.Keymap.JumpTopPrefix.Matches(key):
 		// Home jumps immediately; bare g keeps the gg chord.

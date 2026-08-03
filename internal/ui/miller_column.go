@@ -3,7 +3,6 @@ package ui
 import (
 	"strings"
 
-	"charm.land/bubbles/v2/list"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -25,7 +24,7 @@ type MillerColumn struct {
 }
 
 type MillerListColumn struct {
-	List      *list.Model
+	List      *List
 	Title     string
 	TitleMeta string // optional right-aligned meta on the title row
 	SubHeader string // optional second header row rendered between title and list body
@@ -85,7 +84,7 @@ func RenderMillerListColumn(col MillerListColumn, styles Styles) string {
 			bodyHeight = 1
 		}
 		col.List.SetSize(MillerColumnContentWidth(col.Frame), bodyHeight)
-		body = col.List.View()
+		body = col.List.RenderWindow()
 	}
 	return RenderMillerColumn(MillerColumn{
 		Title:     col.Title,

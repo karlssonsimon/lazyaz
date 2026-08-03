@@ -6,7 +6,7 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
-func ApplyFilterState(l *list.Model) {
+func ApplyFilterState(l *List) {
 	if strings.TrimSpace(l.FilterValue()) == "" {
 		l.SetFilterState(list.Unfiltered)
 		return
@@ -14,7 +14,7 @@ func ApplyFilterState(l *list.Model) {
 	l.SetFilterState(list.FilterApplied)
 }
 
-func HalfPageStep(l list.Model) int {
+func HalfPageStep(l List) int {
 	if l.Paginator.PerPage > 1 {
 		if half := l.Paginator.PerPage / 2; half > 0 {
 			return half
@@ -30,7 +30,7 @@ func HalfPageStep(l list.Model) int {
 	return 1
 }
 
-func ClampListSelection(l *list.Model) {
+func ClampListSelection(l *List) {
 	items := l.Items()
 	if len(items) == 0 {
 		l.Select(0)
@@ -64,7 +64,7 @@ type ListState struct {
 // SnapshotListState captures the current cursor and filter of the given
 // list. The returned ListState can later be passed to RestoreListState
 // to put the list back in the same user-facing state.
-func SnapshotListState(l *list.Model, keyOf func(list.Item) string) ListState {
+func SnapshotListState(l *List, keyOf func(list.Item) string) ListState {
 	var cursorKey string
 	if sel := l.SelectedItem(); sel != nil {
 		cursorKey = keyOf(sel)
@@ -91,7 +91,7 @@ func SnapshotListState(l *list.Model, keyOf func(list.Item) string) ListState {
 // common case when a user navigates into a container/vault/namespace
 // they've never visited before — the stale cursor index from the
 // previous scope must not carry over.
-func RestoreListState(l *list.Model, state ListState, keyOf func(list.Item) string) {
+func RestoreListState(l *List, state ListState, keyOf func(list.Item) string) {
 	if state.Filter != "" {
 		l.SetFilterText(state.Filter)
 	} else {
@@ -117,7 +117,7 @@ func RestoreListState(l *list.Model, state ListState, keyOf func(list.Item) stri
 // the given key. Returns true if a match was found. Used by programmatic
 // navigation (jump list restore, dashboard drill-ins) to align the
 // parent Miller column's cursor with the newly-selected child.
-func SelectByKey(l *list.Model, key string, keyOf func(list.Item) string) bool {
+func SelectByKey(l *List, key string, keyOf func(list.Item) string) bool {
 	if key == "" {
 		return false
 	}
@@ -143,7 +143,7 @@ func SelectByKey(l *list.Model, key string, keyOf func(list.Item) string) bool {
 // Use this for streaming refreshes where items may reorder or disappear
 // as pages arrive, so the cursor sticks to the thing the user was looking
 // at rather than whichever item happens to land in the same slot.
-func SetItemsPreserveKey(l *list.Model, items []list.Item, keyOf func(list.Item) string) {
+func SetItemsPreserveKey(l *List, items []list.Item, keyOf func(list.Item) string) {
 	prevIdx := l.Index()
 	prevKey := ""
 	if selected := l.SelectedItem(); selected != nil {

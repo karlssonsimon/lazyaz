@@ -5,12 +5,22 @@ package keymap
 // by scope but the JSON file is flat.
 type Keymap struct {
 	// Shared — used by all apps.
-	Quit                Binding `json:"quit"`
-	Cancel              Binding `json:"cancel"`
-	CursorUp            Binding `json:"cursor_up"`
-	CursorDown          Binding `json:"cursor_down"`
-	HalfPageDown        Binding `json:"half_page_down"`
-	HalfPageUp          Binding `json:"half_page_up"`
+	Quit           Binding `json:"quit"`
+	Cancel         Binding `json:"cancel"`
+	CursorUp       Binding `json:"cursor_up"`
+	CursorDown     Binding `json:"cursor_down"`
+	HalfPageDown   Binding `json:"half_page_down"`
+	HalfPageUp     Binding `json:"half_page_up"`
+	FullPageDown   Binding `json:"full_page_down"`
+	FullPageUp     Binding `json:"full_page_up"`
+	ScrollLineDown Binding `json:"scroll_line_down"`
+	ScrollLineUp   Binding `json:"scroll_line_up"`
+	// ScrollPrefix opens the vim `z` chord; the three keys below finish
+	// it by repositioning the view around the cursor.
+	ScrollPrefix        Binding `json:"scroll_prefix"`
+	ScrollCenter        Binding `json:"scroll_center"`
+	ScrollTop           Binding `json:"scroll_top"`
+	ScrollBottom        Binding `json:"scroll_bottom"`
 	NextFocus           Binding `json:"next_focus"`
 	PreviousFocus       Binding `json:"previous_focus"`
 	ReloadSubscriptions Binding `json:"reload_subscriptions"`

@@ -3,7 +3,6 @@ package ui
 import (
 	"time"
 
-	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -67,11 +66,11 @@ func PaneAtX(panes []VisiblePane, screenX int) *VisiblePane {
 	return nil
 }
 
-// listHeaderRows returns the number of rows the list.View() renders
+// listHeaderRows returns the number of header rows the list renders
 // above the actual items. Measured empirically: the bubbles list renders
 // an empty title row (when filtering is enabled but idle), the status
 // bar, and then a blank separator line before items start.
-func listHeaderRows(l *list.Model) int {
+func listHeaderRows(l *List) int {
 	rows := 0
 	if l.FilteringEnabled() {
 		rows++ // empty title/filter row
@@ -85,16 +84,17 @@ func listHeaderRows(l *list.Model) int {
 
 // ListItemAtY returns the item index in the list's VisibleItems for a
 // click at the given Y offset within the list's rendered content area
-// (i.e. the list.View() output area). itemHeight is the rendered height
+// (i.e. the rendered window area). itemHeight is the rendered height
 // of each item (delegate Height + Spacing). Returns -1 if out of range.
-func ListItemAtY(l *list.Model, y, itemHeight int) int {
+func ListItemAtY(l *List, y, itemHeight int) int {
 	y -= listHeaderRows(l)
 	if y < 0 || itemHeight <= 0 {
 		return -1
 	}
 	offset := y / itemHeight
-	first := l.Paginator.Page * l.Paginator.PerPage
-	idx := first + offset
+	// The window scrolls a row at a time, so the first visible item is
+	// the list's own offset, not a page boundary.
+	idx := l.Offset() + offset
 	visible := len(l.VisibleItems())
 	if idx < 0 || idx >= visible {
 		return -1

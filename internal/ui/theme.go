@@ -33,8 +33,30 @@ type Config struct {
 	// distinguish "absent" (use the on default) from "explicit false".
 	// There is no reliable runtime detection of which fonts the
 	// terminal has loaded, so the choice is config-driven.
-	Nerdfonts *bool    `json:"nerdfonts,omitempty"`
+	Nerdfonts *bool `json:"nerdfonts,omitempty"`
+	// Scrolloff is how many rows of context stay between the cursor and
+	// the top or bottom of a pane before it starts scrolling, matching
+	// vim's option of the same name. Same tristate treatment as
+	// Nerdfonts: absent means the default, while an explicit 0 means
+	// "only scroll once the cursor reaches the edge".
+	Scrolloff *int     `json:"scrolloff,omitempty"`
 	Schemes   []Scheme `json:"-"`
+}
+
+// DefaultScrolloff is used when the config leaves scrolloff unset.
+const DefaultScrolloff = 3
+
+// ScrolloffValue resolves the tristate Scrolloff field. Values are
+// clamped at zero; ScrollWindow caps the upper end against the pane
+// height, since that varies per pane and per resize.
+func (c Config) ScrolloffValue() int {
+	if c.Scrolloff == nil {
+		return DefaultScrolloff
+	}
+	if *c.Scrolloff < 0 {
+		return 0
+	}
+	return *c.Scrolloff
 }
 
 // NerdfontsEnabled resolves the tristate Nerdfonts field to a bool.

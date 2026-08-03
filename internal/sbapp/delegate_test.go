@@ -17,9 +17,9 @@ func newStyles() ui.Styles {
 	return ui.NewStyles(testConfig.ActiveScheme())
 }
 
-func newEntityList(width int, items []list.Item) list.Model {
+func newEntityList(width int, items []list.Item) ui.List {
 	styles := newStyles()
-	l := list.New(items, newEntityDelegate(styles.Delegate, styles), width, 10)
+	l := ui.NewList(items, newEntityDelegate(styles.Delegate, styles), width, 10)
 	l.SetShowTitle(false)
 	l.SetShowHelp(false)
 	l.SetShowPagination(false)
@@ -27,9 +27,9 @@ func newEntityList(width int, items []list.Item) list.Model {
 	return l
 }
 
-func newSubList(width int, items []list.Item) list.Model {
+func newSubList(width int, items []list.Item) ui.List {
 	styles := newStyles()
-	l := list.New(items, newSubscriptionDelegate(styles.Delegate, styles), width, 10)
+	l := ui.NewList(items, newSubscriptionDelegate(styles.Delegate, styles), width, 10)
 	l.SetShowTitle(false)
 	l.SetShowHelp(false)
 	l.SetShowPagination(false)

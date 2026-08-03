@@ -52,7 +52,7 @@ func TestMillerListBodyHeightReservesTitleAndFooter(t *testing.T) {
 
 func TestRenderMillerListColumnUsesListView(t *testing.T) {
 	styles := NewStyles(FallbackScheme())
-	l := list.New([]list.Item{testListItem("alpha")}, styles.Delegate, 20, 3)
+	l := NewList([]list.Item{testListItem("alpha")}, styles.Delegate, 20, 3)
 	l.SetShowTitle(false)
 	l.SetShowHelp(false)
 	l.SetShowPagination(false)

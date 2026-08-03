@@ -300,3 +300,39 @@ func TestEmbeddedDefaultJSON(t *testing.T) {
 		}
 	}
 }
+
+// The Standard keymap binds ctrl+f to the filter, so the vim page
+// motions must stay unbound there — otherwise merging over Default()
+// would leave ctrl+f doing both.
+func TestStandardKeymapLeavesVimMotionsUnbound(t *testing.T) {
+	data, err := stockKeymapsFS.ReadFile("keymaps/standard.json")
+	if err != nil {
+		t.Fatalf("reading embedded standard.json: %v", err)
+	}
+	var f keymapFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		t.Fatalf("invalid embedded standard.json: %v", err)
+	}
+
+	km := Default()
+	mergeBindings(&km, f.Bindings)
+
+	for _, b := range []struct {
+		name    string
+		binding Binding
+	}{
+		{"FullPageDown", km.FullPageDown},
+		{"FullPageUp", km.FullPageUp},
+		{"ScrollPrefix", km.ScrollPrefix},
+		{"ScrollLineDown", km.ScrollLineDown},
+		{"ScrollLineUp", km.ScrollLineUp},
+	} {
+		if len(b.binding.Keys) != 0 {
+			t.Errorf("standard keymap has %s bound to %v, want unbound", b.name, b.binding.Keys)
+		}
+	}
+
+	if !km.FilterInput.Matches("ctrl+f") {
+		t.Error("standard keymap should still open the filter with ctrl+f")
+	}
+}

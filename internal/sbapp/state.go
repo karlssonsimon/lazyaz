@@ -85,13 +85,16 @@ type Model struct {
 
 	service *servicebus.Service
 
-	namespacesList    list.Model
-	entitiesList      list.Model
-	subscriptionsList list.Model // topic subscriptions
-	queueTypeList     list.Model // Active / DLQ picker (2 items)
-	messageList       list.Model // messages from selected queue type
+	namespacesList    ui.List
+	entitiesList      ui.List
+	subscriptionsList ui.List // topic subscriptions
+	queueTypeList     ui.List // Active / DLQ picker (2 items)
+	messageList       ui.List // messages from selected queue type
 
 	focus int
+
+	// pendingScrollZ holds a half-typed `z` chord between keystrokes.
+	pendingScrollZ bool
 
 	namespaces    []servicebus.Namespace
 	entities      []servicebus.Entity
@@ -285,8 +288,8 @@ type targetEntitiesLoadedMsg struct {
 	err       error
 }
 
-func newList(delegate list.DefaultDelegate, name, plural string) list.Model {
-	l := list.New([]list.Item{}, delegate, 40, 10)
+func newList(delegate list.DefaultDelegate, name, plural string) ui.List {
+	l := ui.NewList([]list.Item{}, delegate, 40, 10)
 	l.SetShowTitle(false)
 	l.SetShowFilter(false) // we render our own /<query>█ as a SubHeader
 	l.SetShowHelp(false)
@@ -318,11 +321,12 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 
 	// Override bubbles list cursor and filter bindings so they follow
 	// the user's configured CursorUp/CursorDown/FilterInput keys.
-	for _, l := range []*list.Model{&namespaces, &entities, &subs, &queueType, &messages} {
+	for _, l := range []*ui.List{&namespaces, &entities, &subs, &queueType, &messages} {
 		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
 		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
 		l.KeyMap.Filter = km.FilterInput.AsBubbleKey()
 		l.Filter = ui.ListFilter
+		l.SetScrolloff(cfg.ScrolloffValue())
 	}
 	// Entity titles carry a kind glyph the filter must offset past —
 	// re-set after the loop so the wrapper wins.
@@ -380,7 +384,7 @@ func (m Model) WithNotification(level appshell.NotificationLevel, message string
 
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.SetScheme(scheme)
-	m.Styles.ApplyToLists([]*list.Model{
+	m.Styles.ApplyToLists([]*ui.List{
 		&m.namespacesList, &m.entitiesList, &m.subscriptionsList,
 		&m.queueTypeList, &m.messageList,
 	}, &m.Spinner)

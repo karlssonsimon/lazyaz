@@ -165,3 +165,14 @@ func (m Model) IsTextInputActive() bool {
 		return true
 	}
 }
+
+// scrollMotion applies a vim-style scroll motion to the focused list and
+// reports whether the key was consumed. The `z` chord spans two
+// keystrokes, so its pending state lives on the model.
+func (m *Model) scrollMotion(key string) bool {
+	motion := ui.HandleListMotion(m.listForPane(m.focus), m.Keymap, key, &m.pendingScrollZ)
+	if motion == ui.MotionChordOpen {
+		m.Notify(appshell.LevelInfo, ui.ScrollChordHint)
+	}
+	return motion != ui.MotionNone
+}

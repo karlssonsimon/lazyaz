@@ -3,7 +3,6 @@ package sbapp
 import (
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
-	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -33,8 +32,8 @@ func (m Model) visiblePanes() []ui.VisiblePane {
 	return panes
 }
 
-// listForPane returns the list.Model pointer for the given pane index, or nil.
-func (m *Model) listForPane(pane int) *list.Model {
+// listForPane returns the ui.List pointer for the given pane index, or nil.
+func (m *Model) listForPane(pane int) *ui.List {
 	switch pane {
 	case namespacesPane:
 		return &m.namespacesList

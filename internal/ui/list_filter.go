@@ -26,7 +26,7 @@ func ListFilter(term string, targets []string) []list.Rank {
 // last-writer-wins, so a stale keystroke's result can arrive after a
 // newer one and stick. Apps route input through UpdateListSyncFilter
 // and drop list.FilterMatchesMsg messages entirely.
-func SyncFilter(l *list.Model) {
+func SyncFilter(l *List) {
 	if l.FilterState() != list.Filtering {
 		return
 	}
@@ -37,7 +37,7 @@ func SyncFilter(l *list.Model) {
 // UpdateListSyncFilter routes msg to the list and refilters
 // synchronously when the message changed the filter input — whatever
 // kind of message it was (keystroke, paste, ...). See SyncFilter.
-func UpdateListSyncFilter(l *list.Model, msg tea.Msg) tea.Cmd {
+func UpdateListSyncFilter(l *List, msg tea.Msg) tea.Cmd {
 	before := l.FilterInput.Value()
 	updated, cmd := l.Update(msg)
 	*l = updated

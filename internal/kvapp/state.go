@@ -124,14 +124,17 @@ type Model struct {
 
 	service *keyvault.Service
 
-	vaultsList   list.Model
-	secretsList  list.Model
-	versionsList list.Model
+	vaultsList   ui.List
+	secretsList  ui.List
+	versionsList ui.List
 	// kindList is the fixed three-row chooser between vaults and items.
 	// Cursor position drives m.kvKind on selection.
-	kindList list.Model
+	kindList ui.List
 
 	focus int
+
+	// pendingScrollZ holds a half-typed `z` chord between keystrokes.
+	pendingScrollZ bool
 
 	vaults         []keyvault.Vault
 	secrets        []keyvault.Secret
@@ -310,7 +313,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 	}
 	delegate := list.NewDefaultDelegate()
 
-	vaults := list.New([]list.Item{}, delegate, 24, 10)
+	vaults := ui.NewList([]list.Item{}, delegate, 24, 10)
 	vaults.SetShowTitle(false)
 	vaults.SetShowFilter(false) // filter UI lives in our SubHeader
 	vaults.SetShowHelp(false)
@@ -320,7 +323,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 	vaults.SetFilteringEnabled(true)
 	vaults.DisableQuitKeybindings()
 
-	secrets := list.New([]list.Item{}, delegate, 24, 10)
+	secrets := ui.NewList([]list.Item{}, delegate, 24, 10)
 	secrets.SetShowTitle(false)
 	secrets.SetShowFilter(false)
 	secrets.SetShowHelp(false)
@@ -330,7 +333,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 	secrets.SetFilteringEnabled(true)
 	secrets.DisableQuitKeybindings()
 
-	versionsList := list.New([]list.Item{}, delegate, 40, 10)
+	versionsList := ui.NewList([]list.Item{}, delegate, 40, 10)
 	versionsList.SetShowTitle(false)
 	versionsList.SetShowFilter(false)
 	versionsList.SetShowHelp(false)
@@ -340,7 +343,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 	versionsList.SetFilteringEnabled(true)
 	versionsList.DisableQuitKeybindings()
 
-	kindList := list.New(kindItems(), delegate, 24, 10)
+	kindList := ui.NewList(kindItems(), delegate, 24, 10)
 	kindList.SetShowTitle(false)
 	kindList.SetShowFilter(false)
 	kindList.SetShowHelp(false)
@@ -352,11 +355,12 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 
 	// Override bubbles list cursor and filter bindings so they follow
 	// the user's configured CursorUp/CursorDown/FilterInput keys.
-	for _, l := range []*list.Model{&vaults, &secrets, &versionsList, &kindList} {
+	for _, l := range []*ui.List{&vaults, &secrets, &versionsList, &kindList} {
 		l.KeyMap.CursorUp = km.CursorUp.AsBubbleKey()
 		l.KeyMap.CursorDown = km.CursorDown.AsBubbleKey()
 		l.KeyMap.Filter = km.FilterInput.AsBubbleKey()
 		l.Filter = ui.ListFilter
+		l.SetScrolloff(cfg.ScrolloffValue())
 	}
 
 	m := Model{
@@ -413,7 +417,7 @@ func (m Model) WithNotification(level appshell.NotificationLevel, message string
 
 func (m *Model) applyScheme(scheme ui.Scheme) {
 	m.SetScheme(scheme)
-	m.Styles.ApplyToLists([]*list.Model{
+	m.Styles.ApplyToLists([]*ui.List{
 		&m.vaultsList, &m.kindList, &m.secretsList, &m.versionsList,
 	}, &m.Spinner)
 	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, secretMarkKey)

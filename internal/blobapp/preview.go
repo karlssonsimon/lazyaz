@@ -168,6 +168,22 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.pendingPreviewG = false
 		step := max(1, m.preview.viewport.Height()/2)
 		return m.movePreviewCursorByLines(-step)
+	case m.Keymap.FullPageDown.Matches(key):
+		m.pendingPreviewG = false
+		return m.movePreviewCursorByLines(max(1, m.preview.viewport.Height()))
+	case m.Keymap.FullPageUp.Matches(key):
+		m.pendingPreviewG = false
+		return m.movePreviewCursorByLines(-max(1, m.preview.viewport.Height()))
+	// The preview has no cursor separate from its scroll position — the
+	// top visible line is the position — so ctrl+e / ctrl+y move by one
+	// line, same as j / k. They are bound because the muscle memory is
+	// worth more than the redundancy.
+	case m.Keymap.ScrollLineDown.Matches(key):
+		m.pendingPreviewG = false
+		return m.movePreviewCursorByLines(1)
+	case m.Keymap.ScrollLineUp.Matches(key):
+		m.pendingPreviewG = false
+		return m.movePreviewCursorByLines(-1)
 	case m.Keymap.JumpBottom.Matches(key):
 		m.pendingPreviewG = false
 		return m.jumpPreviewToBottom()

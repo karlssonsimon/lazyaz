@@ -35,7 +35,7 @@ func (m Model) View() tea.View {
 	frame := func(pane int) ui.MillerColumnFrame {
 		return ui.MillerColumnFrame{Width: pw[pane], Height: h, Focused: m.focus == pane, RightRule: pane != rightmostPane}
 	}
-	footer := func(pane int, l *list.Model) string {
+	footer := func(pane int, l *ui.List) string {
 		f := frame(pane)
 		contentWidth := ui.MillerColumnContentWidth(f)
 		base := m.columnFooter(pane)
@@ -281,7 +281,7 @@ func (m Model) statusActions() []ui.StatusAction {
 }
 
 func (m Model) columnFooter(pane int) string {
-	var l *list.Model
+	var l *ui.List
 	switch pane {
 	case accountsPane:
 		l = &m.accountsList

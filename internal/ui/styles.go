@@ -451,7 +451,7 @@ func NewStyles(s Scheme) Styles {
 }
 
 // ApplyToList applies the resolved styles to a single list.Model.
-func (st Styles) ApplyToList(l *list.Model) {
+func (st Styles) ApplyToList(l *List) {
 	l.SetDelegate(st.Delegate)
 	l.Styles.TitleBar = st.List.TitleBar
 	l.Styles.Title = st.List.Title
@@ -471,7 +471,7 @@ func (st Styles) ApplyToList(l *list.Model) {
 }
 
 // ApplyToLists applies styles to multiple lists and a spinner.
-func (st Styles) ApplyToLists(lists []*list.Model, spin *spinner.Model) {
+func (st Styles) ApplyToLists(lists []*List, spin *spinner.Model) {
 	for _, l := range lists {
 		st.ApplyToList(l)
 	}
