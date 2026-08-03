@@ -22,11 +22,18 @@ import (
 // adjacent to the column it filters without covering the column's
 // table header.
 func RenderFilterLine(before, cursorView, after string, query string, styles Styles, width int, showCursor bool) string {
+	return RenderPromptLine("/", before, cursorView, after, query, styles, width, showCursor)
+}
+
+// RenderPromptLine is RenderFilterLine with the prompt glyph left to the
+// caller, so the search bar can show `/` or `?` for its direction while
+// sharing one implementation with the column filter.
+func RenderPromptLine(prompt, before, cursorView, after string, query string, styles Styles, width int, showCursor bool) string {
 	if width <= 0 {
 		return ""
 	}
 	chrome := styles.Chrome
-	prompt := chrome.HeaderPathMuted.Render("/")
+	promptGlyph := chrome.HeaderPathMuted.Render(prompt)
 	var body string
 	if showCursor {
 		if cursorView == "" {
@@ -36,7 +43,7 @@ func RenderFilterLine(before, cursorView, after string, query string, styles Sty
 	} else {
 		body = chrome.HeaderPath.Render(query)
 	}
-	line := prompt + " " + body
+	line := promptGlyph + " " + body
 	if pad := width - ansi.StringWidth(line); pad > 0 {
 		line += strings.Repeat(" ", pad)
 	}

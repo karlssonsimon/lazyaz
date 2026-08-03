@@ -103,16 +103,15 @@ func (s *TextSelection) HighlightContent(vp viewport.Model, highlight lipgloss.S
 
 	content := vp.View()
 	lines := strings.Split(content, "\n")
-	vpWidth := vp.Width()
 
 	startRow, startCol, endRow, endCol := s.ordered()
 
+	byRow := make(map[int][]ColumnRange, endRow-startRow+1)
 	for i := startRow; i <= endRow && i < len(lines); i++ {
 		if i < 0 {
 			continue
 		}
-		line := lines[i]
-		lineWidth := ansi.StringWidth(line)
+		lineWidth := ansi.StringWidth(lines[i])
 
 		selStart := 0
 		selEnd := lineWidth
@@ -122,35 +121,10 @@ func (s *TextSelection) HighlightContent(vp viewport.Model, highlight lipgloss.S
 		if i == endRow {
 			selEnd = endCol + 1
 		}
-		if selStart >= lineWidth {
-			continue
-		}
-		if selEnd > lineWidth {
-			selEnd = lineWidth
-		}
-		if selStart >= selEnd {
-			continue
-		}
-
-		// Build the line from three visual slices: before | selected | after.
-		// Use ansi.Cut for clean extraction that preserves surrounding styles.
-		before := ""
-		if selStart > 0 {
-			before = ansi.Truncate(line, selStart, "")
-		}
-		selectedPlain := ansi.Strip(ansi.Cut(line, selStart, selEnd))
-		after := ansi.Cut(line, selEnd, lineWidth)
-
-		rebuilt := before + highlight.Render(selectedPlain) + after
-
-		// Clamp to viewport width so we never break the pane border.
-		if ansi.StringWidth(rebuilt) > vpWidth {
-			rebuilt = ansi.Truncate(rebuilt, vpWidth, "")
-		}
-		lines[i] = rebuilt
+		byRow[i] = []ColumnRange{{Start: selStart, End: selEnd, Style: highlight}}
 	}
 
-	return strings.Join(lines, "\n")
+	return HighlightLines(content, vp.Width(), byRow)
 }
 
 // extractText returns the plain text covered by the current selection.
