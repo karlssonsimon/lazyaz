@@ -57,6 +57,11 @@ type Styles struct {
 	Warning            lipgloss.Style // Warning/filter match (base0A)
 	Ok                 lipgloss.Style // Success/ok text (base0B)
 	SelectionHighlight lipgloss.Style // Mouse text selection highlight (base02 bg + base06 fg)
+	// Search matches inside a preview buffer. The current match is the
+	// one n / N moved to; the rest are the other hits in view, dimmer so
+	// the eye lands on the current one first.
+	SearchMatch        lipgloss.Style // Other matches in view (base0A bg)
+	SearchMatchCurrent lipgloss.Style // The match the cursor is on (base09 bg)
 }
 
 // ListStyles contains all list.Model.Styles fields.
@@ -447,6 +452,8 @@ func NewStyles(s Scheme) Styles {
 		Warning:            lipgloss.NewStyle().Foreground(warning),
 		Ok:                 lipgloss.NewStyle().Foreground(green),
 		SelectionHighlight: lipgloss.NewStyle().Foreground(selText).Background(selBg).Reverse(true),
+		SearchMatch:        lipgloss.NewStyle().Foreground(bg).Background(warning),
+		SearchMatchCurrent: lipgloss.NewStyle().Foreground(bg).Background(orange).Bold(true),
 	}
 }
 

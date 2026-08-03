@@ -158,12 +158,24 @@ func (m Model) focusedListSettingFilter() bool {
 // it. Genuine non-text modes: preview viewport (scroll-only) and visual
 // line mode (motion-only).
 func (m Model) IsTextInputActive() bool {
+	// The open search prompt is text input even though the mode is still
+	// ModePreview, so the parent forwards keys instead of eating them.
+	if m.preview.search.bar.InputOpen {
+		return true
+	}
 	switch m.inputMode() {
 	case ModeNormal, ModeVisualLine, ModePreview:
 		return false
 	default:
 		return true
 	}
+}
+
+// BufferSearchFocused reports that the focused pane is a buffer owning
+// the vim search keys. The parent checks this before consuming ? and N
+// for help and notifications.
+func (m Model) BufferSearchFocused() bool {
+	return m.preview.open && m.focus == previewPane
 }
 
 // scrollMotion applies a vim-style scroll motion to the focused list and

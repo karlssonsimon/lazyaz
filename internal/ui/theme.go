@@ -39,16 +39,39 @@ type Config struct {
 	// vim's option of the same name. Same tristate treatment as
 	// Nerdfonts: absent means the default, while an explicit 0 means
 	// "only scroll once the cursor reaches the edge".
-	Scrolloff *int     `json:"scrolloff,omitempty"`
-	Schemes   []Scheme `json:"-"`
+	Scrolloff *int `json:"scrolloff,omitempty"`
+	// SearchScanLimitMB bounds how much of a blob a single preview
+	// search will pull down. These reads are billed, so an unbounded
+	// scan of a very large blob is a cost question, not just a slow one.
+	// Hitting the limit stops the scan and reports where to resume.
+	SearchScanLimitMB *int     `json:"search_scan_limit_mb,omitempty"`
+	Schemes           []Scheme `json:"-"`
 }
 
 // DefaultScrolloff is used when the config leaves scrolloff unset.
 const DefaultScrolloff = 3
 
+// DefaultSearchScanLimitMB is how much of a blob one search reads when
+// the config says nothing.
+const DefaultSearchScanLimitMB = 256
+
 // ScrolloffValue resolves the tristate Scrolloff field. Values are
 // clamped at zero; ScrollWindow caps the upper end against the pane
 // height, since that varies per pane and per resize.
+// SearchScanLimitBytes resolves the scan budget for one search. Zero or
+// negative disables streaming entirely, leaving search confined to the
+// window already in memory.
+func (c Config) SearchScanLimitBytes() int64 {
+	limit := DefaultSearchScanLimitMB
+	if c.SearchScanLimitMB != nil {
+		limit = *c.SearchScanLimitMB
+	}
+	if limit < 0 {
+		limit = 0
+	}
+	return int64(limit) << 20
+}
+
 func (c Config) ScrolloffValue() int {
 	if c.Scrolloff == nil {
 		return DefaultScrolloff

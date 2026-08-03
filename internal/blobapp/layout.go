@@ -100,6 +100,8 @@ func (m *Model) resize() {
 			vpWidth = 1
 		}
 		m.preview.viewport.SetWidth(vpWidth)
-		m.preview.viewport.SetHeight(ui.MillerListBodyHeight(height, false))
+		// The search bar occupies the pane footer when it is showing, so
+		// the viewport has one row less to draw into.
+		m.preview.viewport.SetHeight(ui.MillerListBodyHeight(height, m.previewHasFooter()))
 	}
 }

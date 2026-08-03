@@ -25,6 +25,11 @@ type credentialTab interface {
 	WithCredential(azcore.TokenCredential) tea.Model
 }
 type textInputTab interface{ IsTextInputActive() bool }
+
+// searchableTab is implemented by tabs whose focused pane is a buffer
+// that owns the vim search keys. Without this, ? and N would be consumed
+// as help and notifications before ever reaching the buffer.
+type searchableTab interface{ BufferSearchFocused() bool }
 type themedTab interface{ WithScheme(ui.Scheme) tea.Model }
 type helpTab interface{ HelpSections() []ui.HelpSection }
 type uploadConflictTab interface {

@@ -834,6 +834,13 @@ func (m *Model) rehighlightSelectedMessage() {
 }
 
 func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
+	// The search prompt owns every key while it is open, so a query can
+	// contain characters that are otherwise message-body bindings.
+	if cmd, consumed := m.handleMessageSearchKey(key); consumed {
+		m.pendingMessageG = false
+		return m, cmd
+	}
+
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit

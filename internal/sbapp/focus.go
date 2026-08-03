@@ -179,6 +179,12 @@ func (m Model) focusedListSettingFilter() bool {
 // the overlay. Genuine non-text modes: message preview (scroll-only) and
 // visual line (motion-only).
 func (m Model) IsTextInputActive() bool {
+	// The open search prompt is text input even though the mode is still
+	// ModeMessagePreview, so the parent forwards keys instead of eating
+	// them.
+	if m.messageSearch.bar.InputOpen {
+		return true
+	}
 	switch m.inputMode() {
 	case ModeNormal, ModeVisualLine, ModeMessagePreview:
 		return false

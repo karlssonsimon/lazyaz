@@ -112,3 +112,11 @@ func HighlightLines(content string, width int, byRow map[int][]ColumnRange) stri
 	}
 	return strings.Join(lines, "\n")
 }
+
+// PlainWidth is the display width of raw (unstyled) bytes. Used to turn
+// a byte offset inside a buffer into the column where it will appear
+// once rendered, which is not the same number as soon as the text holds
+// multibyte runes.
+func PlainWidth(b []byte) int {
+	return ansi.StringWidth(string(b))
+}

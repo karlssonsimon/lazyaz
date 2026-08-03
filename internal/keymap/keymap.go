@@ -17,10 +17,15 @@ type Keymap struct {
 	ScrollLineUp   Binding `json:"scroll_line_up"`
 	// ScrollPrefix opens the vim `z` chord; the three keys below finish
 	// it by repositioning the view around the cursor.
-	ScrollPrefix        Binding `json:"scroll_prefix"`
-	ScrollCenter        Binding `json:"scroll_center"`
-	ScrollTop           Binding `json:"scroll_top"`
-	ScrollBottom        Binding `json:"scroll_bottom"`
+	ScrollPrefix Binding `json:"scroll_prefix"`
+	ScrollCenter Binding `json:"scroll_center"`
+	ScrollTop    Binding `json:"scroll_top"`
+	ScrollBottom Binding `json:"scroll_bottom"`
+	// Buffer search inside the blob preview and the message body.
+	SearchForward       Binding `json:"search_forward"`
+	SearchBackward      Binding `json:"search_backward"`
+	SearchNext          Binding `json:"search_next"`
+	SearchPrev          Binding `json:"search_prev"`
 	NextFocus           Binding `json:"next_focus"`
 	PreviousFocus       Binding `json:"previous_focus"`
 	ReloadSubscriptions Binding `json:"reload_subscriptions"`

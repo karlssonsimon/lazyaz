@@ -120,14 +120,20 @@ func (m Model) View() tea.View {
 		vpView := m.messageViewport.View()
 		if m.textSelection.Active {
 			vpView = m.textSelection.HighlightContent(m.messageViewport, m.Styles.SelectionHighlight)
+		} else if ranges := m.messageMatchRanges(); len(ranges) > 0 {
+			// Search highlighting yields to an active mouse selection —
+			// two sets of column ranges over the same rows would fight.
+			vpView = ui.HighlightLines(vpView, m.messageViewport.Width(), ranges)
 		}
 		gutter := ui.RenderLineGutter(m.messageViewport, m.Styles, previewGutterMinDigits)
 		body := lipgloss.JoinHorizontal(lipgloss.Top, gutter, vpView)
 		previewContent := lipgloss.JoinVertical(lipgloss.Left, previewTitle, body)
+		messageFrame := frame(messagePreviewPane)
 		paneMap[messagePreviewPane] = ui.RenderMillerColumn(ui.MillerColumn{
-			Title: messageDetailTitle,
-			Body:  previewContent,
-			Frame: frame(messagePreviewPane),
+			Title:  messageDetailTitle,
+			Body:   previewContent,
+			Footer: m.messageSearch.bar.Render(m.Cursor, m.Styles, ui.MillerColumnContentWidth(messageFrame)),
+			Frame:  messageFrame,
 		}, m.Styles)
 	}
 

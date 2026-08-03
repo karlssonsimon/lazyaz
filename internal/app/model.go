@@ -511,6 +511,22 @@ func (m *Model) activeChildTextInput() bool {
 	return false
 }
 
+// activeChildOwnsSearchKeys reports whether the key is a buffer-search
+// key and the active tab has a searchable buffer focused.
+func (m *Model) activeChildOwnsSearchKeys(key string) bool {
+	if len(m.tabs) == 0 {
+		return false
+	}
+	child, ok := m.tabs[m.activeIdx].Model.(searchableTab)
+	if !ok || !child.BufferSearchFocused() {
+		return false
+	}
+	return m.keymap.SearchForward.Matches(key) ||
+		m.keymap.SearchBackward.Matches(key) ||
+		m.keymap.SearchNext.Matches(key) ||
+		m.keymap.SearchPrev.Matches(key)
+}
+
 func (m *Model) closeTab(idx int) {
 	if idx < 0 || idx >= len(m.tabs) {
 		return
@@ -1055,6 +1071,12 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if key == "ctrl+c" {
 				return m, tea.Quit
 			}
+			return m, m.forwardToActive(msg)
+		}
+
+		// A focused preview buffer owns / ? n N, so they reach the buffer
+		// instead of opening help or the notification centre.
+		if m.activeChildOwnsSearchKeys(key) {
 			return m, m.forwardToActive(msg)
 		}
 

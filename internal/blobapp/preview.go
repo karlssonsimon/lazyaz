@@ -35,6 +35,7 @@ type previewState struct {
 	rendered    string
 	requestID   int
 	viewport    viewport.Model
+	search      previewSearchState
 }
 
 func newPreviewState() previewState {
@@ -42,7 +43,7 @@ func newPreviewState() previewState {
 	vp.SetWidth(40)
 	vp.SetHeight(10)
 	vp.SetContent("")
-	return previewState{viewport: vp}
+	return previewState{viewport: vp, search: previewSearchState{resumeAt: -1}}
 }
 
 // previewGutterMinDigits is the minimum digit width reserved for the
@@ -139,9 +140,41 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 
 func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
+
+	// While the / prompt is open it owns every key, so a query can
+	// contain characters that are otherwise preview bindings.
+	if m.preview.search.bar.InputOpen {
+		consumed, submitted := m.preview.search.bar.HandleKey(key, m.Keymap)
+		if submitted {
+			if err := m.preview.search.bar.Accept(); err != nil {
+				m.Notify(appshell.LevelError, err.Error())
+				return m, nil
+			}
+			return m.startPreviewSearch()
+		}
+		if consumed {
+			return m, nil
+		}
+		return m, nil
+	}
+
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
+	case m.Keymap.SearchForward.Matches(key):
+		m.pendingPreviewG = false
+		m.preview.search.bar.Open(ui.SearchForward)
+		return m, nil
+	case m.Keymap.SearchBackward.Matches(key):
+		m.pendingPreviewG = false
+		m.preview.search.bar.Open(ui.SearchBackward)
+		return m, nil
+	case m.Keymap.SearchNext.Matches(key):
+		m.pendingPreviewG = false
+		return m.repeatPreviewSearch(m.preview.search.bar.Direction)
+	case m.Keymap.SearchPrev.Matches(key):
+		m.pendingPreviewG = false
+		return m.repeatPreviewSearch(m.preview.search.bar.Direction.Opposite())
 	case m.Keymap.PreviewBack.Matches(key):
 		m.pendingPreviewG = false
 		m.transitionTo(blobsPane, false)

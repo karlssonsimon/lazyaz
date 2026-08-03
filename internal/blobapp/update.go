@@ -96,6 +96,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case blobsDownloadedMsg:
 		return m.handleBlobsDownloaded(msg)
 
+	case searchScanDoneMsg:
+		return m.handleSearchScanDone(msg)
+
 	case previewWindowLoadedMsg:
 		return m.handlePreviewWindowLoaded(msg)
 

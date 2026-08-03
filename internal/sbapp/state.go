@@ -137,6 +137,9 @@ type Model struct {
 
 	messageViewport viewport.Model
 	viewingMessage  bool
+
+	// messageSearch is the / prompt over the message body.
+	messageSearch   messageSearchState
 	selectedMessage servicebus.PeekedMessage
 	textSelection   ui.TextSelection
 

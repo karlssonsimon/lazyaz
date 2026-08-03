@@ -17,6 +17,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/blobapp"
 	"github.com/karlssonsimon/lazyaz/internal/dashapp"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
+
+	tea "charm.land/bubbletea/v2"
 	"github.com/karlssonsimon/lazyaz/internal/kvapp"
 	"github.com/karlssonsimon/lazyaz/internal/sbapp"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
@@ -461,5 +463,62 @@ func TestPostLoginSubsUpdatesPrivateServiceCredentialWhenSubscriptionGone(t *tes
 		default:
 			t.Fatalf("unexpected tab model %T", tab.Model)
 		}
+	}
+}
+
+// searchKeyStub stands in for a tab whose buffer may or may not be
+// focused, so the routing decision can be tested without a real tab.
+type searchKeyStub struct {
+	focused bool
+}
+
+func (s searchKeyStub) Init() tea.Cmd                       { return nil }
+func (s searchKeyStub) Update(tea.Msg) (tea.Model, tea.Cmd) { return s, nil }
+func (s searchKeyStub) View() tea.View                      { return tea.NewView("") }
+
+func (s searchKeyStub) BufferSearchFocused() bool { return s.focused }
+
+// ? and N open help and notifications everywhere except a focused
+// preview buffer, where they are the vim search keys.
+func TestActiveChildOwnsSearchKeys(t *testing.T) {
+	km := keymap.Default()
+
+	tests := []struct {
+		name    string
+		focused bool
+		key     string
+		want    bool
+	}{
+		{"forward search reaches a focused buffer", true, "/", true},
+		{"backward search reaches a focused buffer", true, "?", true},
+		{"next reaches a focused buffer", true, "n", true},
+		{"previous reaches a focused buffer", true, "N", true},
+		{"help key is not claimed when unfocused", false, "?", false},
+		{"notifications key is not claimed when unfocused", false, "N", false},
+		{"unrelated key is never claimed", true, "x", false},
+		{"quit is never claimed", true, "q", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &Model{keymap: km}
+			m.tabs = []Tab{{Model: searchKeyStub{focused: tt.focused}}}
+			m.activeIdx = 0
+
+			if got := m.activeChildOwnsSearchKeys(tt.key); got != tt.want {
+				t.Errorf("activeChildOwnsSearchKeys(%q) = %v, want %v", tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
+// A tab that does not implement searchableTab never claims the keys.
+func TestActiveChildOwnsSearchKeysIgnoresPlainTabs(t *testing.T) {
+	m := &Model{keymap: keymap.Default()}
+	m.tabs = []Tab{{Model: nil}}
+	m.activeIdx = 0
+
+	if m.activeChildOwnsSearchKeys("?") {
+		t.Error("a tab without a searchable buffer claimed the search keys")
 	}
 }
