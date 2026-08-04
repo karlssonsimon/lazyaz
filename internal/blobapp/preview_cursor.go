@@ -53,6 +53,7 @@ func previewMotionKeys(km keymap.Keymap) vim.MotionKeys {
 		RepeatFind: km.RepeatFind, RepeatFindBack: km.RepeatFindBack,
 		BigWordForward: km.MotionBigWord, BigWordBack: km.MotionBigWordBack, BigWordEnd: km.MotionBigWordEnd,
 		ObjectInner: km.ObjectInner, ObjectAround: km.ObjectAround,
+		FirstNonBlank: km.MotionFirstNonBlank, Underscore: km.MotionUnderscore,
 		YankOp: km.PreviewYank,
 	}
 }

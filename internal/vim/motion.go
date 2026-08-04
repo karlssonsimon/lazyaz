@@ -351,3 +351,36 @@ func WORDBack(b TextBuffer, c Cursor, n int) Cursor {
 func WORDEnd(b TextBuffer, c Cursor, n int) Cursor {
 	return wordEndCls(b, c, n, classOfBig)
 }
+
+// firstNonBlankCol is where ^ and _ land on a line: the first
+// non-whitespace rune, or column 0 on a blank line.
+func firstNonBlankCol(b TextBuffer, line int) int {
+	for i, r := range lineRunes(b, line) {
+		if classOf(r) != clsWS {
+			return i
+		}
+	}
+	return 0
+}
+
+// FirstNonBlank is ^: the first non-blank of the current line. Vim
+// ignores a count here, so none is taken.
+func FirstNonBlank(b TextBuffer, c Cursor) Cursor {
+	c = normalize(b, c)
+	col := firstNonBlankCol(b, c.Line)
+	c.Col = col
+	c.Want = col
+	return c
+}
+
+// LineFirstNonBlank is _: count-1 lines down, on the first non-blank.
+// Linewise as an operator motion, so y_ equals yy and y3_ takes three
+// lines.
+func LineFirstNonBlank(b TextBuffer, c Cursor, n int) Cursor {
+	c = normalize(b, c)
+	c.Line = clampInt(c.Line+n-1, 0, b.LineCount()-1)
+	col := firstNonBlankCol(b, c.Line)
+	c.Col = col
+	c.Want = col
+	return c
+}

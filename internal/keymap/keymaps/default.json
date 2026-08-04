@@ -39,6 +39,8 @@
     "motion_big_word_end": ["E"],
     "object_inner": ["i"],
     "object_around": ["a"],
+    "motion_first_nonblank": ["^"],
+    "motion_underscore": ["_"],
     "next_focus": ["tab"],
     "previous_focus": ["shift+tab"],
     "reload_subscriptions": ["d"],

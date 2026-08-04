@@ -44,6 +44,8 @@ func Default() Keymap {
 		MotionBigWordEnd:    New("E"),
 		ObjectInner:         New("i"),
 		ObjectAround:        New("a"),
+		MotionFirstNonBlank: New("^"),
+		MotionUnderscore:    New("_"),
 		NextFocus:           New("tab"),
 		PreviousFocus:       New("shift+tab"),
 		ReloadSubscriptions: New("d"),

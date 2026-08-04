@@ -11,6 +11,7 @@ type MotionKeys struct {
 	WordForward, WordBack, WordEnd          keymap.Binding
 	BigWordForward, BigWordBack, BigWordEnd keymap.Binding
 	LineStart, LineEnd                      keymap.Binding
+	FirstNonBlank, Underscore               keymap.Binding
 	FindChar, FindCharBack                  keymap.Binding
 	TillChar, TillCharBack                  keymap.Binding
 	RepeatFind, RepeatFindBack              keymap.Binding
@@ -185,6 +186,12 @@ func (r *Resolver) motionTarget(mk MotionKeys, key string, b TextBuffer, cur Cur
 		return LineStart(cur), KindExclusive, true
 	case mk.LineEnd.Matches(key):
 		return LineEnd(b, cur, r.TakeCount()), KindInclusive, true
+	case mk.FirstNonBlank.Matches(key):
+		// Vim ignores the count for ^; drop a pending one.
+		r.ClearCount()
+		return FirstNonBlank(b, cur), KindExclusive, true
+	case mk.Underscore.Matches(key):
+		return LineFirstNonBlank(b, cur, r.TakeCount()), KindLinewise, true
 	}
 	return cur, 0, false
 }

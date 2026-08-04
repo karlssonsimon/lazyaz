@@ -686,5 +686,6 @@ func countedPreviewKey(km keymap.Keymap, key string) bool {
 		km.TillChar.Matches(key) || km.TillCharBack.Matches(key) ||
 		km.RepeatFind.Matches(key) || km.RepeatFindBack.Matches(key) ||
 		km.MotionBigWord.Matches(key) || km.MotionBigWordBack.Matches(key) ||
-		km.MotionBigWordEnd.Matches(key) || km.PreviewYank.Matches(key)
+		km.MotionBigWordEnd.Matches(key) || km.PreviewYank.Matches(key) ||
+		km.MotionUnderscore.Matches(key)
 }

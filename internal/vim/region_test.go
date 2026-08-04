@@ -365,3 +365,62 @@ func TestTagObject(t *testing.T) {
 		})
 	}
 }
+
+func TestCaretAndUnderscore(t *testing.T) {
+	b := sliceBuffer{"  foo bar", "\tindented", "plain", "   "}
+
+	t.Run("caret goes to first non-blank", func(t *testing.T) {
+		if got := FirstNonBlank(b, at(0, 7)); got.Col != 2 {
+			t.Errorf("^ = col %d, want 2", got.Col)
+		}
+		if got := FirstNonBlank(b, at(1, 5)); got.Col != 1 {
+			t.Errorf("^ on tab-indented = col %d, want 1", got.Col)
+		}
+		if got := FirstNonBlank(b, at(3, 2)); got.Col != 0 {
+			t.Errorf("^ on blank line = col %d, want 0", got.Col)
+		}
+	})
+
+	t.Run("underscore moves count-1 lines to first non-blank", func(t *testing.T) {
+		if got := LineFirstNonBlank(b, at(0, 7), 1); got.Line != 0 || got.Col != 2 {
+			t.Errorf("_ = (%d,%d), want (0,2)", got.Line, got.Col)
+		}
+		if got := LineFirstNonBlank(b, at(0, 0), 3); got.Line != 2 || got.Col != 0 {
+			t.Errorf("3_ = (%d,%d), want (2,0)", got.Line, got.Col)
+		}
+		if got := LineFirstNonBlank(b, at(0, 0), 99); got.Line != 3 {
+			t.Errorf("99_ clamps to line %d, want 3", got.Line)
+		}
+	})
+
+	t.Run("y underscore is linewise like yy", func(t *testing.T) {
+		mk := motionKeys()
+		var r Resolver
+		r.ArmOperator()
+		act := r.BufferMotion(mk, "_", b, at(1, 3), false)
+		if act.Kind != BufYank || !act.Region.Linewise || act.Region.Start.Line != 1 || act.Region.End.Line != 1 {
+			t.Fatalf("y_ = %+v", act)
+		}
+	})
+
+	t.Run("y 3 underscore takes three lines", func(t *testing.T) {
+		mk := motionKeys()
+		var r Resolver
+		r.ArmOperator()
+		r.BufferMotion(mk, "3", b, at(0, 0), false)
+		act := r.BufferMotion(mk, "_", b, at(0, 0), false)
+		if act.Kind != BufYank || !act.Region.Linewise || act.Region.End.Line != 2 {
+			t.Fatalf("y3_ = %+v", act)
+		}
+	})
+
+	t.Run("y caret yanks back to first non-blank exclusively", func(t *testing.T) {
+		mk := motionKeys()
+		var r Resolver
+		r.ArmOperator()
+		act := r.BufferMotion(mk, "^", b, at(0, 7), false)
+		if act.Kind != BufYank || act.Region.Linewise || act.Region.Start != at(0, 2) || act.Region.End != at(0, 7) {
+			t.Fatalf("y^ = %+v", act)
+		}
+	})
+}

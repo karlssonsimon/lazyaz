@@ -62,6 +62,7 @@ func msgMotionKeys(km keymap.Keymap) vim.MotionKeys {
 		TillChar: km.TillChar, TillCharBack: km.TillCharBack,
 		RepeatFind: km.RepeatFind, RepeatFindBack: km.RepeatFindBack,
 		ObjectInner: km.ObjectInner, ObjectAround: km.ObjectAround,
+		FirstNonBlank: km.MotionFirstNonBlank, Underscore: km.MotionUnderscore,
 		YankOp: km.PreviewYank,
 	}
 }
@@ -536,7 +537,7 @@ func countedMsgVimKey(km keymap.Keymap, key string) bool {
 		km.HalfPageDown.Matches(key) || km.HalfPageUp.Matches(key) ||
 		km.FullPageDown.Matches(key) || km.FullPageUp.Matches(key) ||
 		km.ScrollLineDown.Matches(key) || km.ScrollLineUp.Matches(key) ||
-		km.PreviewYank.Matches(key)
+		km.PreviewYank.Matches(key) || km.MotionUnderscore.Matches(key)
 }
 
 // msgCursorHighlight is the cursor cell, viewport-relative, capture

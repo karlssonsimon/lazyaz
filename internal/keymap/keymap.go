@@ -47,6 +47,8 @@ type Keymap struct {
 	MotionBigWordEnd    Binding `json:"motion_big_word_end"`
 	ObjectInner         Binding `json:"object_inner"`
 	ObjectAround        Binding `json:"object_around"`
+	MotionFirstNonBlank Binding `json:"motion_first_nonblank"`
+	MotionUnderscore    Binding `json:"motion_underscore"`
 	NextFocus           Binding `json:"next_focus"`
 	PreviousFocus       Binding `json:"previous_focus"`
 	ReloadSubscriptions Binding `json:"reload_subscriptions"`
