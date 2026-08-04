@@ -219,7 +219,13 @@ func (m Model) handlePreviewBrowseKey(key string) (Model, tea.Cmd) {
 		return m.enterPreviewVimMode(true)
 	// h and left back out of the preview here, restoring the Miller
 	// column muscle memory; inside the vim capture they are motions.
+	// Esc alone dismisses an active search first — the first rung of
+	// the ladder — while the navigation keys leave immediately.
 	case m.Keymap.PreviewBack.Matches(key), m.Keymap.MotionLeft.Matches(key):
+		if key == "esc" && m.preview.search.bar.Active() {
+			m.preview.search.bar.Clear()
+			return m, nil
+		}
 		m.transitionTo(blobsPane, false)
 		return m, nil
 	case m.Keymap.PreviewNextFocus.Matches(key):
@@ -313,8 +319,11 @@ func (m Model) handlePreviewVimKey(key string) (Model, tea.Cmd) {
 		return m.togglePreviewVisual(vim.SpanLine)
 	case m.Keymap.PreviewYank.Matches(key):
 		return m.yankPreviewSelection()
-	// The esc ladder: visual → vim normal → browse. Leaving the preview
-	// itself needs one more esc from browse mode.
+	// The esc ladder: search → visual → vim normal → browse. Leaving
+	// the preview itself needs one more esc from browse mode.
+	case key == "esc" && m.preview.search.bar.Active():
+		m.preview.search.bar.Clear()
+		return m, nil
 	case m.preview.span.Active && m.Keymap.PreviewBack.Matches(key):
 		m.preview.span.Stop()
 		return m, nil

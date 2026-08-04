@@ -918,6 +918,12 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 		m.messageViewport.ScrollUp(m.vimr.TakeCount())
 		return m, nil
 	case m.Keymap.MessageBack.Matches(key):
+		// Esc alone dismisses an active search before backing out; the
+		// navigation keys (h, left, backspace) leave immediately.
+		if key == "esc" && m.messageSearch.bar.Active() {
+			m.messageSearch.bar.Clear()
+			return m, nil
+		}
 		m.transitionTo(messagesPane)
 		m.Notify(appshell.LevelInfo, "Back to message list")
 		return m, nil

@@ -567,3 +567,61 @@ func TestPreviewSearchEscRemovesHighlights(t *testing.T) {
 		t.Fatal("search footer badge survived the esc")
 	}
 }
+
+// With an executed search showing, esc dismisses it first and only the
+// next esc leaves the pane — search is the first rung of the ladder.
+func TestPreviewEscClearsSearchBeforeExiting(t *testing.T) {
+	m := searchModel(t, "alpha one\nalpha two\n")
+
+	m = typeKeys(m, "/", "a", "l", "p", "h", "a", "enter")
+	if !m.preview.search.bar.Active() {
+		t.Fatal("setup: search did not execute")
+	}
+
+	m = typeKeys(m, "esc")
+	if m.preview.search.bar.Active() {
+		t.Fatal("first esc did not clear the search")
+	}
+	if m.focus != previewPane {
+		t.Fatal("first esc left the preview instead of clearing the search")
+	}
+
+	m = typeKeys(m, "esc")
+	if m.focus == previewPane {
+		t.Fatal("second esc did not leave the preview")
+	}
+}
+
+// The full ladder with everything active: search → visual → vim →
+// browse → out, one esc per rung. h skips the search rung and just
+// navigates.
+func TestPreviewFullEscLadderWithSearch(t *testing.T) {
+	m := searchModel(t, "alpha\nbeta\n")
+
+	m = typeKeys(m, "/", "a", "enter", "v", "v")
+	if !m.preview.search.bar.Active() || m.inputMode().String() != "VISUAL" {
+		t.Fatalf("setup: search=%v mode=%q", m.preview.search.bar.Active(), m.inputMode().String())
+	}
+
+	steps := []struct {
+		wantSearch bool
+		wantMode   string
+	}{
+		{false, "VISUAL"}, // search cleared first
+		{false, "VIM"},    // then the selection
+		{false, "NORMAL"}, // then the capture
+	}
+	for i, st := range steps {
+		m = typeKeys(m, "esc")
+		if m.preview.search.bar.Active() != st.wantSearch {
+			t.Fatalf("esc %d: search active = %v, want %v", i+1, m.preview.search.bar.Active(), st.wantSearch)
+		}
+		if got := m.inputMode().String(); got != st.wantMode {
+			t.Fatalf("esc %d: mode = %q, want %q", i+1, got, st.wantMode)
+		}
+	}
+	m = typeKeys(m, "esc")
+	if m.focus == previewPane {
+		t.Fatal("final esc did not leave the preview")
+	}
+}
