@@ -9,7 +9,11 @@
 // lets a new motion land here once and reach every surface.
 package vim
 
-import "github.com/karlssonsimon/lazyaz/internal/keymap"
+import (
+	"fmt"
+
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
+)
 
 // ChordResult is what one keystroke did to a chord in progress.
 type ChordResult int
@@ -51,8 +55,54 @@ const (
 // that exists in its context — the resolver never routes a chord into a
 // surface that didn't ask for it.
 type Resolver struct {
-	gg bool
-	z  bool
+	gg    bool
+	z     bool
+	count int
+}
+
+// countCap bounds an accumulated count. Far beyond any real list, it
+// exists so held-down digits cannot overflow the arithmetic downstream.
+const countCap = 999999
+
+// Digit feeds a key to the count prefix. Digits 1-9 start a count and
+// 0-9 continue one; a lone 0 is not consumed: it is unbound today and
+// stays free for the future line-start motion. Reports whether the key
+// was consumed.
+func (r *Resolver) Digit(key string) bool {
+	if len(key) != 1 || key[0] < '0' || key[0] > '9' {
+		return false
+	}
+	if key == "0" && r.count == 0 {
+		return false
+	}
+	r.count = r.count*10 + int(key[0]-'0')
+	if r.count > countCap {
+		r.count = countCap
+	}
+	return true
+}
+
+// TakeCount returns the pending count (1 when none) and clears it.
+// The motion that fires is the one that consumes the count.
+func (r *Resolver) TakeCount() int {
+	n := r.count
+	r.count = 0
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
+// PendingCount is the accumulated count, 0 when none. For display.
+func (r *Resolver) PendingCount() int {
+	return r.count
+}
+
+// ClearCount drops a pending count without using it. Any key that is
+// neither a digit nor a counted motion does this, so a stray digit
+// cannot ambush the next motion.
+func (r *Resolver) ClearCount() {
+	r.count = 0
 }
 
 // Clear drops any pending chord. Call when leaving the context the
@@ -61,6 +111,7 @@ type Resolver struct {
 func (r *Resolver) Clear() {
 	r.gg = false
 	r.z = false
+	r.count = 0
 }
 
 // GG feeds a key to the gg chord. homeImmediate controls the Home key:
@@ -104,4 +155,13 @@ func (r *Resolver) Scroll(km keymap.Keymap, key string) (ChordResult, ScrollOp) 
 		return ChordArmed, 0
 	}
 	return ChordNone, 0
+}
+
+// ModeWithCount renders the status-bar mode segment with a pending
+// count appended, vim's bottom-right count display: "NORMAL 12".
+func ModeWithCount(mode string, count int) string {
+	if count <= 0 {
+		return mode
+	}
+	return fmt.Sprintf("%s %d", mode, count)
 }

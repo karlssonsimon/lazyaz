@@ -9,6 +9,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 	"github.com/karlssonsimon/lazyaz/internal/vim"
 
@@ -169,6 +170,14 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Count prefix, after the chord so an armed z can swallow first.
+	if m.vimr.Digit(key) {
+		return m, nil
+	}
+	if !countedPreviewKey(m.Keymap, key) {
+		m.vimr.ClearCount()
+	}
+
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
@@ -192,27 +201,27 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.previousFocus()
 		return m, nil
 	case m.Keymap.PreviewDown.Matches(key):
-		return m.movePreviewCursorByLines(1)
+		return m.movePreviewCursorByLines(m.vimr.TakeCount())
 	case m.Keymap.PreviewUp.Matches(key):
-		return m.movePreviewCursorByLines(-1)
+		return m.movePreviewCursorByLines(-m.vimr.TakeCount())
 	case m.Keymap.HalfPageDown.Matches(key):
 		step := max(1, m.preview.viewport.Height()/2)
-		return m.movePreviewCursorByLines(step)
+		return m.movePreviewCursorByLines(step * m.vimr.TakeCount())
 	case m.Keymap.HalfPageUp.Matches(key):
 		step := max(1, m.preview.viewport.Height()/2)
-		return m.movePreviewCursorByLines(-step)
+		return m.movePreviewCursorByLines(-step * m.vimr.TakeCount())
 	case m.Keymap.FullPageDown.Matches(key):
-		return m.movePreviewCursorByLines(max(1, m.preview.viewport.Height()))
+		return m.movePreviewCursorByLines(max(1, m.preview.viewport.Height()) * m.vimr.TakeCount())
 	case m.Keymap.FullPageUp.Matches(key):
-		return m.movePreviewCursorByLines(-max(1, m.preview.viewport.Height()))
+		return m.movePreviewCursorByLines(-max(1, m.preview.viewport.Height()) * m.vimr.TakeCount())
 	// The preview has no cursor separate from its scroll position — the
 	// top visible line is the position — so ctrl+e / ctrl+y move by one
 	// line, same as j / k. They are bound because the muscle memory is
 	// worth more than the redundancy.
 	case m.Keymap.ScrollLineDown.Matches(key):
-		return m.movePreviewCursorByLines(1)
+		return m.movePreviewCursorByLines(m.vimr.TakeCount())
 	case m.Keymap.ScrollLineUp.Matches(key):
-		return m.movePreviewCursorByLines(-1)
+		return m.movePreviewCursorByLines(-m.vimr.TakeCount())
 	case m.Keymap.JumpBottom.Matches(key):
 		return m.jumpPreviewToBottom()
 	default:
@@ -458,4 +467,15 @@ func maxInt64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// countedPreviewKey reports whether key is a motion that consumes a
+// pending count in preview focus. Everything else drops the count.
+// G is deliberately not counted here: absolute line N of a windowed
+// gigabyte blob is unknowable without scanning it.
+func countedPreviewKey(km keymap.Keymap, key string) bool {
+	return km.PreviewDown.Matches(key) || km.PreviewUp.Matches(key) ||
+		km.HalfPageDown.Matches(key) || km.HalfPageUp.Matches(key) ||
+		km.FullPageDown.Matches(key) || km.FullPageUp.Matches(key) ||
+		km.ScrollLineDown.Matches(key) || km.ScrollLineUp.Matches(key)
 }

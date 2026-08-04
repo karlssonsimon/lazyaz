@@ -143,7 +143,7 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 		return
 	}
 
-	steps := ui.HalfPageStep(*target)
+	steps := ui.HalfPageStep(*target) * m.vimr.TakeCount()
 	for i := 0; i < steps; i++ {
 		if direction > 0 {
 			target.CursorDown()

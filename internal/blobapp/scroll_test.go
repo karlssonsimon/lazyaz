@@ -41,9 +41,16 @@ func scrollModel(t *testing.T, n int) Model {
 	return m
 }
 
-func pressKey(m Model, key string) Model {
-	updated, _ := m.Update(tea.KeyPressMsg{Code: rune(key[0]), Text: key})
-	return updated.(Model)
+func pressKey(m Model, keys ...string) Model {
+	for _, key := range keys {
+		var msg tea.KeyMsg
+		if key == "/" || len(key) == 1 {
+			msg = tea.KeyPressMsg{Code: rune(key[0]), Text: key}
+		}
+		updated, _ := m.Update(msg)
+		m = updated.(Model)
+	}
+	return m
 }
 
 // The reported bug. With the cursor on the last visible row, pressing
@@ -172,5 +179,65 @@ func TestScrolloffStillReachesTheEnd(t *testing.T) {
 
 	if got := m.blobsList.Index(); got != 59 {
 		t.Errorf("Index() = %d, want 59 — scrolloff should not pad past the end of the list", got)
+	}
+}
+
+// Counts through the real key path: digits accumulate, the motion
+// consumes, and the status-bar count is visible in between.
+func TestCountedMotionsThroughKeyPath(t *testing.T) {
+	m := scrollModel(t, 500)
+
+	m = pressKey(m, "3")
+	if got := m.vimr.PendingCount(); got != 3 {
+		t.Fatalf("pending count = %d after 3, want 3", got)
+	}
+	m = pressKey(m, "j")
+	if got := m.blobsList.Index(); got != 3 {
+		t.Errorf("Index = %d after 3j, want 3", got)
+	}
+	if got := m.vimr.PendingCount(); got != 0 {
+		t.Errorf("count = %d after the motion, want 0 (consumed)", got)
+	}
+
+	m = pressKey(m, "1", "2", "j")
+	if got := m.blobsList.Index(); got != 15 {
+		t.Errorf("Index = %d after 12j, want 15", got)
+	}
+
+	m = pressKey(m, "5", "G")
+	if got := m.blobsList.Index(); got != 4 {
+		t.Errorf("Index = %d after 5G, want 4", got)
+	}
+}
+
+// A digit typed into an open filter is filter text, never a count.
+func TestDigitIntoFilterIsNotACount(t *testing.T) {
+	m := scrollModel(t, 50)
+
+	m = pressKey(m, "/", "3")
+	if got := m.vimr.PendingCount(); got != 0 {
+		t.Errorf("pending count = %d, want 0 — the digit belongs to the filter", got)
+	}
+	if got := m.blobsList.FilterInput.Value(); got != "3" {
+		t.Errorf("filter value = %q, want %q", got, "3")
+	}
+}
+
+// Counted j in visual mode extends the selection and refreshes the
+// highlight the delegate renders from.
+func TestCountedMotionRefreshesVisualHighlight(t *testing.T) {
+	m := scrollModel(t, 500)
+
+	m.toggleVisualLineMode()
+	if !m.visual.Active() {
+		t.Fatal("visual mode did not start")
+	}
+	m = pressKey(m, "3", "j")
+
+	if got := m.blobsList.Index(); got != 3 {
+		t.Fatalf("Index = %d after 3j in visual mode, want 3", got)
+	}
+	if lo, hi := m.visualRangeDisplay[0], m.visualRangeDisplay[1]; lo != 0 || hi != 3 {
+		t.Errorf("highlight range = [%d,%d], want [0,3]", lo, hi)
 	}
 }

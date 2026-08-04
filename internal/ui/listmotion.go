@@ -37,6 +37,8 @@ func HandleListMotion(l *List, km keymap.Keymap, key string, r *vim.Resolver) Li
 
 	switch res, op := r.Scroll(km, key); res {
 	case vim.ChordArmed:
+		// The z motions take no count; a pending digit is dropped.
+		r.ClearCount()
 		return MotionChordOpen
 	case vim.ChordSwallowed:
 		// An unrecognized continuation is swallowed rather than passed
@@ -54,16 +56,40 @@ func HandleListMotion(l *List, km keymap.Keymap, key string, r *vim.Resolver) Li
 		return MotionHandled
 	}
 
+	// Count prefix: digits accumulate in the resolver; the motion that
+	// fires consumes them via TakeCount.
+	if r.Digit(key) {
+		return MotionHandled
+	}
+
 	switch {
+	// Counted cursor movement takes over from bubbles for that press
+	// only — with no count pending these guards fail and bubbles
+	// handles the key exactly as before.
+	case km.CursorDown.Matches(key) && r.PendingCount() > 0:
+		l.MoveCursor(r.TakeCount())
+	case km.CursorUp.Matches(key) && r.PendingCount() > 0:
+		l.MoveCursor(-r.TakeCount())
+	// Counted G is vim's absolute jump: 5G lands on row 5. Uncounted G
+	// stays with bubbles' go-to-end.
+	case km.JumpBottom.Matches(key) && r.PendingCount() > 0:
+		l.SelectIndex(r.TakeCount() - 1)
 	case km.ScrollLineDown.Matches(key):
-		l.ScrollBy(1)
+		l.ScrollBy(r.TakeCount())
 	case km.ScrollLineUp.Matches(key):
-		l.ScrollBy(-1)
+		l.ScrollBy(-r.TakeCount())
 	case km.FullPageDown.Matches(key):
-		l.MoveCursor(l.Window().Height)
+		l.MoveCursor(l.Window().Height * r.TakeCount())
 	case km.FullPageUp.Matches(key):
-		l.MoveCursor(-l.Window().Height)
+		l.MoveCursor(-l.Window().Height * r.TakeCount())
+	case km.HalfPageDown.Matches(key) || km.HalfPageUp.Matches(key):
+		// Half pages are applied by the caller (they carry app-specific
+		// visual-mode side effects); leave the count for it to take.
+		return MotionNone
 	default:
+		// Any other key clears a pending count so a stray digit cannot
+		// ambush the next motion.
+		r.ClearCount()
 		return MotionNone
 	}
 	return MotionHandled

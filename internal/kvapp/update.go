@@ -590,11 +590,23 @@ func (m Model) handlePasteModalKey(key string) (Model, tea.Cmd) {
 
 // handleVisualLineKey handles keys during visual line selection.
 func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
-	switch {
-	case ui.ShouldQuit(key, m.Keymap.Quit, false):
+	if ui.ShouldQuit(key, m.Keymap.Quit, false) {
 		return m, tea.Quit
-	case m.scrollMotion(key):
+	}
+
+	// A counted motion consumed by scrollMotion moves the cursor without
+	// reaching the fall-through path below, so the selection highlight
+	// refreshes here too. (This also fixes ctrl+f leaving a stale
+	// highlight in visual mode.)
+	if before := m.secretsList.Index(); m.scrollMotion(key) {
+		if m.secretsList.Index() != before {
+			m.refreshSecretSelectionDisplay()
+			m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionNames())))
+		}
 		return m, nil
+	}
+
+	switch {
 	case m.Keymap.HalfPageDown.Matches(key):
 		m.scrollFocusedHalfPage(1)
 		return m, nil

@@ -183,8 +183,13 @@ func assertMillerColumnFocusKeys(t *testing.T, km Keymap) {
 
 func TestJumpIndex(t *testing.T) {
 	km := Default()
-	if idx, ok := km.JumpIndex("3"); !ok || idx != 2 {
-		t.Fatalf("expected 3 → index 2, got %d, %v", idx, ok)
+	if idx, ok := km.JumpIndex("alt+3"); !ok || idx != 2 {
+		t.Fatalf("expected alt+3 → index 2, got %d, %v", idx, ok)
+	}
+	// Bare digits are count prefixes now — they must NOT jump tabs, or
+	// a 3j in a list would switch to tab 3 before the list sees it.
+	if _, ok := km.JumpIndex("3"); ok {
+		t.Fatal("bare 3 still jumps tabs; digits must stay free for vim counts")
 	}
 	if _, ok := km.JumpIndex("x"); ok {
 		t.Fatal("expected no match for x")

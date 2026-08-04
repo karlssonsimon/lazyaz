@@ -227,3 +227,29 @@ func TestPreviewFooterOnlyWhenSearching(t *testing.T) {
 		t.Error("preview does not reserve a footer row while the prompt is open")
 	}
 }
+
+// Counted line motion in the preview: 3j lands three lines down.
+func TestPreviewCountedLineMotion(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&sb, "line %02d\n", i)
+	}
+	m := searchModel(t, sb.String())
+
+	m = typeKeys(m, "3", "j")
+	if got := m.previewLocalLine(); got != 3 {
+		t.Errorf("preview line = %d after 3j, want 3", got)
+	}
+	if got := m.vimr.PendingCount(); got != 0 {
+		t.Errorf("count = %d after the motion, want 0", got)
+	}
+
+	// A digit typed into the search prompt is query text, not a count.
+	m = typeKeys(m, "/", "3")
+	if got := m.vimr.PendingCount(); got != 0 {
+		t.Errorf("count = %d, want 0 — the digit belongs to the query", got)
+	}
+	if got := m.preview.search.bar.Input.Value; got != "3" {
+		t.Errorf("query = %q, want %q", got, "3")
+	}
+}

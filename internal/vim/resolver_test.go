@@ -127,3 +127,101 @@ func TestChordsAreIndependent(t *testing.T) {
 		t.Fatalf("zt with g armed = %v, want ChordFired", got)
 	}
 }
+
+func TestCountAccumulation(t *testing.T) {
+	t.Run("digits accumulate", func(t *testing.T) {
+		var r Resolver
+		for _, d := range []string{"1", "2"} {
+			if !r.Digit(d) {
+				t.Fatalf("digit %q not consumed", d)
+			}
+		}
+		if got := r.PendingCount(); got != 12 {
+			t.Fatalf("PendingCount = %d, want 12", got)
+		}
+		if got := r.TakeCount(); got != 12 {
+			t.Fatalf("TakeCount = %d, want 12", got)
+		}
+		if got := r.PendingCount(); got != 0 {
+			t.Fatalf("PendingCount after take = %d, want 0", got)
+		}
+	})
+
+	t.Run("take with nothing pending is one", func(t *testing.T) {
+		var r Resolver
+		if got := r.TakeCount(); got != 1 {
+			t.Fatalf("TakeCount = %d, want 1", got)
+		}
+	})
+
+	// A lone 0 is not a count starter — it stays free for the future
+	// line-start motion.
+	t.Run("lone zero is not consumed", func(t *testing.T) {
+		var r Resolver
+		if r.Digit("0") {
+			t.Fatal("lone 0 was consumed")
+		}
+		if got := r.PendingCount(); got != 0 {
+			t.Fatalf("PendingCount = %d, want 0", got)
+		}
+	})
+
+	t.Run("zero continues a started count", func(t *testing.T) {
+		var r Resolver
+		r.Digit("1")
+		if !r.Digit("0") {
+			t.Fatal("0 after 1 not consumed")
+		}
+		if got := r.PendingCount(); got != 10 {
+			t.Fatalf("PendingCount = %d, want 10", got)
+		}
+	})
+
+	t.Run("non-digit is never consumed", func(t *testing.T) {
+		var r Resolver
+		r.Digit("3")
+		for _, k := range []string{"j", "esc", "ctrl+d", "alt+3", "space"} {
+			if r.Digit(k) {
+				t.Fatalf("key %q consumed as digit", k)
+			}
+		}
+	})
+
+	t.Run("clear drops the count", func(t *testing.T) {
+		var r Resolver
+		r.Digit("4")
+		r.ClearCount()
+		if got := r.TakeCount(); got != 1 {
+			t.Fatalf("TakeCount after clear = %d, want 1", got)
+		}
+	})
+
+	t.Run("resolver clear drops the count too", func(t *testing.T) {
+		var r Resolver
+		r.Digit("4")
+		r.Clear()
+		if got := r.PendingCount(); got != 0 {
+			t.Fatalf("PendingCount after Clear = %d, want 0", got)
+		}
+	})
+
+	// A ridiculous count must not overflow into nonsense.
+	t.Run("count is capped", func(t *testing.T) {
+		var r Resolver
+		for i := 0; i < 12; i++ {
+			r.Digit("9")
+		}
+		if got := r.PendingCount(); got <= 0 || got > countCap {
+			t.Fatalf("PendingCount = %d, want within (0, %d]", got, countCap)
+		}
+	})
+}
+
+func TestModeWithCount(t *testing.T) {
+	if got := ModeWithCount("NORMAL", 0); got != "NORMAL" {
+		t.Errorf("no count: %q", got)
+	}
+	if got := ModeWithCount("NORMAL", 12); got != "NORMAL 12" {
+		t.Errorf("with count: %q", got)
+	}
+}

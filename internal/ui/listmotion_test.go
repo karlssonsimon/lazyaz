@@ -189,3 +189,105 @@ func TestStandardKeymapDoesNotStealCtrlF(t *testing.T) {
 		}
 	}
 }
+
+// Counted motions: digits accumulate in the resolver and the next
+// motion consumes them.
+func TestHandleListMotionCounts(t *testing.T) {
+	km := keymap.Default()
+
+	t.Run("3j moves three", func(t *testing.T) {
+		l := motionList(t, 200)
+		var r vim.Resolver
+		for _, k := range []string{"3", "j"} {
+			if got := HandleListMotion(l, km, k, &r); got != MotionHandled {
+				t.Fatalf("key %q returned %v, want MotionHandled", k, got)
+			}
+		}
+		if got := l.Index(); got != 3 {
+			t.Errorf("Index = %d, want 3", got)
+		}
+	})
+
+	t.Run("12k moves twelve up", func(t *testing.T) {
+		l := motionList(t, 200)
+		var r vim.Resolver
+		l.Select(50)
+		for _, k := range []string{"1", "2", "k"} {
+			HandleListMotion(l, km, k, &r)
+		}
+		if got := l.Index(); got != 38 {
+			t.Errorf("Index = %d, want 38", got)
+		}
+	})
+
+	t.Run("5G is absolute row five", func(t *testing.T) {
+		l := motionList(t, 200)
+		var r vim.Resolver
+		l.Select(100)
+		HandleListMotion(l, km, "5", &r)
+		if got := HandleListMotion(l, km, "G", &r); got != MotionHandled {
+			t.Fatalf("counted G returned %v, want MotionHandled", got)
+		}
+		if got := l.Index(); got != 4 {
+			t.Errorf("Index = %d, want 4 (row five, zero-based)", got)
+		}
+	})
+
+	t.Run("uncounted G falls through to bubbles", func(t *testing.T) {
+		l := motionList(t, 200)
+		var r vim.Resolver
+		if got := HandleListMotion(l, km, "G", &r); got != MotionNone {
+			t.Errorf("uncounted G returned %v, want MotionNone", got)
+		}
+	})
+
+	t.Run("uncounted j falls through to bubbles", func(t *testing.T) {
+		l := motionList(t, 200)
+		var r vim.Resolver
+		if got := HandleListMotion(l, km, "j", &r); got != MotionNone {
+			t.Errorf("uncounted j returned %v, want MotionNone", got)
+		}
+		if got := l.Index(); got != 0 {
+			t.Errorf("Index moved to %d on a fall-through j", got)
+		}
+	})
+
+	t.Run("unrelated key clears the count", func(t *testing.T) {
+		l := motionList(t, 200)
+		var r vim.Resolver
+		HandleListMotion(l, km, "3", &r)
+		HandleListMotion(l, km, "x", &r) // not a motion — clears
+		if got := r.PendingCount(); got != 0 {
+			t.Fatalf("count = %d after unrelated key, want 0", got)
+		}
+		// A later j is uncounted again.
+		if got := HandleListMotion(l, km, "j", &r); got != MotionNone {
+			t.Errorf("j after cleared count returned %v, want MotionNone", got)
+		}
+	})
+
+	t.Run("half-page keys pass through with the count intact", func(t *testing.T) {
+		l := motionList(t, 200)
+		var r vim.Resolver
+		HandleListMotion(l, km, "3", &r)
+		if got := HandleListMotion(l, km, "ctrl+d", &r); got != MotionNone {
+			t.Fatalf("ctrl+d returned %v, want MotionNone (caller applies it)", got)
+		}
+		if got := r.PendingCount(); got != 3 {
+			t.Errorf("count = %d after ctrl+d pass-through, want 3 (caller takes it)", got)
+		}
+	})
+
+	t.Run("counted ctrl+e scrolls n lines", func(t *testing.T) {
+		l := motionList(t, 200)
+		var r vim.Resolver
+		l.Select(50)
+		l.CursorToTop()
+		before := l.Offset()
+		HandleListMotion(l, km, "4", &r)
+		HandleListMotion(l, km, "ctrl+e", &r)
+		if got := l.Offset(); got != before+4 {
+			t.Errorf("Offset = %d, want %d", got, before+4)
+		}
+	})
+}

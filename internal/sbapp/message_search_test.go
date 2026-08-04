@@ -7,6 +7,8 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
+	tea "charm.land/bubbletea/v2"
+
 	"charm.land/bubbles/v2/list"
 )
 
@@ -142,5 +144,34 @@ func TestMessageSearchBufferFocused(t *testing.T) {
 	m.viewingMessage = false
 	if m.BufferSearchFocused() {
 		t.Error("search keys claimed while the body is not being viewed")
+	}
+}
+
+// Counted scroll in the message body: 3ctrl+e moves three lines.
+func TestMessageBodyCountedScroll(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 100; i++ {
+		sb.WriteString("line\n")
+	}
+	m := messageSearchModel(t, sb.String())
+
+	for _, key := range []string{"3", "ctrl+e"} {
+		m2, _ := m.handleViewingMessageKey(tea.KeyPressMsg{}, key)
+		m = m2
+	}
+	if got := m.messageViewport.YOffset(); got != 3 {
+		t.Errorf("YOffset = %d after 3 ctrl+e, want 3", got)
+	}
+
+	// Counted j scrolls too, and the count is consumed each time.
+	for _, key := range []string{"2", "j"} {
+		m2, _ := m.handleViewingMessageKey(tea.KeyPressMsg{}, key)
+		m = m2
+	}
+	if got := m.messageViewport.YOffset(); got != 5 {
+		t.Errorf("YOffset = %d after 2j, want 5", got)
+	}
+	if got := m.vimr.PendingCount(); got != 0 {
+		t.Errorf("count = %d after motions, want 0", got)
 	}
 }

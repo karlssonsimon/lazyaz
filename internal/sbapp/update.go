@@ -6,6 +6,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 	"github.com/karlssonsimon/lazyaz/internal/vim"
 
@@ -636,11 +637,23 @@ func (m Model) handleListFilterKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 }
 
 func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
-	switch {
-	case ui.ShouldQuit(key, m.Keymap.Quit, false):
+	if ui.ShouldQuit(key, m.Keymap.Quit, false) {
 		return m, tea.Quit
-	case m.scrollMotion(key):
+	}
+
+	// A counted motion consumed by scrollMotion moves the cursor without
+	// reaching the fall-through path below, so the selection highlight
+	// refreshes here too. (This also fixes ctrl+f leaving a stale
+	// highlight in visual mode.)
+	if before := m.messageList.Index(); m.scrollMotion(key) {
+		if m.messageList.Index() != before {
+			m.refreshMessageSelectionDisplay()
+			m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m.visualSelectionIDs())))
+		}
 		return m, nil
+	}
+
+	switch {
 	case m.Keymap.HalfPageDown.Matches(key):
 		m.scrollFocusedHalfPage(1)
 		return m, nil
@@ -851,9 +864,25 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 		return m, nil
 	}
 
+	// Count prefix for the scroll motions below.
+	if m.vimr.Digit(key) {
+		return m, nil
+	}
+	if !countedMessageKey(m.Keymap, key) {
+		m.vimr.ClearCount()
+	}
+
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
+	// Counted j/k take over from the viewport for that press only; with
+	// no count pending the keys fall through to the viewport as before.
+	case m.Keymap.CursorDown.Matches(key) && m.vimr.PendingCount() > 0:
+		m.messageViewport.ScrollDown(m.vimr.TakeCount())
+		return m, nil
+	case m.Keymap.CursorUp.Matches(key) && m.vimr.PendingCount() > 0:
+		m.messageViewport.ScrollUp(m.vimr.TakeCount())
+		return m, nil
 	case m.Keymap.NextFocus.Matches(key):
 		m.nextFocus()
 		return m, nil
@@ -871,18 +900,22 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 		m.messageViewport.GotoBottom()
 		return m, nil
 	case m.Keymap.FullPageDown.Matches(key):
-		m.messageViewport.PageDown()
+		for i := 0; i < m.vimr.TakeCount(); i++ {
+			m.messageViewport.PageDown()
+		}
 		return m, nil
 	case m.Keymap.FullPageUp.Matches(key):
-		m.messageViewport.PageUp()
+		for i := 0; i < m.vimr.TakeCount(); i++ {
+			m.messageViewport.PageUp()
+		}
 		return m, nil
 	// The message body scrolls without a cursor, so ctrl+e / ctrl+y move
 	// the view a single line — the plain vim meaning.
 	case m.Keymap.ScrollLineDown.Matches(key):
-		m.messageViewport.ScrollDown(1)
+		m.messageViewport.ScrollDown(m.vimr.TakeCount())
 		return m, nil
 	case m.Keymap.ScrollLineUp.Matches(key):
-		m.messageViewport.ScrollUp(1)
+		m.messageViewport.ScrollUp(m.vimr.TakeCount())
 		return m, nil
 	case m.Keymap.MessageBack.Matches(key):
 		m.transitionTo(messagesPane)
@@ -908,4 +941,12 @@ func (m Model) yankMessageBody(body string) (Model, tea.Cmd) {
 		}
 		return clipboardMsg{text: body}
 	}
+}
+
+// countedMessageKey reports whether key is a motion that consumes a
+// pending count in message focus. Everything else drops the count.
+func countedMessageKey(km keymap.Keymap, key string) bool {
+	return km.CursorDown.Matches(key) || km.CursorUp.Matches(key) ||
+		km.FullPageDown.Matches(key) || km.FullPageUp.Matches(key) ||
+		km.ScrollLineDown.Matches(key) || km.ScrollLineUp.Matches(key)
 }
