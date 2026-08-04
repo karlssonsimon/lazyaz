@@ -803,3 +803,36 @@ func TestPreviewOperatorJumps(t *testing.T) {
 		}
 	})
 }
+
+// yit yanks the content between tag pairs; vit selects it.
+func TestPreviewTagObject(t *testing.T) {
+	m := searchModel(t, "<env><test>asdf</test></env>\n")
+	m = typeKeys(m, "v", "f", "s") // capture, cursor on the s of asdf
+
+	var r vim.Resolver
+	r.ArmOperator()
+	r.BufferMotion(previewMotionKeys(m.Keymap), "i", m.previewBuf(), m.preview.vcur, false)
+	act := r.BufferMotion(previewMotionKeys(m.Keymap), "t", m.previewBuf(), m.preview.vcur, false)
+	if act.Kind != vim.BufYank {
+		t.Fatalf("yit = %+v", act)
+	}
+	lo := m.previewByteAt(act.Region.Start.Line, act.Region.Start.Col)
+	hi := m.previewByteAt(act.Region.End.Line, act.Region.End.Col)
+	ws := m.preview.windowStart
+	if got := string(m.preview.windowData[lo-ws : hi-ws]); got != "asdf" {
+		t.Fatalf("yit text = %q, want asdf", got)
+	}
+
+	// vat through the key path selects the whole inner tag pair.
+	mm := typeKeys(m, "v", "a", "t")
+	if !mm.preview.span.Active {
+		t.Fatal("vat did not select")
+	}
+	slo, shi, ok := mm.previewSelectionByteRange()
+	if !ok {
+		t.Fatal("no selection")
+	}
+	if got := string(mm.preview.windowData[slo-ws : shi-ws]); got != "<test>asdf</test>" {
+		t.Fatalf("vat selects %q, want <test>asdf</test>", got)
+	}
+}

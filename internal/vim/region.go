@@ -277,3 +277,100 @@ func runeAtPos(b TextBuffer, p pos) rune {
 	}
 	return rs[p.col]
 }
+
+// tagTok is one <...> occurrence found by the tag scanner.
+type tagTok struct {
+	name       string
+	closing    bool
+	start, end pos // the < and the >
+}
+
+// TagObject resolves it/at: the content between an opening tag and its
+// matching close, vim's tag object. Matching is a name-aware stack, so
+// nested same-name tags resolve to the innermost pair containing the
+// cursor — which may sit in the content or inside either tag. Tags
+// themselves must fit on one line (attributes included); the content
+// may span lines, bounded by the loaded window like the bracket
+// objects. Self-closing tags, comments and declarations are skipped.
+func TagObject(b TextBuffer, c Cursor, around bool) (Region, bool) {
+	c = normalize(b, c)
+	cp := pos{c.Line, c.Col}
+
+	var toks []tagTok
+	for line := 0; line < b.LineCount(); line++ {
+		rs := lineRunes(b, line)
+		for i := 0; i < len(rs); i++ {
+			if rs[i] != '<' {
+				continue
+			}
+			j := i + 1
+			for j < len(rs) && rs[j] != '>' {
+				j++
+			}
+			if j >= len(rs) {
+				break // tag not closed on this line — unsupported
+			}
+			inner := rs[i+1 : j]
+			tok := tagTok{start: pos{line, i}, end: pos{line, j}}
+			if len(inner) > 0 && inner[0] == '/' {
+				tok.closing = true
+				inner = inner[1:]
+			}
+			selfClosing := len(inner) > 0 && inner[len(inner)-1] == '/'
+			nameEnd := 0
+			for nameEnd < len(inner) && inner[nameEnd] != ' ' && inner[nameEnd] != '/' {
+				nameEnd++
+			}
+			tok.name = string(inner[:nameEnd])
+			i = j
+			if tok.name == "" || tok.name[0] == '!' || tok.name[0] == '?' || selfClosing {
+				continue
+			}
+			toks = append(toks, tok)
+		}
+	}
+
+	// Stack-match pairs; the best is the innermost whose full extent
+	// contains the cursor.
+	type openTag struct {
+		tok tagTok
+	}
+	var stack []openTag
+	var best *[2]tagTok
+	for _, tok := range toks {
+		if !tok.closing {
+			stack = append(stack, openTag{tok})
+			continue
+		}
+		for len(stack) > 0 {
+			top := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if top.tok.name != tok.name {
+				continue // unclosed inner tag — drop it and keep looking
+			}
+			containsCursor := !posBefore(cp, top.tok.start) && !posBefore(tok.end, cp)
+			if containsCursor && (best == nil || posBefore(best[0].start, top.tok.start)) {
+				pair := [2]tagTok{top.tok, tok}
+				best = &pair
+			}
+			break
+		}
+	}
+	if best == nil {
+		return Region{}, false
+	}
+
+	open, closeTag := best[0], best[1]
+	if around {
+		start := Cursor{Line: open.start.line, Col: open.start.col, Want: open.start.col}
+		end := boundaryAfter(b, Cursor{Line: closeTag.end.line, Col: closeTag.end.col, Want: closeTag.end.col})
+		return Region{Start: start, End: end}, true
+	}
+	start := boundaryAfter(b, Cursor{Line: open.end.line, Col: open.end.col, Want: open.end.col})
+	end := Cursor{Line: closeTag.start.line, Col: closeTag.start.col, Want: closeTag.start.col}
+	return Region{Start: start, End: end}, true
+}
+
+func posBefore(a, b pos) bool {
+	return a.line < b.line || (a.line == b.line && a.col < b.col)
+}

@@ -319,6 +319,8 @@ func resolveObject(b TextBuffer, cur Cursor, target rune, around bool) (Region, 
 		return BracketObject(b, cur, '{', '}', around)
 	case '<', '>':
 		return BracketObject(b, cur, '<', '>', around)
+	case 't':
+		return TagObject(b, cur, around)
 	case 'w':
 		return WordObject(b, cur, false, around)
 	case 'W':

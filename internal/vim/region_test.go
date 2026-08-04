@@ -321,3 +321,47 @@ func TestOperatorGrammar(t *testing.T) {
 		}
 	})
 }
+
+func TestTagObject(t *testing.T) {
+	b := sliceBuffer{
+		`<test>asdf</test>`,
+		`<a><a>x</a></a>`,
+		`<a href="x">y</a>`,
+		`<t>`,
+		`line`,
+		`</t>`,
+		`<open>never closed`,
+		`text <br/> more`,
+	}
+
+	tests := []struct {
+		name      string
+		cur       Cursor
+		around    bool
+		wantStart Cursor
+		wantEnd   Cursor
+		ok        bool
+	}{
+		{"it inside the content", at(0, 7), false, at(0, 6), at(0, 10), true},
+		{"it from inside the opening tag", at(0, 2), false, at(0, 6), at(0, 10), true},
+		{"at includes both tags", at(0, 7), true, at(0, 0), at(0, 17), true},
+		{"nested same-name tags pick the innermost", at(1, 6), false, at(1, 6), at(1, 7), true},
+		{"outer pair from between the tags", at(1, 11), false, at(1, 3), at(1, 11), true},
+		{"attributes do not break the name", at(2, 12), false, at(2, 12), at(2, 13), true},
+		{"multi-line content", at(4, 1), false, at(3, 3), at(5, 0), true},
+		{"multi-line around", at(4, 1), true, at(3, 0), at(5, 4), true},
+		{"unclosed tag fails", at(6, 8), false, Cursor{}, Cursor{}, false},
+		{"self-closing tags are not pairs", at(7, 2), false, Cursor{}, Cursor{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := TagObject(b, tt.cur, tt.around)
+			if ok != tt.ok {
+				t.Fatalf("ok = %v, want %v (got %+v)", ok, tt.ok, got)
+			}
+			if ok && (got.Start != tt.wantStart || got.End != tt.wantEnd) {
+				t.Errorf("region = %+v, want %v..%v", got, tt.wantStart, tt.wantEnd)
+			}
+		})
+	}
+}
