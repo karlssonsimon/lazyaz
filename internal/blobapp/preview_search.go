@@ -250,8 +250,21 @@ func (m Model) previewMatchRanges() map[int][]ui.ColumnRange {
 		if lineStart > match.Start {
 			continue
 		}
-		startCol := ui.PlainWidth(m.preview.windowData[lineStart:match.Start])
+		// Columns are viewport-relative: the horizontal offset shifts
+		// them, and ranges scrolled out of view are dropped.
+		xoff := m.preview.viewport.XOffset()
+		width := m.preview.viewport.Width()
+		startCol := ui.PlainWidth(m.preview.windowData[lineStart:match.Start]) - xoff
 		endCol := startCol + ui.PlainWidth(m.preview.windowData[match.Start:match.End])
+		if endCol <= 0 || startCol >= width {
+			continue
+		}
+		if startCol < 0 {
+			startCol = 0
+		}
+		if endCol > width {
+			endCol = width
+		}
 
 		style := m.Styles.SearchMatch
 		if match.Start == cursorLocal {

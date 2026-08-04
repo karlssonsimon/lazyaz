@@ -62,6 +62,7 @@ type Styles struct {
 	// the eye lands on the current one first.
 	SearchMatch        lipgloss.Style // Other matches in view (base0A bg)
 	SearchMatchCurrent lipgloss.Style // The match the cursor is on (base09 bg)
+	CursorCell         lipgloss.Style // The buffer cursor's cell (solid block)
 }
 
 // ListStyles contains all list.Model.Styles fields.
@@ -454,6 +455,7 @@ func NewStyles(s Scheme) Styles {
 		SelectionHighlight: lipgloss.NewStyle().Foreground(selText).Background(selBg).Reverse(true),
 		SearchMatch:        lipgloss.NewStyle().Foreground(bg).Background(warning),
 		SearchMatchCurrent: lipgloss.NewStyle().Foreground(bg).Background(orange).Bold(true),
+		CursorCell:         lipgloss.NewStyle().Foreground(bg).Background(text),
 	}
 }
 

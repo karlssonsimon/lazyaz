@@ -172,6 +172,10 @@ type Model struct {
 	// a very large blob is a cost question, not just a slow one.
 	searchScanBudget int64
 
+	// scrolloff is the config's context-row count, applied to the
+	// preview's cursor follow as well as the lists.
+	scrolloff int
+
 	cache blobCache
 
 	// usage records every drill-in (account / container) so the
@@ -387,13 +391,15 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 		cache:              newCache(db),
 		downloadDir:        cfg.ResolvedDownloadDir(),
 		searchScanBudget:   cfg.SearchScanLimitBytes(),
-		focus:              accountsPane,
-		blobSortField:      blobSortDate,
-		blobSortDesc:       true,
-		accountsHistory:    make(map[string]ui.ListState),
-		containersHistory:  make(map[string]ui.ListState),
-		blobsHistory:       make(map[string]ui.ListState),
-		inspectPanes:       make(map[int]bool),
+
+		scrolloff:         cfg.ScrolloffValue(),
+		focus:             accountsPane,
+		blobSortField:     blobSortDate,
+		blobSortDesc:      true,
+		accountsHistory:   make(map[string]ui.ListState),
+		containersHistory: make(map[string]ui.ListState),
+		blobsHistory:      make(map[string]ui.ListState),
+		inspectPanes:      make(map[int]bool),
 	}
 	m.applyScheme(cfg.ActiveScheme())
 	// Hydrate subscriptions from cache without hitting Azure. The fetch

@@ -253,3 +253,118 @@ func TestPreviewCountedLineMotion(t *testing.T) {
 		t.Errorf("query = %q, want %q", got, "3")
 	}
 }
+
+// The buffer motions drive a real cursor through the preview's key
+// path: words, line ends, find chords, and the sticky goal column.
+func TestPreviewBufferMotions(t *testing.T) {
+	m := searchModel(t, "foo bar.baz\nshort\na longer line here\n")
+
+	m = typeKeys(m, "w")
+	if c := m.preview.vcur; c.Line != 0 || c.Col != 4 {
+		t.Fatalf("w: (%d,%d), want (0,4)", c.Line, c.Col)
+	}
+	m = typeKeys(m, "$")
+	if c := m.preview.vcur; c.Col != 10 {
+		t.Fatalf("$: col %d, want 10", c.Col)
+	}
+	// Sticky $ rides line ends through j.
+	m = typeKeys(m, "j", "j")
+	if c := m.preview.vcur; c.Line != 2 || c.Col != 17 {
+		t.Fatalf("$jj: (%d,%d), want (2,17)", c.Line, c.Col)
+	}
+	m = typeKeys(m, "0")
+	if c := m.preview.vcur; c.Col != 0 {
+		t.Fatalf("0: col %d, want 0", c.Col)
+	}
+	// f chord with a count.
+	m = typeKeys(m, "2", "f", "e")
+	if c := m.preview.vcur; c.Col != 12 {
+		t.Fatalf("2fe: col %d, want 12 (the e of 'line')", c.Col)
+	}
+	// h moves left now — it must not exit the preview.
+	m = typeKeys(m, "h")
+	if !m.preview.open || m.focus != previewPane {
+		t.Fatal("h left the preview; it should be a cursor motion")
+	}
+	if c := m.preview.vcur; c.Col != 11 {
+		t.Fatalf("h: col %d, want 11", c.Col)
+	}
+	// The byte cursor tracks the vim cursor.
+	if got := m.preview.cursor; got != m.previewByteFromVim() {
+		t.Fatalf("byte cursor %d out of sync with vim cursor (%d)", got, m.previewByteFromVim())
+	}
+}
+
+// The cursor cell renders at its display column, translated through
+// the horizontal offset, and survives sitting inside a search match.
+func TestPreviewCursorCellRendering(t *testing.T) {
+	m := searchModel(t, "det är NEEDLE här\n")
+
+	m = typeKeys(m, "f", "N")
+	row, cell, ok := m.previewCursorHighlight()
+	if !ok {
+		t.Fatal("cursor cell not visible")
+	}
+	if row != 0 {
+		t.Errorf("row = %d, want 0", row)
+	}
+	if cell.Start != 7 || cell.End != 8 {
+		t.Errorf("cell = [%d,%d), want [7,8) — display columns, not bytes", cell.Start, cell.End)
+	}
+
+	// Layered over a search match, the cursor must stay a distinct range.
+	m.preview.search.bar.Open(ui.SearchForward)
+	m.preview.search.bar.Input.SetValue("NEEDLE")
+	if err := m.preview.search.bar.Accept(); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	ranges := m.previewMatchRanges()
+	_, cell, _ = m.previewCursorHighlight()
+	layered := ui.SplitAround(ranges[0], cell)
+	found := false
+	for _, r := range layered {
+		if r.Start == 7 && r.End == 8 {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("cursor cell lost inside the match: %+v", layered)
+	}
+}
+
+// The view follows the cursor horizontally on long lines.
+func TestPreviewHorizontalFollow(t *testing.T) {
+	long := strings.Repeat("x", 200) + "END"
+	m := searchModel(t, long+"\n")
+
+	m = typeKeys(m, "$")
+	if got := m.preview.vcur.Col; got != 202 {
+		t.Fatalf("$ col = %d, want 202", got)
+	}
+	if m.preview.viewport.XOffset() == 0 {
+		t.Fatal("viewport did not scroll horizontally to follow $")
+	}
+
+	m = typeKeys(m, "0")
+	if got := m.preview.viewport.XOffset(); got != 0 {
+		t.Fatalf("XOffset = %d after 0, want 0", got)
+	}
+}
+
+// j keeps the cursor line visible with scrolloff instead of pinning it
+// to the top row.
+func TestPreviewVerticalFollowNotPinned(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 100; i++ {
+		fmt.Fprintf(&sb, "line %02d\n", i)
+	}
+	m := searchModel(t, sb.String())
+
+	m = typeKeys(m, "j", "j", "j")
+	if got := m.preview.viewport.YOffset(); got != 0 {
+		t.Fatalf("YOffset = %d after 3 x j, want 0 — the view must not scroll while the cursor is inside it", got)
+	}
+	if c := m.preview.vcur; c.Line != 3 {
+		t.Fatalf("cursor line = %d, want 3", c.Line)
+	}
+}

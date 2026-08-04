@@ -38,6 +38,9 @@ type previewState struct {
 	requestID   int
 	viewport    viewport.Model
 	search      previewSearchState
+	// vcur is the window-local vim cursor; preview.cursor (the absolute
+	// byte offset) is re-derived from it after every motion.
+	vcur vim.Cursor
 }
 
 func newPreviewState() previewState {
@@ -75,6 +78,7 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.preview.contentType = b.ContentType
 	m.preview.binary = false
 	m.preview.cursor = 0
+	m.preview.vcur = vim.Cursor{}
 	m.preview.windowStart = 0
 	m.preview.windowData = nil
 	m.preview.lineStarts = nil
@@ -128,7 +132,8 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 	m.preview.lineStarts = computeLineStarts(msg.data)
 	m.preview.rendered = renderPreviewContent(msg.data, msg.blobName, m.preview.contentType, m.preview.binary, m.Styles)
 	m.preview.viewport.SetContent(m.preview.rendered)
-	m.preview.viewport.SetYOffset(m.previewLocalLine())
+	m.syncPreviewVimFromByte()
+	m.followPreviewCursor()
 
 	if m.preview.binary {
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Binary preview for %s (%s)", msg.blobName, humanSize(msg.blobSize)))
@@ -159,6 +164,17 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// A pending f/F/t/T owns the next key outright — it is a rune
+	// argument, so it must be consumed before the chords and before
+	// digit handling (f3 finds the character 3, fg finds g).
+	if m.vimr.FindPending() {
+		nc, res := m.vimr.BufferMotion(previewMotionKeys(m.Keymap), key, m.previewBuf(), m.preview.vcur)
+		if res == vim.BufMoved {
+			return m.applyPreviewCursor(nc)
+		}
+		return m, nil
+	}
+
 	// The gg chord is resolved before the switch: its keys (g, home)
 	// are not bound to anything else in preview focus, and a non-chord
 	// key falls through with the pending state cleared.
@@ -176,6 +192,16 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	if !countedPreviewKey(m.Keymap, key) {
 		m.vimr.ClearCount()
+	}
+
+	// Buffer motions resolve in one place — vim returns a cursor, the
+	// preview applies it. A new motion added to the engine reaches here
+	// without this file changing.
+	if nc, res := m.vimr.BufferMotion(previewMotionKeys(m.Keymap), key, m.previewBuf(), m.preview.vcur); res != vim.BufNone {
+		if res == vim.BufMoved {
+			return m.applyPreviewCursor(nc)
+		}
+		return m, nil
 	}
 
 	switch {
@@ -200,28 +226,23 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.PreviewPreviousFocus.Matches(key):
 		m.previousFocus()
 		return m, nil
-	case m.Keymap.PreviewDown.Matches(key):
-		return m.movePreviewCursorByLines(m.vimr.TakeCount())
-	case m.Keymap.PreviewUp.Matches(key):
-		return m.movePreviewCursorByLines(-m.vimr.TakeCount())
 	case m.Keymap.HalfPageDown.Matches(key):
 		step := max(1, m.preview.viewport.Height()/2)
-		return m.movePreviewCursorByLines(step * m.vimr.TakeCount())
+		return m.applyPreviewCursor(vim.MoveDown(m.previewBuf(), m.preview.vcur, step*m.vimr.TakeCount()))
 	case m.Keymap.HalfPageUp.Matches(key):
 		step := max(1, m.preview.viewport.Height()/2)
-		return m.movePreviewCursorByLines(-step * m.vimr.TakeCount())
+		return m.applyPreviewCursor(vim.MoveUp(m.previewBuf(), m.preview.vcur, step*m.vimr.TakeCount()))
 	case m.Keymap.FullPageDown.Matches(key):
-		return m.movePreviewCursorByLines(max(1, m.preview.viewport.Height()) * m.vimr.TakeCount())
+		return m.applyPreviewCursor(vim.MoveDown(m.previewBuf(), m.preview.vcur, max(1, m.preview.viewport.Height())*m.vimr.TakeCount()))
 	case m.Keymap.FullPageUp.Matches(key):
-		return m.movePreviewCursorByLines(-max(1, m.preview.viewport.Height()) * m.vimr.TakeCount())
-	// The preview has no cursor separate from its scroll position — the
-	// top visible line is the position — so ctrl+e / ctrl+y move by one
-	// line, same as j / k. They are bound because the muscle memory is
-	// worth more than the redundancy.
+		return m.applyPreviewCursor(vim.MoveUp(m.previewBuf(), m.preview.vcur, max(1, m.preview.viewport.Height())*m.vimr.TakeCount()))
+	// ctrl+e / ctrl+y scroll the view a line; the cursor is only pushed
+	// when the view would leave it behind — vim's behavior, via the same
+	// ScrollWindow arithmetic the lists use.
 	case m.Keymap.ScrollLineDown.Matches(key):
-		return m.movePreviewCursorByLines(m.vimr.TakeCount())
+		return m.scrollPreviewView(m.vimr.TakeCount())
 	case m.Keymap.ScrollLineUp.Matches(key):
-		return m.movePreviewCursorByLines(-m.vimr.TakeCount())
+		return m.scrollPreviewView(-m.vimr.TakeCount())
 	case m.Keymap.JumpBottom.Matches(key):
 		return m.jumpPreviewToBottom()
 	default:
@@ -243,28 +264,25 @@ func (m Model) jumpPreviewToBottom() (Model, tea.Cmd) {
 	return m.ensurePreviewWindowAtCursor()
 }
 
-func (m Model) movePreviewCursorByLines(delta int) (Model, tea.Cmd) {
+func (m Model) scrollPreviewView(delta int) (Model, tea.Cmd) {
 	if !m.preview.open || delta == 0 {
 		return m, nil
 	}
-	if len(m.preview.windowData) == 0 || len(m.preview.lineStarts) == 0 {
-		return m.ensurePreviewWindowAtCursor()
+	vp := &m.preview.viewport
+	sw := ui.ScrollWindow{
+		Cursor:    m.preview.vcur.Line,
+		Offset:    vp.YOffset(),
+		Height:    vp.Height(),
+		Count:     len(m.preview.lineStarts),
+		Scrolloff: m.scrolloff,
 	}
-
-	local := m.previewLocalLine()
-	target := local + delta
-	if target < 0 {
-		target = 0
+	sw = sw.ScrollBy(delta)
+	vp.SetYOffset(sw.Offset)
+	nc := m.preview.vcur
+	if sw.Cursor != nc.Line {
+		nc = vim.MoveDown(m.previewBuf(), nc, sw.Cursor-nc.Line)
 	}
-	if target >= len(m.preview.lineStarts) {
-		target = len(m.preview.lineStarts) - 1
-	}
-
-	m.preview.cursor = m.preview.windowStart + int64(m.preview.lineStarts[target])
-	if m.preview.blobSize > 0 {
-		m.preview.cursor = clampInt64(m.preview.cursor, 0, m.preview.blobSize-1)
-	}
-	return m.ensurePreviewWindowAtCursor()
+	return m.applyPreviewCursor(nc)
 }
 
 func (m Model) ensurePreviewWindowAtCursor() (Model, tea.Cmd) {
@@ -303,7 +321,8 @@ func (m Model) ensurePreviewWindowAtCursor() (Model, tea.Cmd) {
 		return m, tea.Batch(m.Spinner.Tick, cmd)
 	}
 
-	m.preview.viewport.SetYOffset(m.previewLocalLine())
+	m.syncPreviewVimFromByte()
+	m.followPreviewCursor()
 	return m, nil
 }
 
@@ -477,5 +496,11 @@ func countedPreviewKey(km keymap.Keymap, key string) bool {
 	return km.PreviewDown.Matches(key) || km.PreviewUp.Matches(key) ||
 		km.HalfPageDown.Matches(key) || km.HalfPageUp.Matches(key) ||
 		km.FullPageDown.Matches(key) || km.FullPageUp.Matches(key) ||
-		km.ScrollLineDown.Matches(key) || km.ScrollLineUp.Matches(key)
+		km.ScrollLineDown.Matches(key) || km.ScrollLineUp.Matches(key) ||
+		km.MotionLeft.Matches(key) || km.MotionRight.Matches(key) ||
+		km.MotionWordForward.Matches(key) || km.MotionWordBack.Matches(key) ||
+		km.MotionWordEnd.Matches(key) || km.MotionLineEnd.Matches(key) ||
+		km.FindChar.Matches(key) || km.FindCharBack.Matches(key) ||
+		km.TillChar.Matches(key) || km.TillCharBack.Matches(key) ||
+		km.RepeatFind.Matches(key) || km.RepeatFindBack.Matches(key)
 }

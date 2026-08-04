@@ -113,6 +113,31 @@ func HighlightLines(content string, width int, byRow map[int][]ColumnRange) stri
 	return strings.Join(lines, "\n")
 }
 
+// SplitAround layers one range over a set: base ranges are clipped
+// around top so nothing overlaps, then top is inserted. Used to keep
+// the cursor cell visible inside a search match or a selection —
+// HighlightLine drops overlapping ranges outright, so priority has to
+// be resolved before it runs.
+func SplitAround(base []ColumnRange, top ColumnRange) []ColumnRange {
+	if top.End <= top.Start {
+		return base
+	}
+	out := make([]ColumnRange, 0, len(base)+2)
+	for _, r := range base {
+		if r.End <= top.Start || r.Start >= top.End {
+			out = append(out, r)
+			continue
+		}
+		if r.Start < top.Start {
+			out = append(out, ColumnRange{Start: r.Start, End: top.Start, Style: r.Style})
+		}
+		if r.End > top.End {
+			out = append(out, ColumnRange{Start: top.End, End: r.End, Style: r.Style})
+		}
+	}
+	return append(out, top)
+}
+
 // PlainWidth is the display width of raw (unstyled) bytes. Used to turn
 // a byte offset inside a buffer into the column where it will appear
 // once rendered, which is not the same number as soon as the text holds
