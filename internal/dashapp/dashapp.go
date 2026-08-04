@@ -14,6 +14,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -81,10 +82,8 @@ type Model struct {
 	// state. Ephemeral (not persisted across tab close).
 	viewStates []widgetViewState
 
-	// gPrefixActive is true between the first 'g' and the second 'g'
-	// of a `gg` jump-to-top chord. Cleared by the second g (which
-	// triggers the jump) or by any other key press.
-	gPrefixActive bool
+	// vimr resolves multi-key vim chords and count prefixes.
+	vimr vim.Resolver
 
 	// rowHeights are the inner widget pane heights, indexed by grid
 	// row, recomputed each WindowSizeMsg from the real bar heights.

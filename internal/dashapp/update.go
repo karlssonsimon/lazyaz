@@ -5,7 +5,9 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 
 	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/spinner"
@@ -319,19 +321,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// gg jump-to-top chord: first 'g' arms the prefix, second 'g' fires.
-	// Any other key clears the prefix so unrelated input doesn't trigger
-	// the jump on the next 'g'.
-	if km.WidgetScrollTop.Matches(key) {
-		if m.gPrefixActive {
-			m.gPrefixActive = false
-			m.cursorToTop()
-			return m, nil
-		}
-		m.gPrefixActive = true
+	// gg jump-to-top chord, resolved like every other surface's chords.
+	// Any other key clears the armed prefix inside the resolver.
+	switch m.vimr.GG(km.WidgetScrollTop, key, false) {
+	case vim.ChordFired:
+		m.cursorToTop()
+		return m, nil
+	case vim.ChordArmed:
 		return m, nil
 	}
-	m.gPrefixActive = false
+
+	// Count prefix: digits accumulate and the motion that fires consumes
+	// them; anything that is not a counted motion drops the count.
+	if m.vimr.Digit(key) {
+		return m, nil
+	}
+	if !countedDashKey(km, key) {
+		m.vimr.ClearCount()
+	}
 
 	switch {
 	case km.Cancel.Matches(key):
@@ -363,6 +370,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case km.WidgetScrollBottom.Matches(key) && m.vimr.PendingCount() > 0:
+		// Counted G is vim's absolute jump: 5G lands on row 5.
+		m.cursorTo(m.vimr.TakeCount() - 1)
+		return m, nil
 	case km.WidgetScrollBottom.Matches(key):
 		m.cursorToBottom()
 		return m, nil
@@ -379,16 +390,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focusedIdx = moveFocus(m.widgets, m.focusedIdx, 0, 1)
 		return m, nil
 	case km.WidgetScrollUp.Matches(key):
-		m.moveCursorFocused(-1)
+		m.moveCursorFocused(-m.vimr.TakeCount())
 		return m, nil
 	case km.WidgetScrollDown.Matches(key):
-		m.moveCursorFocused(1)
+		m.moveCursorFocused(m.vimr.TakeCount())
 		return m, nil
 	case km.HalfPageUp.Matches(key):
-		m.moveCursorFocused(-m.halfPageStep())
+		m.moveCursorFocused(-m.halfPageStep() * m.vimr.TakeCount())
 		return m, nil
 	case km.HalfPageDown.Matches(key):
-		m.moveCursorFocused(m.halfPageStep())
+		m.moveCursorFocused(m.halfPageStep() * m.vimr.TakeCount())
 		return m, nil
 	case km.SubscriptionPicker.Matches(key):
 		m.SubOverlay.Open()
@@ -529,4 +540,12 @@ func (m *Model) recomputeWidgetHeights() {
 	}
 	rows, _ := gridDims(m.widgets)
 	m.rowHeights = computeRowHeights(body, rows)
+}
+
+// countedDashKey reports whether key is a motion that consumes a
+// pending count on the dashboard. Everything else drops the count.
+func countedDashKey(km keymap.Keymap, key string) bool {
+	return km.WidgetScrollUp.Matches(key) || km.WidgetScrollDown.Matches(key) ||
+		km.WidgetScrollBottom.Matches(key) ||
+		km.HalfPageUp.Matches(key) || km.HalfPageDown.Matches(key)
 }

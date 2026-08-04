@@ -54,6 +54,20 @@ func (m *Model) cursorToTop() {
 	m.scrollToKeepCursorVisible()
 }
 
+// cursorTo places the focused widget's cursor on an absolute row,
+// clamped to the data. Backs the counted-G jump.
+func (m *Model) cursorTo(row int) {
+	if m.focusedIdx < 0 || m.focusedIdx >= len(m.cursors) {
+		return
+	}
+	total, _ := m.focusedWidgetDims()
+	if total <= 0 {
+		return
+	}
+	m.cursors[m.focusedIdx] = clampInt(row, 0, total-1)
+	m.scrollToKeepCursorVisible()
+}
+
 func (m *Model) cursorToBottom() {
 	if m.focusedIdx < 0 || m.focusedIdx >= len(m.cursors) {
 		return

@@ -100,6 +100,7 @@ func (m Model) View() tea.View {
 	}, m.Styles, m.Width)
 	statusBar := ui.RenderStatusLine(ui.StatusLineConfig{
 		Mode:    "NORMAL",
+		Count:   m.vimr.PendingCount(),
 		Actions: m.statusActions(),
 	}, m.Styles, m.Width)
 	// Dashboard's grid has multiple widgets per row with internal rules,

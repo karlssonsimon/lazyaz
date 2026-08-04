@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 )
 
@@ -288,5 +290,64 @@ func TestClampInt(t *testing.T) {
 		if got := clampInt(tc.v, tc.lo, tc.hi); got != tc.want {
 			t.Errorf("clampInt(%d, %d, %d) = %d, want %d", tc.v, tc.lo, tc.hi, got, tc.want)
 		}
+	}
+}
+
+func pressDashKey(t *testing.T, m Model, keys ...string) Model {
+	t.Helper()
+	for _, k := range keys {
+		msg := tea.KeyPressMsg{Code: rune(k[0]), Text: k}
+		updated, _ := m.handleKey(msg)
+		m = updated.(Model)
+	}
+	return m
+}
+
+// Counts on the dashboard: 3j moves the focused widget's cursor three
+// rows, 5G is the absolute jump, and gg still fires through the
+// resolver that replaced the widget's private chord flag.
+func TestDashboardCountedMotions(t *testing.T) {
+	m := makeModel(0, 20, 10, 50)
+	m.Keymap = keymap.Default()
+
+	m = pressDashKey(t, m, "3", "j")
+	if got := m.cursors[0]; got != 3 {
+		t.Errorf("cursor = %d after 3j, want 3", got)
+	}
+
+	m = pressDashKey(t, m, "1", "0", "G")
+	if got := m.cursors[0]; got != 9 {
+		t.Errorf("cursor = %d after 10G, want 9", got)
+	}
+
+	// Uncounted G still jumps to the end.
+	m = pressDashKey(t, m, "G")
+	if got := m.cursors[0]; got != 49 {
+		t.Errorf("cursor = %d after G, want 49", got)
+	}
+
+	// gg through the resolver.
+	m = pressDashKey(t, m, "g", "g")
+	if got := m.cursors[0]; got != 0 {
+		t.Errorf("cursor = %d after gg, want 0", got)
+	}
+
+	// A stray digit followed by a non-motion clears the count.
+	m = pressDashKey(t, m, "7", "x", "j")
+	if got := m.cursors[0]; got != 1 {
+		t.Errorf("cursor = %d after 7-x-j, want 1 (count cleared by x)", got)
+	}
+}
+
+// An armed g must be disarmed by an unrelated key, so the next g only
+// arms rather than firing a stale chord.
+func TestDashboardGChordClearsOnOtherKey(t *testing.T) {
+	m := makeModel(0, 20, 10, 50)
+	m.Keymap = keymap.Default()
+
+	m = pressDashKey(t, m, "G") // bottom
+	m = pressDashKey(t, m, "g", "x", "g")
+	if got := m.cursors[0]; got != 49 {
+		t.Errorf("cursor = %d, want 49 — g after a cleared chord must only arm", got)
 	}
 }
