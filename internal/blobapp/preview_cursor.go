@@ -127,12 +127,19 @@ const horizontalFollowMargin = 5
 // with a fixed margin.
 func (m *Model) followPreviewCursor() {
 	vp := &m.preview.viewport
+	// Browse mode tracks the top visible line as its position, so
+	// applying scrolloff there would push the view back on every
+	// scroll. The margin belongs to the vim capture only.
+	so := m.scrolloff
+	if !m.preview.vimMode {
+		so = 0
+	}
 	sw := ui.ScrollWindow{
 		Cursor:    m.preview.vcur.Line,
 		Offset:    vp.YOffset(),
 		Height:    vp.Height(),
 		Count:     len(m.preview.lineStarts),
-		Scrolloff: m.scrolloff,
+		Scrolloff: so,
 	}
 	vp.SetYOffset(sw.Normalize().Offset)
 
@@ -174,7 +181,7 @@ func (m Model) previewCursorDisplayCol() int {
 // row and column range, ok=false when the cursor is scrolled out of
 // view.
 func (m Model) previewCursorHighlight() (row int, rng ui.ColumnRange, ok bool) {
-	if len(m.preview.lineStarts) == 0 {
+	if !m.preview.vimMode || len(m.preview.lineStarts) == 0 {
 		return 0, ui.ColumnRange{}, false
 	}
 	vp := m.preview.viewport

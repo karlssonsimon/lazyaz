@@ -162,6 +162,11 @@ func (m Model) IsTextInputActive() bool {
 	if m.preview.search.bar.InputOpen {
 		return true
 	}
+	// The vim capture claims every key: the app forwards them all, so
+	// tab switching and the rest of the chrome stay blocked until esc.
+	if m.preview.open && m.focus == previewPane && m.preview.vimMode {
+		return true
+	}
 	switch m.inputMode() {
 	case ModeNormal, ModeVisualLine, ModePreview:
 		return false

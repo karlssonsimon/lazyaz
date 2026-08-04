@@ -40,6 +40,7 @@ const (
 	ModePreview                        // Blob preview focused
 	ModePreviewVisual                  // Charwise selection in the preview
 	ModePreviewVLine                   // Linewise selection in the preview
+	ModePreviewVim                     // Vim capture in the preview, no selection
 	ModePrefixSearch                   // Server prefix search input open
 	ModeListFilter                     // User is typing a list filter
 	ModeVisualLine                     // Visual line selection active
@@ -64,6 +65,8 @@ func (m Model) inputMode() InputMode {
 			return ModePreviewVLine
 		}
 		return ModePreviewVisual
+	case m.preview.open && m.focus == previewPane && m.preview.vimMode:
+		return ModePreviewVim
 	case m.preview.open && m.focus == previewPane:
 		return ModePreview
 	case m.filter.inputOpen && m.focus == blobsPane:
@@ -83,6 +86,8 @@ func (mode InputMode) String() string {
 		return "VISUAL"
 	case ModePreviewVLine:
 		return "V-LINE"
+	case ModePreviewVim:
+		return "VIM"
 	case ModeListFilter, ModePrefixSearch:
 		return "FILTER"
 	default:

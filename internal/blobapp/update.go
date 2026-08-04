@@ -509,7 +509,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case ModePreview, ModePreviewVisual, ModePreviewVLine:
+	case ModePreview, ModePreviewVim, ModePreviewVisual, ModePreviewVLine:
 		return m.handlePreviewKey(msg)
 
 	case ModePrefixSearch:

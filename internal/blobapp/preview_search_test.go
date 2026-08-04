@@ -80,9 +80,9 @@ func TestPreviewSearchPromptCapturesKeys(t *testing.T) {
 		t.Errorf("query = %q, want %q — preview bindings leaked past the prompt", got, "gj")
 	}
 	// The g typed into the query must not have armed the gg chord: close
-	// the prompt, move down, then press a single g — an armed chord
-	// would fire and jump the cursor back to the top.
-	m = typeKeys(m, "esc", "j")
+	// the prompt, enter the vim capture, move down, then press a single
+	// g — an armed chord would fire and jump the cursor back to the top.
+	m = typeKeys(m, "esc", "v", "j")
 	if m.preview.cursor == 0 {
 		t.Fatal("setup: cursor did not move off the top")
 	}
@@ -260,6 +260,7 @@ func TestPreviewCountedLineMotion(t *testing.T) {
 func TestPreviewBufferMotions(t *testing.T) {
 	m := searchModel(t, "foo bar.baz\nshort\na longer line here\n")
 
+	m = typeKeys(m, "v") // enter the vim capture
 	m = typeKeys(m, "w")
 	if c := m.preview.vcur; c.Line != 0 || c.Col != 4 {
 		t.Fatalf("w: (%d,%d), want (0,4)", c.Line, c.Col)
@@ -301,7 +302,7 @@ func TestPreviewBufferMotions(t *testing.T) {
 func TestPreviewCursorCellRendering(t *testing.T) {
 	m := searchModel(t, "det är NEEDLE här\n")
 
-	m = typeKeys(m, "f", "N")
+	m = typeKeys(m, "v", "f", "N")
 	row, cell, ok := m.previewCursorHighlight()
 	if !ok {
 		t.Fatal("cursor cell not visible")
@@ -338,7 +339,7 @@ func TestPreviewHorizontalFollow(t *testing.T) {
 	long := strings.Repeat("x", 200) + "END"
 	m := searchModel(t, long+"\n")
 
-	m = typeKeys(m, "$")
+	m = typeKeys(m, "v", "$")
 	if got := m.preview.vcur.Col; got != 202 {
 		t.Fatalf("$ col = %d, want 202", got)
 	}
@@ -361,7 +362,7 @@ func TestPreviewVerticalFollowNotPinned(t *testing.T) {
 	}
 	m := searchModel(t, sb.String())
 
-	m = typeKeys(m, "j", "j", "j")
+	m = typeKeys(m, "v", "j", "j", "j")
 	if got := m.preview.viewport.YOffset(); got != 0 {
 		t.Fatalf("YOffset = %d after 3 x j, want 0 — the view must not scroll while the cursor is inside it", got)
 	}
@@ -375,9 +376,9 @@ func TestPreviewVerticalFollowNotPinned(t *testing.T) {
 func TestPreviewCharwiseVisualAndYank(t *testing.T) {
 	m := searchModel(t, "foo bar baz\nsecond line\n")
 
-	m = typeKeys(m, "v")
+	m = typeKeys(m, "v", "v")
 	if !m.preview.span.Active || m.preview.span.Mode != vim.SpanChar {
-		t.Fatal("v did not start a charwise selection")
+		t.Fatal("vv did not start a charwise selection")
 	}
 	if got := m.inputMode().String(); got != "VISUAL" {
 		t.Fatalf("mode = %q, want VISUAL", got)
@@ -405,7 +406,7 @@ func TestPreviewCharwiseVisualAndYank(t *testing.T) {
 func TestPreviewLinewiseSelection(t *testing.T) {
 	m := searchModel(t, "first\nsecond\nthird\n")
 
-	m = typeKeys(m, "j", "V", "j")
+	m = typeKeys(m, "v", "j", "V", "j")
 	if got := m.inputMode().String(); got != "V-LINE" {
 		t.Fatalf("mode = %q, want V-LINE", got)
 	}
@@ -446,4 +447,96 @@ func TestPreviewYankWithoutSelection(t *testing.T) {
 		t.Fatal("yank without selection produced a command")
 	}
 	_ = m2
+}
+
+// The preview opens in browse mode: h backs out like every other pane,
+// no cursor is shown, and v enters the capture.
+func TestPreviewBrowseModeDefaults(t *testing.T) {
+	m := searchModel(t, "alpha\nbeta\n")
+
+	if m.preview.vimMode {
+		t.Fatal("preview opened in vim mode; browse is the default")
+	}
+	if got := m.inputMode().String(); got != "NORMAL" {
+		t.Fatalf("mode = %q, want NORMAL in browse", got)
+	}
+	if _, _, ok := m.previewCursorHighlight(); ok {
+		t.Fatal("cursor cell rendered in browse mode")
+	}
+
+	m = typeKeys(m, "h")
+	if m.focus == previewPane {
+		t.Fatal("h did not back out of the preview in browse mode")
+	}
+}
+
+// v enters the capture: the mode chip reads VIM, the cursor appears,
+// and the app-side key claim is on so chrome shortcuts stay blocked.
+func TestPreviewVimModeEntry(t *testing.T) {
+	m := searchModel(t, "alpha\nbeta\n")
+
+	m = typeKeys(m, "v")
+	if !m.preview.vimMode {
+		t.Fatal("v did not enter vim mode")
+	}
+	if got := m.inputMode().String(); got != "VIM" {
+		t.Fatalf("mode = %q, want VIM", got)
+	}
+	if _, _, ok := m.previewCursorHighlight(); !ok {
+		t.Fatal("no cursor cell in vim mode")
+	}
+	if !m.IsTextInputActive() {
+		t.Fatal("vim mode must claim the keyboard so the app forwards every key")
+	}
+
+	// Non-vim keys are swallowed: tab must not switch panes, q must not
+	// reach quit.
+	before := m.focus
+	m = typeKeys(m, "q")
+	if m.focus != before || !m.preview.vimMode {
+		t.Fatal("q leaked through the capture")
+	}
+}
+
+// V from browse enters the capture with a linewise selection started.
+func TestPreviewShiftVEntersSelecting(t *testing.T) {
+	m := searchModel(t, "alpha\nbeta\n")
+
+	m = typeKeys(m, "V")
+	if !m.preview.vimMode {
+		t.Fatal("V did not enter vim mode")
+	}
+	if !m.preview.span.Active || m.preview.span.Mode != vim.SpanLine {
+		t.Fatal("V did not start a linewise selection")
+	}
+	if got := m.inputMode().String(); got != "V-LINE" {
+		t.Fatalf("mode = %q, want V-LINE", got)
+	}
+}
+
+// Esc walks the ladder one rung at a time: visual → vim → browse →
+// out of the preview.
+func TestPreviewEscLadder(t *testing.T) {
+	m := searchModel(t, "alpha\nbeta\n")
+
+	m = typeKeys(m, "v", "v")
+	if got := m.inputMode().String(); got != "VISUAL" {
+		t.Fatalf("setup: mode = %q, want VISUAL", got)
+	}
+
+	m = typeKeys(m, "esc")
+	if got := m.inputMode().String(); got != "VIM" {
+		t.Fatalf("first esc: mode = %q, want VIM", got)
+	}
+	m = typeKeys(m, "esc")
+	if got := m.inputMode().String(); got != "NORMAL" {
+		t.Fatalf("second esc: mode = %q, want NORMAL (browse)", got)
+	}
+	if m.focus != previewPane {
+		t.Fatal("second esc left the preview; it should only leave the capture")
+	}
+	m = typeKeys(m, "esc")
+	if m.focus == previewPane {
+		t.Fatal("third esc did not leave the preview")
+	}
 }

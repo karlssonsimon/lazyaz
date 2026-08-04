@@ -44,6 +44,10 @@ type previewState struct {
 	// span is the v/V selection: a byte-offset anchor with the cursor
 	// as the moving end.
 	span vim.Span
+	// vimMode gates the cursor. The preview opens in browse mode —
+	// h backs out and j/k scroll, like every other pane — and v enters
+	// the vim capture, where only vim keys work until esc.
+	vimMode bool
 }
 
 func newPreviewState() previewState {
@@ -83,6 +87,7 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.preview.cursor = 0
 	m.preview.vcur = vim.Cursor{}
 	m.preview.span = vim.Span{}
+	m.preview.vimMode = false
 	m.preview.windowStart = 0
 	m.preview.windowData = nil
 	m.preview.lineStarts = nil
@@ -151,8 +156,7 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
-	// While the / prompt is open it owns every key, so a query can
-	// contain characters that are otherwise preview bindings.
+	// While the / prompt is open it owns every key, in both modes.
 	if m.preview.search.bar.InputOpen {
 		consumed, submitted := m.preview.search.bar.HandleKey(key, m.Keymap)
 		if submitted {
@@ -168,6 +172,92 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if !m.preview.vimMode {
+		return m.handlePreviewBrowseKey(key)
+	}
+	return m.handlePreviewVimKey(key)
+}
+
+// handlePreviewBrowseKey is the preview's default mode: it navigates
+// like every other pane. h backs out, j/k scroll the view, no cursor is
+// shown, and v enters the vim capture.
+func (m Model) handlePreviewBrowseKey(key string) (Model, tea.Cmd) {
+	switch m.vimr.GG(m.Keymap.JumpTopPrefix, key, true) {
+	case vim.ChordFired:
+		return m.jumpPreviewToTop()
+	case vim.ChordArmed:
+		m.Notify(appshell.LevelInfo, vim.HintGG)
+		return m, nil
+	}
+
+	if m.vimr.Digit(key) {
+		return m, nil
+	}
+	if !countedPreviewKey(m.Keymap, key) {
+		m.vimr.ClearCount()
+	}
+
+	switch {
+	case ui.ShouldQuit(key, m.Keymap.Quit, false):
+		return m, tea.Quit
+	case m.Keymap.SearchForward.Matches(key):
+		m.preview.search.bar.Open(ui.SearchForward)
+		return m, nil
+	case m.Keymap.SearchBackward.Matches(key):
+		m.preview.search.bar.Open(ui.SearchBackward)
+		return m, nil
+	case m.Keymap.SearchNext.Matches(key):
+		return m.repeatPreviewSearch(m.preview.search.bar.Direction)
+	case m.Keymap.SearchPrev.Matches(key):
+		return m.repeatPreviewSearch(m.preview.search.bar.Direction.Opposite())
+	// VisualChar is checked before ToggleVisualLine: the stock binding
+	// for the latter is ["v","V"], so v must resolve first. V enters
+	// the capture with a linewise selection already started.
+	case m.Keymap.VisualChar.Matches(key):
+		return m.enterPreviewVimMode(false)
+	case m.Keymap.ToggleVisualLine.Matches(key):
+		return m.enterPreviewVimMode(true)
+	// h and left back out of the preview here, restoring the Miller
+	// column muscle memory; inside the vim capture they are motions.
+	case m.Keymap.PreviewBack.Matches(key), m.Keymap.MotionLeft.Matches(key):
+		m.transitionTo(blobsPane, false)
+		return m, nil
+	case m.Keymap.PreviewNextFocus.Matches(key):
+		m.nextFocus()
+		return m, nil
+	case m.Keymap.PreviewPreviousFocus.Matches(key):
+		m.previousFocus()
+		return m, nil
+	case m.Keymap.PreviewDown.Matches(key):
+		return m.browseScrollPreview(m.vimr.TakeCount())
+	case m.Keymap.PreviewUp.Matches(key):
+		return m.browseScrollPreview(-m.vimr.TakeCount())
+	case m.Keymap.HalfPageDown.Matches(key):
+		step := max(1, m.preview.viewport.Height()/2)
+		return m.browseScrollPreview(step * m.vimr.TakeCount())
+	case m.Keymap.HalfPageUp.Matches(key):
+		step := max(1, m.preview.viewport.Height()/2)
+		return m.browseScrollPreview(-step * m.vimr.TakeCount())
+	case m.Keymap.FullPageDown.Matches(key):
+		return m.browseScrollPreview(max(1, m.preview.viewport.Height()) * m.vimr.TakeCount())
+	case m.Keymap.FullPageUp.Matches(key):
+		return m.browseScrollPreview(-max(1, m.preview.viewport.Height()) * m.vimr.TakeCount())
+	case m.Keymap.ScrollLineDown.Matches(key):
+		return m.browseScrollPreview(m.vimr.TakeCount())
+	case m.Keymap.ScrollLineUp.Matches(key):
+		return m.browseScrollPreview(-m.vimr.TakeCount())
+	case m.Keymap.JumpBottom.Matches(key):
+		return m.jumpPreviewToBottom()
+	default:
+		return m, nil
+	}
+}
+
+// handlePreviewVimKey is the capture: only vim keys act, everything
+// else is swallowed until esc walks back to browse mode. The app
+// forwards every key here while the capture is on (IsTextInputActive),
+// so tab switching and the other chrome shortcuts are blocked too.
+func (m Model) handlePreviewVimKey(key string) (Model, tea.Cmd) {
 	// A pending f/F/t/T owns the next key outright — it is a rune
 	// argument, so it must be consumed before the chords and before
 	// digit handling (f3 finds the character 3, fg finds g).
@@ -179,9 +269,6 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// The gg chord is resolved before the switch: its keys (g, home)
-	// are not bound to anything else in preview focus, and a non-chord
-	// key falls through with the pending state cleared.
 	switch m.vimr.GG(m.Keymap.JumpTopPrefix, key, true) {
 	case vim.ChordFired:
 		return m.jumpPreviewToTop()
@@ -190,7 +277,6 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Count prefix, after the chord so an armed z can swallow first.
 	if m.vimr.Digit(key) {
 		return m, nil
 	}
@@ -209,8 +295,6 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 
 	switch {
-	case ui.ShouldQuit(key, m.Keymap.Quit, false):
-		return m, tea.Quit
 	case m.Keymap.SearchForward.Matches(key):
 		m.preview.search.bar.Open(ui.SearchForward)
 		return m, nil
@@ -221,27 +305,23 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.repeatPreviewSearch(m.preview.search.bar.Direction)
 	case m.Keymap.SearchPrev.Matches(key):
 		return m.repeatPreviewSearch(m.preview.search.bar.Direction.Opposite())
-	// VisualChar is checked before ToggleVisualLine: the stock binding
-	// for the latter is ["v","V"], so v must resolve charwise first.
+	// VisualChar before ToggleVisualLine: the stock binding for the
+	// latter is ["v","V"].
 	case m.Keymap.VisualChar.Matches(key):
 		return m.togglePreviewVisual(vim.SpanChar)
 	case m.Keymap.ToggleVisualLine.Matches(key):
 		return m.togglePreviewVisual(vim.SpanLine)
 	case m.Keymap.PreviewYank.Matches(key):
 		return m.yankPreviewSelection()
-	// Esc in visual drops back to normal; only a second esc leaves the
-	// preview, so this case must precede the plain PreviewBack one.
+	// The esc ladder: visual → vim normal → browse. Leaving the preview
+	// itself needs one more esc from browse mode.
 	case m.preview.span.Active && m.Keymap.PreviewBack.Matches(key):
 		m.preview.span.Stop()
 		return m, nil
 	case m.Keymap.PreviewBack.Matches(key):
-		m.transitionTo(blobsPane, false)
-		return m, nil
-	case m.Keymap.PreviewNextFocus.Matches(key):
-		m.nextFocus()
-		return m, nil
-	case m.Keymap.PreviewPreviousFocus.Matches(key):
-		m.previousFocus()
+		m.preview.vimMode = false
+		m.preview.span.Stop()
+		m.vimr.Clear()
 		return m, nil
 	case m.Keymap.HalfPageDown.Matches(key):
 		step := max(1, m.preview.viewport.Height()/2)
@@ -254,8 +334,7 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.FullPageUp.Matches(key):
 		return m.applyPreviewCursor(vim.MoveUp(m.previewBuf(), m.preview.vcur, max(1, m.preview.viewport.Height())*m.vimr.TakeCount()))
 	// ctrl+e / ctrl+y scroll the view a line; the cursor is only pushed
-	// when the view would leave it behind — vim's behavior, via the same
-	// ScrollWindow arithmetic the lists use.
+	// when the view would leave it behind.
 	case m.Keymap.ScrollLineDown.Matches(key):
 		return m.scrollPreviewView(m.vimr.TakeCount())
 	case m.Keymap.ScrollLineUp.Matches(key):
@@ -263,8 +342,40 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case m.Keymap.JumpBottom.Matches(key):
 		return m.jumpPreviewToBottom()
 	default:
+		// Swallowed: the capture admits vim keys only.
 		return m, nil
 	}
+}
+
+// enterPreviewVimMode starts the capture with the cursor on the top
+// visible line. withLineSelection also starts a linewise span, so V
+// from browse mode lands selecting.
+func (m Model) enterPreviewVimMode(withLineSelection bool) (Model, tea.Cmd) {
+	m.preview.vimMode = true
+	m.preview.vcur = vim.Cursor{Line: m.preview.viewport.YOffset()}
+	m.preview.cursor = m.previewByteFromVim()
+	if withLineSelection {
+		m.preview.span.Start(m.preview.cursor, vim.SpanLine)
+	}
+	return m, nil
+}
+
+// browseScrollPreview scrolls the view without a cursor, keeping the
+// byte cursor on the top visible line so search and vim-mode entry
+// start where the user is looking, and sliding the window near edges.
+func (m Model) browseScrollPreview(deltaLines int) (Model, tea.Cmd) {
+	if !m.preview.open || deltaLines == 0 {
+		return m, nil
+	}
+	vp := &m.preview.viewport
+	if deltaLines > 0 {
+		vp.ScrollDown(deltaLines)
+	} else {
+		vp.ScrollUp(-deltaLines)
+	}
+	m.preview.vcur = vim.Cursor{Line: vp.YOffset()}
+	m.preview.cursor = m.previewByteFromVim()
+	return m.ensurePreviewWindowAtCursor()
 }
 
 func (m Model) jumpPreviewToTop() (Model, tea.Cmd) {
