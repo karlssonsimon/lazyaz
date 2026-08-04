@@ -300,6 +300,22 @@ func (m Model) handlePreviewVimKey(key string) (Model, tea.Cmd) {
 		return m.applyBufferAction(act)
 	}
 
+	// The z chord repositions the view around the cursor, same resolver
+	// state the lists use. It sits after the grammar so an armed
+	// operator still owns z (and cancels on it), and before gg so an
+	// armed z swallows its continuation.
+	switch res, op := m.vimr.Scroll(m.Keymap, key); res {
+	case vim.ChordArmed:
+		m.vimr.ClearCount()
+		m.Notify(appshell.LevelInfo, vim.HintScroll)
+		return m, nil
+	case vim.ChordSwallowed:
+		return m, nil
+	case vim.ChordFired:
+		m.applyPreviewScrollOp(op)
+		return m, nil
+	}
+
 	switch m.vimr.GG(m.Keymap.JumpTopPrefix, key, true) {
 	case vim.ChordFired:
 		return m.jumpPreviewToTop()

@@ -836,3 +836,43 @@ func TestPreviewTagObject(t *testing.T) {
 		t.Fatalf("vat selects %q, want <test>asdf</test>", got)
 	}
 }
+
+// zz, zt and zb reposition the view around the cursor in the capture,
+// with the same scrolloff semantics as the lists.
+func TestPreviewScrollOps(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 200; i++ {
+		fmt.Fprintf(&sb, "line %03d\n", i)
+	}
+	m := searchModel(t, sb.String())
+	m = typeKeys(m, "v", "5", "0", "j") // capture, cursor on line 50
+	if got := m.preview.vcur.Line; got != 50 {
+		t.Fatalf("setup: cursor on line %d, want 50", got)
+	}
+	h := m.preview.viewport.Height()
+
+	m = typeKeys(m, "z", "z")
+	if got, want := m.preview.viewport.YOffset(), 50-(h-1)/2; got != want {
+		t.Fatalf("zz: YOffset = %d, want %d", got, want)
+	}
+	if got := m.preview.vcur.Line; got != 50 {
+		t.Fatal("zz moved the cursor")
+	}
+
+	m = typeKeys(m, "z", "t")
+	if got, want := m.preview.viewport.YOffset(), 50-m.scrolloff; got != want {
+		t.Fatalf("zt: YOffset = %d, want %d (scrolloff applies)", got, want)
+	}
+
+	m = typeKeys(m, "z", "b")
+	if got, want := m.preview.viewport.YOffset(), 50-h+1+m.scrolloff; got != want {
+		t.Fatalf("zb: YOffset = %d, want %d", got, want)
+	}
+
+	// A mistyped continuation is swallowed.
+	before := m.preview.viewport.YOffset()
+	m = typeKeys(m, "z", "q")
+	if m.preview.viewport.YOffset() != before {
+		t.Fatal("zq moved the view")
+	}
+}

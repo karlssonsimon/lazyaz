@@ -261,3 +261,26 @@ func (m *Model) applyPendingSnap() {
 	m.preview.vcur.Want = col
 	m.preview.cursor = m.previewByteFromVim()
 }
+
+// applyPreviewScrollOp is zz/zt/zb in the capture: the cursor line
+// stays put and the view moves around it, through the same ScrollWindow
+// arithmetic the lists use — scrolloff included.
+func (m *Model) applyPreviewScrollOp(op vim.ScrollOp) {
+	vp := &m.preview.viewport
+	sw := ui.ScrollWindow{
+		Cursor:    m.preview.vcur.Line,
+		Offset:    vp.YOffset(),
+		Height:    vp.Height(),
+		Count:     len(m.preview.lineStarts),
+		Scrolloff: m.scrolloff,
+	}
+	switch op {
+	case vim.ScrollOpCenter:
+		sw = sw.CenterOnCursor()
+	case vim.ScrollOpTop:
+		sw = sw.CursorToTop()
+	case vim.ScrollOpBottom:
+		sw = sw.CursorToBottom()
+	}
+	vp.SetYOffset(sw.Offset)
+}
