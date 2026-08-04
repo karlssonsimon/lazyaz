@@ -37,6 +37,13 @@ type List struct {
 	// count; the key below only has to cover the gap between frames.
 	countCache    int
 	countCacheKey listCountKey
+
+	// visibleVersion counts mutations of the visible item set. Bumped by
+	// the shadowed mutators below, so every path that can reshape what
+	// the user sees bumps it automatically — vim.Visual caches its
+	// anchor-index resolution against this number instead of comparing
+	// filter signatures by hand.
+	visibleVersion int
 }
 
 // listCountKey captures the inputs that change how many items a filter
@@ -56,6 +63,32 @@ func NewList(items []list.Item, delegate list.ItemDelegate, width, height int) L
 		Model:    list.New(items, delegate, width, height),
 		delegate: delegate,
 	}
+}
+
+// VisibleVersion identifies the current visible item set. Any mutation
+// that can change which items are visible — new items, filter edits —
+// yields a new version. Cache resolved indices against it.
+func (l *List) VisibleVersion() int {
+	return l.visibleVersion
+}
+
+// SetItems shadows list.Model.SetItems to version the visible set.
+func (l *List) SetItems(items []list.Item) tea.Cmd {
+	l.visibleVersion++
+	return l.Model.SetItems(items)
+}
+
+// SetFilterText shadows list.Model.SetFilterText to version the
+// visible set.
+func (l *List) SetFilterText(s string) {
+	l.visibleVersion++
+	l.Model.SetFilterText(s)
+}
+
+// ResetFilter shadows list.Model.ResetFilter to version the visible set.
+func (l *List) ResetFilter() {
+	l.visibleVersion++
+	l.Model.ResetFilter()
 }
 
 // SetDelegate shadows list.Model.SetDelegate to keep the delegate
