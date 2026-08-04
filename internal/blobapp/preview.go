@@ -271,10 +271,30 @@ func (m Model) handlePreviewBrowseKey(key string) (Model, tea.Cmd) {
 // forwards every key here while the capture is on (IsTextInputActive),
 // so tab switching and the other chrome shortcuts are blocked too.
 func (m Model) handlePreviewVimKey(key string) (Model, tea.Cmd) {
+	// yG and ygg are the two operator motions the engine cannot see:
+	// they reach beyond the loaded window, so the preview resolves them
+	// in byte space — the streamed yank and its budget already know how
+	// to pay for the rest. Guarded so f-g still finds g and yi-g still
+	// cancels as an unknown object.
+	if m.vimr.OperatorPending() && !m.vimr.FindPending() && !m.vimr.ObjectPending() {
+		switch m.vimr.GG(m.Keymap.JumpTopPrefix, key, true) {
+		case vim.ChordFired:
+			m.vimr.ConsumeOperator()
+			m.vimr.ClearCount()
+			return m.yankToTop()
+		case vim.ChordArmed:
+			return m, nil
+		}
+		if m.Keymap.JumpBottom.Matches(key) {
+			m.vimr.ConsumeOperator()
+			m.vimr.ClearCount()
+			return m.yankToEnd()
+		}
+	}
+
 	// Armed grammar state — a find target, the y operator, an i/a
 	// object — owns the next key outright: it must be consumed before
-	// the chords and before digit handling (f3 finds the character 3,
-	// yg must not arm the gg chord).
+	// the chords and before digit handling (f3 finds the character 3).
 	if m.vimr.BufferPending() {
 		act := m.vimr.BufferMotion(previewMotionKeys(m.Keymap), key, m.previewBuf(), m.preview.vcur, m.preview.span.Active)
 		return m.applyBufferAction(act)

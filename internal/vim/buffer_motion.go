@@ -137,6 +137,22 @@ func (r *Resolver) FindPending() bool {
 	return r.findPending
 }
 
+// ObjectPending reports an armed i/a awaiting its object key.
+func (r *Resolver) ObjectPending() bool {
+	return r.objPending != 0
+}
+
+// ConsumeOperator reports and clears an armed operator. Consumers use
+// it for operator motions the engine cannot express — yG and ygg reach
+// beyond the loaded window, so the preview resolves them in byte space.
+func (r *Resolver) ConsumeOperator() bool {
+	if !r.opPending {
+		return false
+	}
+	r.opPending = false
+	return true
+}
+
 // motionTarget resolves a plain motion key to its landing cursor and
 // kind, consuming the pending count. This is the one table both the
 // move path and the operator path share — a new motion added here

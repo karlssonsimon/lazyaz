@@ -208,6 +208,40 @@ func (m Model) selectRegion(reg vim.Region) (Model, tea.Cmd) {
 	return m.applyPreviewCursor(last)
 }
 
+// yankToEnd is yG: linewise from the current line's start to the end
+// of the blob — not the window. The budget decides whether that is
+// affordable.
+func (m Model) yankToEnd() (Model, tea.Cmd) {
+	lo := m.previewByteAt(m.preview.vcur.Line, 0)
+	hi := m.preview.blobSize
+	if hi <= lo {
+		return m, nil
+	}
+	// vim leaves the cursor on the region's first line; it is already
+	// there.
+	return m.yankByteRange(lo, hi)
+}
+
+// yankToTop is ygg: linewise from the start of the blob through the
+// current line, then the cursor jumps to the top as in vim.
+func (m Model) yankToTop() (Model, tea.Cmd) {
+	var hi int64
+	if m.preview.vcur.Line+1 < len(m.preview.lineStarts) {
+		hi = m.preview.windowStart + int64(m.preview.lineStarts[m.preview.vcur.Line+1])
+	} else {
+		hi = m.preview.windowStart + int64(len(m.preview.windowData))
+	}
+	if hi > m.preview.blobSize && m.preview.blobSize > 0 {
+		hi = m.preview.blobSize
+	}
+	if hi <= 0 {
+		return m, nil
+	}
+	m2, yankCmd := m.yankByteRange(0, hi)
+	m3, moveCmd := m2.jumpPreviewToTop()
+	return m3, tea.Batch(yankCmd, moveCmd)
+}
+
 // yankDoneMsg carries a streamed yank back to Update.
 type yankDoneMsg struct {
 	text string

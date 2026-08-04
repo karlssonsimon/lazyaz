@@ -755,3 +755,51 @@ func TestPreviewJumpsLandOnFirstNonBlank(t *testing.T) {
 		t.Fatalf("motion after the jump got snapped: col %d", c.Col)
 	}
 }
+
+// yG yanks linewise to the end of the blob and ygg to the top, with
+// the cursor jumping to the top after ygg as in vim.
+func TestPreviewOperatorJumps(t *testing.T) {
+	m := searchModel(t, "first line\nsecond line\nthird line\n")
+	m = typeKeys(m, "v", "j") // capture, cursor on line 1
+
+	t.Run("yG spans cursor line to blob end", func(t *testing.T) {
+		mm := typeKeys(m, "y", "G")
+		if mm.vimr.BufferPending() {
+			t.Fatal("grammar state leaked after yG")
+		}
+		if c := mm.preview.vcur; c.Line != 1 {
+			t.Fatalf("cursor moved to line %d after yG, want 1", c.Line)
+		}
+		// The range is [line 1 start, blobSize): "second line\nthird line\n".
+		lo := mm.previewByteAt(1, 0)
+		if lo != 11 || mm.preview.blobSize != 34 {
+			t.Fatalf("range basis lo=%d size=%d", lo, mm.preview.blobSize)
+		}
+	})
+
+	t.Run("ygg spans top through cursor line and jumps up", func(t *testing.T) {
+		mm := typeKeys(m, "y", "g", "g")
+		if mm.vimr.BufferPending() {
+			t.Fatal("grammar state leaked after ygg")
+		}
+		if c := mm.preview.vcur; c.Line != 0 || c.Col != 0 {
+			t.Fatalf("cursor at (%d,%d) after ygg, want (0,0)", c.Line, c.Col)
+		}
+	})
+
+	t.Run("y g then a non-g falls back to the grammar", func(t *testing.T) {
+		mm := typeKeys(m, "y", "g", "j")
+		// gg broke; j completes as a linewise yj through the router.
+		if mm.vimr.BufferPending() {
+			t.Fatal("grammar state leaked after y-g-j")
+		}
+	})
+
+	t.Run("f-g still finds the letter g", func(t *testing.T) {
+		mm := typeKeys(m, "j") // onto "third line"
+		mm = typeKeys(mm, "0", "f", "n")
+		if c := mm.preview.vcur; c.Col != 8 {
+			t.Fatalf("fn landed at col %d, want 8 — the operator intercept swallowed the find target", c.Col)
+		}
+	})
+}
