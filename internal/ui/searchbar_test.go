@@ -68,8 +68,9 @@ func TestSearchBarAcceptFailureKeepsPreviousPattern(t *testing.T) {
 	}
 }
 
-// Esc abandons the prompt but leaves the last executed search repeatable.
-func TestSearchBarCancelKeepsExecutedPattern(t *testing.T) {
+// Esc removes the search entirely — the typed query and any previously
+// executed pattern, so highlights and the footer badge disappear.
+func TestSearchBarCancelClearsSearch(t *testing.T) {
 	km := keymap.Default()
 	var s SearchBar
 
@@ -87,8 +88,8 @@ func TestSearchBarCancelKeepsExecutedPattern(t *testing.T) {
 	if s.InputOpen {
 		t.Error("input should be closed after esc")
 	}
-	if s.Pattern.Query != "keep" {
-		t.Errorf("pattern query = %q, want %q", s.Pattern.Query, "keep")
+	if s.Active() {
+		t.Errorf("search still active after esc; pattern = %q", s.Pattern.Query)
 	}
 }
 

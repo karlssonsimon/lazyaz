@@ -96,7 +96,10 @@ func (s *SearchBar) HandleKey(key string, km keymap.Keymap) (consumed, submitted
 	}
 	switch {
 	case km.Cancel.Matches(key):
-		s.Close()
+		// Esc removes the search outright — query, executed pattern and
+		// the highlights it drives. Keeping the old pattern alive here
+		// read as the esc being ignored.
+		s.Clear()
 		return true, false
 	case km.OpenFocused.Matches(key) || key == "enter":
 		return true, true

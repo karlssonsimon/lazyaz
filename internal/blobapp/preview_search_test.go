@@ -540,3 +540,30 @@ func TestPreviewEscLadder(t *testing.T) {
 		t.Fatal("third esc did not leave the preview")
 	}
 }
+
+// Esc in the search prompt removes the whole search: the executed
+// pattern, its highlights and the footer badge — not just the typed
+// query.
+func TestPreviewSearchEscRemovesHighlights(t *testing.T) {
+	m := searchModel(t, "alpha one\nalpha two\n")
+
+	m.preview.search.bar.Open(ui.SearchForward)
+	m.preview.search.bar.Input.SetValue("alpha")
+	if err := m.preview.search.bar.Accept(); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	if len(m.previewMatchRanges()) == 0 {
+		t.Fatal("setup: no highlights to clear")
+	}
+
+	m = typeKeys(m, "/", "esc")
+	if m.preview.search.bar.Active() {
+		t.Fatal("search still active after esc in the prompt")
+	}
+	if got := m.previewMatchRanges(); len(got) != 0 {
+		t.Fatalf("highlights survived the esc: %v", got)
+	}
+	if m.previewHasFooter() {
+		t.Fatal("search footer badge survived the esc")
+	}
+}
