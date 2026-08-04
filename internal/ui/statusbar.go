@@ -59,14 +59,16 @@ func RenderStatusLine(cfg StatusLineConfig, styles Styles, width int) string {
 		parts = append(parts, chrome.StatusKey.Render(action.Key)+chrome.Help.Render(label))
 	}
 
+	// The pending count trails the hints as the last left-hand segment:
+	// appended there it can never shift them, and it stays next to the
+	// content instead of floating at the far edge of a wide terminal.
+	if cfg.Count > 0 {
+		parts = append(parts, chrome.StatusMode.Render(strconv.Itoa(cfg.Count)))
+	}
+
 	left := strings.Join(parts, chrome.Help.Render("  "))
 	right := ""
 	switch {
-	// A pending count owns the right edge while it lasts — vim's
-	// bottom-right count display. Rendering it there keeps the left-hand
-	// hints from shifting as digits are typed.
-	case cfg.Count > 0:
-		right = chrome.StatusMode.Render(strconv.Itoa(cfg.Count))
 	case cfg.Message != "" && cfg.IsError:
 		right = chrome.Error.Render(cfg.Message)
 	case cfg.Message != "":

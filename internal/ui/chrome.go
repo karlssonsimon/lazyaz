@@ -42,9 +42,10 @@ type StatusAction struct {
 
 type StatusLineConfig struct {
 	Mode string
-	// Count is a pending vim count prefix, shown highlighted at the
-	// right edge — vim's bottom-right count display — so the left-hand
-	// hints never shift while digits are typed. 0 hides it.
+	// Count is a pending vim count prefix, shown highlighted after the
+	// action hints. Appended last it never shifts them, and it stays
+	// beside the content rather than at the far edge of a wide
+	// terminal. 0 hides it.
 	Count   int
 	Actions []StatusAction
 	Message string // transient info or error; renders on the right when set

@@ -51,29 +51,37 @@ func TestRenderStatusLineIsOneLineAndOmitsEmptyActions(t *testing.T) {
 	}
 }
 
-// The pending count renders highlighted at the right edge. The left
-// side must not move as digits are typed — that jitter is why it does
-// not sit beside the mode chip.
-func TestStatusLineCountAtRightEdge(t *testing.T) {
+// The pending count trails the hints. Appended last it cannot shift
+// them, and it sits beside the content instead of floating at the far
+// edge of a wide terminal.
+func TestStatusLineCountTrailsHints(t *testing.T) {
 	styles := NewStyles(FallbackScheme())
 	cfg := StatusLineConfig{
 		Mode:    "NORMAL",
-		Actions: []StatusAction{{Key: "j/k", Label: "move"}},
+		Actions: []StatusAction{{Key: "j/k", Label: "move"}, {Key: "?", Label: "help"}},
 	}
 
-	without := ansi.Strip(RenderStatusLine(cfg, styles, 80))
+	without := ansi.Strip(RenderStatusLine(cfg, styles, 200))
 	cfg.Count = 12
-	with := ansi.Strip(RenderStatusLine(cfg, styles, 80))
+	with := ansi.Strip(RenderStatusLine(cfg, styles, 200))
 
-	if !strings.HasSuffix(strings.TrimRight(with, " "), "12") {
-		t.Fatalf("count is not at the right edge: %q", with)
+	countAt := strings.Index(with, "12")
+	if countAt < 0 {
+		t.Fatalf("count missing: %q", with)
+	}
+	if lastHint := strings.Index(with, "help"); countAt < lastHint {
+		t.Errorf("count at %d sits before the last hint at %d", countAt, lastHint)
+	}
+	// Right after the content, not at the terminal edge.
+	if countAt > len(with)-1-40 {
+		t.Errorf("count at column %d of %d — floating at the far edge again", countAt, len(with))
 	}
 	if strings.Contains(without, "12") {
 		t.Fatal("count rendered with none pending")
 	}
 
-	// The left content must sit at identical positions in both renders.
-	for _, seg := range []string{"NORMAL", "j/k", "move"} {
+	// The content before it must sit at identical positions.
+	for _, seg := range []string{"NORMAL", "j/k", "move", "help"} {
 		if strings.Index(with, seg) != strings.Index(without, seg) {
 			t.Errorf("%q shifted from %d to %d when the count appeared",
 				seg, strings.Index(without, seg), strings.Index(with, seg))
