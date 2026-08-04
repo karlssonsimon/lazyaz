@@ -63,7 +63,7 @@ func (m Model) inputMode() InputMode {
 		return ModePrefixSearch
 	case m.focusedListSettingFilter():
 		return ModeListFilter
-	case m.visualLineMode && m.focus == blobsPane:
+	case m.visual.Active() && m.focus == blobsPane:
 		return ModeVisualLine
 	default:
 		return ModeNormal
@@ -115,21 +115,15 @@ type Model struct {
 	// vimr resolves multi-key vim chords (gg, z...) for this model.
 	vimr vim.Resolver
 
-	accounts       []blob.Account
-	containers     []blob.ContainerInfo
-	blobs          []blob.BlobEntry
-	markedBlobs    map[string]struct{}
-	visualLineMode bool
-	visualAnchor   string
-	// visualAnchorIdx caches where visualAnchor sits in the visible
-	// list. Resolving the name is a full scan — unacceptable per
-	// keypress at 200k blobs — so the index is reused while the list
-	// filter signature below still matches; item rebuilds invalidate it
-	// by clearing visualAnchorResolved.
-	visualAnchorIdx         int
-	visualAnchorResolved    bool
-	visualAnchorFilterState list.FilterState
-	visualAnchorFilterValue string
+	accounts   []blob.Account
+	containers []blob.ContainerInfo
+	blobs      []blob.BlobEntry
+	// marked and visual are the vim selection state over the blobs list.
+	// The visual anchor's index resolution is cached against the list's
+	// visible version — resolving the name is a full scan, unacceptable
+	// per keypress at 200k blobs.
+	marked vim.MarkSet
+	visual vim.Visual
 	// visualRangeDisplay is the [lo, hi] range the mark delegate reads
 	// at render time (hi < lo = no range). Shared by pointer so cursor
 	// moves update the highlight without re-setting the delegate.
@@ -387,7 +381,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 		containersList:     containers,
 		blobsList:          blobs,
 		parentBlobsList:    parentBlobs,
-		markedBlobs:        make(map[string]struct{}),
+		marked:             vim.NewMarkSet(),
 		visualRangeDisplay: &[2]int{0, -1},
 		preview:            newPreviewState(),
 		cache:              newCache(db),

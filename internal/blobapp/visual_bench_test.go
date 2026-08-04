@@ -29,8 +29,7 @@ func BenchmarkVisualCursorMove200kFiltered(b *testing.B) {
 	m.blobsList.SetFilterText("blob")
 	m.blobsList.Select(0)
 
-	m.visualLineMode = true
-	m.visualAnchor = m.blobs[0].Name
+	m.visual.Start(m.blobs[0].Name)
 
 	down := tea.KeyPressMsg{Code: 'j', Text: "j"}
 	b.ReportAllocs()

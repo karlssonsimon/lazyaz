@@ -127,13 +127,13 @@ func (m Model) buildActions() []action {
 		actions = append(actions, action{actionToggleVisualLine, "Toggle visual line selection", km.ToggleVisualLine.Short()})
 
 		// Marked-blob actions.
-		if len(m.markedBlobs) > 0 || m.visualLineMode {
+		if m.marked.Len() > 0 || m.visual.Active() {
 			actions = append(actions, action{actionDownloadSelection, "Download selection", km.DownloadSelection.Short()})
 		}
-		if len(m.markedBlobs) > 0 {
+		if m.marked.Len() > 0 {
 			actions = append(actions, action{
 				actionDownloadMarked,
-				fmt.Sprintf("Download marked (%d)", len(m.markedBlobs)),
+				fmt.Sprintf("Download marked (%d)", m.marked.Len()),
 				"",
 			})
 			actions = append(actions, action{actionClearMarks, "Clear all marks", ""})
@@ -151,8 +151,8 @@ func (m Model) buildActions() []action {
 		}
 
 		// Mutation on the marked selection.
-		if len(m.markedBlobs) > 0 {
-			actions = append(actions, action{actionDeleteMarked, fmt.Sprintf("Delete marked (%d)...", len(m.markedBlobs)), ""})
+		if m.marked.Len() > 0 {
+			actions = append(actions, action{actionDeleteMarked, fmt.Sprintf("Delete marked (%d)...", m.marked.Len()), ""})
 		}
 
 		// Folder operations:
@@ -222,10 +222,8 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m.startDownloadMarkedBlobs()
 
 	case actionClearMarks:
-		count := len(m.markedBlobs)
-		for name := range m.markedBlobs {
-			delete(m.markedBlobs, name)
-		}
+		count := m.marked.Len()
+		m.marked.Clear()
 		m.refreshItems()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
 		return m, nil
@@ -312,8 +310,8 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m, nil
 
 	case actionDeleteMarked:
-		names := make([]string, 0, len(m.markedBlobs))
-		for n := range m.markedBlobs {
+		names := make([]string, 0, m.marked.Len())
+		for n := range m.marked.Items() {
 			names = append(names, n)
 		}
 		if len(names) == 0 {

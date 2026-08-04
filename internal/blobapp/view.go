@@ -337,7 +337,7 @@ func (m Model) columnTitleMeta(pane int) string {
 		if shown != total {
 			parts = append(parts, fmt.Sprintf("%s total", ui.FormatThousands(int64(total))))
 		}
-		if marked := len(m.markedBlobs); marked > 0 {
+		if marked := m.marked.Len(); marked > 0 {
 			parts = append(parts, fmt.Sprintf("%d selected", marked))
 		}
 		return strings.Join(parts, " · ")

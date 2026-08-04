@@ -29,9 +29,8 @@ func (m *Model) clearFilter() {
 // Called from the action menu "Server prefix search".
 func (m Model) openPrefixSearchInput() (Model, tea.Cmd) {
 	m.filter.inputOpen = true
-	if m.visualLineMode {
-		m.visualLineMode = false
-		m.visualAnchor = ""
+	if m.visual.Active() {
+		m.visual.Stop()
 		m.refreshItems()
 	}
 	return m, m.Cursor.Focus()

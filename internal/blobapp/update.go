@@ -528,7 +528,7 @@ func (m Model) handleListFilterKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 		return m, tea.Quit
 	case m.Keymap.OpenFocused.Matches(key):
 		cmd := m.commitFocusedFilter()
-		if m.focus == blobsPane && m.visualLineMode {
+		if m.focus == blobsPane && m.visual.Active() {
 			m.refreshBlobSelectionDisplay()
 		}
 		return m, cmd
@@ -536,7 +536,7 @@ func (m Model) handleListFilterKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 	m2, cmd := m.updateFocusedList(msg)
 	// Typing a filter while a visual range is active shifts visible
 	// indices under the highlight — recompute it per keystroke.
-	if m2.focus == blobsPane && m2.visualLineMode {
+	if m2.focus == blobsPane && m2.visual.Active() {
 		m2.refreshBlobSelectionDisplay()
 	}
 	return m2, cmd
@@ -560,10 +560,9 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 		return m, nil
 	case m.Keymap.ExitVisualLine.Matches(key):
 		m.commitVisualSelection()
-		m.visualLineMode = false
-		m.visualAnchor = ""
+		m.visual.Stop()
 		m.refreshBlobSelectionDisplay()
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedBlobs)))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", m.marked.Len()))
 		return m, nil
 	case m.Keymap.DownloadSelection.Matches(key):
 		return m.startDownloadMarkedBlobs()
@@ -577,7 +576,7 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 	// too (the old check matched only the stock movement keys).
 	before := m.blobsList.Index()
 	m2, cmd := m.updateFocusedList(msg)
-	if m2.focus == blobsPane && m2.visualLineMode && m2.blobsList.Index() != before {
+	if m2.focus == blobsPane && m2.visual.Active() && m2.blobsList.Index() != before {
 		m2.refreshBlobSelectionDisplay()
 		m2.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", m2.visualRangeCount()))
 	}
@@ -652,11 +651,9 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 	case m.Keymap.ExitVisualLine.Matches(key):
-		if m.focus == blobsPane && len(m.markedBlobs) > 0 {
-			count := len(m.markedBlobs)
-			for name := range m.markedBlobs {
-				delete(m.markedBlobs, name)
-			}
+		if m.focus == blobsPane && m.marked.Len() > 0 {
+			count := m.marked.Len()
+			m.marked.Clear()
 			m.refreshBlobSelectionDisplay()
 			m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
 			return m, nil

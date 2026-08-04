@@ -22,8 +22,8 @@ func TestCopyTargetsFullScope(t *testing.T) {
 	m.prefix = longPrefix
 	m.blobs = []blob.BlobEntry{{Name: longPrefix + "app.json"}}
 	m.refreshItems()
-	m.markedBlobs["a.txt"] = struct{}{}
-	m.markedBlobs["b.txt"] = struct{}{}
+	m.marked.Add("a.txt")
+	m.marked.Add("b.txt")
 
 	got := map[string]string{}
 	for _, target := range m.copyTargets() {

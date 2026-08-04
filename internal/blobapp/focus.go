@@ -55,9 +55,8 @@ func (m *Model) restoreCurrentPane() {
 func (m *Model) exitPane(clearFilter bool) {
 	m.snapshotCurrentPane()
 	m.blurAllFilters()
-	if m.focus == blobsPane && m.visualLineMode {
-		m.visualLineMode = false
-		m.visualAnchor = ""
+	if m.focus == blobsPane && m.visual.Active() {
+		m.visual.Stop()
 		m.refreshItems()
 	}
 	if clearFilter && m.focus == blobsPane {
@@ -132,7 +131,7 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 		}
 	}
 
-	if m.focus == blobsPane && m.visualLineMode {
+	if m.focus == blobsPane && m.visual.Active() {
 		m.refreshBlobSelectionDisplay()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", m.visualRangeCount()))
 	}

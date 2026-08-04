@@ -386,8 +386,7 @@ func TestVisualSelectionRespectsActiveFilter(t *testing.T) {
 	}
 
 	m.blobsList.Select(0) // alpha-1
-	m.visualLineMode = true
-	m.visualAnchor = "alpha-1"
+	m.visual.Start("alpha-1")
 	m.blobsList.Select(2) // alpha-3
 
 	if got := m.visualRangeCount(); got != 3 {
@@ -396,12 +395,12 @@ func TestVisualSelectionRespectsActiveFilter(t *testing.T) {
 
 	m.commitVisualSelection()
 	want := []string{"alpha-1", "alpha-2", "alpha-3"}
-	if len(m.markedBlobs) != len(want) {
-		t.Fatalf("markedBlobs = %v, want %v", m.markedBlobs, want)
+	if m.marked.Len() != len(want) {
+		t.Fatalf("marked = %v, want %v", m.marked.Sorted(), want)
 	}
 	for _, name := range want {
-		if _, ok := m.markedBlobs[name]; !ok {
-			t.Fatalf("markedBlobs missing %q, got %v", name, m.markedBlobs)
+		if !m.marked.Contains(name) {
+			t.Fatalf("marked missing %q, got %v", name, m.marked.Sorted())
 		}
 	}
 }
@@ -420,8 +419,7 @@ func TestVisualAnchorSurvivesItemRebuild(t *testing.T) {
 	m.refreshItems()
 
 	m.blobsList.Select(1) // c
-	m.visualLineMode = true
-	m.visualAnchor = "c"
+	m.visual.Start("c")
 	m.blobsList.Select(2) // d
 
 	if lo, hi, ok := m.visualRange(); !ok || lo != 1 || hi != 2 {
@@ -637,5 +635,44 @@ func TestStrictAncestorOf(t *testing.T) {
 		if got := tc.s.StrictAncestorOf(deep); got != tc.want {
 			t.Errorf("%s: StrictAncestorOf = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+// A streaming refresh can reorder items under an active visual
+// selection. The anchor is identified by key, so the selection must
+// still cover the same items afterwards — this is the guarantee the
+// old per-app anchor bookkeeping provided and vim.Visual must keep.
+func TestVisualSelectionSurvivesItemReorder(t *testing.T) {
+	m := NewModel(nil, testConfig, nil)
+	m.SubOverlay.Close()
+	m.Width, m.Height = 120, 40
+	m.hasAccount = true
+	m.hasContainer = true
+	m.focus = blobsPane
+
+	m.blobs = []blob.BlobEntry{{Name: "a"}, {Name: "b"}, {Name: "c"}, {Name: "d"}}
+	m.refreshItems()
+
+	// Anchor on "b" (index 1), cursor to "d" (index 3).
+	m.blobsList.Select(1)
+	m.visual.Start("b")
+	m.blobsList.Select(3)
+
+	if lo, hi, ok := m.visualRange(); !ok || lo != 1 || hi != 3 {
+		t.Fatalf("setup: range = [%d,%d] ok=%v, want [1,3] true", lo, hi, ok)
+	}
+
+	// Refresh with the order reversed: d c b a. The cursor sticks to
+	// "d" by key (SetItemsPreserveKey) and the anchor must stick to
+	// "b" — the selection covers d..b, now indices 0..2.
+	m.blobs = []blob.BlobEntry{{Name: "d"}, {Name: "c"}, {Name: "b"}, {Name: "a"}}
+	m.refreshItems()
+
+	if got := m.blobsList.Index(); got != 0 {
+		t.Fatalf("cursor at %d after reorder, want 0 (still on d)", got)
+	}
+	lo, hi, ok := m.visualRange()
+	if !ok || lo != 0 || hi != 2 {
+		t.Fatalf("range after reorder = [%d,%d] ok=%v, want [0,2] true (d..b)", lo, hi, ok)
 	}
 }

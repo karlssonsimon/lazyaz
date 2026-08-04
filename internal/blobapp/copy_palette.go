@@ -41,10 +41,10 @@ func (m Model) copyTargets() []ui.CopyTarget {
 			targets = append(targets, ui.CopyTarget{Label: "Blob endpoint", Value: m.currentAccount.BlobEndpoint})
 		}
 	}
-	if len(m.markedBlobs) > 0 {
+	if m.marked.Len() > 0 {
 		targets = append(targets, ui.CopyTarget{
-			Label: fmt.Sprintf("Marked names (%d)", len(m.markedBlobs)),
-			Value: strings.Join(m.sortedMarkedBlobNames(), "\n"),
+			Label: fmt.Sprintf("Marked names (%d)", m.marked.Len()),
+			Value: strings.Join(m.marked.Sorted(), "\n"),
 		})
 	}
 	return targets
