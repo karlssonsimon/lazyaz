@@ -42,6 +42,11 @@ type Keymap struct {
 	RepeatFindBack      Binding `json:"repeat_find_back"`
 	VisualChar          Binding `json:"visual_char"`
 	PreviewYank         Binding `json:"preview_yank"`
+	MotionBigWord       Binding `json:"motion_big_word"`
+	MotionBigWordBack   Binding `json:"motion_big_word_back"`
+	MotionBigWordEnd    Binding `json:"motion_big_word_end"`
+	ObjectInner         Binding `json:"object_inner"`
+	ObjectAround        Binding `json:"object_around"`
 	NextFocus           Binding `json:"next_focus"`
 	PreviousFocus       Binding `json:"previous_focus"`
 	ReloadSubscriptions Binding `json:"reload_subscriptions"`

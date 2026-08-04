@@ -268,11 +268,20 @@ func motionKeys() MotionKeys {
 		Left: km.MotionLeft, Right: km.MotionRight,
 		Down: km.PreviewDown, Up: km.PreviewUp,
 		WordForward: km.MotionWordForward, WordBack: km.MotionWordBack, WordEnd: km.MotionWordEnd,
+		BigWordForward: km.MotionBigWord, BigWordBack: km.MotionBigWordBack, BigWordEnd: km.MotionBigWordEnd,
 		LineStart: km.MotionLineStart, LineEnd: km.MotionLineEnd,
 		FindChar: km.FindChar, FindCharBack: km.FindCharBack,
 		TillChar: km.TillChar, TillCharBack: km.TillCharBack,
 		RepeatFind: km.RepeatFind, RepeatFindBack: km.RepeatFindBack,
+		ObjectInner: km.ObjectInner, ObjectAround: km.ObjectAround,
+		YankOp: km.PreviewYank,
 	}
+}
+
+// unpack adapts BufferAction to the (cursor, kind) shape the older
+// dispatcher tests assert on.
+func unpack(a BufferAction) (Cursor, BufferActionKind) {
+	return a.Cursor, a.Kind
 }
 
 func TestBufferMotionFindChord(t *testing.T) {
@@ -282,35 +291,35 @@ func TestBufferMotionFindChord(t *testing.T) {
 	cur := at(0, 0)
 
 	// f arms; the target rune completes.
-	got, res := r.BufferMotion(mk, "f", b, cur)
+	got, res := unpack(r.BufferMotion(mk, "f", b, cur, false))
 	if res != BufPending || !r.FindPending() {
 		t.Fatalf("f gave %v pending=%v, want BufPending", res, r.FindPending())
 	}
-	got, res = r.BufferMotion(mk, "c", b, got)
+	got, res = unpack(r.BufferMotion(mk, "c", b, got, false))
 	if res != BufMoved || got.Col != 2 {
 		t.Fatalf("fc gave %v col=%d, want BufMoved col 2", res, got.Col)
 	}
 
 	// ; repeats, , reverses.
-	got, res = r.BufferMotion(mk, ";", b, got)
+	got, res = unpack(r.BufferMotion(mk, ";", b, got, false))
 	if res != BufMoved || got.Col != 5 {
 		t.Fatalf("; gave %v col=%d, want col 5", res, got.Col)
 	}
-	got, res = r.BufferMotion(mk, ",", b, got)
+	got, res = unpack(r.BufferMotion(mk, ",", b, got, false))
 	if res != BufMoved || got.Col != 2 {
 		t.Fatalf(", gave %v col=%d, want col 2", res, got.Col)
 	}
 
 	// A missed find consumes the key but does not move.
-	got, res = r.BufferMotion(mk, "f", b, got)
-	got, res = r.BufferMotion(mk, "z", b, got)
+	got, res = unpack(r.BufferMotion(mk, "f", b, got, false))
+	got, res = unpack(r.BufferMotion(mk, "z", b, got, false))
 	if res != BufFailed || got.Col != 2 {
 		t.Fatalf("fz gave %v col=%d, want BufFailed col 2", res, got.Col)
 	}
 
 	// Esc cancels a pending chord.
-	r.BufferMotion(mk, "f", b, got)
-	_, res = r.BufferMotion(mk, "esc", b, got)
+	r.BufferMotion(mk, "f", b, got, false)
+	_, res = unpack(r.BufferMotion(mk, "esc", b, got, false))
 	if res != BufFailed || r.FindPending() {
 		t.Fatalf("esc during chord gave %v pending=%v", res, r.FindPending())
 	}
@@ -323,8 +332,8 @@ func TestBufferMotionDigitIsFindTarget(t *testing.T) {
 	mk := motionKeys()
 	var r Resolver
 
-	r.BufferMotion(mk, "f", b, at(0, 0))
-	got, res := r.BufferMotion(mk, "3", b, at(0, 0))
+	r.BufferMotion(mk, "f", b, at(0, 0), false)
+	got, res := unpack(r.BufferMotion(mk, "3", b, at(0, 0), false))
 	if res != BufMoved || got.Col != 2 {
 		t.Fatalf("f3 gave %v col=%d, want BufMoved col 2", res, got.Col)
 	}
@@ -340,8 +349,8 @@ func TestBufferMotionCountedFind(t *testing.T) {
 	var r Resolver
 
 	r.Digit("3")
-	r.BufferMotion(mk, "f", b, at(0, 0))
-	got, res := r.BufferMotion(mk, "x", b, at(0, 0))
+	r.BufferMotion(mk, "f", b, at(0, 0), false)
+	got, res := unpack(r.BufferMotion(mk, "x", b, at(0, 0), false))
 	if res != BufMoved || got.Col != 6 {
 		t.Fatalf("3fx gave %v col=%d, want col 6", res, got.Col)
 	}
@@ -353,12 +362,12 @@ func TestBufferMotionTillRepeatSkips(t *testing.T) {
 	mk := motionKeys()
 	var r Resolver
 
-	r.BufferMotion(mk, "t", b, at(0, 0))
-	got, _ := r.BufferMotion(mk, ".", b, at(0, 0))
+	r.BufferMotion(mk, "t", b, at(0, 0), false)
+	got, _ := unpack(r.BufferMotion(mk, ".", b, at(0, 0), false))
 	if got.Col != 0 {
 		t.Fatalf("t. from 0 landed at %d, want 0 (before the dot at 1)", got.Col)
 	}
-	got, res := r.BufferMotion(mk, ";", b, got)
+	got, res := unpack(r.BufferMotion(mk, ";", b, got, false))
 	if res != BufMoved || got.Col != 2 {
 		t.Fatalf("; after till gave %v col=%d, want col 2 (skipped the adjacent dot)", res, got.Col)
 	}
@@ -372,12 +381,12 @@ func TestBufferMotionZeroDefersToCount(t *testing.T) {
 	var r Resolver
 
 	r.Digit("1")
-	_, res := r.BufferMotion(mk, "0", b, at(0, 5))
+	_, res := unpack(r.BufferMotion(mk, "0", b, at(0, 5), false))
 	if res != BufNone {
 		t.Fatalf("0 with pending count gave %v, want BufNone", res)
 	}
 	r.ClearCount()
-	got, res := r.BufferMotion(mk, "0", b, at(0, 5))
+	got, res := unpack(r.BufferMotion(mk, "0", b, at(0, 5), false))
 	if res != BufMoved || got.Col != 0 {
 		t.Fatalf("bare 0 gave %v col=%d, want BufMoved col 0", res, got.Col)
 	}
@@ -389,7 +398,7 @@ func TestBufferMotionRepeatWithoutFind(t *testing.T) {
 	mk := motionKeys()
 	var r Resolver
 
-	_, res := r.BufferMotion(mk, ";", b, at(0, 0))
+	_, res := unpack(r.BufferMotion(mk, ";", b, at(0, 0), false))
 	if res != BufFailed {
 		t.Fatalf("; without a find gave %v, want BufFailed", res)
 	}

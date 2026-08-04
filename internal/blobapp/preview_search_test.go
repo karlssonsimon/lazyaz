@@ -625,3 +625,107 @@ func TestPreviewFullEscLadderWithSearch(t *testing.T) {
 		t.Fatal("final esc did not leave the preview")
 	}
 }
+
+// The operator grammar through the real key path: ye, y3w, yi", yy and
+// W all resolve against the loaded window, and the region-to-byte
+// conversion yields exactly the text that lands on the clipboard.
+func TestPreviewOperatorGrammar(t *testing.T) {
+	//                  0123456789...
+	m := searchModel(t, "foo bar \"qux\" tail\nsecond line\n")
+	m = typeKeys(m, "v") // vim capture
+
+	regionText := func(m Model, reg vim.Region) string {
+		var lo, hi int64
+		if reg.Linewise {
+			lo = m.previewByteAt(reg.Start.Line, 0)
+			if reg.End.Line+1 < len(m.preview.lineStarts) {
+				hi = m.preview.windowStart + int64(m.preview.lineStarts[reg.End.Line+1])
+			} else {
+				hi = m.preview.windowStart + int64(len(m.preview.windowData))
+			}
+		} else {
+			lo = m.previewByteAt(reg.Start.Line, reg.Start.Col)
+			hi = m.previewByteAt(reg.End.Line, reg.End.Col)
+		}
+		ws := m.preview.windowStart
+		return string(m.preview.windowData[lo-ws : hi-ws])
+	}
+
+	t.Run("ye yanks a word inclusively", func(t *testing.T) {
+		mm := typeKeys(m, "y")
+		if !mm.vimr.OperatorPending() {
+			t.Fatal("y did not arm the operator")
+		}
+		act := mm.vimr.BufferMotion(previewMotionKeys(mm.Keymap), "e", mm.previewBuf(), mm.preview.vcur, false)
+		if act.Kind != vim.BufYank {
+			t.Fatalf("ye = %+v", act)
+		}
+		if got := regionText(mm, act.Region); got != "foo" {
+			t.Fatalf("ye text = %q, want foo", got)
+		}
+	})
+
+	t.Run("yi quote yanks the string body", func(t *testing.T) {
+		mm := typeKeys(m, "y", "i", "\"")
+		_ = mm
+		// Resolve again statically for the text assertion.
+		var r vim.Resolver
+		r.ArmOperator()
+		r.BufferMotion(previewMotionKeys(m.Keymap), "i", m.previewBuf(), m.preview.vcur, false)
+		act := r.BufferMotion(previewMotionKeys(m.Keymap), "\"", m.previewBuf(), m.preview.vcur, false)
+		if act.Kind != vim.BufYank {
+			t.Fatalf("yi\" = %+v", act)
+		}
+		if got := regionText(m, act.Region); got != "qux" {
+			t.Fatalf("yi\" text = %q, want qux", got)
+		}
+	})
+
+	t.Run("yy takes the whole line with newline", func(t *testing.T) {
+		var r vim.Resolver
+		r.ArmOperator()
+		act := r.BufferMotion(previewMotionKeys(m.Keymap), "y", m.previewBuf(), m.preview.vcur, false)
+		if act.Kind != vim.BufYank || !act.Region.Linewise {
+			t.Fatalf("yy = %+v", act)
+		}
+		if got := regionText(m, act.Region); got != "foo bar \"qux\" tail\n" {
+			t.Fatalf("yy text = %q", got)
+		}
+	})
+
+	t.Run("W moves by big words in the capture", func(t *testing.T) {
+		mm := typeKeys(m, "W", "W")
+		if c := mm.preview.vcur; c.Col != 8 {
+			t.Fatalf("WW landed at col %d, want 8 (the quote)", c.Col)
+		}
+	})
+
+	t.Run("vi quote selects and moves the cursor", func(t *testing.T) {
+		mm := typeKeys(m, "v", "i", "\"")
+		if !mm.preview.span.Active || mm.preview.span.Mode != vim.SpanChar {
+			t.Fatal("vi\" did not select")
+		}
+		lo, hi, ok := mm.previewSelectionByteRange()
+		if !ok {
+			t.Fatal("no selection range")
+		}
+		ws := mm.preview.windowStart
+		if got := string(mm.preview.windowData[lo-ws : hi-ws]); got != "qux" {
+			t.Fatalf("vi\" selects %q, want qux", got)
+		}
+		if c := mm.preview.vcur; c.Col != 11 {
+			t.Fatalf("cursor at col %d after vi\", want 11 (the x)", c.Col)
+		}
+	})
+
+	t.Run("ye through keys moves the cursor to the region start", func(t *testing.T) {
+		mm := typeKeys(m, "3", "l") // col 3
+		mm = typeKeys(mm, "y", "b") // yank back to col 0
+		if c := mm.preview.vcur; c.Col != 0 {
+			t.Fatalf("cursor at col %d after yb, want 0 (region start)", c.Col)
+		}
+		if mm.vimr.BufferPending() {
+			t.Fatal("grammar state leaked after the yank")
+		}
+	})
+}

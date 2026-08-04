@@ -51,7 +51,34 @@ func previewMotionKeys(km keymap.Keymap) vim.MotionKeys {
 		FindChar: km.FindChar, FindCharBack: km.FindCharBack,
 		TillChar: km.TillChar, TillCharBack: km.TillCharBack,
 		RepeatFind: km.RepeatFind, RepeatFindBack: km.RepeatFindBack,
+		BigWordForward: km.MotionBigWord, BigWordBack: km.MotionBigWordBack, BigWordEnd: km.MotionBigWordEnd,
+		ObjectInner: km.ObjectInner, ObjectAround: km.ObjectAround,
+		YankOp: km.PreviewYank,
 	}
+}
+
+// previewByteAt is the absolute byte offset of a buffer position. The
+// column may sit on the line-length boundary (before the newline);
+// unlike the cursor mapping this is not clamped to blobSize-1, so it
+// can express a region's exclusive end.
+func (m Model) previewByteAt(line, col int) int64 {
+	if len(m.preview.lineStarts) == 0 {
+		return m.preview.cursor
+	}
+	if line >= len(m.preview.lineStarts) {
+		line = len(m.preview.lineStarts) - 1
+	}
+	if line < 0 {
+		line = 0
+	}
+	rs := []rune(m.previewBuf().Line(line))
+	if col > len(rs) {
+		col = len(rs)
+	}
+	if col < 0 {
+		col = 0
+	}
+	return m.preview.windowStart + int64(m.preview.lineStarts[line]+len(string(rs[:col])))
 }
 
 // syncPreviewVimFromByte recomputes the window-local (line, col) cursor

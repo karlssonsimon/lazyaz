@@ -55,6 +55,11 @@ type Resolver struct {
 	z     bool
 	count int
 
+	// Operator grammar: y armed, and i/a object selection (0 none,
+	// 1 inner, 2 around).
+	opPending  bool
+	objPending int
+
 	// f/F/t/T chord state and ;/, repeat memory.
 	findPending bool
 	findTill    bool
@@ -119,6 +124,8 @@ func (r *Resolver) Clear() {
 	r.z = false
 	r.count = 0
 	r.findPending = false
+	r.opPending = false
+	r.objPending = 0
 }
 
 // GG feeds a key to the gg chord. homeImmediate controls the Home key:

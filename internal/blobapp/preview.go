@@ -264,15 +264,13 @@ func (m Model) handlePreviewBrowseKey(key string) (Model, tea.Cmd) {
 // forwards every key here while the capture is on (IsTextInputActive),
 // so tab switching and the other chrome shortcuts are blocked too.
 func (m Model) handlePreviewVimKey(key string) (Model, tea.Cmd) {
-	// A pending f/F/t/T owns the next key outright — it is a rune
-	// argument, so it must be consumed before the chords and before
-	// digit handling (f3 finds the character 3, fg finds g).
-	if m.vimr.FindPending() {
-		nc, res := m.vimr.BufferMotion(previewMotionKeys(m.Keymap), key, m.previewBuf(), m.preview.vcur)
-		if res == vim.BufMoved {
-			return m.applyPreviewCursor(nc)
-		}
-		return m, nil
+	// Armed grammar state — a find target, the y operator, an i/a
+	// object — owns the next key outright: it must be consumed before
+	// the chords and before digit handling (f3 finds the character 3,
+	// yg must not arm the gg chord).
+	if m.vimr.BufferPending() {
+		act := m.vimr.BufferMotion(previewMotionKeys(m.Keymap), key, m.previewBuf(), m.preview.vcur, m.preview.span.Active)
+		return m.applyBufferAction(act)
 	}
 
 	switch m.vimr.GG(m.Keymap.JumpTopPrefix, key, true) {
@@ -290,14 +288,11 @@ func (m Model) handlePreviewVimKey(key string) (Model, tea.Cmd) {
 		m.vimr.ClearCount()
 	}
 
-	// Buffer motions resolve in one place — vim returns a cursor, the
-	// preview applies it. A new motion added to the engine reaches here
-	// without this file changing.
-	if nc, res := m.vimr.BufferMotion(previewMotionKeys(m.Keymap), key, m.previewBuf(), m.preview.vcur); res != vim.BufNone {
-		if res == vim.BufMoved {
-			return m.applyPreviewCursor(nc)
-		}
-		return m, nil
+	// The buffer grammar resolves in one place — vim returns an
+	// instruction, the preview applies it. A new motion or object added
+	// to the engine reaches here without this file changing.
+	if act := m.vimr.BufferMotion(previewMotionKeys(m.Keymap), key, m.previewBuf(), m.preview.vcur, m.preview.span.Active); act.Kind != vim.BufNone {
+		return m.applyBufferAction(act)
 	}
 
 	switch {
@@ -318,7 +313,11 @@ func (m Model) handlePreviewVimKey(key string) (Model, tea.Cmd) {
 	case m.Keymap.ToggleVisualLine.Matches(key):
 		return m.togglePreviewVisual(vim.SpanLine)
 	case m.Keymap.PreviewYank.Matches(key):
-		return m.yankPreviewSelection()
+		if m.preview.span.Active {
+			return m.yankPreviewSelection()
+		}
+		m.vimr.ArmOperator()
+		return m, nil
 	// The esc ladder: search → visual → vim normal → browse. Leaving
 	// the preview itself needs one more esc from browse mode.
 	case key == "esc" && m.preview.search.bar.Active():
@@ -639,5 +638,7 @@ func countedPreviewKey(km keymap.Keymap, key string) bool {
 		km.MotionWordEnd.Matches(key) || km.MotionLineEnd.Matches(key) ||
 		km.FindChar.Matches(key) || km.FindCharBack.Matches(key) ||
 		km.TillChar.Matches(key) || km.TillCharBack.Matches(key) ||
-		km.RepeatFind.Matches(key) || km.RepeatFindBack.Matches(key)
+		km.RepeatFind.Matches(key) || km.RepeatFindBack.Matches(key) ||
+		km.MotionBigWord.Matches(key) || km.MotionBigWordBack.Matches(key) ||
+		km.MotionBigWordEnd.Matches(key) || km.PreviewYank.Matches(key)
 }

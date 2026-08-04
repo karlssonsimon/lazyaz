@@ -44,6 +44,15 @@ func classOf(r rune) int {
 	}
 }
 
+// classOfBig is the WORD classifier: anything that is not whitespace is
+// one class, so W/B/E jump whole non-whitespace runs.
+func classOfBig(r rune) int {
+	if unicode.IsSpace(r) {
+		return clsWS
+	}
+	return clsWord
+}
+
 // --- position walking over the buffer ---
 
 type pos struct{ line, col int }
@@ -61,11 +70,15 @@ func lastCol(b TextBuffer, line int) int {
 }
 
 func classAt(b TextBuffer, p pos) int {
+	return classAtCls(b, p, classOf)
+}
+
+func classAtCls(b TextBuffer, p pos, cls func(rune) int) int {
 	rs := lineRunes(b, p.line)
 	if len(rs) == 0 {
 		return clsEmpty
 	}
-	return classOf(rs[p.col])
+	return cls(rs[p.col])
 }
 
 func nextPos(b TextBuffer, p pos) (pos, bool) {
@@ -168,17 +181,24 @@ func LineEnd(b TextBuffer, c Cursor, n int) Cursor {
 // WordForward is w: to the start of the next word, where a punctuation
 // run is a word of its own and an empty line is a stop.
 func WordForward(b TextBuffer, c Cursor, n int) Cursor {
+	return wordForwardCls(b, c, n, classOf)
+}
+
+func wordForwardCls(b TextBuffer, c Cursor, n int, cls func(rune) int) Cursor {
 	c = normalize(b, c)
 	p := pos{c.Line, c.Col}
 	for i := 0; i < n; i++ {
-		if s := classAt(b, p); s == clsWord || s == clsPunct {
+		if s := classAtCls(b, p, cls); s == clsWord || s == clsPunct {
 			for {
 				np, ok := nextPos(b, p)
 				if !ok {
 					return cursorAt(p)
 				}
+				crossed := np.line != p.line
 				p = np
-				if classAt(b, p) != s {
+				// The newline is whitespace: a run never continues onto
+				// the next line even when the classes match.
+				if crossed || classAtCls(b, p, cls) != s {
 					break
 				}
 			}
@@ -189,7 +209,7 @@ func WordForward(b TextBuffer, c Cursor, n int) Cursor {
 			}
 			p = np
 		}
-		for classAt(b, p) == clsWS {
+		for classAtCls(b, p, cls) == clsWS {
 			np, ok := nextPos(b, p)
 			if !ok {
 				return cursorAt(p)
@@ -202,6 +222,10 @@ func WordForward(b TextBuffer, c Cursor, n int) Cursor {
 
 // WordBack is b: to the start of the previous word; empty lines stop it.
 func WordBack(b TextBuffer, c Cursor, n int) Cursor {
+	return wordBackCls(b, c, n, classOf)
+}
+
+func wordBackCls(b TextBuffer, c Cursor, n int, cls func(rune) int) Cursor {
 	c = normalize(b, c)
 	p := pos{c.Line, c.Col}
 	for i := 0; i < n; i++ {
@@ -210,20 +234,20 @@ func WordBack(b TextBuffer, c Cursor, n int) Cursor {
 			break
 		}
 		p = pp
-		for classAt(b, p) == clsWS {
+		for classAtCls(b, p, cls) == clsWS {
 			pp, ok := prevPos(b, p)
 			if !ok {
 				return cursorAt(p)
 			}
 			p = pp
 		}
-		if classAt(b, p) == clsEmpty {
+		if classAtCls(b, p, cls) == clsEmpty {
 			continue
 		}
-		s := classAt(b, p)
+		s := classAtCls(b, p, cls)
 		for {
 			pp, ok := prevPos(b, p)
-			if !ok || classAt(b, pp) != s {
+			if !ok || pp.line != p.line || classAtCls(b, pp, cls) != s {
 				break
 			}
 			p = pp
@@ -234,6 +258,10 @@ func WordBack(b TextBuffer, c Cursor, n int) Cursor {
 
 // WordEnd is e: to the end of the next word; empty lines are skipped.
 func WordEnd(b TextBuffer, c Cursor, n int) Cursor {
+	return wordEndCls(b, c, n, classOf)
+}
+
+func wordEndCls(b TextBuffer, c Cursor, n int, cls func(rune) int) Cursor {
 	c = normalize(b, c)
 	p := pos{c.Line, c.Col}
 	for i := 0; i < n; i++ {
@@ -242,17 +270,17 @@ func WordEnd(b TextBuffer, c Cursor, n int) Cursor {
 			break
 		}
 		p = np
-		for classAt(b, p) == clsWS || classAt(b, p) == clsEmpty {
+		for classAtCls(b, p, cls) == clsWS || classAtCls(b, p, cls) == clsEmpty {
 			np, ok := nextPos(b, p)
 			if !ok {
 				return cursorAt(p)
 			}
 			p = np
 		}
-		s := classAt(b, p)
+		s := classAtCls(b, p, cls)
 		for {
 			np, ok := nextPos(b, p)
-			if !ok || classAt(b, np) != s {
+			if !ok || np.line != p.line || classAtCls(b, np, cls) != s {
 				break
 			}
 			p = np
@@ -307,4 +335,19 @@ func FindOnLine(b TextBuffer, c Cursor, target rune, till, back bool, n int) (Cu
 
 func cursorAt(p pos) Cursor {
 	return Cursor{Line: p.line, Col: p.col, Want: p.col}
+}
+
+// WORDForward is W: like w with whitespace as the only boundary.
+func WORDForward(b TextBuffer, c Cursor, n int) Cursor {
+	return wordForwardCls(b, c, n, classOfBig)
+}
+
+// WORDBack is B.
+func WORDBack(b TextBuffer, c Cursor, n int) Cursor {
+	return wordBackCls(b, c, n, classOfBig)
+}
+
+// WORDEnd is E.
+func WORDEnd(b TextBuffer, c Cursor, n int) Cursor {
+	return wordEndCls(b, c, n, classOfBig)
 }

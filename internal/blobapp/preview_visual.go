@@ -143,6 +143,71 @@ func (m Model) previewSelectionRanges() map[int][]ui.ColumnRange {
 	return byRow
 }
 
+// applyBufferAction executes what the grammar resolved: a cursor move,
+// an operator yank, a visual-mode object selection, or a consumed
+// no-op.
+func (m Model) applyBufferAction(act vim.BufferAction) (Model, tea.Cmd) {
+	switch act.Kind {
+	case vim.BufMoved:
+		return m.applyPreviewCursor(act.Cursor)
+	case vim.BufYank:
+		return m.yankRegion(act.Region)
+	case vim.BufSelect:
+		return m.selectRegion(act.Region)
+	default:
+		return m, nil
+	}
+}
+
+// yankRegion converts an operator's region to bytes and feeds the
+// shared yank assembly. As in vim, the cursor lands on the region's
+// start; for linewise yanks it keeps its column.
+func (m Model) yankRegion(reg vim.Region) (Model, tea.Cmd) {
+	var lo, hi int64
+	if reg.Linewise {
+		lo = m.previewByteAt(reg.Start.Line, 0)
+		if reg.End.Line+1 < len(m.preview.lineStarts) {
+			hi = m.preview.windowStart + int64(m.preview.lineStarts[reg.End.Line+1])
+		} else {
+			hi = m.preview.windowStart + int64(len(m.preview.windowData))
+		}
+	} else {
+		lo = m.previewByteAt(reg.Start.Line, reg.Start.Col)
+		hi = m.previewByteAt(reg.End.Line, reg.End.Col)
+	}
+	if hi <= lo {
+		return m, nil
+	}
+
+	target := reg.Start
+	if reg.Linewise {
+		target = m.preview.vcur
+		target.Line = reg.Start.Line
+	}
+	m2, moveCmd := m.applyPreviewCursor(target)
+	m3, yankCmd := m2.yankByteRange(lo, hi)
+	return m3, tea.Batch(moveCmd, yankCmd)
+}
+
+// selectRegion is a text object resolving in visual mode: the span
+// anchors at the region start and the cursor lands on the last
+// included rune.
+func (m Model) selectRegion(reg vim.Region) (Model, tea.Cmd) {
+	m.preview.span.Start(m.previewByteAt(reg.Start.Line, reg.Start.Col), vim.SpanChar)
+	last := reg.End
+	if last.Col > 0 {
+		last.Col--
+	} else if last.Line > 0 {
+		last.Line--
+		last.Col = len([]rune(m.previewBuf().Line(last.Line)))
+		if last.Col > 0 {
+			last.Col--
+		}
+	}
+	last.Want = last.Col
+	return m.applyPreviewCursor(last)
+}
+
 // yankDoneMsg carries a streamed yank back to Update.
 type yankDoneMsg struct {
 	text string
@@ -160,7 +225,13 @@ func (m Model) yankPreviewSelection() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.preview.span.Stop()
+	return m.yankByteRange(lo, hi)
+}
 
+// yankByteRange is the shared assembly behind visual y and the operator
+// grammar: free from the loaded window when it covers the range,
+// streamed when it does not, bounded by the yank budget.
+func (m Model) yankByteRange(lo, hi int64) (Model, tea.Cmd) {
 	if hi-lo > m.yankBudget {
 		m.Notify(appshell.LevelWarn, fmt.Sprintf(
 			"Selection is %s — over the yank limit (%s)", humanSize(hi-lo), humanSize(m.yankBudget),
