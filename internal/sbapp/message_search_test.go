@@ -1,11 +1,13 @@
 package sbapp
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -173,5 +175,142 @@ func TestMessageBodyCountedScroll(t *testing.T) {
 	}
 	if got := m.vimr.PendingCount(); got != 0 {
 		t.Errorf("count = %d after motions, want 0", got)
+	}
+}
+
+func msgVimModel(t *testing.T, body string) Model {
+	t.Helper()
+	m := messageSearchModel(t, body)
+	m2, _ := m.handleViewingMessageKey(tea.KeyPressMsg{}, "v")
+	m = m2
+	if !m.msgVim.active {
+		t.Fatal("v did not enter the capture")
+	}
+	return m
+}
+
+func msgKeys(t *testing.T, m Model, keys ...string) Model {
+	t.Helper()
+	for _, k := range keys {
+		m2, _ := m.handleViewingMessageKey(tea.KeyPressMsg{}, k)
+		m = m2
+	}
+	return m
+}
+
+// The message body is the second TextBuffer consumer: motions, the
+// operator grammar and objects all work in its capture.
+func TestMessageVimCapture(t *testing.T) {
+	m := msgVimModel(t, "foo bar \"qux\" tail\nsecond line\n")
+
+	if got := m.inputMode().String(); got != "VIM" {
+		t.Fatalf("mode = %q, want VIM", got)
+	}
+	if !m.IsTextInputActive() {
+		t.Fatal("capture must claim the keyboard")
+	}
+
+	m = msgKeys(t, m, "w", "e")
+	if c := m.msgVim.cur; c.Line != 0 || c.Col != 6 {
+		t.Fatalf("we landed at (%d,%d), want (0,6)", c.Line, c.Col)
+	}
+
+	// $ is sticky through j.
+	m = msgKeys(t, m, "$", "j")
+	if c := m.msgVim.cur; c.Line != 1 || c.Col != 10 {
+		t.Fatalf("$j landed at (%d,%d), want (1,10)", c.Line, c.Col)
+	}
+
+	// yi" resolves against the body.
+	var r vim.Resolver
+	r.ArmOperator()
+	r.BufferMotion(msgMotionKeys(m.Keymap), "i", m.msgBuf(), vim.Cursor{Line: 0, Col: 10}, false)
+	act := r.BufferMotion(msgMotionKeys(m.Keymap), "\"", m.msgBuf(), vim.Cursor{Line: 0, Col: 10}, false)
+	if act.Kind != vim.BufYank {
+		t.Fatalf("yi\" = %+v", act)
+	}
+	lo := m.msgByteAt(act.Region.Start.Line, act.Region.Start.Col)
+	hi := m.msgByteAt(act.Region.End.Line, act.Region.End.Col)
+	if got := m.selectedMessage.FullBody[lo:hi]; got != "qux" {
+		t.Fatalf("yi\" text = %q, want qux", got)
+	}
+}
+
+// vi" selects in the capture and y yanks the selection.
+func TestMessageVimVisualObject(t *testing.T) {
+	m := msgVimModel(t, "say \"hello\" end\n")
+
+	m = msgKeys(t, m, "v", "i", "\"")
+	if !m.msgVim.span.Active {
+		t.Fatal("vi\" did not select")
+	}
+	lo, hi, ok := m.msgSelectionByteRange()
+	if !ok {
+		t.Fatal("no selection range")
+	}
+	if got := m.selectedMessage.FullBody[lo:hi]; got != "hello" {
+		t.Fatalf("vi\" selects %q, want hello", got)
+	}
+
+	m2, cmd := m.msgYankSelection()
+	if cmd == nil {
+		t.Fatal("y produced no clipboard command")
+	}
+	if m2.msgVim.span.Active {
+		t.Fatal("span still active after yank")
+	}
+}
+
+// Esc walks: visual → capture → browse; browse esc backs out to the
+// list as before.
+func TestMessageVimEscLadder(t *testing.T) {
+	m := msgVimModel(t, "alpha\nbeta\n")
+	m = msgKeys(t, m, "v")
+	if got := m.inputMode().String(); got != "VISUAL" {
+		t.Fatalf("setup: mode %q", got)
+	}
+
+	m = msgKeys(t, m, "esc")
+	if got := m.inputMode().String(); got != "VIM" {
+		t.Fatalf("first esc: mode %q, want VIM", got)
+	}
+	m = msgKeys(t, m, "esc")
+	if m.msgVim.active {
+		t.Fatal("second esc did not leave the capture")
+	}
+	if !m.viewingMessage {
+		t.Fatal("second esc left the message view; it should only leave the capture")
+	}
+}
+
+// zz centers the cursor line in the capture.
+func TestMessageVimScrollOps(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 100; i++ {
+		fmt.Fprintf(&sb, "line %02d\n", i)
+	}
+	m := msgVimModel(t, sb.String())
+	m = msgKeys(t, m, "2", "5", "j")
+	if got := m.msgVim.cur.Line; got != 25 {
+		t.Fatalf("setup: line %d, want 25", got)
+	}
+	h := m.messageViewport.Height()
+	m = msgKeys(t, m, "z", "z")
+	if got, want := m.messageViewport.YOffset(), 25-(h-1)/2; got != want {
+		t.Fatalf("zz: YOffset %d, want %d", got, want)
+	}
+}
+
+// Browse mode is untouched: y still yanks the whole body, h still
+// backs out.
+func TestMessageBrowseUnchanged(t *testing.T) {
+	m := messageSearchModel(t, "the body\n")
+
+	m2, cmd := m.handleViewingMessageKey(tea.KeyPressMsg{}, "y")
+	if cmd == nil {
+		t.Fatal("browse y no longer yanks the body")
+	}
+	if m2.msgVim.active {
+		t.Fatal("browse y entered the capture")
 	}
 }

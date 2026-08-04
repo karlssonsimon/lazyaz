@@ -120,10 +120,29 @@ func (m Model) View() tea.View {
 		vpView := m.messageViewport.View()
 		if m.textSelection.Active {
 			vpView = m.textSelection.HighlightContent(m.messageViewport, m.Styles.SelectionHighlight)
-		} else if ranges := m.messageMatchRanges(); len(ranges) > 0 {
-			// Search highlighting yields to an active mouse selection —
-			// two sets of column ranges over the same rows would fight.
-			vpView = ui.HighlightLines(vpView, m.messageViewport.Width(), ranges)
+		} else {
+			// Matches first, then the visual selection over them, then
+			// the cursor cell on top — same layering as the blob preview.
+			ranges := m.messageMatchRanges()
+			if sel := m.msgSelectionRanges(); len(sel) > 0 {
+				if ranges == nil {
+					ranges = make(map[int][]ui.ColumnRange, len(sel))
+				}
+				for row, srs := range sel {
+					for _, sr := range srs {
+						ranges[row] = ui.SplitAround(ranges[row], sr)
+					}
+				}
+			}
+			if row, cell, ok := m.msgCursorHighlight(); ok {
+				if ranges == nil {
+					ranges = make(map[int][]ui.ColumnRange, 1)
+				}
+				ranges[row] = ui.SplitAround(ranges[row], cell)
+			}
+			if len(ranges) > 0 {
+				vpView = ui.HighlightLines(vpView, m.messageViewport.Width(), ranges)
+			}
 		}
 		gutter := ui.RenderLineGutter(m.messageViewport, m.Styles, previewGutterMinDigits)
 		body := lipgloss.JoinHorizontal(lipgloss.Top, gutter, vpView)

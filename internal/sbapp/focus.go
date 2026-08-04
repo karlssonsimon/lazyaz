@@ -184,6 +184,10 @@ func (m Model) IsTextInputActive() bool {
 	if m.messageSearch.bar.InputOpen {
 		return true
 	}
+	// The vim capture claims every key so the chrome stays blocked.
+	if m.viewingMessage && m.msgVim.active {
+		return true
+	}
 	switch m.inputMode() {
 	case ModeNormal, ModeVisualLine, ModeMessagePreview:
 		return false

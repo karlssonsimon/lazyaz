@@ -40,6 +40,9 @@ const (
 	ModeTargetPicker                    // Target entity picker open
 	ModeActionMenu                      // Action menu open
 	ModeMessagePreview                  // Viewing message detail
+	ModeMessageVim                      // Vim capture in the message body
+	ModeMessageVisual                   // Charwise selection in the message body
+	ModeMessageVLine                    // Linewise selection in the message body
 	ModeListFilter                      // User is typing a list filter
 	ModeVisualLine                      // Visual line selection active
 	ModeCopyPalette                     // Copy palette overlay open
@@ -59,6 +62,13 @@ func (m Model) inputMode() InputMode {
 		return ModeCopyPalette
 	case m.actionMenu.Active:
 		return ModeActionMenu
+	case m.viewingMessage && m.msgVim.span.Active:
+		if m.msgVim.span.Mode == vim.SpanLine {
+			return ModeMessageVLine
+		}
+		return ModeMessageVisual
+	case m.viewingMessage && m.msgVim.active:
+		return ModeMessageVim
 	case m.viewingMessage && m.focus == messagePreviewPane:
 		return ModeMessagePreview
 	case m.focusedListSettingFilter():
@@ -72,8 +82,12 @@ func (m Model) inputMode() InputMode {
 
 func (mode InputMode) String() string {
 	switch mode {
-	case ModeVisualLine:
+	case ModeVisualLine, ModeMessageVisual:
 		return "VISUAL"
+	case ModeMessageVLine:
+		return "V-LINE"
+	case ModeMessageVim:
+		return "VIM"
 	case ModeListFilter:
 		return "FILTER"
 	default:
@@ -142,7 +156,13 @@ type Model struct {
 	viewingMessage  bool
 
 	// messageSearch is the / prompt over the message body.
-	messageSearch   messageSearchState
+	messageSearch messageSearchState
+
+	// msgVim is the message body's vim capture.
+	msgVim msgVimState
+
+	// scrolloff is the config's context-row count for the capture.
+	scrolloff       int
 	selectedMessage servicebus.PeekedMessage
 	textSelection   ui.TextSelection
 
@@ -336,15 +356,17 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 	entities.Filter = entityListFilter
 
 	m := Model{
-		Model:                appshell.New(cfg, km),
-		service:              svc,
-		namespacesList:       namespaces,
-		entitiesList:         entities,
-		subscriptionsList:    subs,
-		queueTypeList:        queueType,
-		messageList:          messages,
-		focus:                namespacesPane,
-		markedMessages:       make(map[string]vim.MarkSet),
+		Model:             appshell.New(cfg, km),
+		service:           svc,
+		namespacesList:    namespaces,
+		entitiesList:      entities,
+		subscriptionsList: subs,
+		queueTypeList:     queueType,
+		messageList:       messages,
+		focus:             namespacesPane,
+		markedMessages:    make(map[string]vim.MarkSet),
+
+		scrolloff:            cfg.ScrolloffValue(),
 		cache:                newCache(db),
 		namespacesHistory:    make(map[string]ui.ListState),
 		entitiesHistory:      make(map[string]ui.ListState),

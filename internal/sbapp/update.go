@@ -106,7 +106,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Modals and overlays are keyboard-only; swallow clicks so a
 		// double-click can't drill into a list underneath them.
 		switch m.inputMode() {
-		case ModeNormal, ModeListFilter, ModeVisualLine, ModeMessagePreview:
+		case ModeNormal, ModeListFilter, ModeVisualLine, ModeMessagePreview, ModeMessageVim, ModeMessageVisual, ModeMessageVLine:
 		default:
 			return m, nil
 		}
@@ -852,6 +852,10 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 		return m, cmd
 	}
 
+	if m.msgVim.active {
+		return m.handleMessageVimKey(key)
+	}
+
 	// The gg chord resolves before the switch: its keys (g, home) are
 	// not bound to anything else in message focus, and a non-chord key
 	// falls through with the pending state cleared.
@@ -892,6 +896,12 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 	case m.Keymap.ActionMenu.Matches(key):
 		m.actionMenu.open(m.buildActions())
 		return m, nil
+	// VisualChar before ToggleVisualLine: the stock binding for the
+	// latter is ["v","V"]. v enters the capture; V enters it selecting.
+	case m.Keymap.VisualChar.Matches(key):
+		return m.enterMsgVimMode(false)
+	case m.Keymap.ToggleVisualLine.Matches(key):
+		return m.enterMsgVimMode(true)
 	case m.Keymap.YankMessageBody.Matches(key):
 		return m.yankMessageBody(m.selectedMessage.FullBody)
 	case m.Keymap.CopyPalette.Matches(key):

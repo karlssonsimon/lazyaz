@@ -107,6 +107,11 @@ func (m *Model) runMessageSearch(dir ui.SearchDirection, fromStart bool) {
 	}
 
 	m.messageSearch.cursor = match.Start
+	if m.msgVim.active {
+		m.msgSyncFromByte(int64(match.Start))
+		m.msgFollowCursor()
+		return
+	}
 	m.revealMessageOffset(match.Start)
 }
 
@@ -153,8 +158,19 @@ func (m Model) messageMatchRanges() map[int][]ui.ColumnRange {
 			continue
 		}
 		lineStart := lineStarts[line]
-		startCol := ui.PlainWidth([]byte(body[lineStart:match.Start]))
+		xoff := m.messageViewport.XOffset()
+		width := m.messageViewport.Width()
+		startCol := ui.PlainWidth([]byte(body[lineStart:match.Start])) - xoff
 		endCol := startCol + ui.PlainWidth([]byte(body[match.Start:match.End]))
+		if endCol <= 0 || startCol >= width {
+			continue
+		}
+		if startCol < 0 {
+			startCol = 0
+		}
+		if endCol > width {
+			endCol = width
+		}
 
 		style := m.Styles.SearchMatch
 		if match.Start == m.messageSearch.cursor {
