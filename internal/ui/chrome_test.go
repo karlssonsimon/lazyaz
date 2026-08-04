@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"github.com/charmbracelet/x/ansi"
+
 	"strings"
 	"testing"
 
@@ -46,5 +48,27 @@ func TestRenderStatusLineIsOneLineAndOmitsEmptyActions(t *testing.T) {
 	}
 	if got := lipgloss.Width(out); got != 64 {
 		t.Fatalf("status width = %d, want 64", got)
+	}
+}
+
+// The pending count renders as its own segment beside the mode chip,
+// not inside it: the chip's styling must close before the digits start.
+func TestStatusLineCountOutsideModeChip(t *testing.T) {
+	styles := NewStyles(FallbackScheme())
+
+	with := RenderStatusLine(StatusLineConfig{Mode: "NORMAL", Count: 12}, styles, 80)
+	stripped := ansi.Strip(with)
+	if !strings.Contains(stripped, "NORMAL") || !strings.Contains(stripped, "12") {
+		t.Fatalf("mode or count missing: %q", stripped)
+	}
+
+	chip := styles.Chrome.StatusMode.Render("NORMAL")
+	if !strings.Contains(with, chip) {
+		t.Errorf("mode chip no longer renders standalone — the count leaked inside it")
+	}
+
+	without := RenderStatusLine(StatusLineConfig{Mode: "NORMAL"}, styles, 80)
+	if strings.Contains(ansi.Strip(without), "12") {
+		t.Errorf("count rendered with none pending")
 	}
 }

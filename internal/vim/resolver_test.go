@@ -216,12 +216,3 @@ func TestCountAccumulation(t *testing.T) {
 		}
 	})
 }
-
-func TestModeWithCount(t *testing.T) {
-	if got := ModeWithCount("NORMAL", 0); got != "NORMAL" {
-		t.Errorf("no count: %q", got)
-	}
-	if got := ModeWithCount("NORMAL", 12); got != "NORMAL 12" {
-		t.Errorf("with count: %q", got)
-	}
-}

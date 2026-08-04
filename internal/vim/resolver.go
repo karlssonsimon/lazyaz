@@ -9,11 +9,7 @@
 // lets a new motion land here once and reach every surface.
 package vim
 
-import (
-	"fmt"
-
-	"github.com/karlssonsimon/lazyaz/internal/keymap"
-)
+import "github.com/karlssonsimon/lazyaz/internal/keymap"
 
 // ChordResult is what one keystroke did to a chord in progress.
 type ChordResult int
@@ -155,13 +151,4 @@ func (r *Resolver) Scroll(km keymap.Keymap, key string) (ChordResult, ScrollOp) 
 		return ChordArmed, 0
 	}
 	return ChordNone, 0
-}
-
-// ModeWithCount renders the status-bar mode segment with a pending
-// count appended, vim's bottom-right count display: "NORMAL 12".
-func ModeWithCount(mode string, count int) string {
-	if count <= 0 {
-		return mode
-	}
-	return fmt.Sprintf("%s %d", mode, count)
 }

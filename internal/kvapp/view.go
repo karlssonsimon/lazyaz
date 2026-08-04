@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/karlssonsimon/lazyaz/internal/ui"
-	"github.com/karlssonsimon/lazyaz/internal/vim"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
@@ -129,7 +128,8 @@ func (m Model) View() tea.View {
 		Meta:  ui.HeaderMeta(m.CurrentSub, m.HasSubscription, m.Styles),
 	}, m.Styles, m.Width)
 	statusBar := ui.RenderStatusLine(ui.StatusLineConfig{
-		Mode:    vim.ModeWithCount(m.inputMode().String(), m.vimr.PendingCount()),
+		Mode:    m.inputMode().String(),
+		Count:   m.vimr.PendingCount(),
 		Actions: m.statusActions(),
 	}, m.Styles, m.Width)
 	ticks := m.columnTickPositions()

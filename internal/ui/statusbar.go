@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -45,7 +46,11 @@ func RenderStatusLine(cfg StatusLineConfig, styles Styles, width int) string {
 	chrome := styles.Chrome
 	parts := make([]string, 0, len(cfg.Actions)+1)
 	if cfg.Mode != "" {
-		parts = append(parts, chrome.StatusMode.Render(cfg.Mode))
+		mode := chrome.StatusMode.Render(cfg.Mode)
+		if cfg.Count > 0 {
+			mode += chrome.Help.Render(" ") + chrome.StatusKey.Render(strconv.Itoa(cfg.Count))
+		}
+		parts = append(parts, mode)
 	}
 	for _, action := range cfg.Actions {
 		if action.Key == "" {

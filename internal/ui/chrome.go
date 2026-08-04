@@ -41,7 +41,10 @@ type StatusAction struct {
 }
 
 type StatusLineConfig struct {
-	Mode    string
+	Mode string
+	// Count is a pending vim count prefix, rendered as its own segment
+	// beside the mode chip — vim's bottom-right count display. 0 hides it.
+	Count   int
 	Actions []StatusAction
 	Message string // transient info or error; renders on the right when set
 	IsError bool
