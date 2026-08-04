@@ -22,10 +22,26 @@ type Keymap struct {
 	ScrollTop    Binding `json:"scroll_top"`
 	ScrollBottom Binding `json:"scroll_bottom"`
 	// Buffer search inside the blob preview and the message body.
-	SearchForward       Binding `json:"search_forward"`
-	SearchBackward      Binding `json:"search_backward"`
-	SearchNext          Binding `json:"search_next"`
-	SearchPrev          Binding `json:"search_prev"`
+	SearchForward  Binding `json:"search_forward"`
+	SearchBackward Binding `json:"search_backward"`
+	SearchNext     Binding `json:"search_next"`
+	SearchPrev     Binding `json:"search_prev"`
+	// Buffer cursor motions in the preview.
+	MotionLeft          Binding `json:"motion_left"`
+	MotionRight         Binding `json:"motion_right"`
+	MotionWordForward   Binding `json:"motion_word"`
+	MotionWordBack      Binding `json:"motion_word_back"`
+	MotionWordEnd       Binding `json:"motion_word_end"`
+	MotionLineStart     Binding `json:"motion_line_start"`
+	MotionLineEnd       Binding `json:"motion_line_end"`
+	FindChar            Binding `json:"find_char"`
+	FindCharBack        Binding `json:"find_char_back"`
+	TillChar            Binding `json:"till_char"`
+	TillCharBack        Binding `json:"till_char_back"`
+	RepeatFind          Binding `json:"repeat_find"`
+	RepeatFindBack      Binding `json:"repeat_find_back"`
+	VisualChar          Binding `json:"visual_char"`
+	PreviewYank         Binding `json:"preview_yank"`
 	NextFocus           Binding `json:"next_focus"`
 	PreviousFocus       Binding `json:"previous_focus"`
 	ReloadSubscriptions Binding `json:"reload_subscriptions"`

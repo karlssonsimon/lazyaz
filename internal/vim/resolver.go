@@ -54,6 +54,16 @@ type Resolver struct {
 	gg    bool
 	z     bool
 	count int
+
+	// f/F/t/T chord state and ;/, repeat memory.
+	findPending bool
+	findTill    bool
+	findBack    bool
+
+	lastFindRune rune
+	lastFindTill bool
+	lastFindBack bool
+	lastFindOK   bool
 }
 
 // countCap bounds an accumulated count. Far beyond any real list, it
@@ -108,6 +118,7 @@ func (r *Resolver) Clear() {
 	r.gg = false
 	r.z = false
 	r.count = 0
+	r.findPending = false
 }
 
 // GG feeds a key to the gg chord. homeImmediate controls the Home key:
