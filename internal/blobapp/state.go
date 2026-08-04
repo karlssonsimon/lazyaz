@@ -32,16 +32,18 @@ const (
 type InputMode int
 
 const (
-	ModeNormal       InputMode = iota // Browsing lists
-	ModeModal                         // Confirm / text input / conflict / file browser modal open
-	ModeOverlay                       // Sub/Theme/Help overlay open
-	ModeActionMenu                    // Action menu open
-	ModeSortOverlay                   // Sort picker open
-	ModePreview                       // Blob preview focused
-	ModePrefixSearch                  // Server prefix search input open
-	ModeListFilter                    // User is typing a list filter
-	ModeVisualLine                    // Visual line selection active
-	ModeCopyPalette                   // Copy palette overlay open
+	ModeNormal        InputMode = iota // Browsing lists
+	ModeModal                          // Confirm / text input / conflict / file browser modal open
+	ModeOverlay                        // Sub/Theme/Help overlay open
+	ModeActionMenu                     // Action menu open
+	ModeSortOverlay                    // Sort picker open
+	ModePreview                        // Blob preview focused
+	ModePreviewVisual                  // Charwise selection in the preview
+	ModePreviewVLine                   // Linewise selection in the preview
+	ModePrefixSearch                   // Server prefix search input open
+	ModeListFilter                     // User is typing a list filter
+	ModeVisualLine                     // Visual line selection active
+	ModeCopyPalette                    // Copy palette overlay open
 )
 
 func (m Model) inputMode() InputMode {
@@ -57,6 +59,11 @@ func (m Model) inputMode() InputMode {
 		return ModeSortOverlay
 	case m.copyOverlay.Active:
 		return ModeCopyPalette
+	case m.preview.open && m.focus == previewPane && m.preview.span.Active:
+		if m.preview.span.Mode == vim.SpanLine {
+			return ModePreviewVLine
+		}
+		return ModePreviewVisual
 	case m.preview.open && m.focus == previewPane:
 		return ModePreview
 	case m.filter.inputOpen && m.focus == blobsPane:
@@ -72,8 +79,10 @@ func (m Model) inputMode() InputMode {
 
 func (mode InputMode) String() string {
 	switch mode {
-	case ModeVisualLine:
+	case ModeVisualLine, ModePreviewVisual:
 		return "VISUAL"
+	case ModePreviewVLine:
+		return "V-LINE"
 	case ModeListFilter, ModePrefixSearch:
 		return "FILTER"
 	default:
@@ -175,6 +184,9 @@ type Model struct {
 	// scrolloff is the config's context-row count, applied to the
 	// preview's cursor follow as well as the lists.
 	scrolloff int
+
+	// yankBudget caps what one preview yank puts on the clipboard.
+	yankBudget int64
 
 	cache blobCache
 
@@ -392,7 +404,9 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 		downloadDir:        cfg.ResolvedDownloadDir(),
 		searchScanBudget:   cfg.SearchScanLimitBytes(),
 
-		scrolloff:         cfg.ScrolloffValue(),
+		scrolloff: cfg.ScrolloffValue(),
+
+		yankBudget:        cfg.YankLimitBytes(),
 		focus:             accountsPane,
 		blobSortField:     blobSortDate,
 		blobSortDesc:      true,

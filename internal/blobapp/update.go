@@ -99,6 +99,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case searchScanDoneMsg:
 		return m.handleSearchScanDone(msg)
 
+	case yankDoneMsg:
+		return m.handleYankDone(msg)
+
+	case previewClipboardMsg:
+		return m.handlePreviewClipboard(msg)
+
 	case previewWindowLoadedMsg:
 		return m.handlePreviewWindowLoaded(msg)
 
@@ -503,7 +509,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case ModePreview:
+	case ModePreview, ModePreviewVisual, ModePreviewVLine:
 		return m.handlePreviewKey(msg)
 
 	case ModePrefixSearch:

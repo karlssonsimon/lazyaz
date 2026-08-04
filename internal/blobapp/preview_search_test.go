@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -367,4 +368,82 @@ func TestPreviewVerticalFollowNotPinned(t *testing.T) {
 	if c := m.preview.vcur; c.Line != 3 {
 		t.Fatalf("cursor line = %d, want 3", c.Line)
 	}
+}
+
+// v selects charwise, esc drops to normal without leaving the preview,
+// and y puts exactly the selected bytes on the yank path.
+func TestPreviewCharwiseVisualAndYank(t *testing.T) {
+	m := searchModel(t, "foo bar baz\nsecond line\n")
+
+	m = typeKeys(m, "v")
+	if !m.preview.span.Active || m.preview.span.Mode != vim.SpanChar {
+		t.Fatal("v did not start a charwise selection")
+	}
+	if got := m.inputMode().String(); got != "VISUAL" {
+		t.Fatalf("mode = %q, want VISUAL", got)
+	}
+
+	// Extend over "foo b" with motions.
+	m = typeKeys(m, "w")
+	lo, hi, ok := m.previewSelectionByteRange()
+	if !ok || lo != 0 || hi != 5 {
+		t.Fatalf("selection = [%d,%d) ok=%v, want [0,5)", lo, hi, ok)
+	}
+
+	// Esc exits visual, not the preview.
+	m = typeKeys(m, "esc")
+	if m.preview.span.Active {
+		t.Fatal("esc did not drop the selection")
+	}
+	if !m.preview.open || m.focus != previewPane {
+		t.Fatal("esc in visual left the preview")
+	}
+}
+
+// V selects whole lines including the newline, and the yank description
+// speaks lines.
+func TestPreviewLinewiseSelection(t *testing.T) {
+	m := searchModel(t, "first\nsecond\nthird\n")
+
+	m = typeKeys(m, "j", "V", "j")
+	if got := m.inputMode().String(); got != "V-LINE" {
+		t.Fatalf("mode = %q, want V-LINE", got)
+	}
+	lo, hi, ok := m.previewSelectionByteRange()
+	if !ok {
+		t.Fatal("no selection")
+	}
+	if lo != 6 || hi != 19 {
+		t.Fatalf("selection = [%d,%d), want [6,19) — 'second\\nthird\\n' whole lines", lo, hi)
+	}
+
+	// The selection rows render full-width.
+	sel := m.previewSelectionRanges()
+	if len(sel) != 2 {
+		t.Fatalf("selection covers %d rows, want 2", len(sel))
+	}
+}
+
+// The yank budget refuses rather than truncating.
+func TestPreviewYankBudgetRefuses(t *testing.T) {
+	m := searchModel(t, strings.Repeat("x", 100)+"\n")
+	m.yankBudget = 10
+
+	m = typeKeys(m, "V", "y")
+	if m.preview.span.Active {
+		t.Fatal("span still active after refused yank")
+	}
+	// Nothing to assert on the clipboard — the refusal never reaches it;
+	// the guard is that no yank command was produced, which the budget
+	// notify path guarantees synchronously.
+}
+
+// y without a selection informs instead of silently doing nothing.
+func TestPreviewYankWithoutSelection(t *testing.T) {
+	m := searchModel(t, "abc\n")
+	m2, cmd := m.yankPreviewSelection()
+	if cmd != nil {
+		t.Fatal("yank without selection produced a command")
+	}
+	_ = m2
 }

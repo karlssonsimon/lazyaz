@@ -44,8 +44,13 @@ type Config struct {
 	// search will pull down. These reads are billed, so an unbounded
 	// scan of a very large blob is a cost question, not just a slow one.
 	// Hitting the limit stops the scan and reports where to resume.
-	SearchScanLimitMB *int     `json:"search_scan_limit_mb,omitempty"`
-	Schemes           []Scheme `json:"-"`
+	SearchScanLimitMB *int `json:"search_scan_limit_mb,omitempty"`
+	// YankLimitMB bounds how much a preview yank will put on the
+	// clipboard, fetching from Azure when the selection exceeds the
+	// loaded window. Over the limit the yank refuses — clipboards are
+	// not databases.
+	YankLimitMB *int     `json:"yank_limit_mb,omitempty"`
+	Schemes     []Scheme `json:"-"`
 }
 
 // DefaultScrolloff is used when the config leaves scrolloff unset.
@@ -54,6 +59,9 @@ const DefaultScrolloff = 3
 // DefaultSearchScanLimitMB is how much of a blob one search reads when
 // the config says nothing.
 const DefaultSearchScanLimitMB = 256
+
+// DefaultYankLimitMB is the yank bound when the config says nothing.
+const DefaultYankLimitMB = 16
 
 // ScrolloffValue resolves the tristate Scrolloff field. Values are
 // clamped at zero; ScrollWindow caps the upper end against the pane
@@ -65,6 +73,18 @@ func (c Config) SearchScanLimitBytes() int64 {
 	limit := DefaultSearchScanLimitMB
 	if c.SearchScanLimitMB != nil {
 		limit = *c.SearchScanLimitMB
+	}
+	if limit < 0 {
+		limit = 0
+	}
+	return int64(limit) << 20
+}
+
+// YankLimitBytes resolves the preview yank bound.
+func (c Config) YankLimitBytes() int64 {
+	limit := DefaultYankLimitMB
+	if c.YankLimitMB != nil {
+		limit = *c.YankLimitMB
 	}
 	if limit < 0 {
 		limit = 0

@@ -41,6 +41,9 @@ type previewState struct {
 	// vcur is the window-local vim cursor; preview.cursor (the absolute
 	// byte offset) is re-derived from it after every motion.
 	vcur vim.Cursor
+	// span is the v/V selection: a byte-offset anchor with the cursor
+	// as the moving end.
+	span vim.Span
 }
 
 func newPreviewState() previewState {
@@ -79,6 +82,7 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.preview.binary = false
 	m.preview.cursor = 0
 	m.preview.vcur = vim.Cursor{}
+	m.preview.span = vim.Span{}
 	m.preview.windowStart = 0
 	m.preview.windowData = nil
 	m.preview.lineStarts = nil
@@ -217,6 +221,19 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.repeatPreviewSearch(m.preview.search.bar.Direction)
 	case m.Keymap.SearchPrev.Matches(key):
 		return m.repeatPreviewSearch(m.preview.search.bar.Direction.Opposite())
+	// VisualChar is checked before ToggleVisualLine: the stock binding
+	// for the latter is ["v","V"], so v must resolve charwise first.
+	case m.Keymap.VisualChar.Matches(key):
+		return m.togglePreviewVisual(vim.SpanChar)
+	case m.Keymap.ToggleVisualLine.Matches(key):
+		return m.togglePreviewVisual(vim.SpanLine)
+	case m.Keymap.PreviewYank.Matches(key):
+		return m.yankPreviewSelection()
+	// Esc in visual drops back to normal; only a second esc leaves the
+	// preview, so this case must precede the plain PreviewBack one.
+	case m.preview.span.Active && m.Keymap.PreviewBack.Matches(key):
+		m.preview.span.Stop()
+		return m, nil
 	case m.Keymap.PreviewBack.Matches(key):
 		m.transitionTo(blobsPane, false)
 		return m, nil

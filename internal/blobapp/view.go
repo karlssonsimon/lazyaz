@@ -109,6 +109,19 @@ func (m Model) View() tea.View {
 			// Search matches first, then the cursor cell layered on top
 			// so it stays visible inside a match.
 			ranges := m.previewMatchRanges()
+			// The visual selection overrides matches on its rows; the
+			// cursor cell is layered last so it stays visible inside
+			// both.
+			if sel := m.previewSelectionRanges(); len(sel) > 0 {
+				if ranges == nil {
+					ranges = make(map[int][]ui.ColumnRange, len(sel))
+				}
+				for row, srs := range sel {
+					for _, sr := range srs {
+						ranges[row] = ui.SplitAround(ranges[row], sr)
+					}
+				}
+			}
 			if row, cell, ok := m.previewCursorHighlight(); ok {
 				if ranges == nil {
 					ranges = make(map[int][]ui.ColumnRange, 1)
