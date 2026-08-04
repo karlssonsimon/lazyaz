@@ -729,3 +729,29 @@ func TestPreviewOperatorGrammar(t *testing.T) {
 		}
 	})
 }
+
+// G lands on the first non-blank of the last line and gg on the first
+// non-blank of the first line — vim's rule — not on the raw byte ends.
+func TestPreviewJumpsLandOnFirstNonBlank(t *testing.T) {
+	m := searchModel(t, "  indented first\nmiddle\n    indented last\n")
+	m = typeKeys(m, "v")
+
+	m = typeKeys(m, "G")
+	if c := m.preview.vcur; c.Line != 2 || c.Col != 4 {
+		t.Fatalf("G landed at (%d,%d), want (2,4) — first non-blank of the last line", c.Line, c.Col)
+	}
+	if got := m.previewByteFromVim(); got != m.preview.cursor {
+		t.Fatal("byte cursor out of sync after G")
+	}
+
+	m = typeKeys(m, "g", "g")
+	if c := m.preview.vcur; c.Line != 0 || c.Col != 2 {
+		t.Fatalf("gg landed at (%d,%d), want (0,2)", c.Line, c.Col)
+	}
+
+	// A plain motion afterwards must not snap.
+	m = typeKeys(m, "$", "j")
+	if c := m.preview.vcur; c.Col == 0 || c.Col == 2 {
+		t.Fatalf("motion after the jump got snapped: col %d", c.Col)
+	}
+}

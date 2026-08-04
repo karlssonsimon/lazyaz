@@ -44,6 +44,12 @@ type previewState struct {
 	// span is the v/V selection: a byte-offset anchor with the cursor
 	// as the moving end.
 	span vim.Span
+	// snapToLineStart is a one-shot request from gg/G: once the window
+	// holding the target is loaded and the cursor synced, snap to the
+	// line's first non-blank — vim's landing rule for both jumps. The
+	// byte target alone cannot express it, since the line's content is
+	// only known after the window loads.
+	snapToLineStart bool
 	// vimMode gates the cursor. The preview opens in browse mode —
 	// h backs out and j/k scroll, like every other pane — and v enters
 	// the vim capture, where only vim keys work until esc.
@@ -142,6 +148,7 @@ func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea
 	m.preview.rendered = renderPreviewContent(msg.data, msg.blobName, m.preview.contentType, m.preview.binary, m.Styles)
 	m.preview.viewport.SetContent(m.preview.rendered)
 	m.syncPreviewVimFromByte()
+	m.applyPendingSnap()
 	m.followPreviewCursor()
 
 	if m.preview.binary {
@@ -388,6 +395,7 @@ func (m Model) browseScrollPreview(deltaLines int) (Model, tea.Cmd) {
 
 func (m Model) jumpPreviewToTop() (Model, tea.Cmd) {
 	m.preview.cursor = 0
+	m.preview.snapToLineStart = true
 	return m.ensurePreviewWindowAtCursor()
 }
 
@@ -397,6 +405,7 @@ func (m Model) jumpPreviewToBottom() (Model, tea.Cmd) {
 	} else {
 		m.preview.cursor = m.preview.blobSize - 1
 	}
+	m.preview.snapToLineStart = true
 	return m.ensurePreviewWindowAtCursor()
 }
 
@@ -458,6 +467,7 @@ func (m Model) ensurePreviewWindowAtCursor() (Model, tea.Cmd) {
 	}
 
 	m.syncPreviewVimFromByte()
+	m.applyPendingSnap()
 	m.followPreviewCursor()
 	return m, nil
 }

@@ -240,3 +240,24 @@ func (m Model) previewCursorHighlight() (row int, rng ui.ColumnRange, ok bool) {
 	}
 	return row, ui.ColumnRange{Start: start, End: end, Style: m.Styles.CursorCell}, true
 }
+
+// applyPendingSnap lands a gg/G jump on the line's first non-blank,
+// vim's rule for both. One-shot: motions and search hits sync through
+// the same path and must not be snapped.
+func (m *Model) applyPendingSnap() {
+	if !m.preview.snapToLineStart {
+		return
+	}
+	m.preview.snapToLineStart = false
+	rs := []rune(m.previewBuf().Line(m.preview.vcur.Line))
+	col := 0
+	for i, r := range rs {
+		if r != ' ' && r != '\t' {
+			col = i
+			break
+		}
+	}
+	m.preview.vcur.Col = col
+	m.preview.vcur.Want = col
+	m.preview.cursor = m.previewByteFromVim()
+}
