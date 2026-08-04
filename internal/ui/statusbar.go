@@ -46,11 +46,7 @@ func RenderStatusLine(cfg StatusLineConfig, styles Styles, width int) string {
 	chrome := styles.Chrome
 	parts := make([]string, 0, len(cfg.Actions)+1)
 	if cfg.Mode != "" {
-		mode := chrome.StatusMode.Render(cfg.Mode)
-		if cfg.Count > 0 {
-			mode += chrome.Help.Render(" ") + chrome.StatusKey.Render(strconv.Itoa(cfg.Count))
-		}
-		parts = append(parts, mode)
+		parts = append(parts, chrome.StatusMode.Render(cfg.Mode))
 	}
 	for _, action := range cfg.Actions {
 		if action.Key == "" {
@@ -66,6 +62,11 @@ func RenderStatusLine(cfg StatusLineConfig, styles Styles, width int) string {
 	left := strings.Join(parts, chrome.Help.Render("  "))
 	right := ""
 	switch {
+	// A pending count owns the right edge while it lasts — vim's
+	// bottom-right count display. Rendering it there keeps the left-hand
+	// hints from shifting as digits are typed.
+	case cfg.Count > 0:
+		right = chrome.StatusMode.Render(strconv.Itoa(cfg.Count))
 	case cfg.Message != "" && cfg.IsError:
 		right = chrome.Error.Render(cfg.Message)
 	case cfg.Message != "":
@@ -92,7 +93,19 @@ func fitStatusLine(left, right string, width int, fill lipgloss.Style) string {
 	if gap < 0 {
 		gap = 0
 	}
-	line := left + fill.Render(strings.Repeat(" ", gap)) + right
+	// The fill style may carry horizontal padding (chrome.Help does),
+	// which renders on top of the gap and used to push the line past
+	// width — truncating the right segment's tail. Budget the frame out
+	// of the gap so the rendered filler occupies exactly gap columns.
+	filler := ""
+	if gap > 0 {
+		if n := gap - fill.GetHorizontalFrameSize(); n >= 0 {
+			filler = fill.Render(strings.Repeat(" ", n))
+		} else {
+			filler = strings.Repeat(" ", gap)
+		}
+	}
+	line := left + filler + right
 	if ansi.StringWidth(line) > width {
 		return ansi.Truncate(line, width, "")
 	}

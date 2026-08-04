@@ -51,24 +51,50 @@ func TestRenderStatusLineIsOneLineAndOmitsEmptyActions(t *testing.T) {
 	}
 }
 
-// The pending count renders as its own segment beside the mode chip,
-// not inside it: the chip's styling must close before the digits start.
-func TestStatusLineCountOutsideModeChip(t *testing.T) {
+// The pending count renders highlighted at the right edge. The left
+// side must not move as digits are typed — that jitter is why it does
+// not sit beside the mode chip.
+func TestStatusLineCountAtRightEdge(t *testing.T) {
 	styles := NewStyles(FallbackScheme())
-
-	with := RenderStatusLine(StatusLineConfig{Mode: "NORMAL", Count: 12}, styles, 80)
-	stripped := ansi.Strip(with)
-	if !strings.Contains(stripped, "NORMAL") || !strings.Contains(stripped, "12") {
-		t.Fatalf("mode or count missing: %q", stripped)
+	cfg := StatusLineConfig{
+		Mode:    "NORMAL",
+		Actions: []StatusAction{{Key: "j/k", Label: "move"}},
 	}
 
-	chip := styles.Chrome.StatusMode.Render("NORMAL")
-	if !strings.Contains(with, chip) {
-		t.Errorf("mode chip no longer renders standalone — the count leaked inside it")
+	without := ansi.Strip(RenderStatusLine(cfg, styles, 80))
+	cfg.Count = 12
+	with := ansi.Strip(RenderStatusLine(cfg, styles, 80))
+
+	if !strings.HasSuffix(strings.TrimRight(with, " "), "12") {
+		t.Fatalf("count is not at the right edge: %q", with)
+	}
+	if strings.Contains(without, "12") {
+		t.Fatal("count rendered with none pending")
 	}
 
-	without := RenderStatusLine(StatusLineConfig{Mode: "NORMAL"}, styles, 80)
-	if strings.Contains(ansi.Strip(without), "12") {
-		t.Errorf("count rendered with none pending")
+	// The left content must sit at identical positions in both renders.
+	for _, seg := range []string{"NORMAL", "j/k", "move"} {
+		if strings.Index(with, seg) != strings.Index(without, seg) {
+			t.Errorf("%q shifted from %d to %d when the count appeared",
+				seg, strings.Index(without, seg), strings.Index(with, seg))
+		}
+	}
+}
+
+// The gap filler's own padding must not push the right segment past
+// width — messages were silently losing their last two characters.
+func TestStatusLineRightMessageNotTruncated(t *testing.T) {
+	styles := NewStyles(FallbackScheme())
+	line := RenderStatusLine(StatusLineConfig{
+		Mode:    "NORMAL",
+		Message: "Copied to clipboard",
+	}, styles, 80)
+
+	stripped := strings.TrimRight(ansi.Strip(line), " ")
+	if !strings.HasSuffix(stripped, "Copied to clipboard") {
+		t.Errorf("right message truncated: %q", stripped)
+	}
+	if w := ansi.StringWidth(line); w != 80 {
+		t.Errorf("line width = %d, want 80", w)
 	}
 }
