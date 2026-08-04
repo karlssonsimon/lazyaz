@@ -6,6 +6,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 
 	"charm.land/bubbles/v2/list"
 )
@@ -25,21 +26,23 @@ func (m Model) markScope() string {
 	return m.currentEntity.Name + "/" + m.currentSubName + "::" + dlq
 }
 
-func (m Model) currentMarks() map[string]struct{} {
+func (m Model) currentMarks() vim.MarkSet {
 	scope := m.markScope()
 	if scope == "" {
-		return nil
+		return vim.MarkSet{}
 	}
 	return m.markedMessages[scope]
 }
 
-func (m *Model) ensureMarks() map[string]struct{} {
+func (m *Model) ensureMarks() vim.MarkSet {
 	scope := m.markScope()
 	if scope == "" {
-		return nil
+		// Read-only zero set: no scope means nothing to mark into,
+		// matching the nil map this used to return.
+		return vim.MarkSet{}
 	}
-	if m.markedMessages[scope] == nil {
-		m.markedMessages[scope] = make(map[string]struct{})
+	if _, ok := m.markedMessages[scope]; !ok {
+		m.markedMessages[scope] = vim.NewMarkSet()
 	}
 	return m.markedMessages[scope]
 }
@@ -66,25 +69,21 @@ func (m *Model) clearScopeMarks() {
 func (m *Model) migrateMarksToLocks() {
 	scope := m.markScope()
 	marks := m.markedMessages[scope]
-	if len(marks) == 0 {
+	if marks.Len() == 0 {
 		return
 	}
 
-	migrated := make(map[string]struct{}, len(marks))
+	migrated := vim.NewMarkSet()
 	for _, msg := range m.peekedMessages {
 		if msg.LockID == "" {
 			continue
 		}
-		if _, byMessageID := marks[msg.MessageID]; byMessageID {
-			migrated[msg.LockID] = struct{}{}
-			continue
-		}
-		if _, byLockID := marks[msg.LockID]; byLockID {
-			migrated[msg.LockID] = struct{}{}
+		if marks.Contains(msg.MessageID) || marks.Contains(msg.LockID) {
+			migrated.Add(msg.LockID)
 		}
 	}
 
-	if len(migrated) == 0 {
+	if migrated.Len() == 0 {
 		delete(m.markedMessages, scope)
 		return
 	}
@@ -92,19 +91,17 @@ func (m *Model) migrateMarksToLocks() {
 }
 
 func (m *Model) toggleVisualLineMode() {
-	if m.visualLineMode {
+	if m.visual.Active() {
 		m.commitVisualSelection()
-		m.visualLineMode = false
-		m.visualAnchor = ""
+		m.visual.Stop()
 		m.refreshMessageSelectionDisplay()
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.currentMarks())))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", m.currentMarks().Len()))
 		return
 	}
 
-	m.visualLineMode = true
-	m.visualAnchor = m.currentMessageKey()
+	m.visual.Start(m.currentMessageKey())
 	m.refreshMessageSelectionDisplay()
-	if m.visualAnchor == "" {
+	if m.visual.Anchor() == "" {
 		m.Notify(appshell.LevelInfo, "Visual mode on. Move up/down to select a range.")
 		return
 	}
@@ -112,34 +109,44 @@ func (m *Model) toggleVisualLineMode() {
 }
 
 func (m *Model) commitVisualSelection() {
-	if !m.visualLineMode {
+	if !m.visual.Active() {
 		return
 	}
 	marks := m.ensureMarks()
-	if marks == nil {
+	if marks.Items() == nil {
 		return
 	}
 	for _, id := range m.visualSelectionIDs() {
-		marks[id] = struct{}{}
+		marks.Add(id)
 	}
 }
 
 func (m *Model) swapVisualAnchor() {
-	if !m.visualLineMode || m.visualAnchor == "" {
+	if !m.visual.Active() || m.visual.Anchor() == "" {
 		return
 	}
-	oldAnchor := m.visualAnchor
+	anchorIdx := m.visual.AnchorIdx(m.messageList.VisibleVersion(), m.findMessageIdx)
+	if anchorIdx < 0 {
+		return
+	}
 	oldCursor := m.currentMessageKey()
-	if oldCursor == "" || oldCursor == oldAnchor {
+	if oldCursor == "" || oldCursor == m.visual.Anchor() {
 		return
 	}
+	m.visual.SetAnchorWithIdx(oldCursor, m.messageList.Index(), m.messageList.VisibleVersion())
+	m.messageList.Select(anchorIdx)
+}
+
+// findMessageIdx locates a message operation key in the visible list,
+// -1 when absent. This is the scan vim.Visual caches per visible
+// version.
+func (m *Model) findMessageIdx(key string) int {
 	for i, it := range m.messageList.VisibleItems() {
-		if mi, ok := it.(messageItem); ok && messageOperationKey(mi.message) == oldAnchor {
-			m.messageList.Select(i)
-			m.visualAnchor = oldCursor
-			return
+		if mi, ok := it.(messageItem); ok && messageOperationKey(mi.message) == key {
+			return i
 		}
 	}
+	return -1
 }
 
 func (m Model) currentMessageKey() string {
@@ -151,53 +158,20 @@ func (m Model) currentMessageKey() string {
 }
 
 func (m Model) visualSelectionIDs() []string {
-	if !m.visualLineMode {
+	if m.currentMessageKey() == "" {
 		return nil
 	}
 
-	current := m.currentMessageKey()
-	if current == "" {
-		return nil
-	}
-
-	anchor := m.visualAnchor
-	if anchor == "" {
-		anchor = current
-	}
-
-	// Walk the list's visible items so the range covers exactly what
-	// the user sees — with a filter applied, hidden rows between the
-	// endpoints stay unselected (matches kvapp).
+	// The range covers exactly what the user sees — with a filter
+	// applied, hidden rows between the endpoints stay unselected.
 	visible := m.messageList.VisibleItems()
 	if len(visible) == 0 {
 		return nil
 	}
 
-	anchorIdx := -1
-	currentIdx := -1
-	for i, it := range visible {
-		mi, ok := it.(messageItem)
-		if !ok {
-			continue
-		}
-		key := messageOperationKey(mi.message)
-		if anchorIdx < 0 && key == anchor {
-			anchorIdx = i
-		}
-		if currentIdx < 0 && key == current {
-			currentIdx = i
-		}
-	}
-	if currentIdx < 0 {
+	start, end, ok := m.visual.Range(m.messageList.Index(), m.messageList.VisibleVersion(), m.findMessageIdx)
+	if !ok {
 		return nil
-	}
-	if anchorIdx < 0 {
-		anchorIdx = currentIdx
-	}
-
-	start, end := anchorIdx, currentIdx
-	if start > end {
-		start, end = end, start
 	}
 
 	ids := make([]string, 0, end-start+1)
@@ -228,14 +202,13 @@ func (m *Model) clearPeekState() {
 	m.currentEntity = servicebus.Entity{}
 	m.currentSubName = ""
 	m.deadLetter = false
-	m.visualLineMode = false
-	m.visualAnchor = ""
+	m.visual.Stop()
 	m.viewingMessage = false
 	m.selectedMessage = servicebus.PeekedMessage{}
 }
 
 func (m *Model) clearAllMarks() {
-	m.markedMessages = make(map[string]map[string]struct{})
+	m.markedMessages = make(map[string]vim.MarkSet)
 }
 
 // refreshMessageItems rebuilds the message list items. Mark/visual
@@ -257,7 +230,7 @@ func (m Model) messageContentWidth() int {
 // maps without rebuilding items.
 func (m *Model) refreshMessageSelectionDisplay() {
 	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, messageMarkKey)
-	d.Marked = m.currentMarks()
+	d.Marked = m.currentMarks().Items()
 	d.Visual = m.visualSelectionSet()
 	m.messageList.SetDelegate(d)
 }

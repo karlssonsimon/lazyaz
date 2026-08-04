@@ -425,8 +425,7 @@ func TestVisualSelectionRespectsActiveFilter(t *testing.T) {
 	}
 
 	m.messageList.Select(0) // alpha-1
-	m.visualLineMode = true
-	m.visualAnchor = "alpha-1"
+	m.visual.Start("alpha-1")
 	m.messageList.Select(2) // alpha-3
 
 	got := m.visualSelectionIDs()

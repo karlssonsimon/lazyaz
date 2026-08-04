@@ -76,9 +76,8 @@ func (m *Model) currentVersionOwnerName() string {
 func (m *Model) exitPane() {
 	m.snapshotCurrentPane()
 	m.blurAllFilters()
-	if m.focus == secretsPane && m.visualLineMode {
-		m.visualLineMode = false
-		m.visualAnchor = ""
+	if m.focus == secretsPane && m.visual.Active() {
+		m.visual.Stop()
 		m.refreshSecretItems()
 	}
 }
@@ -153,7 +152,7 @@ func (m *Model) scrollFocusedHalfPage(direction int) {
 		}
 	}
 
-	if m.focus == secretsPane && m.visualLineMode {
+	if m.focus == secretsPane && m.visual.Active() {
 		m.refreshSecretSelectionDisplay()
 	}
 }

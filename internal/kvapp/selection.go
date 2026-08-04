@@ -5,18 +5,16 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 )
 
 func (m *Model) clearSecretSelectionState() {
-	m.visualLineMode = false
-	m.visualAnchor = ""
-	if m.markedSecrets == nil {
-		m.markedSecrets = make(map[string]struct{})
+	m.visual.Stop()
+	if m.marked.Items() == nil {
+		m.marked = vim.NewMarkSet()
 		return
 	}
-	for name := range m.markedSecrets {
-		delete(m.markedSecrets, name)
-	}
+	m.marked.Clear()
 }
 
 func (m *Model) refreshSecretItems() {
@@ -26,7 +24,7 @@ func (m *Model) refreshSecretItems() {
 
 func (m *Model) refreshSecretSelectionDisplay() {
 	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, secretMarkKey)
-	d.Marked = m.markedSecrets
+	d.Marked = m.marked.Items()
 	d.Visual = m.visualSelectionNames()
 	m.secretsList.SetDelegate(d)
 }
@@ -37,19 +35,17 @@ func (m *Model) toggleVisualLineMode() {
 		return
 	}
 
-	if m.visualLineMode {
+	if m.visual.Active() {
 		m.commitVisualSelection()
-		m.visualLineMode = false
-		m.visualAnchor = ""
+		m.visual.Stop()
 		m.refreshSecretSelectionDisplay()
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedSecrets)))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", m.marked.Len()))
 		return
 	}
 
-	m.visualLineMode = true
-	m.visualAnchor = m.currentSecretName()
+	m.visual.Start(m.currentSecretName())
 	m.refreshSecretSelectionDisplay()
-	if m.visualAnchor == "" {
+	if m.visual.Anchor() == "" {
 		m.Notify(appshell.LevelInfo, "Visual mode on. Move up/down to select a range.")
 		return
 	}
@@ -58,30 +54,39 @@ func (m *Model) toggleVisualLineMode() {
 }
 
 func (m *Model) commitVisualSelection() {
-	if !m.visualLineMode {
+	if !m.visual.Active() {
 		return
 	}
 	for _, item := range m.visualSelectionItems() {
-		m.markedSecrets[item.secret.Name] = struct{}{}
+		m.marked.Add(item.secret.Name)
 	}
 }
 
 func (m *Model) swapVisualAnchor() {
-	if !m.visualLineMode || m.visualAnchor == "" {
+	if !m.visual.Active() || m.visual.Anchor() == "" {
 		return
 	}
-	oldAnchor := m.visualAnchor
+	anchorIdx := m.visual.AnchorIdx(m.secretsList.VisibleVersion(), m.findSecretIdx)
+	if anchorIdx < 0 {
+		return
+	}
 	oldCursor := m.currentSecretName()
-	if oldCursor == "" || oldCursor == oldAnchor {
+	if oldCursor == "" || oldCursor == m.visual.Anchor() {
 		return
 	}
+	m.visual.SetAnchorWithIdx(oldCursor, m.secretsList.Index(), m.secretsList.VisibleVersion())
+	m.secretsList.Select(anchorIdx)
+}
+
+// findSecretIdx locates a secret name in the visible list, -1 when
+// absent. This is the scan vim.Visual caches per visible version.
+func (m *Model) findSecretIdx(name string) int {
 	for i, it := range m.secretsList.VisibleItems() {
-		if s, ok := it.(secretItem); ok && s.secret.Name == oldAnchor {
-			m.secretsList.Select(i)
-			m.visualAnchor = oldCursor
-			return
+		if s, ok := it.(secretItem); ok && s.secret.Name == name {
+			return i
 		}
 	}
+	return -1
 }
 
 func (m *Model) toggleCurrentSecretMark() {
@@ -96,16 +101,13 @@ func (m *Model) toggleCurrentSecretMark() {
 		return
 	}
 
-	if _, exists := m.markedSecrets[item.secret.Name]; exists {
-		delete(m.markedSecrets, item.secret.Name)
+	if m.marked.Toggle(item.secret.Name) {
 		m.refreshSecretSelectionDisplay()
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", item.secret.Name, len(m.markedSecrets)))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", item.secret.Name, m.marked.Len()))
 		return
 	}
-
-	m.markedSecrets[item.secret.Name] = struct{}{}
 	m.refreshSecretSelectionDisplay()
-	m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", item.secret.Name, len(m.markedSecrets)))
+	m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", item.secret.Name, m.marked.Len()))
 }
 
 func (m Model) currentSecretName() string {
@@ -117,18 +119,8 @@ func (m Model) currentSecretName() string {
 }
 
 func (m Model) visualSelectionItems() []secretItem {
-	if !m.visualLineMode {
+	if m.currentSecretName() == "" {
 		return nil
-	}
-
-	current := m.currentSecretName()
-	if current == "" {
-		return nil
-	}
-
-	anchor := m.visualAnchor
-	if anchor == "" {
-		anchor = current
 	}
 
 	visible := m.secretsList.VisibleItems()
@@ -136,30 +128,9 @@ func (m Model) visualSelectionItems() []secretItem {
 		return nil
 	}
 
-	anchorIdx := -1
-	currentIdx := -1
-	for i, it := range visible {
-		s, ok := it.(secretItem)
-		if !ok {
-			continue
-		}
-		if anchorIdx < 0 && s.secret.Name == anchor {
-			anchorIdx = i
-		}
-		if currentIdx < 0 && s.secret.Name == current {
-			currentIdx = i
-		}
-	}
-	if currentIdx < 0 {
+	start, end, ok := m.visual.Range(m.secretsList.Index(), m.secretsList.VisibleVersion(), m.findSecretIdx)
+	if !ok {
 		return nil
-	}
-	if anchorIdx < 0 {
-		anchorIdx = currentIdx
-	}
-
-	start, end := anchorIdx, currentIdx
-	if start > end {
-		start, end = end, start
 	}
 
 	items := make([]secretItem, 0, end-start+1)

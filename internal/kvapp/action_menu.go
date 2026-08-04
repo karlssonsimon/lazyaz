@@ -111,10 +111,10 @@ func (m Model) buildActions() []action {
 			action{actionToggleVisualLine, "Toggle visual line selection", km.ToggleVisualLine.Short()},
 		)
 
-		if len(m.markedSecrets) > 0 {
+		if m.marked.Len() > 0 {
 			actions = append(actions, action{
 				actionYankMarkedAsJSON,
-				fmt.Sprintf("Yank marked as JSON (%d)", len(m.markedSecrets)),
+				fmt.Sprintf("Yank marked as JSON (%d)", m.marked.Len()),
 				"",
 			})
 			actions = append(actions, action{actionClearMarks, "Clear all marks", ""})
@@ -218,10 +218,8 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m, tea.Batch(m.Spinner.Tick, yankMarkedSecretsAsJSONCmd(m.service, m.currentVault, names))
 
 	case actionClearMarks:
-		count := len(m.markedSecrets)
-		for name := range m.markedSecrets {
-			delete(m.markedSecrets, name)
-		}
+		count := m.marked.Len()
+		m.marked.Clear()
 		m.refreshSecretSelectionDisplay()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
 		return m, nil
@@ -414,11 +412,11 @@ func yankMarkedSecretsAsJSONCmd(svc *keyvault.Service, vault keyvault.Vault, nam
 }
 
 func (m Model) sortedMarkedSecretNames() []string {
-	if len(m.markedSecrets) == 0 {
+	if m.marked.Len() == 0 {
 		return nil
 	}
-	names := make([]string, 0, len(m.markedSecrets))
-	for name := range m.markedSecrets {
+	names := make([]string, 0, m.marked.Len())
+	for name := range m.marked.Items() {
 		names = append(names, name)
 	}
 	sort.Strings(names)

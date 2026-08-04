@@ -703,7 +703,7 @@ func TestVisualSelectionRespectsActiveFilter(t *testing.T) {
 
 	m.secretsList.Select(0) // alpha-1
 	m.toggleVisualLineMode()
-	if !m.visualLineMode {
+	if !m.visual.Active() {
 		t.Fatal("expected visual line mode on")
 	}
 	m.secretsList.Select(2) // alpha-3

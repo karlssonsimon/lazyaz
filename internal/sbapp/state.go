@@ -63,7 +63,7 @@ func (m Model) inputMode() InputMode {
 		return ModeMessagePreview
 	case m.focusedListSettingFilter():
 		return ModeListFilter
-	case m.visualLineMode && m.focus == messagesPane:
+	case m.visual.Active() && m.focus == messagesPane:
 		return ModeVisualLine
 	default:
 		return ModeNormal
@@ -121,8 +121,10 @@ type Model struct {
 	// type picker.
 	deadLetter bool
 
-	visualLineMode bool
-	visualAnchor   string // message ID of the anchor
+	// visual is the vim selection over the messages list; the anchor is
+	// a message operation key and its index cache follows the list's
+	// visible version.
+	visual vim.Visual
 
 	// lockedMessages holds the result of a receive-with-lock operation.
 	// Non-nil means the user has received DLQ messages with locks held.
@@ -144,7 +146,9 @@ type Model struct {
 	selectedMessage servicebus.PeekedMessage
 	textSelection   ui.TextSelection
 
-	markedMessages map[string]map[string]struct{}
+	// markedMessages holds one mark set per queue/DLQ scope. Only this
+	// surface needs scoping, so the map lives here rather than in vim.
+	markedMessages map[string]vim.MarkSet
 
 	cache sbCache
 
@@ -340,7 +344,7 @@ func NewModelWithKeyMap(svc *servicebus.Service, cfg ui.Config, km keymap.Keymap
 		queueTypeList:        queueType,
 		messageList:          messages,
 		focus:                namespacesPane,
-		markedMessages:       make(map[string]map[string]struct{}),
+		markedMessages:       make(map[string]vim.MarkSet),
 		cache:                newCache(db),
 		namespacesHistory:    make(map[string]ui.ListState),
 		entitiesHistory:      make(map[string]ui.ListState),
@@ -388,7 +392,7 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 		&m.queueTypeList, &m.messageList,
 	}, &m.Spinner)
 	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, messageMarkKey)
-	d.Marked = m.currentMarks()
+	d.Marked = m.currentMarks().Items()
 	d.Visual = m.visualSelectionSet()
 	m.messageList.SetDelegate(d)
 	m.entitiesList.SetDelegate(newEntityDelegate(m.Styles.Delegate, m.Styles))

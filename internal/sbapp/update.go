@@ -653,10 +653,9 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 		return m, nil
 	case m.Keymap.ExitVisualLine.Matches(key):
 		m.commitVisualSelection()
-		m.visualLineMode = false
-		m.visualAnchor = ""
+		m.visual.Stop()
 		m.refreshMessageSelectionDisplay()
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.currentMarks())))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", m.currentMarks().Len()))
 		return m, nil
 	}
 
@@ -665,7 +664,7 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 	// too (the old check matched only the stock movement keys).
 	before := m.messageList.Index()
 	m2, cmd := m.updateFocusedList(msg)
-	if m2.focus == messagesPane && m2.visualLineMode && m2.messageList.Index() != before {
+	if m2.focus == messagesPane && m2.visual.Active() && m2.messageList.Index() != before {
 		m2.refreshMessageSelectionDisplay()
 		m2.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(m2.visualSelectionIDs())))
 	}
@@ -722,19 +721,17 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 			}
 			marks := m.ensureMarks()
 			id := messageOperationKey(item.message)
-			if _, marked := marks[id]; marked {
-				delete(marks, id)
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", ui.EmptyToDash(item.message.MessageID), len(marks)))
+			if marks.Toggle(id) {
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", ui.EmptyToDash(item.message.MessageID), marks.Len()))
 			} else {
-				marks[id] = struct{}{}
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", ui.EmptyToDash(item.message.MessageID), len(marks)))
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", ui.EmptyToDash(item.message.MessageID), marks.Len()))
 			}
 			m.refreshMessageSelectionDisplay()
 			return m, nil
 		}
 	case m.Keymap.ExitVisualLine.Matches(key):
-		if m.focus == messagesPane && len(m.currentMarks()) > 0 {
-			count := len(m.currentMarks())
+		if m.focus == messagesPane && m.currentMarks().Len() > 0 {
+			count := m.currentMarks().Len()
 			m.clearScopeMarks()
 			m.refreshMessageSelectionDisplay()
 			m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))

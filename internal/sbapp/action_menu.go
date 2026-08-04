@@ -170,7 +170,7 @@ func (m Model) buildActions() []action {
 		if m.lockedMessages == nil {
 			actions = append(actions, action{actionReceiveMessages, fmt.Sprintf("Receive %s messages (with lock)", label), ""})
 		} else {
-			n := len(m.currentMarks())
+			n := m.currentMarks().Len()
 			if n == 0 {
 				n = 1
 			}
@@ -350,12 +350,10 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 			}
 			marks := m.ensureMarks()
 			id := messageOperationKey(item.message)
-			if _, marked := marks[id]; marked {
-				delete(marks, id)
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", ui.EmptyToDash(item.message.MessageID), len(marks)))
+			if marks.Toggle(id) {
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", ui.EmptyToDash(item.message.MessageID), marks.Len()))
 			} else {
-				marks[id] = struct{}{}
-				m.Notify(appshell.LevelInfo, fmt.Sprintf("Marked %s (%d marked)", ui.EmptyToDash(item.message.MessageID), len(marks)))
+				m.Notify(appshell.LevelInfo, fmt.Sprintf("Unmarked %s (%d marked)", ui.EmptyToDash(item.message.MessageID), marks.Len()))
 			}
 			m.refreshMessageSelectionDisplay()
 		}
@@ -436,8 +434,8 @@ func (m Model) openRequeueConfirm() (Model, tea.Cmd) {
 // selected message as a single-element set.
 func (m Model) lockedMessageTargets() map[string]struct{} {
 	marks := m.currentMarks()
-	if len(marks) > 0 {
-		return marks
+	if marks.Len() > 0 {
+		return marks.Items()
 	}
 	item, ok := m.messageList.SelectedItem().(messageItem)
 	if !ok {

@@ -607,10 +607,9 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 		return m, nil
 	case m.Keymap.ExitVisualLine.Matches(key):
 		m.commitVisualSelection()
-		m.visualLineMode = false
-		m.visualAnchor = ""
+		m.visual.Stop()
 		m.refreshSecretSelectionDisplay()
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", len(m.markedSecrets)))
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode off. %d marked.", m.marked.Len()))
 		return m, nil
 	}
 
@@ -619,7 +618,7 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 	// too (the old check matched only the stock movement keys).
 	before := m.secretsList.Index()
 	mdl, cmd := m.updateFocusedList(msg)
-	if mdl.visualLineMode && mdl.secretsList.Index() != before {
+	if mdl.visual.Active() && mdl.secretsList.Index() != before {
 		mdl.refreshSecretSelectionDisplay()
 		mdl.Notify(appshell.LevelInfo, fmt.Sprintf("Visual mode on. %d in range.", len(mdl.visualSelectionNames())))
 	}
@@ -678,11 +677,9 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 			return m, nil
 		}
 	case m.Keymap.ExitVisualLine.Matches(key):
-		if m.focus == secretsPane && len(m.markedSecrets) > 0 {
-			count := len(m.markedSecrets)
-			for name := range m.markedSecrets {
-				delete(m.markedSecrets, name)
-			}
+		if m.focus == secretsPane && m.marked.Len() > 0 {
+			count := m.marked.Len()
+			m.marked.Clear()
 			m.refreshSecretSelectionDisplay()
 			m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
 			return m, nil

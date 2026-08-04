@@ -68,7 +68,7 @@ func (m Model) inputMode() InputMode {
 		return ModeOverlay
 	case m.focusedListSettingFilter():
 		return ModeListFilter
-	case m.visualLineMode && m.focus == secretsPane:
+	case m.visual.Active() && m.focus == secretsPane:
 		return ModeVisualLine
 	default:
 		return ModeNormal
@@ -137,16 +137,17 @@ type Model struct {
 	// vimr resolves multi-key vim chords (gg, z...) for this model.
 	vimr vim.Resolver
 
-	vaults         []keyvault.Vault
-	secrets        []keyvault.Secret
-	versions       []keyvault.SecretVersion
-	certs          []keyvault.Certificate
-	certVersions   []keyvault.CertificateVersion
-	keys           []keyvault.Key
-	keyVersions    []keyvault.KeyVersion
-	markedSecrets  map[string]struct{}
-	visualLineMode bool
-	visualAnchor   string
+	vaults       []keyvault.Vault
+	secrets      []keyvault.Secret
+	versions     []keyvault.SecretVersion
+	certs        []keyvault.Certificate
+	certVersions []keyvault.CertificateVersion
+	keys         []keyvault.Key
+	keyVersions  []keyvault.KeyVersion
+	// marked and visual are the vim selection state over the secrets
+	// list; the anchor's index cache follows the list's visible version.
+	marked vim.MarkSet
+	visual vim.Visual
 
 	pasteModal pasteModalState
 
@@ -371,7 +372,7 @@ func NewModelWithKeyMap(svc *keyvault.Service, cfg ui.Config, km keymap.Keymap, 
 		secretsList:      secrets,
 		versionsList:     versionsList,
 		kindList:         kindList,
-		markedSecrets:    make(map[string]struct{}),
+		marked:           vim.NewMarkSet(),
 		focus:            vaultsPane,
 		cache:            newCache(db),
 		vaultsHistory:    make(map[string]ui.ListState),
@@ -422,7 +423,7 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 		&m.vaultsList, &m.kindList, &m.secretsList, &m.versionsList,
 	}, &m.Spinner)
 	d := ui.NewMarkDelegate(m.Styles.Delegate, m.Styles, secretMarkKey)
-	d.Marked = m.markedSecrets
+	d.Marked = m.marked.Items()
 	d.Visual = m.visualSelectionNames()
 	m.secretsList.SetDelegate(d)
 }

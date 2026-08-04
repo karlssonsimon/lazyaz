@@ -32,7 +32,7 @@ func TestMarksMigrateToLockIDsAfterReceiveWithLock(t *testing.T) {
 		m.messageList.Select(i)
 		m.executeAction(action{id: actionToggleMark})
 	}
-	if got := len(m.currentMarks()); got != 3 {
+	if got := m.currentMarks().Len(); got != 3 {
 		t.Fatalf("after mark all 3 peeked: want 3 marks, got %d", got)
 	}
 
@@ -48,20 +48,20 @@ func TestMarksMigrateToLockIDsAfterReceiveWithLock(t *testing.T) {
 	m.migrateMarksToLocks()
 
 	marks := m.currentMarks()
-	if len(marks) != 2 {
-		t.Errorf("after receive: want 2 marks (matching the locked messages), got %d: %v", len(marks), marks)
+	if marks.Len() != 2 {
+		t.Errorf("after receive: want 2 marks (matching the locked messages), got %d: %v", marks.Len(), marks.Sorted())
 	}
-	if _, ok := marks["1:0"]; !ok {
-		t.Errorf("LockID 1:0 should be marked, marks=%v", marks)
+	if !marks.Contains("1:0") {
+		t.Errorf("LockID 1:0 should be marked, marks=%v", marks.Sorted())
 	}
-	if _, ok := marks["1:1"]; !ok {
-		t.Errorf("LockID 1:1 should be marked, marks=%v", marks)
+	if !marks.Contains("1:1") {
+		t.Errorf("LockID 1:1 should be marked, marks=%v", marks.Sorted())
 	}
-	if _, ok := marks["msg-3"]; ok {
-		t.Errorf("orphan mark for unreceived msg-3 should be dropped, marks=%v", marks)
+	if marks.Contains("msg-3") {
+		t.Errorf("orphan mark for unreceived msg-3 should be dropped, marks=%v", marks.Sorted())
 	}
-	if _, ok := marks["msg-1"]; ok {
-		t.Errorf("MessageID-keyed mark for msg-1 should be replaced, not retained, marks=%v", marks)
+	if marks.Contains("msg-1") {
+		t.Errorf("MessageID-keyed mark for msg-1 should be replaced, not retained, marks=%v", marks.Sorted())
 	}
 }
 
@@ -97,8 +97,8 @@ func TestRequeueLabelMatchesMarkedCountAfterReceive(t *testing.T) {
 	// Toggling either locked row should now UNMARK it (not double-mark).
 	m.messageList.Select(0)
 	m.executeAction(action{id: actionToggleMark})
-	if _, stillMarked := m.currentMarks()["1:0"]; stillMarked {
-		t.Errorf("toggle on a marked locked row should unmark it, but 1:0 is still marked: %v", m.currentMarks())
+	if m.currentMarks().Contains("1:0") {
+		t.Errorf("toggle on a marked locked row should unmark it, but 1:0 is still marked: %v", m.currentMarks().Sorted())
 	}
 
 	// And the Requeue label should reflect the remaining single mark.
@@ -109,6 +109,6 @@ func TestRequeueLabelMatchesMarkedCountAfterReceive(t *testing.T) {
 		}
 	}
 	if requeueLabel != "Requeue 1 message(s)" {
-		t.Errorf("Requeue label = %q, want %q (marks=%v)", requeueLabel, "Requeue 1 message(s)", m.currentMarks())
+		t.Errorf("Requeue label = %q, want %q (marks=%v)", requeueLabel, "Requeue 1 message(s)", m.currentMarks().Sorted())
 	}
 }

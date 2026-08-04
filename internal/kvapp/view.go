@@ -276,7 +276,7 @@ func (m Model) columnTitleMeta(pane int) string {
 		// Marks only ever apply to secrets — don't surface a stale count
 		// for cert/key kinds.
 		if m.kvKind == kvKindSecrets {
-			if marked := len(m.markedSecrets); marked > 0 {
+			if marked := m.marked.Len(); marked > 0 {
 				parts = append(parts, fmt.Sprintf("%d marked", marked))
 			}
 		}

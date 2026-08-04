@@ -323,7 +323,7 @@ func (m Model) columnTitleMeta(pane int) string {
 		// Count only the current scope's marks — marks persist per
 		// scope, and summing across scopes shows phantom counts after
 		// switching entity or queue type.
-		if marked := len(m.currentMarks()); marked > 0 {
+		if marked := m.currentMarks().Len(); marked > 0 {
 			parts = append(parts, fmt.Sprintf("%d marked", marked))
 		}
 		return strings.Join(parts, " · ")
