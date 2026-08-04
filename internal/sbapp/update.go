@@ -7,6 +7,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
@@ -837,70 +838,60 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 	// The search prompt owns every key while it is open, so a query can
 	// contain characters that are otherwise message-body bindings.
 	if cmd, consumed := m.handleMessageSearchKey(key); consumed {
-		m.pendingMessageG = false
+		m.vimr.Clear()
 		return m, cmd
+	}
+
+	// The gg chord resolves before the switch: its keys (g, home) are
+	// not bound to anything else in message focus, and a non-chord key
+	// falls through with the pending state cleared.
+	switch m.vimr.GG(m.Keymap.JumpTopPrefix, key, true) {
+	case vim.ChordFired:
+		m.messageViewport.GotoTop()
+		return m, nil
+	case vim.ChordArmed:
+		m.Notify(appshell.LevelInfo, vim.HintGG)
+		return m, nil
 	}
 
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
 	case m.Keymap.NextFocus.Matches(key):
-		m.pendingMessageG = false
 		m.nextFocus()
 		return m, nil
 	case m.Keymap.PreviousFocus.Matches(key):
-		m.pendingMessageG = false
 		m.previousFocus()
 		return m, nil
 	case m.Keymap.ActionMenu.Matches(key):
-		m.pendingMessageG = false
 		m.actionMenu.open(m.buildActions())
 		return m, nil
 	case m.Keymap.YankMessageBody.Matches(key):
-		m.pendingMessageG = false
 		return m.yankMessageBody(m.selectedMessage.FullBody)
 	case m.Keymap.CopyPalette.Matches(key):
-		m.pendingMessageG = false
 		return m.openCopyPalette()
 	case m.Keymap.JumpBottom.Matches(key):
-		m.pendingMessageG = false
 		m.messageViewport.GotoBottom()
 		return m, nil
 	case m.Keymap.FullPageDown.Matches(key):
-		m.pendingMessageG = false
 		m.messageViewport.PageDown()
 		return m, nil
 	case m.Keymap.FullPageUp.Matches(key):
-		m.pendingMessageG = false
 		m.messageViewport.PageUp()
 		return m, nil
 	// The message body scrolls without a cursor, so ctrl+e / ctrl+y move
 	// the view a single line — the plain vim meaning.
 	case m.Keymap.ScrollLineDown.Matches(key):
-		m.pendingMessageG = false
 		m.messageViewport.ScrollDown(1)
 		return m, nil
 	case m.Keymap.ScrollLineUp.Matches(key):
-		m.pendingMessageG = false
 		m.messageViewport.ScrollUp(1)
 		return m, nil
-	case m.Keymap.JumpTopPrefix.Matches(key):
-		// Home jumps immediately; bare g keeps the gg chord.
-		if key == "home" || m.pendingMessageG {
-			m.pendingMessageG = false
-			m.messageViewport.GotoTop()
-			return m, nil
-		}
-		m.pendingMessageG = true
-		m.Notify(appshell.LevelInfo, "Press g again for top")
-		return m, nil
 	case m.Keymap.MessageBack.Matches(key):
-		m.pendingMessageG = false
 		m.transitionTo(messagesPane)
 		m.Notify(appshell.LevelInfo, "Back to message list")
 		return m, nil
 	}
-	m.pendingMessageG = false
 	var cmd tea.Cmd
 	m.messageViewport, cmd = m.messageViewport.Update(msg)
 	return m, cmd

@@ -10,6 +10,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -53,7 +54,7 @@ const previewGutterMinDigits = 3
 
 func (m *Model) resetPreviewState() {
 	m.preview = newPreviewState()
-	m.pendingPreviewG = false
+	m.vimr.Clear()
 	if m.focus == previewPane {
 		m.transitionTo(blobsPane, false)
 	}
@@ -79,7 +80,6 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.preview.rendered = m.Styles.Muted.Render("Loading preview...")
 	m.preview.viewport.SetContent(m.preview.rendered)
 	m.preview.requestID++
-	m.pendingPreviewG = false
 	m.transitionTo(previewPane, false)
 	m.StartLoading(previewPane, fmt.Sprintf("Loading preview for %s", b.Name))
 	m.resize()
@@ -158,79 +158,64 @@ func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// The gg chord is resolved before the switch: its keys (g, home)
+	// are not bound to anything else in preview focus, and a non-chord
+	// key falls through with the pending state cleared.
+	switch m.vimr.GG(m.Keymap.JumpTopPrefix, key, true) {
+	case vim.ChordFired:
+		return m.jumpPreviewToTop()
+	case vim.ChordArmed:
+		m.Notify(appshell.LevelInfo, vim.HintGG)
+		return m, nil
+	}
+
 	switch {
 	case ui.ShouldQuit(key, m.Keymap.Quit, false):
 		return m, tea.Quit
 	case m.Keymap.SearchForward.Matches(key):
-		m.pendingPreviewG = false
 		m.preview.search.bar.Open(ui.SearchForward)
 		return m, nil
 	case m.Keymap.SearchBackward.Matches(key):
-		m.pendingPreviewG = false
 		m.preview.search.bar.Open(ui.SearchBackward)
 		return m, nil
 	case m.Keymap.SearchNext.Matches(key):
-		m.pendingPreviewG = false
 		return m.repeatPreviewSearch(m.preview.search.bar.Direction)
 	case m.Keymap.SearchPrev.Matches(key):
-		m.pendingPreviewG = false
 		return m.repeatPreviewSearch(m.preview.search.bar.Direction.Opposite())
 	case m.Keymap.PreviewBack.Matches(key):
-		m.pendingPreviewG = false
 		m.transitionTo(blobsPane, false)
 		return m, nil
 	case m.Keymap.PreviewNextFocus.Matches(key):
-		m.pendingPreviewG = false
 		m.nextFocus()
 		return m, nil
 	case m.Keymap.PreviewPreviousFocus.Matches(key):
-		m.pendingPreviewG = false
 		m.previousFocus()
 		return m, nil
 	case m.Keymap.PreviewDown.Matches(key):
-		m.pendingPreviewG = false
 		return m.movePreviewCursorByLines(1)
 	case m.Keymap.PreviewUp.Matches(key):
-		m.pendingPreviewG = false
 		return m.movePreviewCursorByLines(-1)
 	case m.Keymap.HalfPageDown.Matches(key):
-		m.pendingPreviewG = false
 		step := max(1, m.preview.viewport.Height()/2)
 		return m.movePreviewCursorByLines(step)
 	case m.Keymap.HalfPageUp.Matches(key):
-		m.pendingPreviewG = false
 		step := max(1, m.preview.viewport.Height()/2)
 		return m.movePreviewCursorByLines(-step)
 	case m.Keymap.FullPageDown.Matches(key):
-		m.pendingPreviewG = false
 		return m.movePreviewCursorByLines(max(1, m.preview.viewport.Height()))
 	case m.Keymap.FullPageUp.Matches(key):
-		m.pendingPreviewG = false
 		return m.movePreviewCursorByLines(-max(1, m.preview.viewport.Height()))
 	// The preview has no cursor separate from its scroll position — the
 	// top visible line is the position — so ctrl+e / ctrl+y move by one
 	// line, same as j / k. They are bound because the muscle memory is
 	// worth more than the redundancy.
 	case m.Keymap.ScrollLineDown.Matches(key):
-		m.pendingPreviewG = false
 		return m.movePreviewCursorByLines(1)
 	case m.Keymap.ScrollLineUp.Matches(key):
-		m.pendingPreviewG = false
 		return m.movePreviewCursorByLines(-1)
 	case m.Keymap.JumpBottom.Matches(key):
-		m.pendingPreviewG = false
 		return m.jumpPreviewToBottom()
-	case m.Keymap.JumpTopPrefix.Matches(key):
-		// Home jumps immediately; bare g keeps the gg chord.
-		if key == "home" || m.pendingPreviewG {
-			m.pendingPreviewG = false
-			return m.jumpPreviewToTop()
-		}
-		m.pendingPreviewG = true
-		m.Notify(appshell.LevelInfo, "Press g again for top")
-		return m, nil
 	default:
-		m.pendingPreviewG = false
 		return m, nil
 	}
 }

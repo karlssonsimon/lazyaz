@@ -11,6 +11,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 
 	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/list"
@@ -111,8 +112,8 @@ type Model struct {
 
 	focus int
 
-	// pendingScrollZ holds a half-typed `z` chord between keystrokes.
-	pendingScrollZ bool
+	// vimr resolves multi-key vim chords (gg, z...) for this model.
+	vimr vim.Resolver
 
 	accounts       []blob.Account
 	containers     []blob.ContainerInfo
@@ -154,16 +155,15 @@ type Model struct {
 	// Non-empty means more entries exist — the action menu offers
 	// "Load N more" and the pane title shows a trailing "+". Cleared on
 	// every scope change; refreshed by each completed hierarchy load.
-	blobNextMarker  string
-	blobSortField   blobSortField
-	blobSortDesc    bool
-	filter          blobFilter
-	sortOverlay     sortOverlayState
-	copyOverlay     ui.CopyOverlay
-	actionMenu      actionMenuState
-	preview         previewState
-	pendingPreviewG bool
-	textSelection   ui.TextSelection
+	blobNextMarker string
+	blobSortField  blobSortField
+	blobSortDesc   bool
+	filter         blobFilter
+	sortOverlay    sortOverlayState
+	copyOverlay    ui.CopyOverlay
+	actionMenu     actionMenuState
+	preview        previewState
+	textSelection  ui.TextSelection
 
 	// downloadDir is the resolved root directory under which marked
 	// blobs are saved. Set once at construction time from

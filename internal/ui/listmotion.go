@@ -1,6 +1,9 @@
 package ui
 
-import "github.com/karlssonsimon/lazyaz/internal/keymap"
+import (
+	"github.com/karlssonsimon/lazyaz/internal/keymap"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
+)
 
 // ListMotion reports what HandleListMotion did with a key, so the caller
 // knows whether to keep routing it and whether to show the chord hint.
@@ -18,39 +21,40 @@ const (
 // ScrollChordHint is what to show while a `z` chord is waiting for its
 // second key. Unlike the gg chord there are three continuations, so
 // spelling them out beats a bare "press z again".
-const ScrollChordHint = "z: t top · z center · b bottom"
+const ScrollChordHint = vim.HintScroll
 
 // HandleListMotion routes a key through the vim-style scroll motions for
-// one list. chordPending carries the half-typed `z` across keystrokes and
-// is owned by the caller, so each pane keeps its own chord state.
+// one list. The z chord's pending state lives in the caller's resolver,
+// so each pane keeps its own chord state.
 //
 // Plain cursor movement is not handled here — the bubbles list still owns
 // CursorUp/CursorDown via the user's keymap, and List re-derives the
 // window offset afterwards.
-func HandleListMotion(l *List, km keymap.Keymap, key string, chordPending *bool) ListMotion {
+func HandleListMotion(l *List, km keymap.Keymap, key string, r *vim.Resolver) ListMotion {
 	if l == nil {
 		return MotionNone
 	}
 
-	if *chordPending {
-		*chordPending = false
-		switch {
-		case km.ScrollCenter.Matches(key):
-			l.CenterOnCursor()
-		case km.ScrollTop.Matches(key):
-			l.CursorToTop()
-		case km.ScrollBottom.Matches(key):
-			l.CursorToBottom()
-		}
+	switch res, op := r.Scroll(km, key); res {
+	case vim.ChordArmed:
+		return MotionChordOpen
+	case vim.ChordSwallowed:
 		// An unrecognized continuation is swallowed rather than passed
 		// on, so a mistyped chord cannot trigger some unrelated action.
+		return MotionHandled
+	case vim.ChordFired:
+		switch op {
+		case vim.ScrollOpCenter:
+			l.CenterOnCursor()
+		case vim.ScrollOpTop:
+			l.CursorToTop()
+		case vim.ScrollOpBottom:
+			l.CursorToBottom()
+		}
 		return MotionHandled
 	}
 
 	switch {
-	case km.ScrollPrefix.Matches(key):
-		*chordPending = true
-		return MotionChordOpen
 	case km.ScrollLineDown.Matches(key):
 		l.ScrollBy(1)
 	case km.ScrollLineUp.Matches(key):

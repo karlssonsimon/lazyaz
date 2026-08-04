@@ -78,8 +78,16 @@ func TestPreviewSearchPromptCapturesKeys(t *testing.T) {
 	if got := m.preview.search.bar.Input.Value; got != "gj" {
 		t.Errorf("query = %q, want %q — preview bindings leaked past the prompt", got, "gj")
 	}
-	if m.pendingPreviewG {
-		t.Error("typing g into the query armed the gg chord")
+	// The g typed into the query must not have armed the gg chord: close
+	// the prompt, move down, then press a single g — an armed chord
+	// would fire and jump the cursor back to the top.
+	m = typeKeys(m, "esc", "j")
+	if m.preview.cursor == 0 {
+		t.Fatal("setup: cursor did not move off the top")
+	}
+	m = typeKeys(m, "g")
+	if m.preview.cursor == 0 {
+		t.Error("typing g into the query armed the gg chord — a single g later fired it")
 	}
 }
 

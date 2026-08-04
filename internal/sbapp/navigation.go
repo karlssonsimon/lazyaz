@@ -53,7 +53,7 @@ func (m *Model) closePreview() {
 	m.viewingMessage = false
 	m.selectedMessage = servicebus.PeekedMessage{}
 	m.textSelection.Reset()
-	m.pendingMessageG = false
+	m.vimr.Clear()
 }
 
 func (m Model) messageViewportRegion() ui.ViewportRegion {

@@ -10,6 +10,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 
 	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/list"
@@ -93,8 +94,8 @@ type Model struct {
 
 	focus int
 
-	// pendingScrollZ holds a half-typed `z` chord between keystrokes.
-	pendingScrollZ bool
+	// vimr resolves multi-key vim chords (gg, z...) for this model.
+	vimr vim.Resolver
 
 	namespaces    []servicebus.Namespace
 	entities      []servicebus.Entity
@@ -142,11 +143,6 @@ type Model struct {
 	messageSearch   messageSearchState
 	selectedMessage servicebus.PeekedMessage
 	textSelection   ui.TextSelection
-
-	// pendingMessageG is true between the first and second `g` of the
-	// gg jump-to-top chord in the message preview (mirrors blobapp's
-	// pendingPreviewG).
-	pendingMessageG bool
 
 	markedMessages map[string]map[string]struct{}
 

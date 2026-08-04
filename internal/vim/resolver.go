@@ -55,6 +55,14 @@ type Resolver struct {
 	z  bool
 }
 
+// Clear drops any pending chord. Call when leaving the context the
+// chord was armed in — closing the preview, say — so a stale first key
+// cannot complete a chord somewhere else.
+func (r *Resolver) Clear() {
+	r.gg = false
+	r.z = false
+}
+
 // GG feeds a key to the gg chord. homeImmediate controls the Home key:
 // the preview and message viewers jump on a single Home, while the file
 // browser treats every JumpTopPrefix key as arming.

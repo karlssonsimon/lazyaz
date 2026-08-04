@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 
 	"charm.land/bubbles/v2/list"
 )
@@ -46,26 +47,24 @@ func TestHandleListMotionZChord(t *testing.T) {
 	rows := l.Window().Height
 	l.Select(100)
 
-	var pending bool
+	var r vim.Resolver
 
 	// `z` alone only opens the chord; nothing moves yet.
 	before := l.Offset()
-	if got := HandleListMotion(l, km, "z", &pending); got != MotionChordOpen {
+	if got := HandleListMotion(l, km, "z", &r); got != MotionChordOpen {
 		t.Fatalf("first z returned %v, want MotionChordOpen", got)
-	}
-	if !pending {
-		t.Error("chord should be pending after z")
 	}
 	if l.Offset() != before {
 		t.Errorf("offset moved to %d on the opening z, want it to stay at %d", l.Offset(), before)
 	}
 
 	// `zz` centers.
-	if got := HandleListMotion(l, km, "z", &pending); got != MotionHandled {
+	if got := HandleListMotion(l, km, "z", &r); got != MotionHandled {
 		t.Fatalf("zz returned %v, want MotionHandled", got)
 	}
-	if pending {
-		t.Error("chord should be closed after the second key")
+	// The chord is closed: a bare t is no motion.
+	if got := HandleListMotion(l, km, "t", &r); got != MotionNone {
+		t.Errorf("t after a completed chord returned %v, want MotionNone", got)
 	}
 	if want := 100 - (rows-1)/2; l.Offset() != want {
 		t.Errorf("zz put the offset at %d, want %d", l.Offset(), want)
@@ -75,15 +74,15 @@ func TestHandleListMotionZChord(t *testing.T) {
 	}
 
 	// `zt` puts the cursor line on top.
-	HandleListMotion(l, km, "z", &pending)
-	HandleListMotion(l, km, "t", &pending)
+	HandleListMotion(l, km, "z", &r)
+	HandleListMotion(l, km, "t", &r)
 	if l.Offset() != 100 {
 		t.Errorf("zt put the offset at %d, want 100", l.Offset())
 	}
 
 	// `zb` puts it on the bottom row.
-	HandleListMotion(l, km, "z", &pending)
-	HandleListMotion(l, km, "b", &pending)
+	HandleListMotion(l, km, "z", &r)
+	HandleListMotion(l, km, "b", &r)
 	if want := 100 - rows + 1; l.Offset() != want {
 		t.Errorf("zb put the offset at %d, want %d", l.Offset(), want)
 	}
@@ -96,15 +95,16 @@ func TestHandleListMotionUnknownChordKeyIsSwallowed(t *testing.T) {
 	l := motionList(t, 200)
 	l.Select(100)
 
-	var pending bool
-	HandleListMotion(l, km, "z", &pending)
+	var r vim.Resolver
+	HandleListMotion(l, km, "z", &r)
 
 	before := l.Offset()
-	if got := HandleListMotion(l, km, "q", &pending); got != MotionHandled {
+	if got := HandleListMotion(l, km, "q", &r); got != MotionHandled {
 		t.Errorf("unknown chord key returned %v, want MotionHandled (swallowed)", got)
 	}
-	if pending {
-		t.Error("chord should be closed after any second key")
+	// The chord is closed after any second key: a bare t is no motion.
+	if got := HandleListMotion(l, km, "t", &r); got != MotionNone {
+		t.Errorf("t after a swallowed chord returned %v, want MotionNone", got)
 	}
 	if l.Offset() != before {
 		t.Errorf("offset moved to %d on an unknown chord key, want %d", l.Offset(), before)
@@ -146,7 +146,7 @@ func TestHandleListMotionScrollAndPage(t *testing.T) {
 				t.Fatalf("setup: offset = %d, want %d", startOffset, start-rows+1)
 			}
 
-			if got := HandleListMotion(l, km, tt.key, new(bool)); got != MotionHandled {
+			if got := HandleListMotion(l, km, tt.key, &vim.Resolver{}); got != MotionHandled {
 				t.Fatalf("%s returned %v, want MotionHandled", tt.key, got)
 			}
 			if want := start + tt.wantCursorDelta(rows); l.Index() != want {
@@ -166,7 +166,7 @@ func TestHandleListMotionIgnoresOtherKeys(t *testing.T) {
 	l := motionList(t, 200)
 
 	for _, key := range []string{"j", "k", "enter", "/", "q", "G"} {
-		if got := HandleListMotion(l, km, key, new(bool)); got != MotionNone {
+		if got := HandleListMotion(l, km, key, &vim.Resolver{}); got != MotionNone {
 			t.Errorf("key %q returned %v, want MotionNone", key, got)
 		}
 	}
@@ -184,7 +184,7 @@ func TestStandardKeymapDoesNotStealCtrlF(t *testing.T) {
 
 	l := motionList(t, 200)
 	for _, key := range []string{"ctrl+f", "ctrl+b", "ctrl+e", "ctrl+y", "z"} {
-		if got := HandleListMotion(l, km, key, new(bool)); got != MotionNone {
+		if got := HandleListMotion(l, km, key, &vim.Resolver{}); got != MotionNone {
 			t.Errorf("key %q returned %v with the motions unbound, want MotionNone", key, got)
 		}
 	}

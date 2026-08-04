@@ -9,6 +9,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/fuzzy"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
+	"github.com/karlssonsimon/lazyaz/internal/vim"
 )
 
 // DirReader abstracts filesystem access so the file browser can be
@@ -54,8 +55,8 @@ type FileBrowserState struct {
 	filterCaret     int // rune index of the edit caret within filterQuery
 	filterInputOpen bool
 
-	km       keymap.Keymap
-	pendingG bool
+	km     keymap.Keymap
+	chords vim.Resolver
 }
 
 // Cwd returns the current working directory the browser is showing.
@@ -114,7 +115,7 @@ func (s *FileBrowserState) Open(startDir string, reader DirReader, km keymap.Key
 	s.filterCaret = 0
 	s.filterInputOpen = false
 	s.km = km
-	s.pendingG = false
+	s.chords.Clear()
 	s.loadEntries()
 }
 
@@ -170,8 +171,14 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 	}
 
 	km := s.km
-	primedG := s.pendingG
-	s.pendingG = false
+
+	// The gg chord resolves before the switch. Every JumpTopPrefix key
+	// arms here — Home included — matching the browser's original
+	// primed-flag behavior rather than the viewers' immediate Home.
+	if s.chords.GG(km.JumpTopPrefix, key, false) == vim.ChordFired {
+		s.cursor = 0
+		return FileBrowserResult{Action: FBActionNone}
+	}
 
 	switch {
 	case km.FilterInput.Matches(key):
@@ -187,12 +194,6 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 	case km.JumpBottom.Matches(key):
 		if n := len(s.VisibleEntries()); n > 0 {
 			s.cursor = n - 1
-		}
-	case km.JumpTopPrefix.Matches(key):
-		if primedG {
-			s.cursor = 0
-		} else {
-			s.pendingG = true
 		}
 	case km.OpenFocusedAlt.Matches(key):
 		visible := s.VisibleEntries()

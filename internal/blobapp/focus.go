@@ -182,7 +182,7 @@ func (m Model) BufferSearchFocused() bool {
 // reports whether the key was consumed. The `z` chord spans two
 // keystrokes, so its pending state lives on the model.
 func (m *Model) scrollMotion(key string) bool {
-	motion := ui.HandleListMotion(m.listForPane(m.focus), m.Keymap, key, &m.pendingScrollZ)
+	motion := ui.HandleListMotion(m.listForPane(m.focus), m.Keymap, key, &m.vimr)
 	if motion == ui.MotionChordOpen {
 		m.Notify(appshell.LevelInfo, ui.ScrollChordHint)
 	}
