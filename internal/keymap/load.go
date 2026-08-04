@@ -62,11 +62,13 @@ func ensureStockKeymaps(keymapsDir string) {
 	}
 	for _, e := range entries {
 		path := filepath.Join(keymapsDir, e.Name())
-		// Copy only when missing — users edit these files, and an
-		// unconditional write would clobber their changes on every launch.
-		if _, err := os.Stat(path); err == nil {
-			continue
-		}
+		// Stock keymap files are the app's property and are rewritten on
+		// every launch, matching how stock themes behave. Copy-if-missing
+		// pinned old bindings forever: an install predating the digit→alt
+		// tab-jump rebind kept jump_1 = ["1"] on disk, which ate digits as
+		// tab jumps and killed vim counts. Customization belongs in
+		// config.json inline bindings (which override these files) or a
+		// keymap file under a different name, which is never touched.
 		data, err := stockKeymapsFS.ReadFile("keymaps/" + e.Name())
 		if err != nil {
 			continue

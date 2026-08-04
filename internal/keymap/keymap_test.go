@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -339,5 +340,63 @@ func TestStandardKeymapLeavesVimMotionsUnbound(t *testing.T) {
 
 	if !km.FilterInput.Matches("ctrl+f") {
 		t.Error("standard keymap should still open the filter with ctrl+f")
+	}
+}
+
+// A stale stock keymap file must not pin old bindings forever. The
+// digit→alt rebind is the concrete case: an install from before it has
+// jump_1 = ["1"] on disk, which would eat digits as tab jumps and kill
+// vim counts. Stock files are the app's property and are refreshed on
+// load, matching how stock themes behave; customization belongs in
+// config.json inline bindings or a user-named keymap file.
+func TestLoadRefreshesStaleStockKeymap(t *testing.T) {
+	dir := t.TempDir()
+	keymapsDir := filepath.Join(dir, "keymaps")
+	os.MkdirAll(keymapsDir, 0o755)
+
+	stale := map[string]any{
+		"name": "Default (Vim)",
+		"bindings": map[string][]string{
+			"jump_1": {"1"},
+		},
+	}
+	data, _ := json.Marshal(stale)
+	os.WriteFile(filepath.Join(keymapsDir, "default.json"), data, 0o644)
+
+	km := Load(dir)
+
+	if km.Jump1.Matches("1") {
+		t.Error("stale stock file still binds bare 1 to tab jump — counts are dead on old installs")
+	}
+	if !km.Jump1.Matches("alt+1") {
+		t.Error("jump_1 should be alt+1 after the stock refresh")
+	}
+}
+
+// A user keymap under its own name is untouched by the stock refresh.
+func TestLoadPreservesUserNamedKeymap(t *testing.T) {
+	dir := t.TempDir()
+	keymapsDir := filepath.Join(dir, "keymaps")
+	os.MkdirAll(keymapsDir, 0o755)
+
+	custom := map[string]any{
+		"name": "mine",
+		"bindings": map[string][]string{
+			"jump_1": {"f1"},
+		},
+	}
+	data, _ := json.Marshal(custom)
+	os.WriteFile(filepath.Join(keymapsDir, "mine.json"), data, 0o644)
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"keymap": "mine"}`), 0o644)
+
+	km := Load(dir)
+	if !km.Jump1.Matches("f1") {
+		t.Error("user-named keymap was not honored")
+	}
+
+	// And the file itself was not rewritten.
+	raw, _ := os.ReadFile(filepath.Join(keymapsDir, "mine.json"))
+	if !strings.Contains(string(raw), `"f1"`) {
+		t.Error("user-named keymap file was rewritten by the stock refresh")
 	}
 }
