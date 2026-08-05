@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"io"
+
+	"golang.org/x/text/encoding/htmlindex"
 )
 
 // FormatDocument pretty-prints a document for the in-memory formatted
@@ -34,6 +36,18 @@ func FormatDocument(data []byte) ([]byte, string, bool) {
 
 func formatXML(data []byte) ([]byte, bool) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
+	// Real-world XML declares charsets (encoding="ISO-8859-1") and leans
+	// on HTML entities; the stock decoder refuses both. This is a
+	// read-only view, so permissive decoding beats refusing the file.
+	dec.Strict = false
+	dec.Entity = xml.HTMLEntity
+	dec.CharsetReader = func(charset string, input io.Reader) (io.Reader, error) {
+		enc, err := htmlindex.Get(charset)
+		if err != nil {
+			return nil, err
+		}
+		return enc.NewDecoder().Reader(input), nil
+	}
 	var buf bytes.Buffer
 	enc := xml.NewEncoder(&buf)
 	enc.Indent("", "  ")

@@ -50,6 +50,38 @@ func TestFormatDocumentJSONWinsOverXML(t *testing.T) {
 	}
 }
 
+// Real-world XML declares charsets and uses HTML entities; both must
+// format instead of refusing.
+func TestFormatDocumentXMLRealWorld(t *testing.T) {
+	t.Run("xml declaration", func(t *testing.T) {
+		_, kind, ok := FormatDocument([]byte(`<?xml version="1.0" encoding="UTF-8"?><root><a>1</a></root>`))
+		if !ok || kind != "XML" {
+			t.Fatalf("kind = %q ok = %v, want XML true", kind, ok)
+		}
+	})
+
+	t.Run("iso-8859-1 charset", func(t *testing.T) {
+		// é in latin-1 is the single byte 0xE9 — invalid UTF-8, so this
+		// exercises the charset reader, not just the declaration.
+		doc := append([]byte(`<?xml version="1.0" encoding="ISO-8859-1"?><root><name>caf`), 0xE9)
+		doc = append(doc, []byte(`</name></root>`)...)
+		out, kind, ok := FormatDocument(doc)
+		if !ok || kind != "XML" {
+			t.Fatalf("kind = %q ok = %v, want XML true", kind, ok)
+		}
+		if !strings.Contains(string(out), "café") {
+			t.Errorf("latin-1 content not transcoded: %q", out)
+		}
+	})
+
+	t.Run("html entity", func(t *testing.T) {
+		_, kind, ok := FormatDocument([]byte(`<root><a>x&nbsp;y</a></root>`))
+		if !ok || kind != "XML" {
+			t.Fatalf("kind = %q ok = %v, want XML true", kind, ok)
+		}
+	})
+}
+
 func TestFormatDocumentRefusals(t *testing.T) {
 	cases := map[string]string{
 		"garbage":       "not a document at all",
