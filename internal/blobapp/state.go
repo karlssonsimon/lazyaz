@@ -193,6 +193,10 @@ type Model struct {
 	// yankBudget caps what one preview yank puts on the clipboard.
 	yankBudget int64
 
+	// formatBudget caps how large a blob = will fetch and pretty-print
+	// in memory.
+	formatBudget int64
+
 	cache blobCache
 
 	// usage records every drill-in (account / container) so the
@@ -412,6 +416,7 @@ func NewModelWithKeyMap(svc *blob.Service, cfg ui.Config, km keymap.Keymap, db *
 		scrolloff: cfg.ScrolloffValue(),
 
 		yankBudget:        cfg.YankLimitBytes(),
+		formatBudget:      cfg.FormatLimitBytes(),
 		focus:             accountsPane,
 		blobSortField:     blobSortDate,
 		blobSortDesc:      true,
@@ -582,6 +587,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(keymap.New(km.HalfPageDown.Label()+"/"+km.HalfPageUp.Label()), "half-page preview scroll"),
 				keymap.HelpEntry(km.JumpTopPrefix, "go to top with gg"),
 				keymap.HelpEntry(km.JumpBottom, "go to bottom"),
+				keymap.HelpEntry(km.FormatPreview, "format JSON/XML in-memory (toggle)"),
 				keymap.HelpEntry(km.PreviewBack, "close preview / go back"),
 			},
 		},

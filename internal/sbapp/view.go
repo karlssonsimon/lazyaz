@@ -113,6 +113,9 @@ func (m Model) View() tea.View {
 		contentWidth := ui.MillerColumnContentWidth(frame(messagePreviewPane))
 		msgID := ui.EmptyToDash(m.selectedMessage.MessageID)
 		titleText := fmt.Sprintf("Message: %s", msgID)
+		if m.msgFormatted {
+			titleText += " · formatted " + m.msgFormattedKind
+		}
 		previewTitle := m.Styles.Accent.Copy().
 			Width(contentWidth).
 			MaxWidth(contentWidth).

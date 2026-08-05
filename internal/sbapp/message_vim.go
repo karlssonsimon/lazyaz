@@ -48,7 +48,7 @@ func (b msgBuffer) Line(i int) string {
 }
 
 func (m Model) msgBuf() msgBuffer {
-	return newMsgBuffer(m.selectedMessage.FullBody)
+	return newMsgBuffer(m.msgBody())
 }
 
 func msgMotionKeys(km keymap.Keymap) vim.MotionKeys {
@@ -176,7 +176,7 @@ func (m Model) applyMsgBufferAction(act vim.BufferAction) (Model, tea.Cmd) {
 // msgYankRegion slices the region straight from the body — no windows,
 // no budget — and lands the cursor on the region start as vim does.
 func (m Model) msgYankRegion(reg vim.Region) (Model, tea.Cmd) {
-	body := m.selectedMessage.FullBody
+	body := m.msgBody()
 	var lo, hi int64
 	if reg.Linewise {
 		buf := m.msgBuf()
@@ -228,7 +228,7 @@ func (m Model) msgSelectionByteRange() (lo, hi int64, ok bool) {
 	head := m.msgByteAt(m.msgVim.cur.Line, m.msgVim.cur.Col)
 	lo, hi = m.msgVim.span.Range(head)
 
-	body := m.selectedMessage.FullBody
+	body := m.msgBody()
 	if m.msgVim.span.Mode == vim.SpanLine {
 		buf := m.msgBuf()
 		loLine, hiLine := 0, 0
@@ -267,7 +267,7 @@ func (m Model) msgYankSelection() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.msgVim.span.Stop()
-	body := m.selectedMessage.FullBody
+	body := m.msgBody()
 	if hi > int64(len(body)) {
 		hi = int64(len(body))
 	}
@@ -314,7 +314,7 @@ func (m Model) msgJumpBottom() (Model, tea.Cmd) {
 // both are plain slices.
 func (m Model) msgYankToEnd() (Model, tea.Cmd) {
 	lo := int64(m.msgBuf().starts[m.msgVim.cur.Line])
-	body := m.selectedMessage.FullBody
+	body := m.msgBody()
 	if int64(len(body)) <= lo {
 		return m, nil
 	}
@@ -323,7 +323,7 @@ func (m Model) msgYankToEnd() (Model, tea.Cmd) {
 
 func (m Model) msgYankToTop() (Model, tea.Cmd) {
 	buf := m.msgBuf()
-	body := m.selectedMessage.FullBody
+	body := m.msgBody()
 	var hi int64
 	if m.msgVim.cur.Line+1 < len(buf.starts) {
 		hi = int64(buf.starts[m.msgVim.cur.Line+1])
@@ -451,6 +451,8 @@ func (m Model) handleMessageVimKey(key string) (Model, tea.Cmd) {
 		}
 		m.vimr.ArmOperator()
 		return m, nil
+	case m.Keymap.FormatPreview.Matches(key):
+		return m.toggleMsgFormat()
 	case m.Keymap.JumpBottom.Matches(key):
 		return m.msgJumpBottom()
 	case m.Keymap.ScrollLineDown.Matches(key):

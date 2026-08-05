@@ -58,7 +58,15 @@ func (r serviceRangeReader) ReadBlobRange(ctx context.Context, offset, count int
 
 // runPreviewSearch starts a scan in the given direction from `from`.
 func (m Model) runPreviewSearch(pattern ui.SearchPattern, dir ui.SearchDirection, from int64) (Model, tea.Cmd) {
-	if m.service == nil || !m.preview.open {
+	if !m.preview.open {
+		return m, nil
+	}
+	// Formatted mode searches the in-memory document: the scanner reads
+	// the real blob, whose bytes no longer match what is on screen.
+	if m.preview.formatted {
+		return m.searchFormattedPreview(pattern, dir, from)
+	}
+	if m.service == nil {
 		return m, nil
 	}
 

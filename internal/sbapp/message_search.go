@@ -64,7 +64,7 @@ func (m *Model) runMessageSearch(dir ui.SearchDirection, fromStart bool) {
 		return
 	}
 
-	body := []byte(m.selectedMessage.FullBody)
+	body := []byte(m.msgBody())
 	if len(body) == 0 {
 		m.Notify(appshell.LevelInfo, "Nothing to search")
 		return
@@ -118,7 +118,7 @@ func (m *Model) runMessageSearch(dir ui.SearchDirection, fromStart bool) {
 // revealMessageOffset scrolls the viewport so the line holding the given
 // byte offset is visible, centring it when the body is long enough.
 func (m *Model) revealMessageOffset(offset int) {
-	line := strings.Count(m.selectedMessage.FullBody[:offset], "\n")
+	line := strings.Count(m.msgBody()[:offset], "\n")
 
 	height := m.messageViewport.Height()
 	target := line
@@ -136,11 +136,11 @@ func (m *Model) revealMessageOffset(offset int) {
 // the line index less the scroll offset.
 func (m Model) messageMatchRanges() map[int][]ui.ColumnRange {
 	pattern := m.messageSearch.bar.Pattern
-	if !pattern.Valid() || m.selectedMessage.FullBody == "" {
+	if !pattern.Valid() || m.msgBody() == "" {
 		return nil
 	}
 
-	body := m.selectedMessage.FullBody
+	body := m.msgBody()
 	matches := ui.SearchBufferAll(pattern, []byte(body))
 	if len(matches) == 0 {
 		return nil

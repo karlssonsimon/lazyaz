@@ -135,8 +135,12 @@ func (m Model) View() tea.View {
 		gutter := ui.RenderLineGutter(m.preview.viewport, m.Styles, previewGutterMinDigits)
 		body := lipgloss.JoinHorizontal(lipgloss.Top, gutter, vpView)
 		previewFrame := frame(previewPane)
+		previewTitle := "DETAILS"
+		if m.preview.formatted {
+			previewTitle = "DETAILS · formatted " + m.preview.formatKind
+		}
 		paneMap[previewPane] = ui.RenderMillerColumn(ui.MillerColumn{
-			Title:  "DETAILS",
+			Title:  previewTitle,
 			Body:   body,
 			Footer: m.preview.search.bar.Render(m.Cursor, m.Styles, ui.MillerColumnContentWidth(previewFrame)),
 			Frame:  previewFrame,

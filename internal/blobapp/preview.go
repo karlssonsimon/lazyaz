@@ -54,6 +54,11 @@ type previewState struct {
 	// h backs out and j/k scroll, like every other pane — and v enters
 	// the vim capture, where only vim keys work until esc.
 	vimMode bool
+	// formatted means = swapped the window for the pretty-printed
+	// document; rawStash holds the raw view for the toggle back.
+	formatted  bool
+	formatKind string
+	rawStash   *previewRawStash
 }
 
 func newPreviewState() previewState {
@@ -97,6 +102,9 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 	m.preview.windowStart = 0
 	m.preview.windowData = nil
 	m.preview.lineStarts = nil
+	m.preview.formatted = false
+	m.preview.formatKind = ""
+	m.preview.rawStash = nil
 	m.preview.rendered = m.Styles.Muted.Render("Loading preview...")
 	m.preview.viewport.SetContent(m.preview.rendered)
 	m.preview.requestID++
@@ -217,6 +225,8 @@ func (m Model) handlePreviewBrowseKey(key string) (Model, tea.Cmd) {
 		return m.repeatPreviewSearch(m.preview.search.bar.Direction)
 	case m.Keymap.SearchPrev.Matches(key):
 		return m.repeatPreviewSearch(m.preview.search.bar.Direction.Opposite())
+	case m.Keymap.FormatPreview.Matches(key):
+		return m.togglePreviewFormat()
 	// VisualChar is checked before ToggleVisualLine: the stock binding
 	// for the latter is ["v","V"], so v must resolve first. V enters
 	// the capture with a linewise selection already started.
@@ -361,6 +371,8 @@ func (m Model) handlePreviewVimKey(key string) (Model, tea.Cmd) {
 		}
 		m.vimr.ArmOperator()
 		return m, nil
+	case m.Keymap.FormatPreview.Matches(key):
+		return m.togglePreviewFormat()
 	// The esc ladder: search → visual → vim normal → browse. Leaving
 	// the preview itself needs one more esc from browse mode.
 	case key == "esc" && m.preview.search.bar.Active():

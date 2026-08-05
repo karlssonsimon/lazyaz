@@ -159,6 +159,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.selectedMessage = item.message
+		m.clearMsgFormat()
 		m.viewingMessage = true
 		m.transitionTo(messagePreviewPane)
 		m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))

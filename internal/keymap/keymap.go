@@ -49,6 +49,7 @@ type Keymap struct {
 	ObjectAround        Binding `json:"object_around"`
 	MotionFirstNonBlank Binding `json:"motion_first_nonblank"`
 	MotionUnderscore    Binding `json:"motion_underscore"`
+	FormatPreview       Binding `json:"format_preview"`
 	NextFocus           Binding `json:"next_focus"`
 	PreviousFocus       Binding `json:"previous_focus"`
 	ReloadSubscriptions Binding `json:"reload_subscriptions"`

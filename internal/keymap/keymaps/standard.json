@@ -41,6 +41,7 @@
     "object_around": [],
     "motion_first_nonblank": [],
     "motion_underscore": [],
+    "format_preview": ["="],
     "next_focus": ["tab"],
     "previous_focus": ["shift+tab"],
     "reload_subscriptions": ["ctrl+r"],

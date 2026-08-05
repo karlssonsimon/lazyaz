@@ -161,6 +161,13 @@ type Model struct {
 	// msgVim is the message body's vim capture.
 	msgVim msgVimState
 
+	// msgFormatted means = swapped the shown body for its pretty-printed
+	// form; msgBody() reads through these.
+	msgFormatted     bool
+	msgFormattedBody string
+	msgFormattedKind string
+	msgFormatStash   *msgFormatStash
+
 	// scrolloff is the config's context-row count for the capture.
 	scrolloff       int
 	selectedMessage servicebus.PeekedMessage
@@ -459,6 +466,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(km.ToggleDLQFilter, "entity actions (sort, filter)"),
 				keymap.HelpEntry(km.RequeueDLQ, "requeue received DLQ message(s)"),
 				keymap.HelpEntry(km.YankMessageBody, "yank message body to clipboard"),
+				keymap.HelpEntry(km.FormatPreview, "format JSON/XML in-memory (toggle)"),
 				keymap.HelpEntry(km.CopyPalette, "copy palette (IDs, names, body)"),
 				keymap.HelpEntry(km.MessageBack, "close message preview"),
 			},

@@ -49,8 +49,13 @@ type Config struct {
 	// clipboard, fetching from Azure when the selection exceeds the
 	// loaded window. Over the limit the yank refuses — clipboards are
 	// not databases.
-	YankLimitMB *int     `json:"yank_limit_mb,omitempty"`
-	Schemes     []Scheme `json:"-"`
+	YankLimitMB *int `json:"yank_limit_mb,omitempty"`
+	// FormatLimitMB bounds how large a blob the in-memory format action
+	// will fetch and pretty-print. Formatting needs the whole document in
+	// memory, and indented output roughly doubles the bytes, so this is a
+	// memory ceiling as much as a transfer one.
+	FormatLimitMB *int     `json:"format_limit_mb,omitempty"`
+	Schemes       []Scheme `json:"-"`
 }
 
 // DefaultScrolloff is used when the config leaves scrolloff unset.
@@ -62,6 +67,9 @@ const DefaultSearchScanLimitMB = 256
 
 // DefaultYankLimitMB is the yank bound when the config says nothing.
 const DefaultYankLimitMB = 16
+
+// DefaultFormatLimitMB is the format bound when the config says nothing.
+const DefaultFormatLimitMB = 16
 
 // ScrolloffValue resolves the tristate Scrolloff field. Values are
 // clamped at zero; ScrollWindow caps the upper end against the pane
@@ -85,6 +93,18 @@ func (c Config) YankLimitBytes() int64 {
 	limit := DefaultYankLimitMB
 	if c.YankLimitMB != nil {
 		limit = *c.YankLimitMB
+	}
+	if limit < 0 {
+		limit = 0
+	}
+	return int64(limit) << 20
+}
+
+// FormatLimitBytes resolves the in-memory format bound.
+func (c Config) FormatLimitBytes() int64 {
+	limit := DefaultFormatLimitMB
+	if c.FormatLimitMB != nil {
+		limit = *c.FormatLimitMB
 	}
 	if limit < 0 {
 		limit = 0

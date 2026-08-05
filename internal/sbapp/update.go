@@ -817,6 +817,7 @@ func (m *Model) syncPreviewToSelection() {
 	item, ok := m.messageList.SelectedItem().(messageItem)
 	if !ok {
 		m.selectedMessage = servicebus.PeekedMessage{}
+		m.clearMsgFormat()
 		m.messageViewport.SetContent(m.Styles.Muted.Render("(no message selected)"))
 		m.messageViewport.GotoTop()
 		return
@@ -825,6 +826,7 @@ func (m *Model) syncPreviewToSelection() {
 		return
 	}
 	m.selectedMessage = item.message
+	m.clearMsgFormat()
 	m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))
 	m.messageViewport.GotoTop()
 }
@@ -840,7 +842,7 @@ func (m *Model) rehighlightSelectedMessage() {
 		return
 	}
 	offset := m.messageViewport.YOffset()
-	m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(m.selectedMessage.FullBody))
+	m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(m.msgBody()))
 	m.messageViewport.SetYOffset(offset)
 }
 
@@ -903,7 +905,9 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 	case m.Keymap.ToggleVisualLine.Matches(key):
 		return m.enterMsgVimMode(true)
 	case m.Keymap.YankMessageBody.Matches(key):
-		return m.yankMessageBody(m.selectedMessage.FullBody)
+		return m.yankMessageBody(m.msgBody())
+	case m.Keymap.FormatPreview.Matches(key):
+		return m.toggleMsgFormat()
 	case m.Keymap.CopyPalette.Matches(key):
 		return m.openCopyPalette()
 	case m.Keymap.JumpBottom.Matches(key):

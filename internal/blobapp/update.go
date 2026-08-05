@@ -108,6 +108,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case previewWindowLoadedMsg:
 		return m.handlePreviewWindowLoaded(msg)
 
+	case previewFormatFetchedMsg:
+		return m.handlePreviewFormatFetched(msg)
+
 	case blobContentClipboardMsg:
 		if msg.err != nil {
 			m.Notify(appshell.LevelError, fmt.Sprintf("Failed to download %s: %s", msg.blobName, msg.err.Error()))
