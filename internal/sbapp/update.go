@@ -608,7 +608,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case ModeMessagePreview:
+	// The capture modes share the preview handler: it routes to
+	// handleMessageVimKey while msgVim is active.
+	case ModeMessagePreview, ModeMessageVim, ModeMessageVisual, ModeMessageVLine:
 		return m.handleViewingMessageKey(msg, key)
 
 	case ModeListFilter:

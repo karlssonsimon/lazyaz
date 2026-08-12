@@ -301,6 +301,45 @@ func TestMessageVimScrollOps(t *testing.T) {
 	}
 }
 
+// Keys reach the capture through the mode dispatch: once v flips the
+// input mode to VIM/VISUAL/V-LINE, handleKey must still route to the
+// message handler instead of falling through and swallowing everything.
+func TestMessageVimKeysRouteThroughHandleKey(t *testing.T) {
+	m := messageSearchModel(t, "alpha\nbeta\ngamma\n")
+	m.focus = messagePreviewPane
+
+	press := func(m Model, code rune, text string) Model {
+		t.Helper()
+		m2, _ := m.handleKey(tea.KeyPressMsg{Code: code, Text: text})
+		return m2
+	}
+
+	m = press(m, 'v', "v")
+	if !m.msgVim.active {
+		t.Fatal("v did not enter the capture")
+	}
+
+	m = press(m, 'j', "j")
+	if got := m.msgVim.cur.Line; got != 1 {
+		t.Fatalf("j fell through the mode dispatch: line %d, want 1", got)
+	}
+
+	m = press(m, 'v', "v")
+	if got := m.inputMode().String(); got != "VISUAL" {
+		t.Fatalf("v did not start a selection: mode %q", got)
+	}
+	m = press(m, 'j', "j")
+	if got := m.msgVim.cur.Line; got != 2 {
+		t.Fatalf("j in visual fell through: line %d, want 2", got)
+	}
+
+	m2, _ := m.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m2, _ = m2.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m2.msgVim.active {
+		t.Fatal("esc fell through the mode dispatch; capture never exits")
+	}
+}
+
 // Browse mode is untouched: y still yanks the whole body, h still
 // backs out.
 func TestMessageBrowseUnchanged(t *testing.T) {
