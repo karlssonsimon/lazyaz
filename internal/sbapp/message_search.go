@@ -205,7 +205,10 @@ func lineOfOffset(starts []int, offset int) int {
 }
 
 // BufferSearchFocused reports that the message body is focused and owns
-// the vim search keys.
+// the vim search keys. The preview stays open beside the list after h
+// backs out of it, so the focus check matters: with the list focused,
+// ? must reach the parent as help, not vanish into a pane that is not
+// listening.
 func (m Model) BufferSearchFocused() bool {
-	return m.viewingMessage
+	return m.viewingMessage && m.focus == messagePreviewPane
 }
