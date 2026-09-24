@@ -283,6 +283,20 @@ func (m Model) columnTickPositions() []int {
 
 func (m Model) statusActions() []ui.StatusAction {
 	km := m.Keymap
+	// The preview has its own vocabulary: no filter or refresh, and ?
+	// is backward search there, so the help hint must name a key that
+	// actually opens help.
+	if m.focus == messagePreviewPane {
+		return []ui.StatusAction{
+			{Key: km.CursorDown.Short() + "/" + km.CursorUp.Short(), Label: "scroll"},
+			{Key: km.MessageProperties.Short(), Label: "props"},
+			{Key: km.FormatPreview.Short(), Label: "format"},
+			{Key: km.SearchForward.Short(), Label: "search"},
+			{Key: km.YankMessageBody.Short(), Label: "yank"},
+			{Key: km.MessageBack.Short(), Label: "back"},
+			{Key: m.previewHelpKey(), Label: "help"},
+		}
+	}
 	actions := []ui.StatusAction{
 		{Key: km.CursorDown.Short() + "/" + km.CursorUp.Short(), Label: "move"},
 		{Key: km.OpenFocusedAlt.Short(), Label: "open"},
@@ -298,6 +312,21 @@ func (m Model) statusActions() []ui.StatusAction {
 		actions = append(actions, ui.StatusAction{Key: km.ToggleMark.Short(), Label: "mark"})
 	}
 	return actions
+}
+
+// previewHelpKey is the first help key the message body does not
+// claim as a search key — f1 in the stock keymap, where ? is backward
+// search. Falls back to the plain hint if every help key is taken.
+func (m Model) previewHelpKey() string {
+	km := m.Keymap
+	for _, k := range km.ToggleHelp.Keys {
+		if km.SearchForward.Matches(k) || km.SearchBackward.Matches(k) ||
+			km.SearchNext.Matches(k) || km.SearchPrev.Matches(k) {
+			continue
+		}
+		return k
+	}
+	return km.ToggleHelp.Short()
 }
 
 func (m Model) columnFooter(pane int) string {

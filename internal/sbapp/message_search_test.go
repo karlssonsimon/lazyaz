@@ -28,6 +28,7 @@ func messageSearchModel(t *testing.T, body string) Model {
 	m.messageList.SetItems([]list.Item{messageItem{message: msg}})
 	m.messageList.Select(0)
 	m.viewingMessage = true
+	m.focus = messagePreviewPane
 	m.syncPreviewToSelection()
 	return m
 }
@@ -140,12 +141,48 @@ func TestMessageSearchHighlightsMatches(t *testing.T) {
 func TestMessageSearchBufferFocused(t *testing.T) {
 	m := messageSearchModel(t, "body\n")
 	if !m.BufferSearchFocused() {
-		t.Error("message body should own the search keys while being viewed")
+		t.Error("message body should own the search keys while focused")
 	}
 
+	// h backs out to the list but leaves the preview open; ? must now
+	// reach the parent as help instead of being swallowed.
+	m.focus = messagesPane
+	if m.BufferSearchFocused() {
+		t.Error("search keys claimed while the list, not the body, is focused")
+	}
+
+	m.focus = messagePreviewPane
 	m.viewingMessage = false
 	if m.BufferSearchFocused() {
 		t.Error("search keys claimed while the body is not being viewed")
+	}
+}
+
+// The preview's status bar names keys that work there: p for the
+// property views, and a help key that is not the body's ? search.
+func TestMessagePreviewStatusHints(t *testing.T) {
+	m := messageSearchModel(t, "body\n")
+	hints := map[string]string{}
+	for _, a := range m.statusActions() {
+		hints[a.Label] = a.Key
+	}
+	if hints["props"] != "p" {
+		t.Errorf("props hint = %q, want p", hints["props"])
+	}
+	if hints["help"] != "f1" {
+		t.Errorf("help hint = %q, want f1 (? is backward search in the body)", hints["help"])
+	}
+	if _, ok := hints["filter"]; ok {
+		t.Error("filter hint shown in the preview, where there is no filter")
+	}
+
+	m.focus = messagesPane
+	hints = map[string]string{}
+	for _, a := range m.statusActions() {
+		hints[a.Label] = a.Key
+	}
+	if hints["help"] != "?" {
+		t.Errorf("list help hint = %q, want ?", hints["help"])
 	}
 }
 

@@ -42,6 +42,7 @@ func messagePropsModel(t *testing.T) Model {
 	})
 	m.messageList.Select(0)
 	m.viewingMessage = true
+	m.focus = messagePreviewPane
 	m.syncPreviewToSelection()
 	return m
 }
@@ -132,7 +133,6 @@ func TestMessagePropertiesFromVimCapture(t *testing.T) {
 // The title names the view so the reader always knows what they see.
 func TestMessagePropertiesTitle(t *testing.T) {
 	m := messagePropsModel(t)
-	m.focus = messagePreviewPane
 	m.resize()
 	if v := m.View().Content; strings.Contains(v, "broker properties") {
 		t.Fatal("body view should not be labelled as a property table")
