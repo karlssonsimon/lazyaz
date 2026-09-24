@@ -112,13 +112,15 @@ func (m Model) View() tea.View {
 	if pw[messagePreviewPane] > 0 && m.viewingMessage {
 		contentWidth := ui.MillerColumnContentWidth(frame(messagePreviewPane))
 		msgID := ui.EmptyToDash(m.selectedMessage.MessageID)
-		titleText := fmt.Sprintf("Message: %s", msgID)
-		switch {
-		case m.msgView != msgViewBody:
-			titleText += " · " + m.msgView.String()
-		case m.msgFormatted:
-			titleText += " · formatted " + m.msgFormattedKind
+		// The title always names the view and the key to the next one,
+		// so the property views are visible from the moment a message
+		// opens rather than only in help.
+		viewLabel := m.msgView.String()
+		if m.msgView == msgViewBody && m.msgFormatted {
+			viewLabel = "formatted " + m.msgFormattedKind
 		}
+		titleText := fmt.Sprintf("Message: %s · %s · %s: %s",
+			msgID, viewLabel, m.Keymap.MessageProperties.Short(), m.msgView.next().String())
 		previewTitle := m.Styles.Accent.Copy().
 			Width(contentWidth).
 			MaxWidth(contentWidth).
