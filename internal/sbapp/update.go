@@ -829,7 +829,7 @@ func (m *Model) syncPreviewToSelection() {
 	}
 	m.selectedMessage = item.message
 	m.clearMsgFormat()
-	m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))
+	m.setMsgViewportContent()
 	m.messageViewport.GotoTop()
 }
 
@@ -844,7 +844,7 @@ func (m *Model) rehighlightSelectedMessage() {
 		return
 	}
 	offset := m.messageViewport.YOffset()
-	m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(m.msgBody()))
+	m.setMsgViewportContent()
 	m.messageViewport.SetYOffset(offset)
 }
 
@@ -907,9 +907,11 @@ func (m Model) handleViewingMessageKey(msg tea.KeyMsg, key string) (Model, tea.C
 	case m.Keymap.ToggleVisualLine.Matches(key):
 		return m.enterMsgVimMode(true)
 	case m.Keymap.YankMessageBody.Matches(key):
-		return m.yankMessageBody(m.msgBody())
+		return m.yankMsgView()
 	case m.Keymap.FormatPreview.Matches(key):
 		return m.toggleMsgFormat()
+	case m.Keymap.MessageProperties.Matches(key):
+		return m.cycleMsgView()
 	case m.Keymap.CopyPalette.Matches(key):
 		return m.openCopyPalette()
 	case m.Keymap.JumpBottom.Matches(key):

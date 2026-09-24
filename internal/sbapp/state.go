@@ -161,6 +161,11 @@ type Model struct {
 	// msgVim is the message body's vim capture.
 	msgVim msgVimState
 
+	// msgView is which of the three message views the pane shows:
+	// the body or one of the two property tables. It is sticky across
+	// messages so stepping through a queue keeps the chosen table up.
+	msgView msgViewKind
+
 	// msgFormatted means = swapped the shown body for its pretty-printed
 	// form; msgBody() reads through these.
 	msgFormatted     bool
@@ -467,7 +472,8 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(km.RequeueDLQ, "requeue received DLQ message(s)"),
 				keymap.HelpEntry(km.YankMessageBody, "yank message body to clipboard"),
 				keymap.HelpEntry(km.FormatPreview, "format JSON/XML in-memory (toggle)"),
-				keymap.HelpEntry(km.CopyPalette, "copy palette (IDs, names, body)"),
+				keymap.HelpEntry(km.MessageProperties, "cycle body / broker / custom properties"),
+				keymap.HelpEntry(km.CopyPalette, "copy palette (IDs, names, body, properties)"),
 				keymap.HelpEntry(km.MessageBack, "close message preview"),
 			},
 		},

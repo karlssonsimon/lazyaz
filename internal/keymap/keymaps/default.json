@@ -96,6 +96,7 @@
     "yank_message_body": ["y"],
     "toggle_dlq_filter": ["s"],
     "message_back": ["h", "left", "backspace", "esc"],
+    "message_properties": ["p"],
     "yank_secret": ["y"],
     "reveal_secret": ["R"],
     "paste_secrets": ["p"],

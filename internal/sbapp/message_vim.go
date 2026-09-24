@@ -453,6 +453,8 @@ func (m Model) handleMessageVimKey(key string) (Model, tea.Cmd) {
 		return m, nil
 	case m.Keymap.FormatPreview.Matches(key):
 		return m.toggleMsgFormat()
+	case m.Keymap.MessageProperties.Matches(key):
+		return m.cycleMsgView()
 	case m.Keymap.JumpBottom.Matches(key):
 		return m.msgJumpBottom()
 	case m.Keymap.ScrollLineDown.Matches(key):

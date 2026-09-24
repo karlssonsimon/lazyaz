@@ -82,12 +82,35 @@ message body. You can select text in the preview with the mouse to copy it.
 |---|---|
 | `Enter` | View message detail |
 | `h` / `Esc` / `Backspace` | Close message preview |
+| `p` | Cycle the preview: body → broker properties → custom properties |
 | `R` | Requeue received DLQ message(s) (opens a confirmation prompt) |
-| `y` | Yank message body to clipboard |
+| `y` | Yank the current view (body or property table) to clipboard |
 | `Space` | Mark / unmark message |
 | `v` / `V` | Enter visual-line mode to select a range |
 | `o` | Swap anchor while in visual mode |
 | `Esc` | Commit visual selection as marks |
+
+### Message properties
+
+The preview pane has three views, mirroring the tabs in the portal's
+Service Bus Explorer. Press `p` to cycle through them; the pane title
+names the one you are on.
+
+| View | Contents |
+|---|---|
+| Body | The message payload, with `=` to pretty-print JSON or XML |
+| Broker properties | Every property the broker sets: IDs, sequence numbers, enqueued / scheduled / expiry times, TTL, delivery count, state, content type, subject, correlation and session IDs, partition key, reply-to and to, lock token, and the dead-letter source, reason and description |
+| Custom properties | The sender's application properties as a key / value table, keys sorted |
+
+The property views are ordinary text: scroll them, search with `/`, enter
+the vim capture with `v` to select and yank a single value, or press `y`
+to yank the whole table. The chosen view sticks while you step between
+messages, so you can walk a dead-letter queue with the custom properties
+up the whole time. The inspect strip (`K`) still shows the one-line
+summary; the property views are where the full text lives.
+
+The copy palette (`Y`) offers the two tables and each custom property on
+its own, for pasting a single value straight into a search or a ticket.
 
 ## Dead-letter queue operations
 
@@ -281,6 +304,7 @@ have no effect on a single-message view.
 | `o` | Swap visual anchor |
 | `Esc` | Exit visual mode (commits selection) / close preview / cancel filter or overlay |
 | `K` | Toggle inspect panel |
+| `p` | Cycle message preview: body / broker properties / custom properties |
 | `S` | Switch subscription |
 | `r` | Refresh — re-fetches entity counts from the queue-type pane; re-peeks from the messages pane (unless DLQ is locked) |
 | `F` | Activity overlay (app-level — currently shows cache fetches only) |
