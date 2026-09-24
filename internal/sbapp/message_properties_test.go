@@ -130,16 +130,21 @@ func TestMessagePropertiesFromVimCapture(t *testing.T) {
 	}
 }
 
-// The title names the view so the reader always knows what they see.
+// The title names the current view and the key to the next one, so
+// the property views are discoverable from the moment a message opens.
 func TestMessagePropertiesTitle(t *testing.T) {
 	m := messagePropsModel(t)
 	m.resize()
-	if v := m.View().Content; strings.Contains(v, "broker properties") {
-		t.Fatal("body view should not be labelled as a property table")
+	if v := m.View().Content; !strings.Contains(v, "· body · p: broker properties") {
+		t.Fatalf("body view title missing the view and the p hint:\n%s", v)
 	}
 	m = msgKeys(t, m, "p")
-	if v := m.View().Content; !strings.Contains(v, "broker properties") {
-		t.Fatal("broker view not named in the pane title")
+	if v := m.View().Content; !strings.Contains(v, "· broker properties · p: custom properties") {
+		t.Fatalf("broker view title missing the view and the p hint:\n%s", v)
+	}
+	m = msgKeys(t, m, "p", "p", "=")
+	if v := m.View().Content; !strings.Contains(v, "· formatted JSON · p: broker properties") {
+		t.Fatalf("formatted body title lost the format label or the p hint:\n%s", v)
 	}
 }
 
