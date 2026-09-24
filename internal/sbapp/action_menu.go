@@ -33,6 +33,7 @@ const (
 	actionToggleMark
 	actionToggleVisualLine
 	actionInspect
+	actionMessageProperties
 	actionRefresh
 	actionSubscriptionPicker
 	actionThemePicker
@@ -125,6 +126,11 @@ func (m Model) buildActions() []action {
 	// else is a list-cursor operation that doesn't fit a
 	// "viewing one message" context.
 	if m.focus == messagePreviewPane && m.hasPeekTarget {
+		actions = append(actions, action{
+			actionMessageProperties,
+			"Show " + m.msgView.next().String(),
+			km.MessageProperties.Short(),
+		})
 		if item, ok := m.messageList.SelectedItem().(messageItem); ok {
 			if ref, ok := parseBlobReference(item.message.FullBody); ok {
 				actions = append(actions, action{
@@ -367,6 +373,9 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 
 	case actionRefresh:
 		return m.refresh()
+
+	case actionMessageProperties:
+		return m.cycleMsgView()
 
 	case actionInspect:
 		m.toggleInspect()

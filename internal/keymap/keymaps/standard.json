@@ -96,6 +96,7 @@
     "yank_message_body": ["ctrl+c"],
     "toggle_dlq_filter": ["ctrl+l"],
     "message_back": ["left", "backspace", "esc"],
+    "message_properties": ["alt+p"],
     "yank_secret": ["ctrl+c"],
     "reveal_secret": ["alt+r"],
     "paste_secrets": ["ctrl+v"],

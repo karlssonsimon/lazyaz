@@ -115,6 +115,9 @@ type Keymap struct {
 	YankMessageBody Binding `json:"yank_message_body"`
 	ToggleDLQFilter Binding `json:"toggle_dlq_filter"`
 	MessageBack     Binding `json:"message_back"`
+	// MessageProperties cycles the message view: body → broker
+	// properties → custom properties.
+	MessageProperties Binding `json:"message_properties"`
 
 	// Key Vault app.
 	YankSecret   Binding `json:"yank_secret"`

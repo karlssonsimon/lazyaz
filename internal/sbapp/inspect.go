@@ -2,7 +2,6 @@ package sbapp
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
@@ -87,11 +86,7 @@ func appPropertiesLine(props map[string]string) string {
 	if len(props) == 0 {
 		return "-"
 	}
-	keys := make([]string, 0, len(props))
-	for k := range props {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := sortedKeys(props)
 	parts := make([]string, len(keys))
 	for i, k := range keys {
 		parts[i] = k + "=" + props[k]

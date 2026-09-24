@@ -74,6 +74,21 @@ type PeekedMessage struct {
 	DeadLetterDescription string
 	DeadLetterSource      string
 	AppProperties         map[string]string
+
+	// The remaining broker properties, shown in the message view's
+	// broker-properties table. Zero values mean the broker did not
+	// set them; the table renders those as dashes.
+	EnqueuedSequenceNumber int64
+	ExpiresAt              time.Time
+	LockedUntil            time.Time
+	LockToken              string
+	PartitionKey           string
+	ReplyTo                string
+	ReplyToSessionID       string
+	ScheduledEnqueueTime   time.Time
+	TimeToLive             time.Duration
+	To                     string
+	State                  string
 }
 
 // peekedFromReceived converts an SDK message into the display type,
@@ -103,6 +118,29 @@ func peekedFromReceived(msg *azservicebus.ReceivedMessage) PeekedMessage {
 	setIfPtr(&entry.DeadLetterReason, msg.DeadLetterReason)
 	setIfPtr(&entry.DeadLetterDescription, msg.DeadLetterErrorDescription)
 	setIfPtr(&entry.DeadLetterSource, msg.DeadLetterSource)
+	setIfPtr(&entry.PartitionKey, msg.PartitionKey)
+	setIfPtr(&entry.ReplyTo, msg.ReplyTo)
+	setIfPtr(&entry.ReplyToSessionID, msg.ReplyToSessionID)
+	setIfPtr(&entry.To, msg.To)
+	if msg.EnqueuedSequenceNumber != nil {
+		entry.EnqueuedSequenceNumber = *msg.EnqueuedSequenceNumber
+	}
+	if msg.ExpiresAt != nil {
+		entry.ExpiresAt = *msg.ExpiresAt
+	}
+	if msg.LockedUntil != nil {
+		entry.LockedUntil = *msg.LockedUntil
+	}
+	if msg.ScheduledEnqueueTime != nil {
+		entry.ScheduledEnqueueTime = *msg.ScheduledEnqueueTime
+	}
+	if msg.TimeToLive != nil {
+		entry.TimeToLive = *msg.TimeToLive
+	}
+	if msg.LockToken != [16]byte{} {
+		entry.LockToken = formatLockToken(msg.LockToken)
+	}
+	entry.State = messageStateName(msg.State)
 	if len(msg.ApplicationProperties) > 0 {
 		entry.AppProperties = make(map[string]string, len(msg.ApplicationProperties))
 		for k, v := range msg.ApplicationProperties {
@@ -110,6 +148,26 @@ func peekedFromReceived(msg *azservicebus.ReceivedMessage) PeekedMessage {
 		}
 	}
 	return entry
+}
+
+// formatLockToken renders the AMQP lock token in the UUID form the
+// portal and the other SDKs show.
+func formatLockToken(b [16]byte) string {
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// messageStateName maps the SDK's message state onto the label the
+// portal uses.
+func messageStateName(s azservicebus.MessageState) string {
+	switch s {
+	case azservicebus.MessageStateActive:
+		return "Active"
+	case azservicebus.MessageStateDeferred:
+		return "Deferred"
+	case azservicebus.MessageStateScheduled:
+		return "Scheduled"
+	}
+	return fmt.Sprintf("Unknown (%d)", int32(s))
 }
 
 type Service struct {

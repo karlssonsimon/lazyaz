@@ -23,9 +23,16 @@ type msgFormatStash struct {
 	xoffset int
 }
 
-// msgBody is what the message view shows and operates on: the formatted
-// document while = is active, the raw body otherwise.
+// msgBody is what the message view shows and operates on: one of the
+// property tables while that view is selected, else the formatted
+// document while = is active, else the raw body.
 func (m Model) msgBody() string {
+	switch m.msgView {
+	case msgViewBroker:
+		return brokerPropertiesText(m.selectedMessage)
+	case msgViewCustom:
+		return customPropertiesText(m.selectedMessage)
+	}
 	if m.msgFormatted {
 		return m.msgFormattedBody
 	}
@@ -36,13 +43,17 @@ func (m Model) msgBody() string {
 // view. Cursor, search and selection reset on entry — there is no
 // honest mapping of a raw position into pretty-printed text.
 func (m Model) toggleMsgFormat() (Model, tea.Cmd) {
+	if m.msgView != msgViewBody {
+		m.Notify(appshell.LevelInfo, fmt.Sprintf("Formatting applies to the body view — %s to switch", m.Keymap.MessageProperties.Label()))
+		return m, nil
+	}
 	if m.msgFormatted {
 		st := m.msgFormatStash
 		m.clearMsgFormat()
 		m.msgVim.span.Stop()
 		m.messageSearch.bar.Clear()
 		m.messageSearch.cursor = 0
-		m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(m.selectedMessage.FullBody))
+		m.setMsgViewportContent()
 		if st != nil {
 			m.msgVim.cur = st.cur
 			m.messageViewport.SetYOffset(st.yoffset)
@@ -70,7 +81,7 @@ func (m Model) toggleMsgFormat() (Model, tea.Cmd) {
 	m.msgVim.span.Stop()
 	m.messageSearch.bar.Clear()
 	m.messageSearch.cursor = 0
-	m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(m.msgFormattedBody))
+	m.setMsgViewportContent()
 	m.messageViewport.SetYOffset(0)
 	m.messageViewport.SetXOffset(0)
 

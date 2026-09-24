@@ -162,7 +162,7 @@ func (m Model) handleEnter() (Model, tea.Cmd) {
 		m.clearMsgFormat()
 		m.viewingMessage = true
 		m.transitionTo(messagePreviewPane)
-		m.messageViewport.SetContent(m.Styles.Syntax.HighlightJSON(item.message.FullBody))
+		m.setMsgViewportContent()
 		m.messageViewport.GotoTop()
 		m.Notify(appshell.LevelInfo, fmt.Sprintf("Viewing message %s", ui.EmptyToDash(item.message.MessageID)))
 		return m, nil
