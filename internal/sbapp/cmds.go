@@ -37,35 +37,44 @@ func fetchTopicSubscriptionsCmd(svc *servicebus.Service, broker *cache.Broker[se
 	return cmd
 }
 
-func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queueName string, deadLetter, repeek, preserveCursor bool, fromSeqNo int64) tea.Cmd {
+// peekTimeout bounds one peek. A session walk accepts sessions one by
+// one and waits out an accept timeout at the end, so it gets longer.
+func peekTimeout(sessions bool) time.Duration {
+	if sessions {
+		return 120 * time.Second
+	}
+	return 30 * time.Second
+}
+
+func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queueName string, deadLetter, sessions, repeek, preserveCursor bool, fromSeqNo int64) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), peekTimeout(sessions))
 		defer cancel()
 		var messages []servicebus.PeekedMessage
-		err := svc.PeekQueueMessages(ctx, ns, queueName, peekMaxMessages, deadLetter, fromSeqNo, func(batch []servicebus.PeekedMessage) {
+		err := svc.PeekQueueMessages(ctx, ns, queueName, peekMaxMessages, deadLetter, sessions, fromSeqNo, func(batch []servicebus.PeekedMessage) {
 			messages = append(messages, batch...)
 		})
 		return messagesLoadedMsg{namespace: ns, source: queueName, entityName: queueName, messages: messages, deadLetter: deadLetter, repeek: repeek, preserveCursor: preserveCursor, err: err}
 	}
 }
 
-func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, topicName, subName string, deadLetter, repeek, preserveCursor bool, fromSeqNo int64) tea.Cmd {
+func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, topicName, subName string, deadLetter, sessions, repeek, preserveCursor bool, fromSeqNo int64) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), peekTimeout(sessions))
 		defer cancel()
 		var messages []servicebus.PeekedMessage
-		err := svc.PeekSubscriptionMessages(ctx, ns, topicName, subName, peekMaxMessages, deadLetter, fromSeqNo, func(batch []servicebus.PeekedMessage) {
+		err := svc.PeekSubscriptionMessages(ctx, ns, topicName, subName, peekMaxMessages, deadLetter, sessions, fromSeqNo, func(batch []servicebus.PeekedMessage) {
 			messages = append(messages, batch...)
 		})
 		return messagesLoadedMsg{namespace: ns, source: topicName + "/" + subName, entityName: topicName, subName: subName, messages: messages, deadLetter: deadLetter, repeek: repeek, preserveCursor: preserveCursor, err: err}
 	}
 }
 
-func receiveCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName, subName string, deadLetter bool, maxCount int) tea.Cmd {
+func receiveCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName, subName string, deadLetter, sessions bool, maxCount int) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), peekTimeout(sessions))
 		defer cancel()
-		result, err := svc.Receive(ctx, ns, entityName, subName, deadLetter, maxCount)
+		result, err := svc.Receive(ctx, ns, entityName, subName, deadLetter, sessions, maxCount)
 		return messagesReceivedMsg{namespace: ns, entityName: entityName, subName: subName, deadLetter: deadLetter, result: result, err: err}
 	}
 }
@@ -132,12 +141,19 @@ func refreshEntitiesCmd(svc *servicebus.Service, ns servicebus.Namespace) tea.Cm
 
 // moveAllCmd receives all messages (from DLQ or active queue) and
 // sends them to a different target queue/topic, then completes the originals.
-func moveAllCmd(svc *servicebus.Service, sourceNS servicebus.Namespace, entityName, subName string, deadLetter bool, targetNS servicebus.Namespace, targetEntity string, count int) tea.Cmd {
+func moveAllCmd(svc *servicebus.Service, sourceNS servicebus.Namespace, entityName, subName string, deadLetter, sessions bool, targetNS servicebus.Namespace, targetEntity string, count int) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		// A session walk accepts, drains and releases one session at a
+		// time, so it gets a far longer budget than a single-receiver
+		// move.
+		timeout := 120 * time.Second
+		if sessions {
+			timeout = 10 * time.Minute
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
-		total, err := svc.ResendAllFromSource(ctx, sourceNS, entityName, subName, deadLetter, targetNS, targetEntity, count)
+		total, err := svc.ResendAllFromSource(ctx, sourceNS, entityName, subName, deadLetter, sessions, targetNS, targetEntity, count)
 		return moveAllDoneMsg{moved: total, deadLetter: deadLetter, err: err}
 	}
 }

@@ -497,6 +497,31 @@ func (m *Model) activeSubscription() (azure.Subscription, bool) {
 	return azure.Subscription{}, false
 }
 
+// notificationCopiedMsg reports the outcome of copying a notification
+// from the history overlay.
+type notificationCopiedMsg struct {
+	text string
+	err  error
+}
+
+// yankNotification copies the message under the overlay cursor. The
+// overlay lists newest first, so the cursor indexes the snapshot from
+// the end.
+func (m *Model) yankNotification() tea.Cmd {
+	entries := m.notifier.Snapshot()
+	idx := len(entries) - 1 - m.notificationsOverlay.CursorIdx
+	if idx < 0 || idx >= len(entries) {
+		return nil
+	}
+	text := entries[idx].Message
+	return func() tea.Msg {
+		if err := ui.WriteClipboard(text); err != nil {
+			return notificationCopiedMsg{err: err}
+		}
+		return notificationCopiedMsg{text: text}
+	}
+}
+
 // activeChildTextInput returns true when the active tab's child model
 // is accepting free-form text input (e.g. list filter). The parent
 // uses this to suppress single-key shortcuts so they don't fire while
@@ -878,6 +903,14 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case notificationCopiedMsg:
+		if msg.err != nil {
+			m.notifier.Push(appshell.LevelError, "Clipboard: "+msg.err.Error())
+		} else {
+			m.notifier.Push(appshell.LevelSuccess, "Copied to clipboard: "+ui.TrimToWidth(msg.text, 60))
+		}
+		return m, nil
+
 	case toggleActivityMsg:
 		if m.activityOverlay.Active {
 			m.activityOverlay.Close()
@@ -1041,11 +1074,15 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Notifications overlay.
 		if m.notificationsOverlay.Active {
-			m.notificationsOverlay.HandleKey(key, ui.HelpKeyBindings{
+			yank := m.notificationsOverlay.HandleKey(key, ui.NotifKeyBindings{
 				Up: m.keymap.ThemeUp, Down: m.keymap.ThemeDown,
 				Close:  m.keymap.ToggleNotifications,
 				Cancel: m.keymap.Cancel,
+				Yank:   m.keymap.PreviewYank,
 			}, m.notifier.Len())
+			if yank {
+				return m, m.yankNotification()
+			}
 			return m, nil
 		}
 

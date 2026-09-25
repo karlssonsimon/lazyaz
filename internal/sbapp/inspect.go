@@ -32,12 +32,16 @@ func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
 		if e.Kind == servicebus.EntityTopic {
 			kind = "Topic"
 		}
-		return kind, []ui.InspectField{
+		fields := []ui.InspectField{
 			{Label: "Name", Value: e.Name},
 			{Label: "Kind", Value: kind},
 			{Label: "Active Messages", Value: fmt.Sprintf("%d", e.ActiveMsgCount)},
 			{Label: "Dead Letter", Value: fmt.Sprintf("%d", e.DeadLetterCount)},
 		}
+		if e.Kind == servicebus.EntityQueue {
+			fields = append(fields, ui.InspectField{Label: "Sessions", Value: yesNo(e.RequiresSession)})
+		}
+		return kind, fields
 	case subscriptionsPane:
 		item, ok := m.subscriptionsList.SelectedItem().(subscriptionItem)
 		if !ok {
@@ -49,6 +53,7 @@ func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
 			{Label: "Parent Topic", Value: m.currentEntity.Name},
 			{Label: "Active Messages", Value: fmt.Sprintf("%d", s.ActiveMsgCount)},
 			{Label: "Dead Letter", Value: fmt.Sprintf("%d", s.DeadLetterCount)},
+			{Label: "Sessions", Value: yesNo(s.RequiresSession)},
 		}
 	case messagesPane:
 		if item, ok := m.messageList.SelectedItem().(messageItem); ok {
@@ -78,6 +83,13 @@ func (m Model) inspectFor(pane int) (string, []ui.InspectField) {
 		return "Message", nil
 	}
 	return "", nil
+}
+
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
 }
 
 // appPropertiesLine folds the custom application properties into one

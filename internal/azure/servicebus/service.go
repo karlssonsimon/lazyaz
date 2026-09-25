@@ -40,12 +40,18 @@ type Entity struct {
 	Kind            EntityKind
 	ActiveMsgCount  int64
 	DeadLetterCount int64
+	// RequiresSession means the broker refuses plain receivers on the
+	// active queue; peeks go through sessions. The DLQ is never
+	// session-aware. Always false for topics (it lives on the
+	// subscription).
+	RequiresSession bool
 }
 
 type TopicSubscription struct {
 	Name            string
 	ActiveMsgCount  int64
 	DeadLetterCount int64
+	RequiresSession bool
 }
 
 // Key functions for cache deduplication.
@@ -368,6 +374,9 @@ func (s *Service) ListEntities(ctx context.Context, ns Namespace, send func([]En
 				continue
 			}
 			e := Entity{Name: *q.Name, Kind: EntityQueue}
+			if q.Properties != nil && q.Properties.RequiresSession != nil {
+				e.RequiresSession = *q.Properties.RequiresSession
+			}
 			if q.Properties != nil && q.Properties.CountDetails != nil {
 				if q.Properties.CountDetails.ActiveMessageCount != nil {
 					e.ActiveMsgCount = *q.Properties.CountDetails.ActiveMessageCount
@@ -436,6 +445,9 @@ func (s *Service) ListTopicSubscriptions(ctx context.Context, ns Namespace, topi
 				continue
 			}
 			ts := TopicSubscription{Name: *sub.Name}
+			if sub.Properties != nil && sub.Properties.RequiresSession != nil {
+				ts.RequiresSession = *sub.Properties.RequiresSession
+			}
 			if sub.Properties != nil && sub.Properties.CountDetails != nil {
 				if sub.Properties.CountDetails.ActiveMessageCount != nil {
 					ts.ActiveMsgCount = *sub.Properties.CountDetails.ActiveMessageCount
@@ -478,7 +490,58 @@ func (s *Service) withFallback(ctx context.Context, ns Namespace, label string, 
 	return nil
 }
 
-func (s *Service) PeekQueueMessages(ctx context.Context, ns Namespace, queueName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
+// PeekQueueMessages peeks up to maxCount messages. requiresSession
+// selects the session walk for the active queue; the DLQ sub-queue is
+// never session-aware, so it always uses a plain receiver.
+// dropClients forgets the cached clients for a namespace so the next
+// call builds fresh ones, closing the old ones in the background. The
+// SDK hands back its cached AMQP connection without checking it is
+// alive and only replaces it from inside its own retry loop; the
+// session accept never enters that loop, so a connection the broker
+// closed for idleness (no links for 60 s) fails every accept until the
+// client is rebuilt.
+func (s *Service) dropClients(fqdn string) {
+	s.mu.Lock()
+	old := []*azservicebus.Client{s.clients[fqdn], s.connStrClients[fqdn]}
+	delete(s.clients, fqdn)
+	delete(s.connStrClients, fqdn)
+	s.mu.Unlock()
+	for _, c := range old {
+		if c == nil {
+			continue
+		}
+		go func(c *azservicebus.Client) {
+			ctx, cancel := context.WithTimeout(context.Background(), sessionCloseTimeout)
+			defer cancel()
+			_ = c.Close(ctx)
+		}(c)
+	}
+}
+
+// withSessionRecovery is withFallback for the session walks: a
+// connection-lost failure discards the namespace's cached clients and
+// runs fn once more on fresh ones. Plain receivers recover inside the
+// SDK's retry loop and do not need this.
+func (s *Service) withSessionRecovery(ctx context.Context, ns Namespace, label string, fn func(*azservicebus.Client) error) error {
+	err := s.withFallback(ctx, ns, label, fn)
+	if err == nil || ctx.Err() != nil || !isConnectionLost(err) {
+		return err
+	}
+	s.dropClients(ns.FQDN)
+	return s.withFallback(ctx, ns, label, fn)
+}
+
+func isConnectionLost(err error) bool {
+	var sbErr *azservicebus.Error
+	return errors.As(err, &sbErr) && sbErr.Code == azservicebus.CodeConnectionLost
+}
+
+func (s *Service) PeekQueueMessages(ctx context.Context, ns Namespace, queueName string, maxCount int, deadLetter, requiresSession bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
+	if requiresSession && !deadLetter {
+		return s.withSessionRecovery(ctx, ns, "peek queue "+queueName, func(c *azservicebus.Client) error {
+			return peekSessions(ctx, queueSessionAccepter(c, queueName), maxCount, fromSequenceNumber, send)
+		})
+	}
 	return s.withFallback(ctx, ns, "peek queue "+queueName, func(c *azservicebus.Client) error {
 		return s.peekQueue(ctx, c, queueName, maxCount, deadLetter, fromSequenceNumber, send)
 	})
@@ -493,8 +556,16 @@ func (s *Service) peekQueue(ctx context.Context, client *azservicebus.Client, qu
 	return peekMessages(ctx, receiver, maxCount, fromSequenceNumber, send)
 }
 
-func (s *Service) PeekSubscriptionMessages(ctx context.Context, ns Namespace, topicName, subName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
-	return s.withFallback(ctx, ns, fmt.Sprintf("peek subscription %s/%s", topicName, subName), func(c *azservicebus.Client) error {
+// PeekSubscriptionMessages is PeekQueueMessages for a topic
+// subscription; requiresSession is the subscription's own flag.
+func (s *Service) PeekSubscriptionMessages(ctx context.Context, ns Namespace, topicName, subName string, maxCount int, deadLetter, requiresSession bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
+	label := fmt.Sprintf("peek subscription %s/%s", topicName, subName)
+	if requiresSession && !deadLetter {
+		return s.withSessionRecovery(ctx, ns, label, func(c *azservicebus.Client) error {
+			return peekSessions(ctx, subscriptionSessionAccepter(c, topicName, subName), maxCount, fromSequenceNumber, send)
+		})
+	}
+	return s.withFallback(ctx, ns, label, func(c *azservicebus.Client) error {
 		return s.peekSubscription(ctx, c, topicName, subName, maxCount, deadLetter, fromSequenceNumber, send)
 	})
 }
@@ -515,19 +586,35 @@ type LockedMessage struct {
 	ID     string
 	LockID string
 	raw    *azservicebus.ReceivedMessage
+	// settler is the receiver that holds this message's lock. A plain
+	// receive shares one across the batch; a session receive gives each
+	// message the session receiver that accepted it, because a lock can
+	// only be settled through the link that took it.
+	settler settler
+}
+
+// settler is what a locked message needs from its receiver. Both the
+// plain Receiver and the SessionReceiver satisfy it.
+type settler interface {
+	CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error
+	AbandonMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.AbandonMessageOptions) error
+	Close(ctx context.Context) error
 }
 
 type ReceivedMessages struct {
 	mu       sync.Mutex
 	messages []LockedMessage
-	receiver *azservicebus.Receiver
+	// receivers are every link holding locks in this set: one for a
+	// plain receive, one per accepted session otherwise. Close releases
+	// them all.
+	receivers []settler
 }
 
-func lockReceivedMessages(messages []*azservicebus.ReceivedMessage) []LockedMessage {
+func lockReceivedMessages(messages []*azservicebus.ReceivedMessage, st settler) []LockedMessage {
 	session := atomic.AddUint64(&lockedMessageSessionCounter, 1)
 	locked := make([]LockedMessage, len(messages))
 	for i, msg := range messages {
-		locked[i] = LockedMessage{ID: msg.MessageID, LockID: fmt.Sprintf("%d:%d", session, i), raw: msg}
+		locked[i] = LockedMessage{ID: msg.MessageID, LockID: fmt.Sprintf("%d:%d", session, i), raw: msg, settler: st}
 	}
 	return locked
 }
@@ -541,12 +628,18 @@ func (r *ReceivedMessages) CompleteByID(ctx context.Context, id string) error {
 	if !r.hasAvailableMessageLocked(id) {
 		return fmt.Errorf("complete locked message %q: message ID not found", id)
 	}
-	if r.receiver == nil {
+	if len(r.receivers) == 0 {
 		return fmt.Errorf("complete locked message %q: receiver is nil", id)
 	}
-	return r.completeByIDLocked(ctx, id, func(ctx context.Context, msg *azservicebus.ReceivedMessage) error {
-		return r.receiver.CompleteMessage(ctx, msg, nil)
-	})
+	return r.completeByIDLocked(ctx, id, settleComplete)
+}
+
+// settleComplete completes a locked message through its own receiver.
+func settleComplete(ctx context.Context, msg LockedMessage) error {
+	if msg.settler == nil {
+		return fmt.Errorf("complete locked message %q: receiver is nil", msg.operationID())
+	}
+	return msg.settler.CompleteMessage(ctx, msg.raw, nil)
 }
 
 func (r *ReceivedMessages) hasAvailableMessageLocked(id string) bool {
@@ -558,14 +651,13 @@ func (r *ReceivedMessages) hasAvailableMessageLocked(id string) bool {
 	return false
 }
 
-func (r *ReceivedMessages) completeByIDLocked(ctx context.Context, id string, complete func(context.Context, *azservicebus.ReceivedMessage) error) error {
+func (r *ReceivedMessages) completeByIDLocked(ctx context.Context, id string, complete func(context.Context, LockedMessage) error) error {
 	for i := range r.messages {
 		msg := &r.messages[i]
 		if !msg.matchesOperationID(id) || msg.raw == nil {
 			continue
 		}
-		raw := msg.raw
-		if err := complete(ctx, raw); err != nil {
+		if err := complete(ctx, *msg); err != nil {
 			return err
 		}
 		msg.raw = nil
@@ -631,31 +723,30 @@ func (r *ReceivedMessages) Len() int {
 }
 
 func (r *ReceivedMessages) abandonAllLocked(ctx context.Context) {
-	if r.receiver == nil {
-		return
-	}
 	for i := range r.messages {
 		msg := &r.messages[i]
-		if msg.raw != nil {
-			_ = r.receiver.AbandonMessage(ctx, msg.raw, nil)
+		if msg.raw != nil && msg.settler != nil {
+			_ = msg.settler.AbandonMessage(ctx, msg.raw, nil)
 			msg.raw = nil
 		}
 	}
 }
 
-// Close abandons all messages and closes the receiver.
+// Close abandons all messages and closes every receiver holding locks.
 func (r *ReceivedMessages) Close(ctx context.Context) {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.receiver == nil {
+	if len(r.receivers) == 0 {
 		return
 	}
 	r.abandonAllLocked(ctx)
-	r.receiver.Close(ctx)
-	r.receiver = nil
+	for _, rc := range r.receivers {
+		_ = rc.Close(ctx)
+	}
+	r.receivers = nil
 }
 
 func (r *ReceivedMessages) PeekedMessages() []PeekedMessage {
@@ -696,8 +787,26 @@ func newReceiver(client *azservicebus.Client, entityName, subName string, deadLe
 // with peek-lock semantics. Pass subName == "" to receive from a queue;
 // pass deadLetter == true to target the dead-letter sub-queue. The
 // caller owns the returned Receiver and must Close it when done.
-func (s *Service) Receive(ctx context.Context, ns Namespace, entityName, subName string, deadLetter bool, maxCount int) (*ReceivedMessages, error) {
+//
+// requiresSession routes the active side of a session-enabled entity
+// through the session walk, which locks whole sessions rather than
+// single messages; the DLQ is never session-aware.
+func (s *Service) Receive(ctx context.Context, ns Namespace, entityName, subName string, deadLetter, requiresSession bool, maxCount int) (*ReceivedMessages, error) {
 	var result *ReceivedMessages
+	if requiresSession && !deadLetter {
+		err := s.withSessionRecovery(ctx, ns, receiveLabel(entityName, subName, deadLetter), func(c *azservicebus.Client) error {
+			r, err := receiveSessions(ctx, sessionAccepterFor(c, entityName, subName), maxCount)
+			if err != nil {
+				return err
+			}
+			result = r
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
 	err := s.withFallback(ctx, ns, receiveLabel(entityName, subName, deadLetter), func(c *azservicebus.Client) error {
 		receiver, err := newReceiver(c, entityName, subName, deadLetter)
 		if err != nil {
@@ -708,7 +817,7 @@ func (s *Service) Receive(ctx context.Context, ns Namespace, entityName, subName
 			receiver.Close(ctx)
 			return fmt.Errorf("receive messages: %w", err)
 		}
-		result = &ReceivedMessages{messages: lockReceivedMessages(messages), receiver: receiver}
+		result = &ReceivedMessages{messages: lockReceivedMessages(messages, receiver), receivers: []settler{receiver}}
 		return nil
 	})
 	if err != nil {
@@ -769,7 +878,7 @@ func (s *Service) RequeueLockedByID(ctx context.Context, ns Namespace, queueOrTo
 		toRequeue = append(toRequeue, msg.raw)
 		selectedIDs = append(selectedIDs, operationID)
 	}
-	if len(selectedIDs) > 0 && locked.receiver == nil {
+	if len(selectedIDs) > 0 && len(locked.receivers) == 0 {
 		return nil, fmt.Errorf("complete locked message %q: receiver is nil", selectedIDs[0])
 	}
 
@@ -782,9 +891,7 @@ func (s *Service) RequeueLockedByID(ctx context.Context, ns Namespace, queueOrTo
 
 	completed := make([]string, 0, len(selectedIDs))
 	for _, id := range selectedIDs {
-		if err := locked.completeByIDLocked(ctx, id, func(ctx context.Context, msg *azservicebus.ReceivedMessage) error {
-			return locked.receiver.CompleteMessage(ctx, msg, nil)
-		}); err != nil {
+		if err := locked.completeByIDLocked(ctx, id, settleComplete); err != nil {
 			return completed, err
 		}
 		completed = append(completed, id)
@@ -842,7 +949,7 @@ func sendMessagesBatched(ctx context.Context, sender *azservicebus.Sender, messa
 // AMQP handshakes. When maxMessages > 0 the loop stops after that many
 // messages to avoid infinite cycles when a consumer immediately dead-letters
 // resent messages. Returns the number of messages successfully resent.
-func (s *Service) resendAll(ctx context.Context, client *azservicebus.Client, receiver *azservicebus.Receiver, targetName string, batchSize, maxMessages int) (int, error) {
+func (s *Service) resendAll(ctx context.Context, client *azservicebus.Client, receiver bulkReceiver, targetName string, batchSize, maxMessages int) (int, error) {
 	sender, err := client.NewSender(targetName, nil)
 	if err != nil {
 		return 0, fmt.Errorf("create sender for %s: %w", targetName, err)
@@ -931,7 +1038,11 @@ func (s *Service) resendAllFromDLQ(ctx context.Context, client *azservicebus.Cli
 // the target rejects on auth, the operation fails. A second-level
 // fallback for cross-NS would need a per-target conn-string lookup —
 // added when there's a real use case for it.
-func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityName, subName string, deadLetter bool, targetNS Namespace, targetName string, expectedCount int) (int, error) {
+//
+// requiresSession selects the session walk for a session-enabled
+// entity's active side: each session is accepted, drained into the
+// target, and released before the next.
+func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityName, subName string, deadLetter, requiresSession bool, targetNS Namespace, targetName string, expectedCount int) (int, error) {
 	sameNS := strings.EqualFold(ns.FQDN, targetNS.FQDN)
 
 	var crossNSTarget *azservicebus.Client
@@ -944,13 +1055,32 @@ func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityN
 	}
 
 	var total int
+	if requiresSession && !deadLetter {
+		// total accumulates: a retry after a dropped connection carries
+		// on from the sessions already drained.
+		err := s.withSessionRecovery(ctx, ns, "resend from source", func(c *azservicebus.Client) error {
+			batchSize := 50
+			remaining := expectedCount
+			if remaining > 0 {
+				remaining -= total
+				if remaining <= 0 {
+					return nil
+				}
+				if remaining < batchSize {
+					batchSize = remaining
+				}
+			}
+			targetClient := crossNSTarget
+			if sameNS {
+				targetClient = c
+			}
+			n, err := s.resendAllSessions(ctx, targetClient, sessionAccepterFor(c, entityName, subName), targetName, batchSize, remaining)
+			total += n
+			return err
+		})
+		return total, err
+	}
 	err := s.withFallback(ctx, ns, "resend from source", func(c *azservicebus.Client) error {
-		receiver, err := newReceiver(c, entityName, subName, deadLetter)
-		if err != nil {
-			return fmt.Errorf("create receiver: %w", err)
-		}
-		defer receiver.Close(ctx)
-
 		batchSize := 50
 		if expectedCount > 0 && expectedCount < batchSize {
 			batchSize = expectedCount
@@ -959,6 +1089,11 @@ func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityN
 		if sameNS {
 			targetClient = c
 		}
+		receiver, err := newReceiver(c, entityName, subName, deadLetter)
+		if err != nil {
+			return fmt.Errorf("create receiver: %w", err)
+		}
+		defer receiver.Close(ctx)
 		n, err := s.resendAll(ctx, targetClient, receiver, targetName, batchSize, expectedCount)
 		total = n
 		return err

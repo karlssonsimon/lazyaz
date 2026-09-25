@@ -71,6 +71,37 @@ Open the action menu (`a`) from the messages pane and choose one of:
 - **Clear messages** — drop the local snapshot without peeking
 
 <Aside type="note">
+### Session-enabled queues and subscriptions
+
+An entity that requires sessions refuses the plain receiver a normal peek
+uses, so lazyaz peeks it by walking its sessions instead: it accepts each
+available session, peeks inside it, and merges the results in sequence
+order so the list looks like any other peek. "Peek more" continues from
+the last sequence number across all sessions. The spinner says "walking
+sessions" and the status line reports how many sessions the batch spans.
+The inspect strip (`K`) shows whether an entity requires sessions.
+
+Two things to know:
+
+- The sessions stay locked for the duration of the walk, usually a few
+  seconds. A live consumer waits that long for them. The walk covers at
+  most 64 sessions per peek.
+- The walk only sees sessions that nobody else holds. A session a live
+  consumer has locked is skipped by the broker, so its messages do not
+  appear in the peek even though they are in the queue. The entity's
+  active count (inspect strip, `K`) still includes them; to see their
+  contents while the consumer holds the session, use the portal's Service
+  Bus Explorer, which peeks across locked sessions too.
+- Receive-with-lock walks sessions the same way and locks each accepted
+  session whole. Each locked message is settled through the session that
+  holds it, so complete, move and abandon work as on a plain queue. A
+  session lock expires after the entity's lock duration (one minute by
+  default) if you leave the locked view idle, at which point settling
+  fails and you receive again. "Move all" from the queue-type pane also
+  walks sessions, draining and releasing one session at a time.
+- The dead-letter queue is not session-aware: it peeks and receives as
+  usual.
+
 Peeking is read-only. It does not lock or consume messages. You can peek the
 same DLQ repeatedly without affecting it.
 </Aside>

@@ -130,6 +130,52 @@ func TestEntityDelegate_CountsAlignNearNames(t *testing.T) {
 	t.Fatalf("no line contained counts:\n%s", plain)
 }
 
+// Long names are cropped so the counts stay on screen, and the counts
+// of every row line up in one column at the right edge.
+func TestEntityDelegate_LongNamesCropToKeepCounts(t *testing.T) {
+	long := "integration-events-for-the-regional-fulfilment-service-v2"
+	items := []list.Item{
+		entityItem{entity: servicebus.Entity{Name: long, Kind: servicebus.EntityQueue, ActiveMsgCount: 12, DeadLetterCount: 0}},
+		entityItem{entity: servicebus.Entity{Name: "orders", Kind: servicebus.EntityQueue, ActiveMsgCount: 128, DeadLetterCount: 5}},
+	}
+	l := newEntityList(40, items)
+
+	plain := ansi.Strip(l.View())
+	lines := strings.Split(plain, "\n")
+	var longLine, shortLine string
+	for _, line := range lines {
+		switch {
+		case strings.Contains(line, "integration-events"):
+			longLine = line
+		case strings.Contains(line, "orders"):
+			shortLine = line
+		}
+	}
+	if longLine == "" || shortLine == "" {
+		t.Fatalf("rows missing:\n%s", plain)
+	}
+	if !strings.Contains(longLine, "12 / 0") {
+		t.Errorf("long name pushed its counts off the row: %q", longLine)
+	}
+	if strings.Contains(longLine, long) || !strings.Contains(longLine, "…") {
+		t.Errorf("long name should be cropped with an ellipsis: %q", longLine)
+	}
+	if !strings.Contains(shortLine, "128 / 5") {
+		t.Errorf("short row lost its counts: %q", shortLine)
+	}
+	// Compare display columns, not byte offsets: the selected row holds
+	// multibyte glyphs (the border bar, the ellipsis).
+	col := func(line, counts string) int { return lipgloss.Width(line[:strings.Index(line, counts)]) }
+	if col(longLine, "12 / 0") != col(shortLine, "128 / 5") {
+		t.Errorf("counts not aligned in one column:\n%q\n%q", longLine, shortLine)
+	}
+	for _, line := range []string{longLine, shortLine} {
+		if lipgloss.Width(line) > 40 {
+			t.Errorf("row wider than the list: %d %q", lipgloss.Width(line), line)
+		}
+	}
+}
+
 func TestSubscriptionDelegate_RendersCounts(t *testing.T) {
 	items := []list.Item{
 		subscriptionItem{sub: servicebus.TopicSubscription{Name: "orders-sub", ActiveMsgCount: 7, DeadLetterCount: 2}},

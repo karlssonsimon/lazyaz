@@ -173,8 +173,14 @@ func (m Model) buildActions() []action {
 		// queue and the DLQ. Requeue only exists in DLQ mode: from the
 		// active queue it would degenerate into "re-send to the same
 		// queue and complete the original", i.e. move-to-back.
+		// On a session-enabled active queue the receive walks sessions
+		// and locks them whole; the label says so.
 		if m.lockedMessages == nil {
-			actions = append(actions, action{actionReceiveMessages, fmt.Sprintf("Receive %s messages (with lock)", label), ""})
+			how := "with lock"
+			if m.peekViaSessions() {
+				how = "with lock, walking sessions"
+			}
+			actions = append(actions, action{actionReceiveMessages, fmt.Sprintf("Receive %s messages (%s)", label, how), ""})
 		} else {
 			n := m.currentMarks().Len()
 			if n == 0 {
@@ -263,9 +269,12 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if m.deadLetter {
 			scope = "DLQ"
 		}
+		if m.peekViaSessions() {
+			scope += " (walking sessions)"
+		}
 		m.StartLoading(m.focus, fmt.Sprintf("Receiving %s messages with lock...", scope))
 		return m, tea.Batch(m.Spinner.Tick,
-			receiveCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, peekMaxMessages))
+			receiveCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, m.peekViaSessions(), peekMaxMessages))
 
 	case actionRequeueCurrent:
 		return m.openRequeueConfirm()
@@ -509,13 +518,38 @@ func (m Model) doPeek(append bool) (Model, tea.Cmd) {
 	if m.deadLetter {
 		label = "DLQ"
 	}
+	sessions := m.peekViaSessions()
+	if sessions {
+		label += " (walking sessions)"
+	}
 	if m.currentSubName == "" {
 		m.StartLoading(m.focus, fmt.Sprintf("Peeking %s messages from queue %s", label, m.currentEntity.Name))
-		return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, append, false, fromSeqNo))
+		return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, sessions, append, false, fromSeqNo))
 	}
 
 	m.StartLoading(m.focus, fmt.Sprintf("Peeking %s messages from %s/%s", label, m.currentEntity.Name, m.currentSubName))
-	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, append, false, fromSeqNo))
+	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, sessions, append, false, fromSeqNo))
+}
+
+// currentRequiresSession is the session flag of the open queue or
+// topic subscription.
+func (m Model) currentRequiresSession() bool {
+	if m.currentSubName == "" {
+		return m.currentEntity.RequiresSession
+	}
+	for _, s := range m.subscriptions {
+		if s.Name == m.currentSubName {
+			return s.RequiresSession
+		}
+	}
+	return false
+}
+
+// peekViaSessions is true when the open scope must be peeked through
+// sessions: a session-enabled entity's active queue. Its DLQ is not
+// session-aware and peeks plainly.
+func (m Model) peekViaSessions() bool {
+	return m.currentRequiresSession() && !m.deadLetter
 }
 
 func (m Model) renderActionMenu(base string) string {

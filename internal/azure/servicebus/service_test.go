@@ -193,11 +193,11 @@ func TestLockedMessagesUseUniqueOperationIDsAcrossSessions(t *testing.T) {
 	first := lockReceivedMessages([]*azservicebus.ReceivedMessage{
 		{MessageID: "same"},
 		{MessageID: "same"},
-	})
+	}, nil)
 	second := lockReceivedMessages([]*azservicebus.ReceivedMessage{
 		{MessageID: "same"},
 		{MessageID: "same"},
-	})
+	}, nil)
 
 	seen := make(map[string]struct{})
 	for _, locked := range append(first, second...) {
@@ -423,5 +423,7 @@ func strPtr(v string) *string {
 func (r *ReceivedMessages) completeByID(ctx context.Context, id string, complete func(context.Context, *azservicebus.ReceivedMessage) error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.completeByIDLocked(ctx, id, complete)
+	return r.completeByIDLocked(ctx, id, func(ctx context.Context, msg LockedMessage) error {
+		return complete(ctx, msg.raw)
+	})
 }

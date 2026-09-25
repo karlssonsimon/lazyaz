@@ -42,25 +42,47 @@ func newCountStyles(base list.DefaultDelegate, styles ui.Styles) countStyles {
 	}
 }
 
-// countsGap is the minimum space between the widest title in the list
-// and the active/DLQ counts column.
-const countsGap = 4
+const (
+	// countsGap is the minimum space between the widest title in the
+	// list and the active/DLQ counts column.
+	countsGap = 4
+
+	// minTitleWidth is the least a cropped name may keep. Below it the
+	// pane is too narrow for both, and the counts are dropped instead
+	// of leaving an unreadable name.
+	minTitleWidth = 12
+)
 
 // renderRowWithCounts delegates to base.Render, then aligns a
 // "active / dlq" suffix to a column just past the widest title in
-// the visible list. If the row cannot fit the counts, they are
-// omitted so the name is never truncated further.
+// the visible list. When the names are too long for that, they are
+// cropped with an ellipsis so the counts keep a column at the right
+// edge — a queue's backlog matters more than the tail of its name.
+// Only a pane too narrow for even a cropped name drops the counts.
 func renderRowWithCounts(w io.Writer, base list.DefaultDelegate, m list.Model, index int, item list.Item, active, dead int64, cs countStyles) {
-	var buf strings.Builder
-	base.Render(&buf, m, index, item)
-	rendered := buf.String()
-
 	rowWidth := m.Width()
 	counts := fmt.Sprintf("%d / %d", active, dead)
 	countsW := lipgloss.Width(counts)
-	renderedW := lipgloss.Width(rendered)
+	colW := max(countsColumnWidth(m), countsW)
 
 	targetCol := titleColumnWidth(m) + countsGap
+	if rowWidth > 0 && targetCol+colW > rowWidth {
+		avail := rowWidth - countsGap - colW
+		if avail < minTitleWidth {
+			base.Render(w, m, index, item)
+			return
+		}
+		// m is a copy; narrowing it makes base.Render truncate the
+		// title to the column left of the counts.
+		m.SetWidth(avail)
+		targetCol = rowWidth - colW
+	}
+
+	var buf strings.Builder
+	base.Render(&buf, m, index, item)
+	rendered := buf.String()
+	renderedW := lipgloss.Width(rendered)
+
 	if targetCol < renderedW+1 {
 		targetCol = renderedW + 1
 	}
@@ -81,6 +103,28 @@ func renderRowWithCounts(w io.Writer, base list.DefaultDelegate, m list.Model, i
 
 	pad := targetCol - renderedW
 	fmt.Fprint(w, rendered+strings.Repeat(" ", pad)+style.Render(counts))
+}
+
+// countsColumnWidth is the width of the widest "active / dlq" text
+// among the visible items, so a cropped list still aligns its counts
+// in one column.
+func countsColumnWidth(m list.Model) int {
+	widest := 0
+	for _, it := range m.VisibleItems() {
+		var active, dead int64
+		switch v := it.(type) {
+		case entityItem:
+			active, dead = v.entity.ActiveMsgCount, v.entity.DeadLetterCount
+		case subscriptionItem:
+			active, dead = v.sub.ActiveMsgCount, v.sub.DeadLetterCount
+		default:
+			continue
+		}
+		if w := lipgloss.Width(fmt.Sprintf("%d / %d", active, dead)); w > widest {
+			widest = w
+		}
+	}
+	return widest
 }
 
 // titleColumnWidth returns the rendered width of the widest title

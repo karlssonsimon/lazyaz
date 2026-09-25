@@ -313,8 +313,22 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	if msg.deadLetter {
 		label = "DLQ"
 	}
-	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Peeked %d %s messages from %s", len(msg.messages), label, msg.source))
+	status := fmt.Sprintf("Peeked %d %s messages from %s", len(msg.messages), label, msg.source)
+	if m.peekViaSessions() {
+		status += fmt.Sprintf(" across %d sessions", distinctSessions(msg.messages))
+	}
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 	return m, nil
+}
+
+// distinctSessions counts the session IDs in a peeked batch, for the
+// session-walk status line.
+func distinctSessions(msgs []servicebus.PeekedMessage) int {
+	seen := make(map[string]struct{})
+	for _, m := range msgs {
+		seen[m.SessionID] = struct{}{}
+	}
+	return len(seen)
 }
 
 func (m Model) handleEntitiesRefreshed(msg entitiesRefreshedMsg) (Model, tea.Cmd) {
@@ -372,7 +386,11 @@ func (m Model) handleMessagesReceived(msg messagesReceivedMsg) (Model, tea.Cmd) 
 	}
 	m.messageList.Title = fmt.Sprintf("%s (%d)", title, len(m.peekedMessages))
 	m.resize()
-	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, fmt.Sprintf("Received %d %s messages with lock", len(m.peekedMessages), scope))
+	status := fmt.Sprintf("Received %d %s messages with lock", len(m.peekedMessages), scope)
+	if m.peekViaSessions() {
+		status += fmt.Sprintf(" across %d sessions", distinctSessions(m.peekedMessages))
+	}
+	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)
 	return m, nil
 }
 

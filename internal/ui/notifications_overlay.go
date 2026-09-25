@@ -11,10 +11,22 @@ import (
 
 const (
 	notifInnerW     = 100
-	notifMaxVisible = 16
+	notifMaxVisible = 12
 	notifTimeColW   = 10
 	notifLevelColW  = 11 // "✗ ERROR  " padded
+
+	// notifDetailLines is the fixed height of the detail pane under the
+	// list, where the cursor entry's message is shown in full, wrapped.
+	// Fixed so the box does not jump as the cursor moves.
+	notifDetailLines = 5
 )
+
+// NotifKeyBindings are the keys the notifications overlay answers to.
+// Yank may be nil or empty (the standard keymap has no plain yank);
+// the footer hint is then omitted.
+type NotifKeyBindings struct {
+	Up, Down, Close, Cancel, Yank KeyMatcher
+}
 
 // NotificationsOverlayState is the open/closed + scroll state of the
 // notifications history overlay. The actual notification entries live
@@ -35,8 +47,9 @@ func (s *NotificationsOverlayState) Close() {
 }
 
 // HandleKey processes key presses for the overlay. Up/Down move the
-// cursor; close or cancel dismiss it.
-func (s *NotificationsOverlayState) HandleKey(key string, bindings HelpKeyBindings, total int) {
+// cursor; close or cancel dismiss it. It reports a yank request for
+// the caller to act on, since the clipboard lives outside this package.
+func (s *NotificationsOverlayState) HandleKey(key string, bindings NotifKeyBindings, total int) (yank bool) {
 	switch {
 	case bindings.Close.Matches(key), bindings.Cancel != nil && bindings.Cancel.Matches(key):
 		s.Close()
@@ -48,7 +61,10 @@ func (s *NotificationsOverlayState) HandleKey(key string, bindings HelpKeyBindin
 		if s.CursorIdx < total-1 {
 			s.CursorIdx++
 		}
+	case bindings.Yank != nil && bindings.Yank.Matches(key):
+		return total > 0
 	}
+	return false
 }
 
 // NotificationEntry is the renderer-facing view of a logged
@@ -62,8 +78,10 @@ type NotificationEntry struct {
 
 // RenderNotificationsOverlay paints the scrollable history (newest first)
 // as a tabular log: NOTIFICATIONS header pill, level counters, WHEN/LEVEL/
-// EVENT columns, footer with LOG mode pill.
-func RenderNotificationsOverlay(state NotificationsOverlayState, closeHint string, entries []NotificationEntry, styles Styles, width, height int, base string) string {
+// EVENT columns, a detail pane with the cursor entry's full message,
+// and a footer with the LOG mode pill. yankHint names the copy key, or
+// is empty when the keymap has none.
+func RenderNotificationsOverlay(state NotificationsOverlayState, closeHint, yankHint string, entries []NotificationEntry, styles Styles, width, height int, base string) string {
 	innerW := notifInnerW
 	boxW := innerW + 6
 	if boxW > width-4 {
@@ -99,10 +117,13 @@ func RenderNotificationsOverlay(state NotificationsOverlayState, closeHint strin
 	header := renderNotifHeader(closeHint, len(reversed), nErr, nWarn, nOk, nInfo, styles, innerW)
 	colHeader := renderNotifColumnHeader(styles, innerW)
 	bodyRows := renderNotifBody(reversed, state.CursorIdx, styles, innerW)
-	footer := renderNotifFooter(styles, innerW)
+	detailRows := renderNotifDetail(reversed, state.CursorIdx, styles, innerW)
+	footer := renderNotifFooter(styles, yankHint, innerW)
 
 	rows := []string{header, rule, colHeader}
 	rows = append(rows, bodyRows...)
+	rows = append(rows, rule)
+	rows = append(rows, detailRows...)
 	rows = append(rows, rule, footer)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
@@ -261,9 +282,41 @@ func renderNotifRow(entry NotificationEntry, isCursor bool, timeW, levelW, event
 	return rowStyle.Render(whenCol + levelCol + eventCol)
 }
 
+// renderNotifDetail is the pane under the list: the cursor entry's
+// message in full, word-wrapped to the box, so a long error is
+// readable here even though the list row truncates it. Always
+// notifDetailLines tall; a message longer than that ends in "…" and
+// the yank still copies the whole text.
+func renderNotifDetail(entries []NotificationEntry, cursor int, styles Styles, innerW int) []string {
+	ov := styles.Overlay
+	rows := make([]string, 0, notifDetailLines)
+	if cursor >= 0 && cursor < len(entries) {
+		entry := entries[cursor]
+		// Rows carry the overlay's 1-cell side padding (innerW-2 of
+		// content, like the list columns) and the 2-cell icon prefix.
+		textW := innerW - 4
+		lines := wrapAndClamp(entry.Message, textW, notifDetailLines)
+		colored := lipgloss.NewStyle().
+			Foreground(levelColor(entry.Level, styles)).
+			Background(ov.Normal.GetBackground())
+		for i, line := range lines {
+			if i == 0 {
+				line = colored.Render(levelIcon(entry.Level)) + " " + line
+			} else {
+				line = "  " + line
+			}
+			rows = append(rows, ov.Normal.Width(innerW).Render(line))
+		}
+	}
+	for len(rows) < notifDetailLines {
+		rows = append(rows, ov.Normal.Width(innerW).Render(""))
+	}
+	return rows
+}
+
 // renderNotifFooter builds the bottom row with the LOG mode pill and
 // the navigation hints we actually wire up.
-func renderNotifFooter(styles Styles, innerW int) string {
+func renderNotifFooter(styles Styles, yankHint string, innerW int) string {
 	chrome := styles.Chrome
 	ov := styles.Overlay
 	dim := ov.Hint.Inline(true).Padding(0)
@@ -274,6 +327,9 @@ func renderNotifFooter(styles Styles, innerW int) string {
 
 	sep := dim.Render("  ")
 	left := mode + sep + move + sep + close
+	if yankHint != "" {
+		left += sep + chrome.StatusKey.Render(yankHint) + dim.Render(" copy")
+	}
 	return overlayJustifyRow(left, "", innerW, ov)
 }
 

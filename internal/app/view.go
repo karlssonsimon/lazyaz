@@ -74,7 +74,7 @@ func (m Model) View() tea.View {
 		view = ui.RenderHelpOverlay(m.helpOverlay, closeHint, m.cursor, m.styles, &m.keymap, m.width, m.height, view)
 	}
 	if m.notificationsOverlay.Active {
-		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, closeHint, notifierToEntries(m.notifier.Snapshot()), m.styles, m.width, m.height, view)
+		view = ui.RenderNotificationsOverlay(m.notificationsOverlay, closeHint, m.keymap.PreviewYank.Short(), notifierToEntries(m.notifier.Snapshot()), m.styles, m.width, m.height, view)
 	}
 	if m.activityOverlay.Active {
 		rows := activityRowsFromRegistry(m.sharedActivities)

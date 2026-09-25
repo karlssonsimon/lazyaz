@@ -266,7 +266,7 @@ func (m Model) executeMoveAction(moveAction actionID, result targetPickerResult)
 		m.confirmAction = func(m Model) (Model, tea.Cmd) {
 			m.StartLoading(m.focus, fmt.Sprintf("Moving all %s messages to %s/%s...", label, targetNS.Name, target))
 			return m, tea.Batch(m.Spinner.Tick,
-				moveAllCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, targetNS, target, count))
+				moveAllCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, m.peekViaSessions(), targetNS, target, count))
 		}
 		return m, nil
 
