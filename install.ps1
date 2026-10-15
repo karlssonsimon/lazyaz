@@ -44,9 +44,29 @@ $arch = switch ($env:PROCESSOR_ARCHITECTURE) {
 
 if ($Version -eq "latest") {
     Write-Log "resolving latest release"
-    $release = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
-    $Version = $release.tag_name
-    if (-not $Version) { throw "could not determine latest version" }
+    # The redirect from github.com/<repo>/releases/latest names the tag
+    # and is not subject to the API's per-IP rate limit, which a shared
+    # office address exhausts (the API then answers 403). The API stays
+    # as a fallback. Both Windows PowerShell and PowerShell 7 raise on a
+    # 302 when redirects are disabled, so the Location is read from the
+    # exception's response.
+    $location = $null
+    try {
+        $resp = Invoke-WebRequest "https://github.com/$Repo/releases/latest" -MaximumRedirection 0 -UseBasicParsing -ErrorAction Stop
+        $location = $resp.Headers.Location
+    } catch {
+        $r = $_.Exception.Response
+        if ($r) {
+            try { $location = $r.Headers.Location } catch { }
+            if (-not $location) { try { $location = $r.Headers["Location"] } catch { } }
+        }
+    }
+    if ($location) { $Version = ([string]$location) -replace '.*/releases/tag/', '' }
+    if (-not $Version -or $Version -eq "latest") {
+        $release = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
+        $Version = $release.tag_name
+    }
+    if (-not $Version -or $Version -eq "latest") { throw "could not determine latest version" }
 }
 
 $numVersion = $Version.TrimStart("v")

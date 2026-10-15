@@ -56,10 +56,31 @@ case "$ARCH" in
   *) err "unsupported architecture: $ARCH" ;;
 esac
 
+# latest_tag resolves the newest release from the redirect that
+# github.com/<repo>/releases/latest issues. Unlike api.github.com it is
+# not subject to the per-IP API rate limit (60 requests/hour when
+# unauthenticated), which a shared office address exhausts and which
+# then answers 403 for everyone behind it. The API remains a fallback
+# for networks that do not pass the redirect through.
+latest_tag() {
+  tag=""
+  if command -v curl >/dev/null 2>&1; then
+    tag="$(curl -sSIL -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" 2>/dev/null \
+      | sed -n 's#.*/releases/tag/##p')"
+  elif command -v wget >/dev/null 2>&1; then
+    tag="$(wget -qO /dev/null --server-response "https://github.com/$REPO/releases/latest" 2>&1 \
+      | sed -n 's#.*[Ll]ocation: .*/releases/tag/\([^[:space:]]*\).*#\1#p' | tail -n 1)"
+  fi
+  if [ -z "$tag" ]; then
+    tag="$($FETCH "https://api.github.com/repos/$REPO/releases/latest" \
+      | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)"
+  fi
+  printf '%s' "$tag"
+}
+
 if [ "$VERSION" = "latest" ]; then
   log "resolving latest release"
-  VERSION="$($FETCH "https://api.github.com/repos/$REPO/releases/latest" \
-    | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)"
+  VERSION="$(latest_tag)"
   [ -n "$VERSION" ] || err "could not determine latest version"
 fi
 

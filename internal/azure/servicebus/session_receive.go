@@ -31,7 +31,7 @@ func receiveSessions(ctx context.Context, accept sessionAccepter, maxCount int) 
 
 	var locked []LockedMessage
 	for len(locked) < maxCount && len(held) < maxSessionsPerPeek {
-		h, ok, err := acceptNext(ctx, accept)
+		h, ok, err := acceptNext(ctx, accept, len(held) == 0)
 		if err != nil {
 			release()
 			return nil, err
@@ -78,7 +78,7 @@ func (s *Service) resendAllSessions(ctx context.Context, targetClient *azservice
 		if maxMessages > 0 && total >= maxMessages {
 			break
 		}
-		h, ok, err := acceptNext(ctx, accept)
+		h, ok, err := acceptNext(ctx, accept, sessions == 0)
 		if err != nil {
 			return total, err
 		}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 )
@@ -357,5 +358,33 @@ func TestWithSessionRecoveryRebuildsClientOnce(t *testing.T) {
 	})
 	if err == nil || calls != 1 || svc.clients[ns.FQDN] != before {
 		t.Fatalf("plain error: err=%v calls=%d rebuilt=%v", err, calls, svc.clients[ns.FQDN] != before)
+	}
+}
+
+// The opening accept gets the long budget (it also opens the
+// connection); later accepts get the short one.
+func TestPeekSessionsFirstAcceptHasLongerBudget(t *testing.T) {
+	var budgets []time.Duration
+	sessions := []*fakeSession{{id: "a", seqs: []int64{1}}, {id: "b", seqs: []int64{2}}}
+	inner := fakeAccepter(sessions)
+	accept := func(ctx context.Context) (sessionHandle, error) {
+		d, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("accept called without a deadline")
+		}
+		budgets = append(budgets, time.Until(d))
+		return inner(ctx)
+	}
+	collect(t, accept, 50, 0)
+	if len(budgets) != 3 {
+		t.Fatalf("expected 3 accepts (2 sessions + exhaustion), got %d", len(budgets))
+	}
+	if budgets[0] <= sessionAcceptTimeout {
+		t.Errorf("first accept budget %v should exceed the short timeout %v", budgets[0], sessionAcceptTimeout)
+	}
+	for i, b := range budgets[1:] {
+		if b > sessionAcceptTimeout {
+			t.Errorf("accept %d budget %v should be within the short timeout %v", i+2, b, sessionAcceptTimeout)
+		}
 	}
 }

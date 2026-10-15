@@ -315,6 +315,14 @@ func (m Model) handleMessagesLoaded(msg messagesLoadedMsg) (Model, tea.Cmd) {
 	}
 	status := fmt.Sprintf("Peeked %d %s messages from %s", len(msg.messages), label, msg.source)
 	if m.peekViaSessions() {
+		// The walk only sees sessions nobody holds. An empty result on
+		// a queue whose count says otherwise means a consumer owns every
+		// session; say so instead of reporting a quiet success.
+		if active, _ := m.currentMessageCounts(); len(msg.messages) == 0 && active > 0 {
+			m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelWarn,
+				fmt.Sprintf("Peeked 0 of %d active messages from %s: every session is currently held by a consumer, so none could be accepted", active, msg.source))
+			return m, nil
+		}
 		status += fmt.Sprintf(" across %d sessions", distinctSessions(msg.messages))
 	}
 	m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, status)

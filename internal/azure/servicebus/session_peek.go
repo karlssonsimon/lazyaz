@@ -30,6 +30,12 @@ const (
 	// walk takes to notice.
 	sessionAcceptTimeout = 4 * time.Second
 
+	// firstAcceptTimeout is the budget for a walk's first accept, which
+	// also opens the AMQP connection and fetches a token — several
+	// seconds on an az-login credential. Reading that as "no sessions"
+	// made a loaded queue peek as empty, silently.
+	firstAcceptTimeout = 20 * time.Second
+
 	// sessionCloseTimeout bounds releasing the held sessions when the
 	// caller's context is already gone.
 	sessionCloseTimeout = 5 * time.Second
@@ -79,11 +85,17 @@ func sessionAccepterFor(client *azservicebus.Client, entityName, subName string)
 	return subscriptionSessionAccepter(client, entityName, subName)
 }
 
-// acceptNext runs one accept under the accept timeout and classifies
-// the outcome: a handle, the end of the walk (ok == false, err == nil),
-// or a real error.
-func acceptNext(ctx context.Context, accept sessionAccepter) (h sessionHandle, ok bool, err error) {
-	actx, cancel := context.WithTimeout(ctx, sessionAcceptTimeout)
+// acceptNext runs one accept under a timeout and classifies the
+// outcome: a handle, the end of the walk (ok == false, err == nil), or
+// a real error. first selects the longer budget for a walk's opening
+// accept; once a session has come back the connection is warm and a
+// short wait is enough to call the walk exhausted.
+func acceptNext(ctx context.Context, accept sessionAccepter, first bool) (h sessionHandle, ok bool, err error) {
+	timeout := sessionAcceptTimeout
+	if first {
+		timeout = firstAcceptTimeout
+	}
+	actx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	h, err = accept(actx)
 	if err == nil {
@@ -122,7 +134,7 @@ func peekSessions(ctx context.Context, accept sessionAccepter, maxCount int, fro
 
 	var messages []PeekedMessage
 	for len(held) < maxSessionsPerPeek {
-		h, ok, err := acceptNext(ctx, accept)
+		h, ok, err := acceptNext(ctx, accept, len(held) == 0)
 		if err != nil {
 			return err
 		}
