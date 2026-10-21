@@ -142,7 +142,11 @@ func (m Model) buildActions() []action {
 		// Current-blob actions.
 		if item, ok := m.blobsList.SelectedItem().(blobItem); ok && !item.blob.IsPrefix {
 			actions = append(actions, action{actionDownloadCurrent, "Download current blob", ""})
-			actions = append(actions, action{actionYankBlobName, "Yank blob name", ""})
+			if n := m.selectionCount(); n > 1 {
+				actions = append(actions, action{actionYankBlobName, fmt.Sprintf("Yank blob names (%d)", n), ""})
+			} else {
+				actions = append(actions, action{actionYankBlobName, "Yank blob name", ""})
+			}
 			if item.blob.Size > 0 && item.blob.Size < 5*1024*1024 {
 				actions = append(actions, action{actionYankBlobContent, "Yank blob content", km.YankBlobContent.Short()})
 			}
@@ -239,11 +243,12 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		return m.startDownloadBlobs([]string{item.blob.Name})
 
 	case actionYankBlobName:
-		item, ok := m.blobsList.SelectedItem().(blobItem)
-		if !ok {
+		var text string
+		text, m = m.yankBlobNames()
+		if text == "" {
 			return m, nil
 		}
-		return m.copyToClipboard(item.blob.Name)
+		return m.copyToClipboard(text)
 
 	case actionYankBlobContent:
 		item, ok := m.blobsList.SelectedItem().(blobItem)
