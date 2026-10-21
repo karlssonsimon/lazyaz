@@ -605,16 +605,18 @@ func (m Model) handleVisualLineKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) 
 }
 
 func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
-	// Esc peels filters like a stack on the blobs pane:
+	// Esc peels state like a stack on the focused pane, keeping the
+	// cursor on the row it was on at each step:
 	//  1. If the bubbles list has an applied filter → clear it.
-	//  2. If a prefix search is active → clear it.
-	//  3. Otherwise fall through.
-	if m.Keymap.Cancel.Matches(key) && m.focus == blobsPane {
-		if m.blobsList.FilterState() != list.Unfiltered {
-			m.blobsList.ResetFilter()
+	//  2. If a prefix search is active (blobs pane) → clear it.
+	//  3. If blobs are marked → clear the marks (ExitVisualLine below).
+	//  4. Otherwise jump to the top of the list (ExitVisualLine below).
+	if m.Keymap.Cancel.Matches(key) {
+		if l := m.listForPane(m.focus); l != nil && l.FilterState() != list.Unfiltered {
+			ui.ResetFilterPreserveKey(l, m.keyForPane(m.focus))
 			return m, nil
 		}
-		if m.hasActiveFilter() {
+		if m.focus == blobsPane && m.hasActiveFilter() {
 			m.clearFilter()
 			m.Notify(appshell.LevelInfo, "Prefix filter cleared")
 			return m, nil
@@ -677,6 +679,11 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 			m.marked.Clear()
 			m.refreshBlobSelectionDisplay()
 			m.Notify(appshell.LevelInfo, fmt.Sprintf("Cleared %d marks", count))
+			return m, nil
+		}
+		// Nothing left to peel: a further Esc goes back to the top.
+		if l := m.listForPane(m.focus); l != nil && len(l.VisibleItems()) > 0 {
+			l.Select(0)
 			return m, nil
 		}
 	case m.Keymap.NextFocus.Matches(key):

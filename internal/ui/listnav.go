@@ -130,6 +130,22 @@ func SelectByKey(l *List, key string, keyOf func(list.Item) string) bool {
 	return false
 }
 
+// ResetFilterPreserveKey clears the list's filter while keeping the
+// cursor on the item it was on. bubbles' ResetFilter leaves the numeric
+// index untouched, so after a filter narrows the list to one row the
+// cursor would otherwise land on whatever row holds that index in the
+// full list — not the row the user picked.
+func ResetFilterPreserveKey(l *List, keyOf func(list.Item) string) {
+	prevKey := ""
+	if selected := l.SelectedItem(); selected != nil {
+		prevKey = keyOf(selected)
+	}
+	l.ResetFilter()
+	if !SelectByKey(l, prevKey, keyOf) {
+		ClampListSelection(l)
+	}
+}
+
 // SetItemsPreserveKey replaces list items while keeping the cursor
 // pointed at the same item by identity (via keyOf), not by numeric index.
 // If the previously selected item is no longer present, the cursor clamps
