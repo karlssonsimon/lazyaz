@@ -3,6 +3,7 @@ package blobapp
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
@@ -333,27 +334,67 @@ func (m *Model) visualRangeCount() int {
 	return hi - lo + 1
 }
 
-func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
-	if !m.hasAccount || !m.hasContainer {
-		m.Notify(appshell.LevelInfo, "Open a container before downloading")
-		return m, nil
-	}
-
-	// If visual mode is active, commit the range first.
+// selectedBlobNames resolves the blob names a selection-wide action
+// operates on: an active visual range is committed into the marks
+// first, the marks win when any exist, and otherwise the cursor row
+// alone is used. Folder rows never count. Returns nil when there is
+// nothing to act on.
+func (m *Model) selectedBlobNames() []string {
 	if m.visual.Active() {
 		m.commitVisualSelection()
 		m.visual.Stop()
 		m.refreshBlobSelectionDisplay()
 	}
 
-	blobNames := m.marked.Sorted()
-	if len(blobNames) == 0 {
-		item, ok := m.blobsList.SelectedItem().(blobItem)
-		if !ok || item.blob.IsPrefix {
-			m.Notify(appshell.LevelInfo, "Select blobs with space or visual mode before downloading")
-			return m, nil
+	if names := m.marked.Sorted(); len(names) > 0 {
+		return names
+	}
+	item, ok := m.blobsList.SelectedItem().(blobItem)
+	if !ok || item.blob.IsPrefix {
+		return nil
+	}
+	return []string{item.blob.Name}
+}
+
+// selectionCount is how many names selectedBlobNames would return,
+// without committing the visual range. Used for menu labels.
+func (m Model) selectionCount() int {
+	if n := m.marked.Len(); n > 0 || !m.visual.Active() {
+		return n
+	}
+	lo, hi, ok := m.visualRange()
+	if !ok {
+		return 0
+	}
+	visible := m.blobsList.VisibleItems()
+	if hi >= len(visible) {
+		hi = len(visible) - 1
+	}
+	n := 0
+	for i := lo; i <= hi; i++ {
+		if b, ok := visible[i].(blobItem); ok && !b.blob.IsPrefix {
+			n++
 		}
-		blobNames = []string{item.blob.Name}
+	}
+	return n
+}
+
+// yankBlobNames returns the selection's names joined one per line,
+// resolved the same way the download path resolves its targets.
+func (m Model) yankBlobNames() (string, Model) {
+	return strings.Join(m.selectedBlobNames(), "\n"), m
+}
+
+func (m Model) startDownloadMarkedBlobs() (Model, tea.Cmd) {
+	if !m.hasAccount || !m.hasContainer {
+		m.Notify(appshell.LevelInfo, "Open a container before downloading")
+		return m, nil
+	}
+
+	blobNames := m.selectedBlobNames()
+	if len(blobNames) == 0 {
+		m.Notify(appshell.LevelInfo, "Select blobs with space or visual mode before downloading")
+		return m, nil
 	}
 
 	return m.startDownloadBlobs(blobNames)
