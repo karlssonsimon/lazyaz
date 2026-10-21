@@ -3,6 +3,7 @@ package blobapp
 import (
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 
+	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -35,6 +36,19 @@ func (m Model) visiblePanes() []ui.VisiblePane {
 }
 
 // listForPane returns the ui.List pointer for the given pane index, or nil.
+// keyForPane returns the identity function for the rows of a pane's
+// list, so cursor position can be kept by item rather than by index.
+func (m *Model) keyForPane(pane int) func(list.Item) string {
+	switch pane {
+	case accountsPane:
+		return accountItemKey
+	case containersPane:
+		return containerItemKey
+	default:
+		return blobItemKey
+	}
+}
+
 func (m *Model) listForPane(pane int) *ui.List {
 	switch pane {
 	case accountsPane:

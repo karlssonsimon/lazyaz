@@ -49,7 +49,7 @@ on large containers.
 |---|---|---|
 | `/` | Either | Local fuzzy filter on the current blob list |
 | `a` → Search by prefix | Hierarchy | Server-side prefix search — calls the Azure API, works on any container size |
-| `Esc` | Either | Clear active filter |
+| `Esc` | Either | Clear active filter, keeping the cursor on the current row. With nothing to clear, jumps to the top. |
 
 Use `/` for quick local filtering on what's already loaded. For large containers
 in hierarchy mode, use the action menu (`a`) and select **Search by prefix** to

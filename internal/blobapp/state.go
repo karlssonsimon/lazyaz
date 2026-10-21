@@ -573,7 +573,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 				keymap.HelpEntry(km.ToggleLoadAll, "toggle load-all blobs"),
 				keymap.HelpEntry(km.ToggleMark, "toggle mark on current blob"),
 				keymap.HelpEntry(km.ToggleVisualLine, "start/end visual-line selection"),
-				keymap.HelpEntry(km.ExitVisualLine, "exit visual mode / clear marks"),
+				keymap.HelpEntry(km.ExitVisualLine, "exit visual mode / clear filter, marks, then jump to top"),
 				keymap.HelpEntry(km.DownloadSelection, "download marked/visual selection"),
 				keymap.HelpEntry(km.YankBlobContent, "yank blob content to clipboard"),
 			},
