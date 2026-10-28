@@ -18,6 +18,10 @@ type fakeSession struct {
 	max       int
 	completed []int64
 	abandoned []int64
+	// oneAtATime mimics the SDK's real behaviour: a receive returns a
+	// single message however many were asked for.
+	oneAtATime   bool
+	receiveCalls int
 }
 
 func (f *fakeSession) SessionID() string { return f.id }
@@ -202,11 +206,22 @@ func TestPeekSessionsCap(t *testing.T) {
 // --- receive walk ---
 
 func (f *fakeSession) ReceiveMessages(_ context.Context, maxCount int, _ *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
+	f.receiveCalls++
 	if len(f.seqs) == 0 {
 		return nil, context.DeadlineExceeded
 	}
-	msgs, _ := f.PeekMessages(context.Background(), maxCount, nil)
-	return msgs, nil
+	if f.oneAtATime {
+		maxCount = 1
+	}
+	n := min(maxCount, len(f.seqs))
+	var out []*azservicebus.ReceivedMessage
+	for _, s := range f.seqs[:n] {
+		seq := s
+		id := f.id
+		out = append(out, &azservicebus.ReceivedMessage{MessageID: "m", SequenceNumber: &seq, SessionID: &id})
+	}
+	f.seqs = f.seqs[n:] // received messages are no longer available
+	return out, nil
 }
 
 func (f *fakeSession) CompleteMessage(_ context.Context, msg *azservicebus.ReceivedMessage, _ *azservicebus.CompleteMessageOptions) error {
@@ -386,5 +401,32 @@ func TestPeekSessionsFirstAcceptHasLongerBudget(t *testing.T) {
 		if b > sessionAcceptTimeout {
 			t.Errorf("accept %d budget %v should be within the short timeout %v", i+2, b, sessionAcceptTimeout)
 		}
+	}
+}
+
+// --- receiveUpTo ---
+
+// A receiver that hands out one message per call still yields the
+// whole available set, and an empty entity costs no receive at all.
+func TestReceiveUpToGathersInRounds(t *testing.T) {
+	r := &fakeSession{id: "a", seqs: []int64{1, 2, 3, 4}, oneAtATime: true}
+	got, err := receiveUpTo(context.Background(), r, 50)
+	if err != nil {
+		t.Fatalf("receiveUpTo: %v", err)
+	}
+	if len(got) != 4 || r.receiveCalls != 4 {
+		t.Fatalf("got %d messages in %d calls, want 4 in 4", len(got), r.receiveCalls)
+	}
+
+	empty := &fakeSession{id: "e"}
+	got, err = receiveUpTo(context.Background(), empty, 50)
+	if err != nil || len(got) != 0 || empty.receiveCalls != 0 {
+		t.Fatalf("empty: got %d, err %v, receive calls %d; want 0, nil, 0", len(got), err, empty.receiveCalls)
+	}
+
+	capped := &fakeSession{id: "c", seqs: []int64{1, 2, 3}}
+	got, _ = receiveUpTo(context.Background(), capped, 2)
+	if len(got) != 2 {
+		t.Fatalf("want honoured: got %d, want 2", len(got))
 	}
 }

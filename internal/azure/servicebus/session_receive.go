@@ -2,16 +2,10 @@ package servicebus
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
 )
-
-// sessionReceiveTimeout bounds one session's receive. The SDK reports a
-// session with nothing receivable as a deadline on this context.
-const sessionReceiveTimeout = 10 * time.Second
 
 // receiveSessions is Receive for a session-enabled entity: accept a
 // session, receive inside it, keep the session open as the settler for
@@ -41,19 +35,12 @@ func receiveSessions(ctx context.Context, accept sessionAccepter, maxCount int) 
 		}
 		held = append(held, h)
 
-		rctx, rcancel := context.WithTimeout(ctx, sessionReceiveTimeout)
-		messages, err := h.ReceiveMessages(rctx, maxCount-len(locked), &azservicebus.ReceiveMessagesOptions{
-			TimeAfterFirstMessage: time.Second,
-		})
-		rcancel()
-		if err != nil && len(messages) == 0 {
-			if ctx.Err() != nil {
-				release()
-				return nil, fmt.Errorf("receive session %s: %w", h.SessionID(), ctx.Err())
-			}
-			if errors.Is(err, context.DeadlineExceeded) {
-				continue // nothing receivable in this session; keep it held and move on
-			}
+		// Peek-guided, like the plain receive: the session is ours, so
+		// its peeked count is what is receivable, bar scheduled or
+		// deferred messages. An empty session is skipped without a
+		// wait, but stays held so the broker cannot hand it back.
+		messages, err := receiveUpTo(ctx, h, maxCount-len(locked))
+		if err != nil {
 			release()
 			return nil, fmt.Errorf("receive session %s: %w", h.SessionID(), err)
 		}

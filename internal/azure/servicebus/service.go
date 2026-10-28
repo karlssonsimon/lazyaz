@@ -812,7 +812,7 @@ func (s *Service) Receive(ctx context.Context, ns Namespace, entityName, subName
 		if err != nil {
 			return fmt.Errorf("create receiver: %w", err)
 		}
-		messages, err := receiver.ReceiveMessages(ctx, maxCount, nil)
+		messages, err := receiveUpTo(ctx, receiver, maxCount)
 		if err != nil {
 			receiver.Close(ctx)
 			return fmt.Errorf("receive messages: %w", err)
@@ -824,6 +824,53 @@ func (s *Service) Receive(ctx context.Context, ns Namespace, entityName, subName
 		return nil, err
 	}
 	return result, nil
+}
+
+// lockReceiver is what receiveUpTo needs: a plain Receiver or a session
+// handle.
+type lockReceiver interface {
+	PeekMessages(ctx context.Context, maxMessageCount int, options *azservicebus.PeekMessagesOptions) ([]*azservicebus.ReceivedMessage, error)
+	ReceiveMessages(ctx context.Context, maxMessages int, options *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error)
+}
+
+// receiveRoundTimeout bounds one receive round once messages are known
+// to exist; a silent round means the rest are not receivable (locked by
+// another consumer, scheduled, deferred).
+const receiveRoundTimeout = 5 * time.Second
+
+// receiveUpTo locks up to want messages. The SDK's ReceiveMessages
+// returns as soon as the first message lands plus a 20 ms grace, which
+// on a real link is usually a single message no matter how many were
+// asked for. So: peek to learn how many are there, then receive in
+// rounds until that many are held or a round comes back empty. An
+// entity with nothing to peek returns at once without a receive.
+func receiveUpTo(ctx context.Context, r lockReceiver, want int) ([]*azservicebus.ReceivedMessage, error) {
+	peeked, err := r.PeekMessages(ctx, want, nil)
+	if err != nil {
+		return nil, fmt.Errorf("peek before receive: %w", err)
+	}
+	if len(peeked) < want {
+		want = len(peeked)
+	}
+	var got []*azservicebus.ReceivedMessage
+	for len(got) < want {
+		rctx, cancel := context.WithTimeout(ctx, receiveRoundTimeout)
+		batch, err := r.ReceiveMessages(rctx, want-len(got), &azservicebus.ReceiveMessagesOptions{
+			TimeAfterFirstMessage: time.Second,
+		})
+		cancel()
+		got = append(got, batch...)
+		if err != nil && len(batch) == 0 {
+			if ctx.Err() != nil {
+				return got, ctx.Err()
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				break
+			}
+			return got, err
+		}
+	}
+	return got, nil
 }
 
 func receiveLabel(entityName, subName string, deadLetter bool) string {
