@@ -285,6 +285,9 @@ func (m *Model) applyNewCredential(cred azcore.TokenCredential, tenantID string,
 	if m.kvSvc != nil {
 		m.kvSvc.SetCredential(cred)
 	}
+	if m.acSvc != nil {
+		m.acSvc.SetCredential(cred)
+	}
 
 	m.brokers.resetAll()
 	m.pendingLoginMsg = successMsg
@@ -374,6 +377,10 @@ func (m *Model) credentialForTabKind(kind TabKind) azcore.TokenCredential {
 	case TabKeyVault:
 		if m.kvSvc != nil {
 			return m.kvSvc.Credential()
+		}
+	case TabAppConfig:
+		if m.acSvc != nil {
+			return m.acSvc.Credential()
 		}
 	}
 	return nil

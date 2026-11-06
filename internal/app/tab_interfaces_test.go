@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/karlssonsimon/lazyaz/internal/acapp"
 	"testing"
 
 	"github.com/karlssonsimon/lazyaz/internal/blobapp"
@@ -24,6 +25,14 @@ func TestChildModelsImplementParentCapabilities(t *testing.T) {
 	var _ subscriptionTab = kvapp.Model{}
 	var _ themedTab = kvapp.Model{}
 	var _ navigationTab = kvapp.Model{}
+
+	var _ notifyingTab = acapp.Model{}
+	var _ subscriptionTab = acapp.Model{}
+	var _ themedTab = acapp.Model{}
+	var _ navigationTab = acapp.Model{}
+	var _ credentialTab = acapp.Model{}
+	var _ textInputTab = acapp.Model{}
+	var _ helpTab = acapp.Model{}
 
 	var _ notifyingTab = dashapp.Model{}
 	var _ subscriptionTab = dashapp.Model{}

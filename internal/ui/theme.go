@@ -174,7 +174,7 @@ func (c Config) ResolvedDownloadDir() string {
 
 // TabConfig is one startup-tab entry from the user config. Kind names
 // the tab type (matched case-insensitively against "blob",
-// "servicebus", "keyvault"). Subscription is an optional Azure
+// "servicebus", "keyvault", "dashboard", "appconfig"). Subscription is an optional Azure
 // subscription ID to auto-select once subscriptions are loaded.
 type TabConfig struct {
 	Kind         string `json:"kind"`

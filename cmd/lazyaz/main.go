@@ -8,6 +8,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/app"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/appconfig"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
@@ -48,6 +49,7 @@ func main() {
 		blob.NewService(cred),
 		servicebus.NewService(cred),
 		keyvault.NewService(cred),
+		appconfig.NewService(cred),
 		cfg,
 		db,
 		km,

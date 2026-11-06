@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/karlssonsimon/lazyaz/internal/acapp"
 	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/appconfig"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
@@ -45,6 +47,7 @@ type Model struct {
 	blobSvc *blob.Service
 	sbSvc   *servicebus.Service
 	kvSvc   *keyvault.Service
+	acSvc   *appconfig.Service
 
 	brokers          sharedBrokers
 	sharedActivities *activity.Registry
@@ -121,7 +124,7 @@ const lastSubscriptionPrefKey = "last_subscription"
 
 // NewModel creates the parent tabbed model.
 // If db is non-nil, a persistent SQLite cache is used; otherwise in-memory.
-func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.Service, cfg ui.Config, db *cache.DB, km keymap.Keymap) Model {
+func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.Service, acSvc *appconfig.Service, cfg ui.Config, db *cache.DB, km keymap.Keymap) Model {
 	cur := cursor.New()
 	cur.SetChar(" ")
 	cur.Focus() // pre-focus; Init() returns the blink cmd
@@ -129,6 +132,7 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		blobSvc:          blobSvc,
 		sbSvc:            sbSvc,
 		kvSvc:            kvSvc,
+		acSvc:            acSvc,
 		brokers:          newSharedBrokers(db),
 		sharedActivities: activity.NewRegistry(),
 		cfg:              cfg,
@@ -216,6 +220,13 @@ func (m *Model) newKeyVaultService() *keyvault.Service {
 		return keyvault.NewService(nil)
 	}
 	return keyvault.NewService(m.kvSvc.Credential())
+}
+
+func (m *Model) newAppConfigService() *appconfig.Service {
+	if m.acSvc == nil {
+		return appconfig.NewService(nil)
+	}
+	return appconfig.NewService(m.acSvc.Credential())
 }
 
 // setTabStatus pokes a status string into the given tab's appshell so
@@ -323,6 +334,18 @@ func (m *Model) addTab(kind TabKind, preferredSub string) {
 		kvm.CredResolver = m
 		applyInitialSub(&kvm)
 		child = kvm
+	case TabAppConfig:
+		am := acapp.NewModelWithCache(m.newAppConfigService(), m.cfg, acapp.ACStores{
+			Subscriptions: m.brokers.subscriptions,
+			Stores:        m.brokers.acStores,
+			Settings:      m.brokers.acSettings,
+		}, m.keymap)
+		am.EmbeddedMode = true
+		am.Notifier = m.notifier
+		am.Activities = m.sharedActivities
+		am.CredResolver = m
+		applyInitialSub(&am)
+		child = am
 	case TabDashboard:
 		dm := dashapp.NewModelWithCache(m.newServiceBusService(), m.cfg, dashapp.DashStores{
 			Subscriptions: m.brokers.subscriptions,
@@ -429,6 +452,32 @@ func (m *Model) openSBTabWithNav(sub azure.Subscription, nav sbapp.PendingNav) (
 		sm.SetSubscription(sub)
 		ffCmd = sm.SetPendingNav(nav)
 		tab.Model = sm
+	}
+	initCmd := wrapCmd(tab.ID, tab.Model.Init())
+	resizeCmd := m.forwardToActive(tea.WindowSizeMsg{
+		Width:  m.width,
+		Height: m.childHeight(),
+	})
+	return m, tea.Batch(initCmd, wrapCmd(tab.ID, ffCmd), resizeCmd)
+}
+
+// openKeyVaultTabWithNav opens a Key Vault tab on sub and drives it to
+// nav, recording the departure so ctrl+o returns. Used for App
+// Configuration's Key Vault references.
+func (m *Model) openKeyVaultTabWithNav(sub azure.Subscription, nav kvapp.PendingNav) (tea.Model, tea.Cmd) {
+	oldIdx := m.activeIdx
+	m.addTab(TabKeyVault, sub.ID)
+	if oldIdx >= 0 && oldIdx < len(m.tabs) {
+		if snap := m.tabSnapshotForJump(oldIdx); snap != nil {
+			m.recordJump(m.tabs[oldIdx].ID, snap)
+		}
+	}
+	tab := &m.tabs[m.activeIdx]
+	var ffCmd tea.Cmd
+	if km, ok := tab.Model.(kvapp.Model); ok {
+		km.SetSubscription(sub)
+		ffCmd = km.SetPendingNav(nav)
+		tab.Model = km
 	}
 	initCmd := wrapCmd(tab.ID, tab.Model.Init())
 	resizeCmd := m.forwardToActive(tea.WindowSizeMsg{
@@ -853,6 +902,12 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			BlobName:      msg.BlobName,
 		})
 
+	case acapp.OpenKeyVaultReferenceMsg:
+		return m.openKeyVaultTabWithNav(msg.Subscription, kvapp.PendingNav{
+			VaultName: msg.VaultName,
+			ItemName:  msg.SecretName,
+		})
+
 	case nextTabMsg:
 		// Plain tab cycling (H/L) isn't a vim "jump" — it's :bnext.
 		// Don't record so the jump list stays focused on real
@@ -1252,6 +1307,9 @@ func (m *Model) buildCommands() []command {
 		}},
 		{name: "New Tab: Key Vault", hint: "ctrl+t", section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabKeyVault}}
+		}},
+		{name: "New Tab: App Configuration", hint: "ctrl+t", section: secTabs, action: func() commandAction {
+			return commandAction{msg: tabPickerMsg{kind: TabAppConfig}}
 		}},
 		{name: "New Tab: Dashboard", hint: "ctrl+t", section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabDashboard}}

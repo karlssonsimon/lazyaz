@@ -61,6 +61,7 @@ export default defineConfig({
 							slug: 'resources/service-bus',
 						},
 						{ label: 'Key Vault', slug: 'resources/key-vault' },
+						{ label: 'App Configuration', slug: 'resources/app-configuration' },
 					],
 				},
 				{

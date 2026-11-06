@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/karlssonsimon/lazyaz/internal/acapp"
 	"github.com/karlssonsimon/lazyaz/internal/blobapp"
 	"github.com/karlssonsimon/lazyaz/internal/dashapp"
 	"github.com/karlssonsimon/lazyaz/internal/jumplist"
@@ -104,6 +105,7 @@ func wrapMsg(id int, msg tea.Msg) tea.Msg {
 	case dashapp.OpenSBNamespaceMsg, dashapp.OpenSBEntityMsg,
 		dashapp.OpenBlobAccountMsg, dashapp.OpenBlobContainerMsg,
 		sbapp.OpenBlobReferenceMsg,
+		acapp.OpenKeyVaultReferenceMsg,
 		jumplist.RecordJumpMsg,
 		blobapp.ActivityAutoOpenRequestMsg:
 		return msg

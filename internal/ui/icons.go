@@ -16,6 +16,7 @@ type Icons struct {
 	TabServiceBus string
 	TabKeyVault   string
 	TabDashboard  string
+	TabAppConfig  string
 }
 
 // terminalIcons returns the default, terminal-safe glyph set. These
@@ -26,6 +27,7 @@ func terminalIcons() Icons {
 		TabServiceBus: "⇄",
 		TabKeyVault:   "⌬",
 		TabDashboard:  "▦",
+		TabAppConfig:  "⚙",
 	}
 }
 
@@ -37,6 +39,7 @@ func nerdfontIcons() Icons {
 		TabServiceBus: "", // nf-fa-inbox
 		TabKeyVault:   "", // nf-fa-key
 		TabDashboard:  "", // nf-fa-dashboard
+		TabAppConfig:  "", // nf-fa-sliders
 	}
 }
 

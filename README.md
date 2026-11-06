@@ -1,6 +1,6 @@
 # lazyaz
 
-A keyboard-driven TUI for Azure — Blob Storage, Service Bus, and Key Vault.
+A keyboard-driven TUI for Azure — Blob Storage, Service Bus, Key Vault, and App Configuration.
 
 `lazyaz` is to `az` what `lazygit` is to `git`: a fast terminal explorer that turns
 common Azure browse-and-inspect tasks into a few keystrokes. No more clicking
@@ -53,7 +53,10 @@ messages, inspect topics and subscriptions.
 **Key Vault** — Browse vaults and secrets, view version history, yank secret
 values to clipboard.
 
-All three run side by side in tabs with per-tab subscription selection.
+**App Configuration** — Browse stores and key-values by label, view JSON and
+feature flags, and jump from a Key Vault reference to the secret.
+
+All of them run side by side in tabs with per-tab subscription selection.
 
 ## Navigation
 

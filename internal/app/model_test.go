@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/appconfig"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
@@ -36,7 +37,7 @@ func testConfig() ui.Config {
 }
 
 func TestNewModelAllowsNilDB(t *testing.T) {
-	m := NewModel(nil, nil, nil, testConfig(), nil, keymap.Default())
+	m := NewModel(nil, nil, nil, nil, testConfig(), nil, keymap.Default())
 	if len(m.tabs) != 1 {
 		t.Fatalf("len(tabs) = %d, want 1", len(m.tabs))
 	}
@@ -47,7 +48,7 @@ func TestNewModelAllowsNilDB(t *testing.T) {
 
 func TestPostLoginSubsReconcilesDashboardTabs(t *testing.T) {
 	cfg := testConfig()
-	m := NewModel(nil, servicebus.NewService(nil), nil, cfg, nil, keymap.Default())
+	m := NewModel(nil, servicebus.NewService(nil), nil, nil, cfg, nil, keymap.Default())
 	dm, ok := m.tabs[0].Model.(dashapp.Model)
 	if !ok {
 		t.Fatalf("tabs[0].Model = %T, want dashapp.Model", m.tabs[0].Model)
@@ -75,7 +76,7 @@ func TestPostLoginSubsReconcilesDashboardTabs(t *testing.T) {
 }
 
 func TestApplyNewCredentialAllowsNilRootServices(t *testing.T) {
-	m := NewModel(nil, nil, nil, testConfig(), nil, keymap.Default())
+	m := NewModel(nil, nil, nil, nil, testConfig(), nil, keymap.Default())
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -86,7 +87,7 @@ func TestApplyNewCredentialAllowsNilRootServices(t *testing.T) {
 }
 
 func TestHandleOpenAzLoginAllowsNilBlobService(t *testing.T) {
-	m := NewModel(nil, nil, nil, testConfig(), nil, keymap.Default())
+	m := NewModel(nil, nil, nil, nil, testConfig(), nil, keymap.Default())
 	m.tenantPicker.open()
 
 	defer func() {
@@ -114,6 +115,7 @@ func TestNewPerTabServicesCopyCredentialWithoutSharingService(t *testing.T) {
 		blobSvc: blob.NewService(cred),
 		sbSvc:   servicebus.NewService(cred),
 		kvSvc:   keyvault.NewService(cred),
+		acSvc:   appconfig.NewService(cred),
 	}
 
 	if got := m.newBlobService(); got == nil || got == m.blobSvc || got.Credential() != cred {
@@ -125,6 +127,9 @@ func TestNewPerTabServicesCopyCredentialWithoutSharingService(t *testing.T) {
 	if got := m.newKeyVaultService(); got == nil || got == m.kvSvc || got.Credential() != cred {
 		t.Fatalf("newKeyVaultService() = %#v, want distinct service with original credential", got)
 	}
+	if got := m.newAppConfigService(); got == nil || got == m.acSvc || got.Credential() != cred {
+		t.Fatalf("newAppConfigService() = %#v, want distinct service with original credential", got)
+	}
 
 	empty := Model{}
 	if got := empty.newBlobService(); got == nil || got.Credential() != nil {
@@ -135,6 +140,9 @@ func TestNewPerTabServicesCopyCredentialWithoutSharingService(t *testing.T) {
 	}
 	if got := empty.newKeyVaultService(); got == nil || got.Credential() != nil {
 		t.Fatalf("nil parent key vault service produced %#v, want service with nil credential", got)
+	}
+	if got := empty.newAppConfigService(); got == nil || got.Credential() != nil {
+		t.Fatalf("nil parent app configuration service produced %#v, want service with nil credential", got)
 	}
 }
 
@@ -150,7 +158,7 @@ func credResolverField(model any) any {
 }
 
 func TestAddTabInjectsCredResolverIntoEveryTab(t *testing.T) {
-	m := NewModel(blob.NewService(nil), servicebus.NewService(nil), keyvault.NewService(nil), testConfig(), nil, keymap.Default())
+	m := NewModel(blob.NewService(nil), servicebus.NewService(nil), keyvault.NewService(nil), appconfig.NewService(nil), testConfig(), nil, keymap.Default())
 	m.tabs = nil
 	m.activeIdx = 0
 	m.addTab(TabBlob, "")
@@ -176,7 +184,7 @@ func TestAddTabInjectsCredResolverIntoEveryTab(t *testing.T) {
 }
 
 func TestCredentialForReturnsSameInstancePerTenant(t *testing.T) {
-	m := NewModel(nil, nil, nil, testConfig(), nil, keymap.Default())
+	m := NewModel(nil, nil, nil, nil, testConfig(), nil, keymap.Default())
 	// Swap in a deterministic factory so the test doesn't touch azidentity.
 	m.credCache = newCredentialCache(func(id string) (azcore.TokenCredential, error) {
 		return testCredential{id: id}, nil
@@ -199,7 +207,7 @@ func TestCredentialForReturnsSameInstancePerTenant(t *testing.T) {
 }
 
 func TestPostLoginSubsAfterTenantSwitchSeedsBrokerAtTenantScope(t *testing.T) {
-	m := NewModel(blob.NewService(nil), servicebus.NewService(nil), keyvault.NewService(nil), testConfig(), nil, keymap.Default())
+	m := NewModel(blob.NewService(nil), servicebus.NewService(nil), keyvault.NewService(nil), appconfig.NewService(nil), testConfig(), nil, keymap.Default())
 	subs := []azure.Subscription{{ID: "s1", TenantID: "tenant-A"}}
 
 	// Tenant-switch path: applyNewCredential is called with a tenant ID.
@@ -215,7 +223,7 @@ func TestPostLoginSubsAfterTenantSwitchSeedsBrokerAtTenantScope(t *testing.T) {
 }
 
 func TestPostLoginSubsAfterAzLoginSeedsBrokerAtEmptyScope(t *testing.T) {
-	m := NewModel(blob.NewService(nil), servicebus.NewService(nil), keyvault.NewService(nil), testConfig(), nil, keymap.Default())
+	m := NewModel(blob.NewService(nil), servicebus.NewService(nil), keyvault.NewService(nil), appconfig.NewService(nil), testConfig(), nil, keymap.Default())
 	subs := []azure.Subscription{{ID: "s1", TenantID: "tenant-A"}}
 
 	// az login path: tenantID is empty (default credential isn't pinned).
@@ -229,7 +237,7 @@ func TestPostLoginSubsAfterAzLoginSeedsBrokerAtEmptyScope(t *testing.T) {
 
 func TestAddTabUsesPrivateServices(t *testing.T) {
 	cred := testCredential{id: "cred"}
-	m := NewModel(blob.NewService(cred), servicebus.NewService(cred), keyvault.NewService(cred), testConfig(), nil, keymap.Default())
+	m := NewModel(blob.NewService(cred), servicebus.NewService(cred), keyvault.NewService(cred), appconfig.NewService(cred), testConfig(), nil, keymap.Default())
 
 	m.addTab(TabBlob, "")
 	if child, ok := m.tabs[m.activeIdx].Model.(blobapp.Model); !ok || servicePointer(child) == 0 || servicePointer(child) == reflect.ValueOf(m.blobSvc).Pointer() {
@@ -268,6 +276,8 @@ func serviceCredential(model any) azcore.TokenCredential {
 		return svc.Credential()
 	case *keyvault.Service:
 		return svc.Credential()
+	case *appconfig.Service:
+		return svc.Credential()
 	default:
 		return nil
 	}
@@ -280,7 +290,7 @@ func serviceCredential(model any) azcore.TokenCredential {
 // the first show whatever the first tab landed on.
 func TestConfigTabsDoNotInheritEarlierTabSubscription(t *testing.T) {
 	cred := testCredential{id: "cred"}
-	m := NewModel(blob.NewService(cred), servicebus.NewService(cred), keyvault.NewService(cred), testConfig(), nil, keymap.Default())
+	m := NewModel(blob.NewService(cred), servicebus.NewService(cred), keyvault.NewService(cred), appconfig.NewService(cred), testConfig(), nil, keymap.Default())
 
 	subs := []azure.Subscription{
 		{ID: "sub-A", Name: "A"},
@@ -318,7 +328,7 @@ func TestConfigTabsDoNotInheritEarlierTabSubscription(t *testing.T) {
 func TestPostLoginSubsReappliesMatchedSubscription(t *testing.T) {
 	oldSub := azure.Subscription{ID: "sub", Name: "Old", TenantID: "old-tenant"}
 	matched := azure.Subscription{ID: "sub", Name: "New", TenantID: "new-tenant"}
-	m := NewModel(blob.NewService(nil), servicebus.NewService(nil), keyvault.NewService(nil), testConfig(), nil, keymap.Default())
+	m := NewModel(blob.NewService(nil), servicebus.NewService(nil), keyvault.NewService(nil), appconfig.NewService(nil), testConfig(), nil, keymap.Default())
 	m.tabs = nil
 	m.activeIdx = 0
 	m.addTab(TabBlob, "")
@@ -371,7 +381,7 @@ func TestPostLoginSubsUpdatesPrivateServiceCredentialForMatchedSubscription(t *t
 	newCred := testCredential{id: "new"}
 	oldSub := azure.Subscription{ID: "sub", Name: "Old", TenantID: "old-tenant"}
 	matched := azure.Subscription{ID: "sub", Name: "New"}
-	m := NewModel(blob.NewService(oldCred), servicebus.NewService(oldCred), keyvault.NewService(oldCred), testConfig(), nil, keymap.Default())
+	m := NewModel(blob.NewService(oldCred), servicebus.NewService(oldCred), keyvault.NewService(oldCred), appconfig.NewService(oldCred), testConfig(), nil, keymap.Default())
 	m.tabs = nil
 	m.activeIdx = 0
 	m.addTab(TabBlob, "")
@@ -411,7 +421,7 @@ func TestPostLoginSubsUpdatesPrivateServiceCredentialWhenSubscriptionGone(t *tes
 	newCred := testCredential{id: "new"}
 	oldSub := azure.Subscription{ID: "old-sub", Name: "Old"}
 	newSub := azure.Subscription{ID: "new-sub", Name: "New"}
-	m := NewModel(blob.NewService(oldCred), servicebus.NewService(oldCred), keyvault.NewService(oldCred), testConfig(), nil, keymap.Default())
+	m := NewModel(blob.NewService(oldCred), servicebus.NewService(oldCred), keyvault.NewService(oldCred), appconfig.NewService(oldCred), testConfig(), nil, keymap.Default())
 	m.tabs = nil
 	m.activeIdx = 0
 	m.addTab(TabBlob, "")

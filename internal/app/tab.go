@@ -5,6 +5,7 @@ import (
 
 	"github.com/karlssonsimon/lazyaz/internal/activity"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/appconfig"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
@@ -22,6 +23,7 @@ const (
 	TabServiceBus
 	TabKeyVault
 	TabDashboard
+	TabAppConfig
 )
 
 func (k TabKind) String() string {
@@ -34,6 +36,8 @@ func (k TabKind) String() string {
 		return "Key Vault"
 	case TabDashboard:
 		return "Dashboard"
+	case TabAppConfig:
+		return "App Configuration"
 	default:
 		return "Unknown"
 	}
@@ -53,14 +57,16 @@ func (k TabKind) Icon(icons ui.Icons) string {
 		return icons.TabKeyVault
 	case TabDashboard:
 		return icons.TabDashboard
+	case TabAppConfig:
+		return icons.TabAppConfig
 	}
 	return "·"
 }
 
 // TabKindFromString parses a config-supplied tab kind name into a
 // TabKind. Recognized values (case-insensitive): "blob", "servicebus",
-// "keyvault", "dashboard". Returns ok=false on anything else so the
-// caller can warn.
+// "keyvault", "dashboard", "appconfig". Returns ok=false on anything
+// else so the caller can warn.
 func TabKindFromString(s string) (TabKind, bool) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "blob":
@@ -71,6 +77,8 @@ func TabKindFromString(s string) (TabKind, bool) {
 		return TabKeyVault, true
 	case "dashboard":
 		return TabDashboard, true
+	case "appconfig", "app-config", "app_config", "appconfiguration", "app-configuration":
+		return TabAppConfig, true
 	default:
 		return 0, false
 	}
@@ -110,6 +118,9 @@ type sharedBrokers struct {
 	kvCertVersions *cache.Broker[keyvault.CertificateVersion]
 	kvKeys         *cache.Broker[keyvault.Key]
 	kvKeyVersions  *cache.Broker[keyvault.KeyVersion]
+
+	acStores   *cache.Broker[appconfig.Store]
+	acSettings *cache.Broker[appconfig.Setting]
 }
 
 // bindRegistry wires r into every broker so activity tracking is
@@ -129,6 +140,8 @@ func (b *sharedBrokers) bindRegistry(r *activity.Registry) {
 	b.kvCertVersions.SetRegistry(r)
 	b.kvKeys.SetRegistry(r)
 	b.kvKeyVersions.SetRegistry(r)
+	b.acStores.SetRegistry(r)
+	b.acSettings.SetRegistry(r)
 }
 
 // resetAll cancels all active streams and clears all cached data.
@@ -148,6 +161,8 @@ func (b *sharedBrokers) resetAll() {
 	b.kvCertVersions.Reset()
 	b.kvKeys.Reset()
 	b.kvKeyVersions.Reset()
+	b.acStores.Reset()
+	b.acSettings.Reset()
 }
 
 func newSharedBrokers(db *cache.DB) sharedBrokers {
@@ -170,6 +185,9 @@ func newSharedBrokers(db *cache.DB) sharedBrokers {
 			kvCertVersions: cache.NewBroker(cache.NewStore[keyvault.CertificateVersion](db, "kv_cert_versions"), keyvault.CertificateVersionKey),
 			kvKeys:         cache.NewBroker(cache.NewStore[keyvault.Key](db, "kv_keys"), keyvault.KvKeyKey),
 			kvKeyVersions:  cache.NewBroker(cache.NewStore[keyvault.KeyVersion](db, "kv_key_versions"), keyvault.KeyVersionKey),
+
+			acStores:   cache.NewBroker(cache.NewStore[appconfig.Store](db, "ac_stores"), appconfig.StoreKey),
+			acSettings: cache.NewBroker(cache.NewStore[appconfig.Setting](db, "ac_settings"), appconfig.SettingKey),
 		}
 	}
 	return sharedBrokers{
@@ -190,5 +208,8 @@ func newSharedBrokers(db *cache.DB) sharedBrokers {
 		kvCertVersions: cache.NewBroker(cache.NewMap[keyvault.CertificateVersion](), keyvault.CertificateVersionKey),
 		kvKeys:         cache.NewBroker(cache.NewMap[keyvault.Key](), keyvault.KvKeyKey),
 		kvKeyVersions:  cache.NewBroker(cache.NewMap[keyvault.KeyVersion](), keyvault.KeyVersionKey),
+
+		acStores:   cache.NewBroker(cache.NewMap[appconfig.Store](), appconfig.StoreKey),
+		acSettings: cache.NewBroker(cache.NewMap[appconfig.Setting](), appconfig.SettingKey),
 	}
 }

@@ -1,0 +1,86 @@
+---
+title: "App Configuration - Browse Settings, Labels and Key Vault References from Terminal"
+description: "Browse Azure App Configuration stores from your terminal with lazyaz. Read key-values by label, view JSON and feature flags, and jump from a Key Vault reference straight to the secret."
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Browse Azure App Configuration stores without the portal: pick a store,
+scan its key-values with their labels, open a value, and follow a Key
+Vault reference into the Key Vault tab. The explorer is read-only.
+
+Open a tab with `Ctrl+T` → **App Configuration**, or add
+`{ "kind": "appconfig" }` to the `tabs` list in your config.
+
+## Pane layout
+
+Three Miller columns, left to right:
+
+- **Stores** — every App Configuration store in the subscription.
+- **Settings** — the store's key-values. Each row shows the key, then the
+  label in a muted column, and a tag for Key Vault references
+  (`→ key vault`) and feature flags (`flag`). Long keys are cropped so the
+  label column stays visible. Feature flags show without their
+  `.appconfig.featureflag/` prefix.
+- **Value** — the opened value. JSON is pretty-printed and highlighted;
+  anything else is shown as is. The line above the value names the key,
+  label, content type, and whether the setting is read-only.
+
+## Browsing
+
+| Key | Action |
+|---|---|
+| `Enter` / `l` | Open the store, or open the selected value |
+| `h` / `Left` / `Backspace` | Go back one column |
+| `/` | Filter the focused column by key or store name |
+| `j` / `k`, `Ctrl+D` / `Ctrl+U`, `gg` / `G` | Move, with counts, in lists and in the value pane |
+| `y` | Yank the value to the clipboard |
+| `Y` | Copy palette: key, value, label, store endpoint, and for references the vault, secret and URI |
+| `K` | Toggle the inspect strip |
+| `r` | Refresh the current column |
+
+The value pane follows the cursor: once a value is open, moving in the
+settings list swaps the value without reopening it. It closes when you
+change store or subscription.
+
+## Labels
+
+A key can exist under several labels, typically one per environment. The
+list shows every label as its own row, so `Db/Timeout` with no label and
+`Db/Timeout` under `prod` are two rows. The unlabelled value is what the
+portal calls "(No label)". Filtering matches the key; a label filter is
+not available yet.
+
+## Key Vault references
+
+A setting whose content type marks it as a Key Vault reference holds a
+pointer to a secret, not the secret itself. The value pane shows the
+vault, the secret name, the pinned version if any, and the secret URI.
+Press `Enter` in the value pane to open that secret in a Key Vault tab,
+positioned on the secret. `Ctrl+O` jumps back.
+
+## Feature flags
+
+Feature flags are key-values with a special content type. The explorer
+shows them as their JSON definition, which includes the enabled state and
+any filters. Toggling flags is not supported yet.
+
+## Inspect panel
+
+Press `K` to show key, label, kind (key-value, Key Vault reference or
+feature flag), content type, last modified time, read-only state, tags,
+and for references the vault and secret.
+
+## Permissions
+
+Listing stores needs `Reader` on the subscription or resource group.
+Reading key-values needs the data-plane role `App Configuration Data
+Reader` on the store. Without it, lazyaz falls back to the store's access
+keys, which `Owner` and `Contributor` can read through ARM, preferring a
+read-only key. A store with local authentication disabled has no usable
+keys, so there the data role is required and settings fail with a 403.
+
+<Aside>
+Editing values, toggling feature flags, revisions and snapshots are not
+part of this first version.
+</Aside>

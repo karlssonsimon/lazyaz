@@ -23,6 +23,7 @@ var tabPickerEntries = []tabPickerEntry{
 	{name: "Blob Storage", action: func() tea.Msg { return tabPickerMsg{kind: TabBlob} }},
 	{name: "Service Bus", action: func() tea.Msg { return tabPickerMsg{kind: TabServiceBus} }},
 	{name: "Key Vault", action: func() tea.Msg { return tabPickerMsg{kind: TabKeyVault} }},
+	{name: "App Configuration", action: func() tea.Msg { return tabPickerMsg{kind: TabAppConfig} }},
 	{name: "Dashboard", action: func() tea.Msg { return tabPickerMsg{kind: TabDashboard} }},
 	{name: "Azurite (local emulator)", action: func() tea.Msg { return openAzuriteTabMsg{} }},
 	{name: "Blob (connection string)", action: func() tea.Msg { return openConnStringPromptMsg{} }},
