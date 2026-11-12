@@ -1,6 +1,7 @@
 package sbapp
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -130,5 +131,30 @@ func TestReceiveCountFollowsPeekedMessages(t *testing.T) {
 	m.peekedMessages = make([]servicebus.PeekedMessage, receiveMaxMessages+1)
 	if got := m.receiveCount(); got != receiveMaxMessages {
 		t.Fatalf("over the cap: receive count = %d, want %d", got, receiveMaxMessages)
+	}
+}
+
+// With rows marked, the receive reaches the last marked row and no
+// further: marking the first 50 of 100 peeked locks 50, not 100.
+func TestReceiveCountStopsAtLastMarkedRow(t *testing.T) {
+	m := receiveTestModel(true)
+	m.peekedMessages = make([]servicebus.PeekedMessage, 100)
+	for i := range m.peekedMessages {
+		m.peekedMessages[i].MessageID = fmt.Sprintf("msg-%d", i)
+	}
+	m.messageList.SetItems(m.messageItems())
+	mark := func(i int) {
+		m.messageList.Select(i)
+		m.executeAction(action{id: actionToggleMark})
+	}
+	for i := 0; i < 50; i++ {
+		mark(i)
+	}
+	if got := m.receiveCount(); got != 50 {
+		t.Fatalf("first 50 of 100 marked: receive count = %d, want 50", got)
+	}
+	mark(79)
+	if got := m.receiveCount(); got != 80 {
+		t.Fatalf("row 80 also marked: receive count = %d, want 80", got)
 	}
 }

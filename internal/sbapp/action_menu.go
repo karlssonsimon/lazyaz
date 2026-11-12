@@ -586,13 +586,36 @@ func (m Model) renderActionMenu(base string) string {
 	return ui.RenderOverlayList(cfg, items, s.CursorIdx, m.Styles, m.Width, m.Height, base)
 }
 
-// receiveCount is how many messages a receive-with-lock asks for: as
-// many as are peeked into the list, so the locked set covers what the
-// user was looking at (and had marked), never fewer than one peek
-// batch and never more than receiveMaxMessages. The broker hands out
-// messages from the head of the queue, so this is a count, not a pick
-// of specific messages.
+// receiveCount is how many messages a receive-with-lock asks for.
+//
+// With messages marked (or a visual range active) it is the position of
+// the last selected row: the broker hands out messages from the head of
+// the queue, so reaching that row means locking everything up to it,
+// and nothing past it is locked needlessly. With nothing selected it is
+// as many as are peeked into the list, never fewer than one peek batch.
+// Either way it is capped at receiveMaxMessages.
 func (m Model) receiveCount() int {
 	n := max(len(m.peekedMessages), peekMaxMessages)
+	if last := m.lastSelectedPosition(); last > 0 {
+		n = last
+	}
 	return min(n, receiveMaxMessages)
+}
+
+// lastSelectedPosition is the 1-based position in the peeked list of
+// the last marked or visually selected message, or 0 with no selection.
+func (m Model) lastSelectedPosition() int {
+	marks := m.currentMarks()
+	visual := m.visualSelectionSet()
+	if marks.Len() == 0 && len(visual) == 0 {
+		return 0
+	}
+	last := 0
+	for i, msg := range m.peekedMessages {
+		key := messageOperationKey(msg)
+		if _, ok := visual[key]; ok || marks.Contains(key) {
+			last = i + 1
+		}
+	}
+	return last
 }
