@@ -9,6 +9,12 @@ type SearchableOverlay[T any] struct {
 	Query      string
 	QueryCaret int // rune index of the edit caret within Query
 
+	// KeepUnfiltered, when set, is asked about each new query; a query
+	// it claims is not a search, so the list stays whole and the cursor
+	// stays on its row. The action menu uses it to take a typed number
+	// as a count for the highlighted action.
+	KeepUnfiltered func(query string) bool
+
 	items    []T
 	filtered []int
 	key      func(T) string
@@ -105,8 +111,19 @@ func (s *SearchableOverlay[T]) Selected() (T, bool) {
 
 func (s *SearchableOverlay[T]) refilter() {
 	if s.Query == "" {
-		s.filtered = nil
-		s.CursorIdx = 0
+		// Emptying a query that never filtered (see KeepUnfiltered)
+		// leaves the cursor where it is.
+		if s.filtered != nil {
+			s.filtered = nil
+			s.CursorIdx = 0
+		}
+		return
+	}
+	if s.KeepUnfiltered != nil && s.KeepUnfiltered(s.Query) {
+		if s.filtered != nil {
+			s.filtered = nil
+			s.CursorIdx = 0
+		}
 		return
 	}
 	s.filtered = fuzzy.Filter(s.Query, s.items, s.key)
