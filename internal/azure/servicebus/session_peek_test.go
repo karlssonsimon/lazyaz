@@ -461,3 +461,24 @@ func TestReceiveUpToCountsAcrossShortPeeks(t *testing.T) {
 		t.Fatalf("got %d messages, want 100", len(got))
 	}
 }
+
+// A large peek is gathered across short batches into one send.
+func TestPeekUpToGathersAcrossShortPeeks(t *testing.T) {
+	seqs := make([]int64, 300)
+	for i := range seqs {
+		seqs[i] = int64(i + 1)
+	}
+	r := &shortPeekSession{fakeSession: &fakeSession{id: "a", seqs: seqs}, peekCap: 100}
+	var got []PeekedMessage
+	sends := 0
+	err := peekUpTo(context.Background(), r, 250, 0, func(b []PeekedMessage) { sends++; got = append(got, b...) })
+	if err != nil {
+		t.Fatalf("peekUpTo: %v", err)
+	}
+	if len(got) != 250 || sends != 1 {
+		t.Fatalf("got %d messages in %d sends, want 250 in 1", len(got), sends)
+	}
+	if got[0].SequenceNumber != 1 || got[249].SequenceNumber != 250 {
+		t.Fatalf("peeked range %d..%d, want 1..250", got[0].SequenceNumber, got[249].SequenceNumber)
+	}
+}

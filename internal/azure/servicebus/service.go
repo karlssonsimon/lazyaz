@@ -1181,26 +1181,46 @@ func isAuthError(err error) bool {
 }
 
 func peekMessages(ctx context.Context, receiver *azservicebus.Receiver, maxCount int, fromSequenceNumber int64, send func([]PeekedMessage)) error {
+	return peekUpTo(ctx, receiver, maxCount, fromSequenceNumber, send)
+}
+
+// messagePeeker is the peek half of a receiver.
+type messagePeeker interface {
+	PeekMessages(ctx context.Context, maxMessageCount int, options *azservicebus.PeekMessagesOptions) ([]*azservicebus.ReceivedMessage, error)
+}
+
+// peekUpTo peeks up to maxCount messages and sends them as one batch.
+// One peek may come back short of what was asked while more remain (the
+// broker caps a batch by response size), which a large maxCount makes
+// likely, so it peeks on from the last sequence number until maxCount
+// is reached or a peek returns nothing.
+func peekUpTo(ctx context.Context, r messagePeeker, maxCount int, fromSequenceNumber int64, send func([]PeekedMessage)) error {
 	var opts *azservicebus.PeekMessagesOptions
 	if fromSequenceNumber > 0 {
-		opts = &azservicebus.PeekMessagesOptions{
-			FromSequenceNumber: &fromSequenceNumber,
+		opts = &azservicebus.PeekMessagesOptions{FromSequenceNumber: &fromSequenceNumber}
+	}
+	var messages []PeekedMessage
+	for len(messages) < maxCount {
+		peeked, err := r.PeekMessages(ctx, maxCount-len(messages), opts)
+		if err != nil {
+			return fmt.Errorf("peek messages: %w", err)
 		}
+		if len(peeked) == 0 {
+			break
+		}
+		for _, msg := range peeked {
+			messages = append(messages, peekedFromReceived(msg))
+		}
+		last := peeked[len(peeked)-1].SequenceNumber
+		if last == nil {
+			break
+		}
+		next := *last + 1
+		opts = &azservicebus.PeekMessagesOptions{FromSequenceNumber: &next}
 	}
-	peeked, err := receiver.PeekMessages(ctx, maxCount, opts)
-	if err != nil {
-		return fmt.Errorf("peek messages: %w", err)
-	}
-
-	messages := make([]PeekedMessage, 0, len(peeked))
-	for _, msg := range peeked {
-		messages = append(messages, peekedFromReceived(msg))
-	}
-
 	if len(messages) > 0 {
 		send(messages)
 	}
-
 	return nil
 }
 

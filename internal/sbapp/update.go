@@ -629,8 +629,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 
 	case ModeActionMenu:
-		if selected, act := m.actionMenu.handleKey(key, m.Keymap); selected {
-			return m.executeAction(act)
+		if selected, act, count := m.actionMenu.handleKey(key, m.Keymap); selected {
+			return m.executeActionWithCount(act, count)
 		}
 		return m, nil
 
