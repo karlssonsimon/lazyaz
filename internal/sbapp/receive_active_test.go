@@ -107,3 +107,28 @@ func TestModeMismatchedReceiveIsStale(t *testing.T) {
 		t.Fatal("mode-mismatched receive result must be dropped as stale")
 	}
 }
+
+// Receive-with-lock takes as many messages as are peeked into the
+// list, so "peek more" then receive locks everything on screen rather
+// than the first batch only.
+func TestReceiveCountFollowsPeekedMessages(t *testing.T) {
+	m := receiveTestModel(true)
+	if got := m.receiveCount(); got != peekMaxMessages {
+		t.Fatalf("nothing peeked: receive count = %d, want %d", got, peekMaxMessages)
+	}
+	m.peekedMessages = make([]servicebus.PeekedMessage, 20)
+	if got := m.receiveCount(); got != peekMaxMessages {
+		t.Fatalf("20 peeked: receive count = %d, want the default %d", got, peekMaxMessages)
+	}
+	m.peekedMessages = make([]servicebus.PeekedMessage, 150)
+	if got := m.receiveCount(); got != 150 {
+		t.Fatalf("150 peeked: receive count = %d, want 150", got)
+	}
+	if !hasLabelContaining(actionLabels(m), "up to 150") {
+		t.Fatalf("receive label should state the count, got %v", actionLabels(m))
+	}
+	m.peekedMessages = make([]servicebus.PeekedMessage, receiveMaxMessages+1)
+	if got := m.receiveCount(); got != receiveMaxMessages {
+		t.Fatalf("over the cap: receive count = %d, want %d", got, receiveMaxMessages)
+	}
+}

@@ -20,6 +20,11 @@ import (
 
 const peekMaxMessages = 50
 
+// receiveMaxMessages caps one receive-with-lock. Locks start running
+// out as soon as they are taken, so a very large batch would expire
+// before the user could act on it.
+const receiveMaxMessages = 500
+
 const (
 	namespacesPane = iota
 	entitiesPane

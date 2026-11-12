@@ -180,7 +180,7 @@ func (m Model) buildActions() []action {
 			if m.peekViaSessions() {
 				how = "with lock, walking sessions"
 			}
-			actions = append(actions, action{actionReceiveMessages, fmt.Sprintf("Receive %s messages (%s)", label, how), ""})
+			actions = append(actions, action{actionReceiveMessages, fmt.Sprintf("Receive %s messages (%s), up to %d", label, how, m.receiveCount()), ""})
 		} else {
 			n := m.currentMarks().Len()
 			if n == 0 {
@@ -274,7 +274,7 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		}
 		m.StartLoading(m.focus, fmt.Sprintf("Receiving %s messages with lock...", scope))
 		return m, tea.Batch(m.Spinner.Tick,
-			receiveCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, m.peekViaSessions(), peekMaxMessages))
+			receiveCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, m.peekViaSessions(), m.receiveCount()))
 
 	case actionRequeueCurrent:
 		return m.openRequeueConfirm()
@@ -584,4 +584,15 @@ func (m Model) renderActionMenu(base string) string {
 		Center:     true,
 	}
 	return ui.RenderOverlayList(cfg, items, s.CursorIdx, m.Styles, m.Width, m.Height, base)
+}
+
+// receiveCount is how many messages a receive-with-lock asks for: as
+// many as are peeked into the list, so the locked set covers what the
+// user was looking at (and had marked), never fewer than one peek
+// batch and never more than receiveMaxMessages. The broker hands out
+// messages from the head of the queue, so this is a count, not a pick
+// of specific messages.
+func (m Model) receiveCount() int {
+	n := max(len(m.peekedMessages), peekMaxMessages)
+	return min(n, receiveMaxMessages)
 }
