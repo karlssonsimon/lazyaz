@@ -430,3 +430,34 @@ func TestReceiveUpToGathersInRounds(t *testing.T) {
 		t.Fatalf("want honoured: got %d, want 2", len(got))
 	}
 }
+
+// shortPeekSession peeks at most peekCap messages per call, like the
+// broker does when a batch would exceed its response size.
+type shortPeekSession struct {
+	*fakeSession
+	peekCap int
+}
+
+func (s *shortPeekSession) PeekMessages(ctx context.Context, maxCount int, opts *azservicebus.PeekMessagesOptions) ([]*azservicebus.ReceivedMessage, error) {
+	if maxCount > s.peekCap {
+		maxCount = s.peekCap
+	}
+	return s.fakeSession.PeekMessages(ctx, maxCount, opts)
+}
+
+// A peek that comes back short of what was asked does not cap the
+// receive: the count is taken across as many peeks as it needs.
+func TestReceiveUpToCountsAcrossShortPeeks(t *testing.T) {
+	seqs := make([]int64, 120)
+	for i := range seqs {
+		seqs[i] = int64(i + 1)
+	}
+	r := &shortPeekSession{fakeSession: &fakeSession{id: "a", seqs: seqs}, peekCap: 50}
+	got, err := receiveUpTo(context.Background(), r, 100)
+	if err != nil {
+		t.Fatalf("receiveUpTo: %v", err)
+	}
+	if len(got) != 100 {
+		t.Fatalf("got %d messages, want 100", len(got))
+	}
+}

@@ -70,9 +70,16 @@ func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespac
 	}
 }
 
+// receiveTimeout is the peek budget plus ten seconds for every batch
+// beyond the first, since a larger receive takes more rounds.
+func receiveTimeout(sessions bool, maxCount int) time.Duration {
+	extra := max(maxCount-peekMaxMessages, 0) / peekMaxMessages
+	return peekTimeout(sessions) + time.Duration(extra)*10*time.Second
+}
+
 func receiveCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName, subName string, deadLetter, sessions bool, maxCount int) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), peekTimeout(sessions))
+		ctx, cancel := context.WithTimeout(context.Background(), receiveTimeout(sessions, maxCount))
 		defer cancel()
 		result, err := svc.Receive(ctx, ns, entityName, subName, deadLetter, sessions, maxCount)
 		return messagesReceivedMsg{namespace: ns, entityName: entityName, subName: subName, deadLetter: deadLetter, result: result, err: err}

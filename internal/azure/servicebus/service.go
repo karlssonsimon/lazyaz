@@ -845,13 +845,11 @@ const receiveRoundTimeout = 5 * time.Second
 // rounds until that many are held or a round comes back empty. An
 // entity with nothing to peek returns at once without a receive.
 func receiveUpTo(ctx context.Context, r lockReceiver, want int) ([]*azservicebus.ReceivedMessage, error) {
-	peeked, err := r.PeekMessages(ctx, want, nil)
+	available, err := countPeekable(ctx, r, want)
 	if err != nil {
 		return nil, fmt.Errorf("peek before receive: %w", err)
 	}
-	if len(peeked) < want {
-		want = len(peeked)
-	}
+	want = available
 	var got []*azservicebus.ReceivedMessage
 	for len(got) < want {
 		rctx, cancel := context.WithTimeout(ctx, receiveRoundTimeout)
@@ -871,6 +869,32 @@ func receiveUpTo(ctx context.Context, r lockReceiver, want int) ([]*azservicebus
 		}
 	}
 	return got, nil
+}
+
+// countPeekable reports how many messages, up to want, a peek can see.
+// One peek may come back short of what was asked while more remain (the
+// broker caps a batch by response size), so it peeks on from the last
+// sequence number until want is reached or a peek returns nothing.
+func countPeekable(ctx context.Context, r lockReceiver, want int) (int, error) {
+	count := 0
+	var opts *azservicebus.PeekMessagesOptions
+	for count < want {
+		peeked, err := r.PeekMessages(ctx, want-count, opts)
+		if err != nil {
+			return count, err
+		}
+		if len(peeked) == 0 {
+			break
+		}
+		count += len(peeked)
+		last := peeked[len(peeked)-1].SequenceNumber
+		if last == nil {
+			break
+		}
+		next := *last + 1
+		opts = &azservicebus.PeekMessagesOptions{FromSequenceNumber: &next}
+	}
+	return count, nil
 }
 
 func receiveLabel(entityName, subName string, deadLetter bool) string {
