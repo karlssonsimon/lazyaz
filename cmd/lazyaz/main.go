@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"sync/atomic"
+	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/app"
 	"github.com/karlssonsimon/lazyaz/internal/azure"
@@ -67,7 +69,8 @@ func main() {
 		program.Kill()
 	})
 
-	_, runErr := program.Run()
+	final, runErr := program.Run()
+	releaseLocks(final)
 
 	if c := crash.Load(); c != nil {
 		fmt.Fprintf(os.Stderr, "lazyaz crashed in a background worker: %v\n\n%s\n", c.recovered, c.stack)
@@ -77,6 +80,31 @@ func main() {
 		fmt.Fprintf(os.Stderr, "application error: %v\n", runErr)
 		os.Exit(1)
 	}
+}
+
+// lockHolder is the app model as far as shutdown cares: it may hold
+// Service Bus messages received with lock.
+type lockHolder interface {
+	HoldsLocks() bool
+	ReleaseLocks(ctx context.Context)
+}
+
+// lockReleaseTimeout bounds the wait for the broker on the way out.
+const lockReleaseTimeout = 10 * time.Second
+
+// releaseLocks abandons messages still held with lock when the program
+// ends, so they are receivable again at once instead of after the
+// entity's lock duration. It runs after the terminal is restored. A
+// crash or kill hands back no model, and those locks are left to expire.
+func releaseLocks(final tea.Model) {
+	holder, ok := final.(lockHolder)
+	if !ok || !holder.HoldsLocks() {
+		return
+	}
+	fmt.Fprintln(os.Stderr, "Releasing Service Bus message locks...")
+	ctx, cancel := context.WithTimeout(context.Background(), lockReleaseTimeout)
+	defer cancel()
+	holder.ReleaseLocks(ctx)
 }
 
 // backgroundPanic carries a panic from a safego worker back to main so

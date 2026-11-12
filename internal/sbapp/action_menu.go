@@ -530,6 +530,27 @@ func (m *Model) clearLockedMessages() {
 	closeLockedAsync(locked)
 }
 
+// HoldsLocks reports whether this explorer holds messages received
+// with lock.
+func (m Model) HoldsLocks() bool {
+	return m.lockedMessages != nil
+}
+
+// ReleaseLocks abandons any messages held with lock and closes their
+// receivers, blocking until done or ctx ends. It is for shutdown, when
+// there is no event loop left to run a command: without it the broker
+// keeps the messages locked for the entity's full lock duration after
+// lazyaz has gone.
+func (m Model) ReleaseLocks(ctx context.Context) {
+	m.lockedMessages.Close(ctx)
+}
+
+// ReleaseLocksAsync is ReleaseLocks off the calling goroutine, for a
+// tab that is closed while the program carries on.
+func (m Model) ReleaseLocksAsync() {
+	closeLockedAsync(m.lockedMessages)
+}
+
 // abandonLockedIfHeld returns a tea.Cmd that abandons and closes any
 // held locked messages. Use this when navigating away from the messages
 // pane so the UI doesn't block on network calls.
@@ -542,9 +563,9 @@ func (m *Model) abandonLockedIfHeld() tea.Cmd {
 	return abandonDLQCmd(locked)
 }
 
-// doPeek fires a peek command for the current scope. When append is
-// true, new messages are appended to the existing set.
-// doPeek peeks count messages, or one default batch when count is 0.
+// doPeek fires a peek command for the current scope, for count
+// messages or one default batch when count is 0. When append is true,
+// new messages are appended to the existing set.
 func (m Model) doPeek(append bool, count int) (Model, tea.Cmd) {
 	if !m.hasPeekTarget {
 		return m, nil
