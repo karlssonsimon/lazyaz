@@ -1,6 +1,7 @@
 package sbapp
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -198,4 +199,21 @@ func TestParseCount(t *testing.T) {
 			t.Errorf("parseCount(%q) = %d, want %d", query, got, want)
 		}
 	}
+}
+
+// Shutdown asks each explorer whether it holds locks and releases
+// them; an explorer holding none is a no-op, not a nil dereference.
+func TestReleaseLocksOnlyWhenHeld(t *testing.T) {
+	m := receiveTestModel(true)
+	if m.HoldsLocks() {
+		t.Fatal("fresh model reports held locks")
+	}
+	m.ReleaseLocks(context.Background())
+	m.ReleaseLocksAsync()
+
+	m.lockedMessages = &servicebus.ReceivedMessages{}
+	if !m.HoldsLocks() {
+		t.Fatal("model with received messages reports no held locks")
+	}
+	m.ReleaseLocks(context.Background())
 }

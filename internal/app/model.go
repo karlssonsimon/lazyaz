@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -606,6 +607,11 @@ func (m *Model) closeTab(idx int) {
 		return
 	}
 	closedID := m.tabs[idx].ID
+	// A Service Bus tab may hold messages received with lock; let them
+	// go rather than leave them locked until the lock runs out.
+	if sb, ok := m.tabs[idx].Model.(sbapp.Model); ok {
+		sb.ReleaseLocksAsync()
+	}
 	m.tabs = append(m.tabs[:idx], m.tabs[idx+1:]...)
 	if m.activeIdx >= len(m.tabs) {
 		m.activeIdx = len(m.tabs) - 1
@@ -617,6 +623,28 @@ func (m *Model) closeTab(idx int) {
 	// doesn't end up at "random" surviving entries instead of the
 	// position the user expected.
 	m.cleanupJumpsForTab(closedID)
+}
+
+// HoldsLocks reports whether any Service Bus tab holds messages
+// received with lock.
+func (m Model) HoldsLocks() bool {
+	for _, t := range m.tabs {
+		if sb, ok := t.Model.(sbapp.Model); ok && sb.HoldsLocks() {
+			return true
+		}
+	}
+	return false
+}
+
+// ReleaseLocks abandons the messages every Service Bus tab holds with
+// lock, blocking until done or ctx ends. Call it once the program has
+// stopped, on the model Run returned.
+func (m Model) ReleaseLocks(ctx context.Context) {
+	for _, t := range m.tabs {
+		if sb, ok := t.Model.(sbapp.Model); ok {
+			sb.ReleaseLocks(ctx)
+		}
+	}
 }
 
 func (m *Model) closeTabByID(id int) {
