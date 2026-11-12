@@ -46,33 +46,41 @@ func peekTimeout(sessions bool) time.Duration {
 	return 30 * time.Second
 }
 
-func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queueName string, deadLetter, sessions, repeek, preserveCursor bool, fromSeqNo int64) tea.Cmd {
+func peekQueueMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, queueName string, deadLetter, sessions, repeek, preserveCursor bool, fromSeqNo int64, maxCount int) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), peekTimeout(sessions))
+		ctx, cancel := context.WithTimeout(context.Background(), receiveTimeout(sessions, maxCount))
 		defer cancel()
 		var messages []servicebus.PeekedMessage
-		err := svc.PeekQueueMessages(ctx, ns, queueName, peekMaxMessages, deadLetter, sessions, fromSeqNo, func(batch []servicebus.PeekedMessage) {
+		err := svc.PeekQueueMessages(ctx, ns, queueName, maxCount, deadLetter, sessions, fromSeqNo, func(batch []servicebus.PeekedMessage) {
 			messages = append(messages, batch...)
 		})
 		return messagesLoadedMsg{namespace: ns, source: queueName, entityName: queueName, messages: messages, deadLetter: deadLetter, repeek: repeek, preserveCursor: preserveCursor, err: err}
 	}
 }
 
-func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, topicName, subName string, deadLetter, sessions, repeek, preserveCursor bool, fromSeqNo int64) tea.Cmd {
+func peekSubscriptionMessagesCmd(svc *servicebus.Service, ns servicebus.Namespace, topicName, subName string, deadLetter, sessions, repeek, preserveCursor bool, fromSeqNo int64, maxCount int) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), peekTimeout(sessions))
+		ctx, cancel := context.WithTimeout(context.Background(), receiveTimeout(sessions, maxCount))
 		defer cancel()
 		var messages []servicebus.PeekedMessage
-		err := svc.PeekSubscriptionMessages(ctx, ns, topicName, subName, peekMaxMessages, deadLetter, sessions, fromSeqNo, func(batch []servicebus.PeekedMessage) {
+		err := svc.PeekSubscriptionMessages(ctx, ns, topicName, subName, maxCount, deadLetter, sessions, fromSeqNo, func(batch []servicebus.PeekedMessage) {
 			messages = append(messages, batch...)
 		})
 		return messagesLoadedMsg{namespace: ns, source: topicName + "/" + subName, entityName: topicName, subName: subName, messages: messages, deadLetter: deadLetter, repeek: repeek, preserveCursor: preserveCursor, err: err}
 	}
 }
 
+// receiveTimeout is the base budget plus ten seconds for every batch
+// of messages beyond the first, since a larger peek or receive takes
+// more round trips.
+func receiveTimeout(sessions bool, maxCount int) time.Duration {
+	extra := max(maxCount-peekMaxMessages, 0) / peekMaxMessages
+	return peekTimeout(sessions) + time.Duration(extra)*10*time.Second
+}
+
 func receiveCmd(svc *servicebus.Service, ns servicebus.Namespace, entityName, subName string, deadLetter, sessions bool, maxCount int) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), peekTimeout(sessions))
+		ctx, cancel := context.WithTimeout(context.Background(), receiveTimeout(sessions, maxCount))
 		defer cancel()
 		result, err := svc.Receive(ctx, ns, entityName, subName, deadLetter, sessions, maxCount)
 		return messagesReceivedMsg{namespace: ns, entityName: entityName, subName: subName, deadLetter: deadLetter, result: result, err: err}

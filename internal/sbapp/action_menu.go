@@ -3,6 +3,7 @@ package sbapp
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
@@ -52,37 +53,66 @@ type actionMenuState struct {
 
 func (s *actionMenuState) open(actions []action) {
 	s.Open(actions, func(a action) string { return a.label })
+	s.KeepUnfiltered = func(query string) bool { return parseCount(query) > 0 }
+}
+
+// count is the number typed into the menu, or 0 when the query is
+// empty or a search.
+func (s *actionMenuState) count() int {
+	return parseCount(s.Query)
+}
+
+// parseCount reads a query made only of digits as a positive count.
+// Anything else, including a number too long to be a sane count, is 0.
+func parseCount(query string) int {
+	if query == "" || len(query) > 6 {
+		return 0
+	}
+	for _, r := range query {
+		if r < '0' || r > '9' {
+			return 0
+		}
+	}
+	n, err := strconv.Atoi(query)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 func (s *actionMenuState) close() {
 	s.Close()
 }
 
-func (s *actionMenuState) handleKey(key string, km keymap.Keymap) (selected bool, act action) {
+// handleKey routes a key to the menu. On Enter it reports the chosen
+// action and the count typed before it (0 if none); peek and receive
+// take the count as how many messages to ask for.
+func (s *actionMenuState) handleKey(key string, km keymap.Keymap) (selected bool, act action, count int) {
 	switch {
 	case km.ThemeUp.Matches(key):
 		s.Move(-1)
-		return false, action{}
+		return false, action{}, 0
 	case km.ThemeDown.Matches(key):
 		s.Move(1)
-		return false, action{}
+		return false, action{}, 0
 	case km.ThemeApply.Matches(key):
 		if a, ok := s.Selected(); ok {
+			count := s.count()
 			s.close()
-			return true, a
+			return true, a, count
 		}
-		return false, action{}
+		return false, action{}, 0
 	case km.ThemeCancel.Matches(key):
 		s.Cancel()
-		return false, action{}
+		return false, action{}, 0
 	case key == "ctrl+v":
 		if text := ui.ReadClipboard(); text != "" {
 			s.TypeText(text)
 		}
-		return false, action{}
+		return false, action{}, 0
 	}
 	s.HandleQueryKey(key)
-	return false, action{}
+	return false, action{}, 0
 }
 
 func (m Model) buildActions() []action {
@@ -180,7 +210,7 @@ func (m Model) buildActions() []action {
 			if m.peekViaSessions() {
 				how = "with lock, walking sessions"
 			}
-			actions = append(actions, action{actionReceiveMessages, fmt.Sprintf("Receive %s messages (%s)", label, how), ""})
+			actions = append(actions, action{actionReceiveMessages, fmt.Sprintf("Receive %s messages (%s), up to %d", label, how, m.receiveCount()), ""})
 		} else {
 			n := m.currentMarks().Len()
 			if n == 0 {
@@ -230,16 +260,22 @@ func (m Model) buildActions() []action {
 }
 
 func (m Model) executeAction(act action) (Model, tea.Cmd) {
+	return m.executeActionWithCount(act, 0)
+}
+
+// executeActionWithCount runs act with the count typed in the action
+// menu, 0 for none. Only peek and receive use it.
+func (m Model) executeActionWithCount(act action, count int) (Model, tea.Cmd) {
 	switch act.id {
 	case actionPeekMessages:
 		m.clearLockedMessages()
 		m.peekedMessages = nil
 		m.messageList.ResetFilter()
 		m.messageList.SetItems(nil)
-		return m.doPeek(false)
+		return m.doPeek(false, count)
 
 	case actionPeekMore:
-		return m.doPeek(true)
+		return m.doPeek(true, count)
 
 	case actionOpenBlobReference:
 		item, ok := m.messageList.SelectedItem().(messageItem)
@@ -272,9 +308,13 @@ func (m Model) executeAction(act action) (Model, tea.Cmd) {
 		if m.peekViaSessions() {
 			scope += " (walking sessions)"
 		}
+		want := m.receiveCount()
+		if count > 0 {
+			want = min(count, receiveMaxMessages)
+		}
 		m.StartLoading(m.focus, fmt.Sprintf("Receiving %s messages with lock...", scope))
 		return m, tea.Batch(m.Spinner.Tick,
-			receiveCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, m.peekViaSessions(), peekMaxMessages))
+			receiveCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, m.peekViaSessions(), want))
 
 	case actionRequeueCurrent:
 		return m.openRequeueConfirm()
@@ -490,6 +530,27 @@ func (m *Model) clearLockedMessages() {
 	closeLockedAsync(locked)
 }
 
+// HoldsLocks reports whether this explorer holds messages received
+// with lock.
+func (m Model) HoldsLocks() bool {
+	return m.lockedMessages != nil
+}
+
+// ReleaseLocks abandons any messages held with lock and closes their
+// receivers, blocking until done or ctx ends. It is for shutdown, when
+// there is no event loop left to run a command: without it the broker
+// keeps the messages locked for the entity's full lock duration after
+// lazyaz has gone.
+func (m Model) ReleaseLocks(ctx context.Context) {
+	m.lockedMessages.Close(ctx)
+}
+
+// ReleaseLocksAsync is ReleaseLocks off the calling goroutine, for a
+// tab that is closed while the program carries on.
+func (m Model) ReleaseLocksAsync() {
+	closeLockedAsync(m.lockedMessages)
+}
+
 // abandonLockedIfHeld returns a tea.Cmd that abandons and closes any
 // held locked messages. Use this when navigating away from the messages
 // pane so the UI doesn't block on network calls.
@@ -502,12 +563,17 @@ func (m *Model) abandonLockedIfHeld() tea.Cmd {
 	return abandonDLQCmd(locked)
 }
 
-// doPeek fires a peek command for the current scope. When append is
-// true, new messages are appended to the existing set.
-func (m Model) doPeek(append bool) (Model, tea.Cmd) {
+// doPeek fires a peek command for the current scope, for count
+// messages or one default batch when count is 0. When append is true,
+// new messages are appended to the existing set.
+func (m Model) doPeek(append bool, count int) (Model, tea.Cmd) {
 	if !m.hasPeekTarget {
 		return m, nil
 	}
+	if count <= 0 {
+		count = peekMaxMessages
+	}
+	count = min(count, peekCountLimit)
 
 	var fromSeqNo int64
 	if append && len(m.peekedMessages) > 0 {
@@ -524,11 +590,11 @@ func (m Model) doPeek(append bool) (Model, tea.Cmd) {
 	}
 	if m.currentSubName == "" {
 		m.StartLoading(m.focus, fmt.Sprintf("Peeking %s messages from queue %s", label, m.currentEntity.Name))
-		return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, sessions, append, false, fromSeqNo))
+		return m, tea.Batch(m.Spinner.Tick, peekQueueMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.deadLetter, sessions, append, false, fromSeqNo, count))
 	}
 
 	m.StartLoading(m.focus, fmt.Sprintf("Peeking %s messages from %s/%s", label, m.currentEntity.Name, m.currentSubName))
-	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, sessions, append, false, fromSeqNo))
+	return m, tea.Batch(m.Spinner.Tick, peekSubscriptionMessagesCmd(m.service, m.currentNS, m.currentEntity.Name, m.currentSubName, m.deadLetter, sessions, append, false, fromSeqNo, count))
 }
 
 // currentRequiresSession is the session flag of the open queue or
@@ -562,8 +628,12 @@ func (m Model) renderActionMenu(base string) string {
 			Hint:  action.hint,
 		}
 	}
+	title := "Actions"
+	if n := s.count(); n > 0 {
+		title = fmt.Sprintf("Actions · count %d for peek/receive", n)
+	}
 	cfg := ui.OverlayListConfig{
-		Title:       "Actions",
+		Title:       title,
 		Query:       s.Query,
 		QueryCursor: s.QueryCaret,
 		Cursor:      m.Cursor,
@@ -584,4 +654,38 @@ func (m Model) renderActionMenu(base string) string {
 		Center:     true,
 	}
 	return ui.RenderOverlayList(cfg, items, s.CursorIdx, m.Styles, m.Width, m.Height, base)
+}
+
+// receiveCount is how many messages a receive-with-lock asks for.
+//
+// With messages marked (or a visual range active) it is the position of
+// the last selected row: the broker hands out messages from the head of
+// the queue, so reaching that row means locking everything up to it,
+// and nothing past it is locked needlessly. With nothing selected it is
+// as many as are peeked into the list, never fewer than one peek batch.
+// Either way it is capped at receiveMaxMessages.
+func (m Model) receiveCount() int {
+	n := max(len(m.peekedMessages), peekMaxMessages)
+	if last := m.lastSelectedPosition(); last > 0 {
+		n = last
+	}
+	return min(n, receiveMaxMessages)
+}
+
+// lastSelectedPosition is the 1-based position in the peeked list of
+// the last marked or visually selected message, or 0 with no selection.
+func (m Model) lastSelectedPosition() int {
+	marks := m.currentMarks()
+	visual := m.visualSelectionSet()
+	if marks.Len() == 0 && len(visual) == 0 {
+		return 0
+	}
+	last := 0
+	for i, msg := range m.peekedMessages {
+		key := messageOperationKey(msg)
+		if _, ok := visual[key]; ok || marks.Contains(key) {
+			last = i + 1
+		}
+	}
+	return last
 }

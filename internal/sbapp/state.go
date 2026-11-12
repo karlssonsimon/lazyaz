@@ -20,6 +20,16 @@ import (
 
 const peekMaxMessages = 50
 
+// peekCountLimit caps a peek whose count the user typed in the action
+// menu. Peeking is read-only, so the cap only guards against a typo
+// pulling a whole queue into memory.
+const peekCountLimit = 1000
+
+// receiveMaxMessages caps one receive-with-lock. Locks start running
+// out as soon as they are taken, so a very large batch would expire
+// before the user could act on it.
+const receiveMaxMessages = 500
+
 const (
 	namespacesPane = iota
 	entitiesPane
