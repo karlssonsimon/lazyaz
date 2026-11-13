@@ -58,6 +58,8 @@ func Default() Keymap {
 		BackspaceUp:         New("backspace"),
 		SubscriptionPicker:  New("S"),
 		ToggleThemePicker:   New("T"),
+		PIMOverlay:          New("P"),
+		PIMToggleActive:     New("ctrl+a"),
 		ToggleHelp:          New("?", "f1"),
 		ToggleNotifications: New("N"),
 		ToggleActivity:      New("F"),

@@ -53,6 +53,8 @@
     "backspace_up": ["backspace"],
     "subscription_picker": ["S"],
     "toggle_theme_picker": ["T"],
+    "pim_overlay": ["P"],
+    "pim_toggle_active": ["ctrl+a"],
     "toggle_help": ["?", "f1"],
     "toggle_notifications": ["N"],
     "toggle_activity": ["F"],

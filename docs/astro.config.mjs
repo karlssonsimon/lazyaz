@@ -62,6 +62,7 @@ export default defineConfig({
 						},
 						{ label: 'Key Vault', slug: 'resources/key-vault' },
 						{ label: 'App Configuration', slug: 'resources/app-configuration' },
+						{ label: 'PIM', slug: 'resources/pim' },
 					],
 				},
 				{

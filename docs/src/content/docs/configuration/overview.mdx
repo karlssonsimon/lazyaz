@@ -14,6 +14,7 @@ The main config file is `config.json`:
   "theme": "Default Dark",
   "download_dir": "~/Downloads",
   "nerdfonts": true,
+  "pim": { "default_duration": "2h" },
   "tabs": [
     { "kind": "blob", "subscription": "<subscription-id>" },
     { "kind": "servicebus", "subscription": "<subscription-id>" },
@@ -34,6 +35,14 @@ Controls whether tab badges use Nerd Font glyphs (default) or terminal-safe
 Unicode fallbacks. Set `"nerdfonts": false` if your terminal isn't using a
 Nerd Font — there's no reliable runtime detection, so the choice is
 config-driven.
+
+### `pim`
+
+`pim.default_duration` sets the duration prefilled in the
+[PIM](/lazyaz/resources/pim/) activation form, in hours and minutes (`30m`,
+`2h`, `1h30m`; minimum 5 minutes). If it is missing or invalid, lazyaz falls
+back to `1h`. The duration you last used for a given role takes precedence
+over it, and any prefill is lowered to the role's policy maximum.
 
 ## Themes
 

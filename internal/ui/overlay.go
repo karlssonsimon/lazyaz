@@ -23,6 +23,7 @@ type OverlayItem struct {
 	Hint     string // right-aligned secondary text (shortcut, author, etc.)
 	IsActive bool   // shows a marker (e.g. * for current theme)
 	IsHeader bool   // renders Label as a section title; never selectable
+	IsNote   bool   // renders Label as a muted status line; never selectable
 }
 
 // OverlayBindings tells the overlay renderer which keymap bindings the
@@ -60,6 +61,13 @@ type OverlayListConfig struct {
 	// align flush with section headers instead of sitting indented under
 	// them.
 	NoActiveMarker bool
+	// ExactMatch highlights the query in fzf exact mode, for overlays that
+	// filter with fuzzy.FilterExact.
+	ExactMatch bool
+	// ExtraActions are appended to the footer hints after the standard
+	// ones, for keys a particular overlay answers to beyond move, apply,
+	// cancel and erase.
+	ExtraActions []StatusAction
 }
 
 // RenderOverlayList renders an overlay using the floating-screen pattern:
@@ -183,7 +191,7 @@ func renderOverlayFooter(cfg OverlayListConfig, styles Styles, innerW int) strin
 		mode = "MENU"
 	}
 
-	actions := defaultOverlayActions(cfg.Bindings, cfg.HideSearch, cfg.Query != "")
+	actions := append(defaultOverlayActions(cfg.Bindings, cfg.HideSearch, cfg.Query != ""), cfg.ExtraActions...)
 
 	parts := []string{chrome.StatusMode.Render(mode)}
 	for _, a := range actions {
@@ -281,6 +289,14 @@ func renderOverlayBodyRows(cfg OverlayListConfig, items []OverlayItem, cursor, s
 			continue
 		}
 
+		if item.IsNote {
+			// Status line (loading, errors, empty states): muted, no
+			// marker, no cursor styling.
+			note := ov.NoMatch.Background(rowBg).Render(item.Label)
+			rows = append(rows, normal.Render(note))
+			continue
+		}
+
 		bg := rowBg
 		style := normal
 		if ci == cursor {
@@ -319,7 +335,7 @@ func renderOverlayBodyRows(cfg OverlayListConfig, items []OverlayItem, cursor, s
 		// gets its slot — long names elide with `…` instead of pushing the
 		// GUID off the row.
 		visibleLabel := truncateLabel(item.Label, nameWidth)
-		labelRendered := highlightFuzzyMatch(visibleLabel, cfg.Query, matchStyle, baseStyle)
+		labelRendered := highlightMatch(visibleLabel, cfg.Query, cfg.ExactMatch, matchStyle, baseStyle)
 
 		labelPadded := labelRendered
 		if pad := nameWidth - lipgloss.Width(labelRendered); pad > 0 {
@@ -436,14 +452,19 @@ func formatInt(n int) string {
 	return string(buf[i:])
 }
 
-// highlightFuzzyMatch renders `label` with fuzzy-matched chars wrapped in
-// matchStyle and the rest in baseStyle. Returns plain rendered string when
-// query is empty or there's no match.
-func highlightFuzzyMatch(label, query string, matchStyle, baseStyle lipgloss.Style) string {
+// highlightMatch renders `label` with matched chars wrapped in matchStyle
+// and the rest in baseStyle, matching the way the list was filtered: fzf
+// exact mode when exact, fuzzy otherwise. Returns plain rendered string
+// when query is empty or there's no match.
+func highlightMatch(label, query string, exact bool, matchStyle, baseStyle lipgloss.Style) string {
 	if strings.TrimSpace(query) == "" {
 		return baseStyle.Render(label)
 	}
-	res := fuzzy.Match(query, label)
+	match := fuzzy.Match
+	if exact {
+		match = fuzzy.MatchExact
+	}
+	res := match(query, label)
 	if !res.Matched || len(res.Pos) == 0 {
 		return baseStyle.Render(label)
 	}

@@ -61,6 +61,8 @@ type Keymap struct {
 	BackspaceUp         Binding `json:"backspace_up"`
 	SubscriptionPicker  Binding `json:"subscription_picker"`
 	ToggleThemePicker   Binding `json:"toggle_theme_picker"`
+	PIMOverlay          Binding `json:"pim_overlay"`
+	PIMToggleActive     Binding `json:"pim_toggle_active"` // inside the PIM overlay
 	ToggleHelp          Binding `json:"toggle_help"`
 	ToggleNotifications Binding `json:"toggle_notifications"`
 	ToggleActivity      Binding `json:"toggle_activity"`

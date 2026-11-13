@@ -1,7 +1,11 @@
 package app
 
 import (
+	"time"
+
 	"github.com/karlssonsimon/lazyaz/internal/acapp"
+	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/azure/pim"
 	"github.com/karlssonsimon/lazyaz/internal/blobapp"
 	"github.com/karlssonsimon/lazyaz/internal/dashapp"
 	"github.com/karlssonsimon/lazyaz/internal/jumplist"
@@ -47,6 +51,49 @@ type openThemePickerMsg struct{}
 type toggleHelpMsg struct{}
 type toggleNotificationsMsg struct{}
 type toggleActivityMsg struct{}
+
+// openPIMOverlayMsg opens the PIM role list (global key or palette).
+type openPIMOverlayMsg struct{}
+
+// PIM results. gen is the overlay generation the request was made for;
+// results for an older generation are dropped. pimActivatedMsg carries no
+// gen: it is handled even after the overlay has closed.
+type pimTenantsLoadedMsg struct {
+	gen     int
+	tenants []azure.Tenant
+	err     error
+}
+
+type pimRolesLoadedMsg struct {
+	gen        int
+	tenantName string // pim.TenantName of the queried tenant
+	roles      []pim.Role
+	err        error
+}
+
+// pimActiveLoadedMsg carries one tenant's activations in effect.
+type pimActiveLoadedMsg struct {
+	gen        int
+	tenantID   string
+	tenantName string
+	active     []pim.ActiveInstance
+	err        error
+}
+
+type pimPolicyLoadedMsg struct {
+	gen int
+	key string // pim.Role.Key() of the role the form was opened for
+	max time.Duration
+	err error
+}
+
+type pimActivatedMsg struct {
+	role      pim.Role
+	duration  time.Duration
+	result    pim.ActivationResult
+	err       error
+	spinnerID int
+}
 
 // activityAutoOpenMsg is dispatched when an upload starts to pop the
 // activity overlay into detail view for that activity. Ignored if the overlay

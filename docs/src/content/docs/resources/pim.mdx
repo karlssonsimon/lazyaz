@@ -1,0 +1,182 @@
+---
+title: "PIM - Activate Azure Roles from Terminal"
+description: "Activate your eligible Azure PIM roles from lazyaz without opening the portal. Search across all tenants, give a reason and a duration, and get on with your work."
+---
+
+The PIM overlay lists the Azure roles you are eligible for and activates them
+from a form. It exists for the just-in-time case: you hold Contributor on prod
+as an eligible role, you need it for an hour, and you would rather not leave
+the terminal to get it.
+
+**Common tasks this replaces:**
+- Opening Azure Portal → Privileged Identity Management → My roles → Azure resources
+- Finding the right subscription or resource group in a long eligible list
+- Switching tenants in the portal to activate a role in another directory
+
+## Opening the overlay
+
+Press `P` (default keymap) or `Ctrl+E` (standard keymap) from any tab. You can
+also open it from the command palette (`Ctrl+P`) with **PIM: Activate role**.
+
+The key does nothing while a text input in the current tab has focus, so a
+`P` typed into a filter stays a `P`. The command palette entry always works.
+
+## The role list
+
+Roles are listed for every tenant your login can see. When the listed roles
+come from more than one tenant, each tenant gets a header. If two tenants have
+the same name, their headers add the first eight characters of the tenant ID,
+for example `CONTOSO (72f988bf)`. Each row shows the role name and the scope it
+applies to.
+
+### Scoped to the subscription you are in
+
+When the current tab has a subscription selected, the list opens limited to
+roles that can grant access there: roles on that subscription, on its resource
+groups and resources, and on management groups in the same tenant (which may
+include it). The subscription name is shown at the top right.
+
+Press `Tab` to list every subscription instead, and `Tab` again to go back. The
+search is kept when you switch. If nothing in the subscription matches, a row
+says so and points at `Tab`. Tabs without a subscription, and the command
+palette from such a tab, list everything.
+
+### Searching
+
+Each word you type must appear as written (ignoring case) somewhere in the
+role name, scope name or tenant name. Words separated by spaces must all
+match, so `rbac reader` lists only roles containing both words. This is
+stricter than the fuzzy matching in other lazyaz filters: with hundreds of
+long role and scope names, fuzzy matching finds scattered letters in almost
+every row.
+
+| Query | Matches |
+|---|---|
+| `contributor prod` | rows containing both `contributor` and `prod` |
+| `^contributor` | roles whose name starts with Contributor |
+| `contributor !storage` | Contributor roles, excluding any row containing `storage` |
+| `sql \| storage` | rows containing `sql` or `storage` |
+| `'sbdc` | fuzzy match, for when you want it: Storage Blob Data Contributor |
+
+Results from each tenant appear as they arrive, with a `Loading…` row while any
+are still pending. Which roles are already active is looked up separately, from
+your recent activation requests, and a `Checking which roles are active…` row
+stays until the active markers are in.
+
+Status rows at the bottom of the list are dimmed:
+
+- If a tenant cannot be queried, the others still load and a row names the
+  tenant and the first line of the error Azure returned, for example
+  `1 tenant could not be queried — Contoso: AuthorizationFailed: …`. With
+  several failed tenants, the row shows the count and the first error.
+- A tenant without PIM (no license for it, or not onboarded to it) cannot hold
+  eligible roles. It is skipped silently and is not counted as failed.
+- If a tenant's roles load but its active assignments cannot be read, its roles
+  are listed without an active marker and a row says
+  `Active state unknown for Contoso: …`.
+
+Only **Azure resource roles** are listed. Microsoft Entra directory roles and
+PIM for Groups are not covered.
+
+Type to search. The query matches against role name, scope and tenant name.
+`Esc` clears the query first and closes the overlay when it is already empty.
+
+Roles that are active show `active 1h42m` with the time left. In the last
+minute the row shows `active <1m`, and an assignment with no end time shows
+`active`. Pressing `Enter` on an active role reports that it is already active
+instead of opening the form. Once the end time passes, the role counts as
+inactive and `Enter` opens the form again.
+
+### Active roles
+
+Press `Ctrl+A` to list only the roles that are active right now, with the time
+left on each. This view covers every subscription and tenant, whatever the
+current tab has selected, so `Tab` does nothing here. Within each tenant the
+role that expires first is at the top, and roles with no end time come last.
+Press `Ctrl+A` again to go back to the eligible roles. The search is kept when
+you switch.
+
+While active state is still being looked up, the view shows
+`Checking which roles are active…`. If nothing is active, it says
+`No active roles`.
+
+The key is `pim_toggle_active` in the keymap. It only applies inside the PIM
+overlay, so in the standard keymap it does not clash with `Ctrl+A` in the blob
+explorer.
+
+## Activating a role
+
+Press `Enter` on an eligible role to open the form.
+
+| Field | Notes |
+|---|---|
+| Reason | Required. Sent to Azure with the request. lazyaz never stores it. |
+| Duration | Hours and minutes: `30m`, `2h`, `1h30m`. Minimum 5 minutes. |
+
+Submitting with an empty reason is rejected, and a role is never activated
+without you submitting the form.
+
+### Duration
+
+The duration is prefilled from, in order:
+
+1. The duration you last used for that role (the hint says `last used`)
+2. `pim.default_duration` in `config.json`
+3. `1h`
+
+The role's policy maximum is looked up when the form opens and shown in the
+hint (for example `max 8h`) a moment later. A prefilled value above the maximum
+is lowered to it, and a value you type above the maximum is rejected with
+`maximum for this role is 8h`. If the maximum cannot be fetched, the hint says
+`max unknown`. The form still works, and Azure enforces the limit when you
+submit.
+
+## After you submit
+
+The overlay closes and a spinner shows while the request is made. On success:
+
+```
+<role> @ <scope> active until 14:32 — may take a few minutes to take effect
+```
+
+No `az login` is needed afterwards. A command or action that was denied a
+moment ago can still fail for a few minutes until Azure applies the new
+assignment, so retry shortly. The last-used duration is saved for next time.
+
+### Roles that need approval
+
+If the role's policy requires approval, the request is submitted and lazyaz
+reports `activation requested, pending approval`. The role becomes active once
+an approver accepts it.
+
+### Other accepted requests
+
+Azure can accept a request with a status that is neither active nor pending
+approval. lazyaz then reports `request accepted (status <status>)` with the
+status Azure returned, and saves the duration as it does on success. Reopen the
+overlay later to see whether the role became active.
+
+### Roles that must use the portal
+
+Two requirements cannot be satisfied from the terminal. When a role requires
+MFA or ticket information, lazyaz tells you so, gives the portal link and adds
+Azure's own message in parentheses:
+
+```
+https://portal.azure.com/#view/Microsoft_Azure_PIMCommon/ActivationMenuBlade/~/azurerbac
+```
+
+Activate the role there. lazyaz fetches the role list each time the overlay
+opens, so the role shows as active after you close and reopen the overlay.
+
+Other failures are reported with the message Azure returned.
+
+## Not included
+
+lazyaz only activates roles. It does not deactivate or extend an active one;
+use the portal for that.
+
+## Configuration
+
+The default duration is set in `config.json`; see
+[Configuration](/lazyaz/configuration/overview/#pim).

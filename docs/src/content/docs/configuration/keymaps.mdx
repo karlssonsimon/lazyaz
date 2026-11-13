@@ -81,6 +81,7 @@ lazyaz ships with two keymaps. Set `keymap` in your `config.json` to switch:
 | Previous tab | `H` |
 | Jump to tab | `1`–`9` |
 | Command palette | `Ctrl+P` |
+| Activate PIM role | `P` |
 </TabItem>
 <TabItem label="Standard">
 | Action | Keys |
@@ -91,6 +92,7 @@ lazyaz ships with two keymaps. Set `keymap` in your `config.json` to switch:
 | Previous tab | `Ctrl+PgUp` |
 | Jump to tab | `Alt+1`–`Alt+9` |
 | Command palette | `Ctrl+P` |
+| Activate PIM role | `Ctrl+E` |
 </TabItem>
 </Tabs>
 
@@ -272,6 +274,9 @@ and are the same in both keymaps:
 | Cancel | `Esc` / `Ctrl+C` |
 | Delete character | `Backspace` |
 
+In the [PIM overlay](/lazyaz/resources/pim/), `Ctrl+A` (`pim_toggle_active`)
+switches between eligible roles and the roles active now, in both keymaps.
+
 ## Full JSON reference
 
 The complete keymap files shipped with lazyaz. Copy one as a starting point for your own.
@@ -304,6 +309,8 @@ or overwritten, so edits you make to them survive restarts.
     "backspace_up": ["backspace"],
     "subscription_picker": ["S"],
     "toggle_theme_picker": ["T"],
+    "pim_overlay": ["P"],
+    "pim_toggle_active": ["ctrl+a"],
     "toggle_help": ["?", "f1"],
     "toggle_notifications": ["N"],
     "toggle_activity": ["F"],
@@ -388,6 +395,8 @@ or overwritten, so edits you make to them survive restarts.
     "backspace_up": ["backspace"],
     "subscription_picker": ["ctrl+s"],
     "toggle_theme_picker": ["ctrl+t"],
+    "pim_overlay": ["ctrl+e"],
+    "pim_toggle_active": ["ctrl+a"],
     "toggle_help": ["f1"],
     "toggle_notifications": ["ctrl+n"],
     "toggle_activity": ["ctrl+g"],

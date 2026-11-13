@@ -15,6 +15,11 @@
 //	a | b    OR — pipe joins adjacent terms into alternatives
 //
 // A backslash-escaped space ("\ ") is a literal space inside a term.
+//
+// The *Exact variants follow fzf's --exact mode: a plain term matches as a
+// contiguous substring and 'foo is the fuzzy one. Use them for lists whose
+// entries are long enough that scattered single letters match almost
+// everything.
 package fuzzy
 
 import (
@@ -66,7 +71,13 @@ type Pattern struct {
 func (p Pattern) Empty() bool { return len(p.sets) == 0 }
 
 // ParsePattern parses fzf extended-search syntax into a Pattern.
-func ParsePattern(pattern string) Pattern {
+func ParsePattern(pattern string) Pattern { return parsePattern(pattern, false) }
+
+// ParsePatternExact parses pattern in fzf's exact mode: plain terms are
+// substrings, 'terms are fuzzy.
+func ParsePatternExact(pattern string) Pattern { return parsePattern(pattern, true) }
+
+func parsePattern(pattern string, exact bool) Pattern {
 	var sets [][]term
 	pendingOr := false
 	for _, tok := range tokenize(pattern) {
@@ -76,7 +87,7 @@ func ParsePattern(pattern string) Pattern {
 			pendingOr = len(sets) > 0
 			continue
 		}
-		t, ok := parseTerm(tok)
+		t, ok := parseTerm(tok, exact)
 		if !ok {
 			pendingOr = false
 			continue
@@ -126,15 +137,19 @@ func tokenize(pattern string) []string {
 	return tokens
 }
 
-func parseTerm(tok string) (term, bool) {
-	t := term{kind: termFuzzy}
+func parseTerm(tok string, exact bool) (term, bool) {
+	plain, quoted := termFuzzy, termExact
+	if exact {
+		plain, quoted = termExact, termFuzzy
+	}
+	t := term{kind: plain}
 	if strings.HasPrefix(tok, "!") {
 		t.inv = true
 		tok = tok[1:]
 	}
 	switch {
 	case strings.HasPrefix(tok, "'"):
-		t.kind = termExact
+		t.kind = quoted
 		tok = tok[1:]
 	case strings.HasPrefix(tok, "^"):
 		t.kind = termPrefix
@@ -238,19 +253,33 @@ func (p Pattern) match(candidate string, withPos bool, slab *util.Slab) Result {
 // Match scores pattern against candidate. An empty pattern matches
 // everything with score 0. Pos holds matched rune positions for
 // highlight rendering.
-func Match(pattern, candidate string) Result {
+func Match(pattern, candidate string) Result { return matchMode(pattern, candidate, false) }
+
+// MatchExact is Match in exact mode (see the package doc).
+func MatchExact(pattern, candidate string) Result { return matchMode(pattern, candidate, true) }
+
+func matchMode(pattern, candidate string, exact bool) Result {
 	if pattern == "" {
 		return Result{Matched: true}
 	}
 	slab := slabPool.Get().(*util.Slab)
 	defer slabPool.Put(slab)
-	return ParsePattern(pattern).match(candidate, true, slab)
+	return parsePattern(pattern, exact).match(candidate, true, slab)
 }
 
 // Filter returns indices into items where the pattern matches, ordered
 // by score (best first, ties keep input order). getter extracts the
 // matchable string from each item.
 func Filter[T any](pattern string, items []T, getter func(T) string) []int {
+	return filterMode(pattern, items, getter, false)
+}
+
+// FilterExact is Filter in exact mode (see the package doc).
+func FilterExact[T any](pattern string, items []T, getter func(T) string) []int {
+	return filterMode(pattern, items, getter, true)
+}
+
+func filterMode[T any](pattern string, items []T, getter func(T) string, exact bool) []int {
 	if pattern == "" {
 		idx := make([]int, len(items))
 		for i := range items {
@@ -259,7 +288,7 @@ func Filter[T any](pattern string, items []T, getter func(T) string) []int {
 		return idx
 	}
 
-	p := ParsePattern(pattern)
+	p := parsePattern(pattern, exact)
 	slab := slabPool.Get().(*util.Slab)
 	defer slabPool.Put(slab)
 
