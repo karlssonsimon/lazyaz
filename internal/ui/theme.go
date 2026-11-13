@@ -56,6 +56,15 @@ type Config struct {
 	// memory ceiling as much as a transfer one.
 	FormatLimitMB *int     `json:"format_limit_mb,omitempty"`
 	Schemes       []Scheme `json:"-"`
+	// PIM holds Privileged Identity Management settings.
+	PIM PIMConfig `json:"pim"`
+}
+
+// PIMConfig is the "pim" section of config.json.
+type PIMConfig struct {
+	// DefaultDuration is the raw activation duration prefill (e.g. "2h").
+	// It is stored unparsed; the consumer parses it and falls back to 1h.
+	DefaultDuration string `json:"default_duration"`
 }
 
 // DefaultScrolloff is used when the config leaves scrolloff unset.

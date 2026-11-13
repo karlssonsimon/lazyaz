@@ -400,3 +400,52 @@ func TestLoadPreservesUserNamedKeymap(t *testing.T) {
 		t.Error("user-named keymap file was rewritten by the stock refresh")
 	}
 }
+
+func TestDefaultKeymapBindsPIMOverlay(t *testing.T) {
+	if !Default().PIMOverlay.Matches("P") {
+		t.Fatal("Default().PIMOverlay should match P")
+	}
+}
+
+func TestStandardKeymapBindsPIMOverlayToUnusedChord(t *testing.T) {
+	data, err := stockKeymapsFS.ReadFile("keymaps/standard.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var f keymapFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Bindings["pim_overlay"]; len(got) != 1 || got[0] != "ctrl+e" {
+		t.Fatalf("standard pim_overlay = %v, want [ctrl+e]", got)
+	}
+	for action, keys := range f.Bindings {
+		if action == "pim_overlay" {
+			continue
+		}
+		for _, k := range keys {
+			if k == "ctrl+e" {
+				t.Errorf("ctrl+e also bound to %s in standard.json", action)
+			}
+		}
+	}
+}
+
+func TestStockKeymapsBindPIMToggleActiveToCtrlA(t *testing.T) {
+	if !Default().PIMToggleActive.Matches("ctrl+a") {
+		t.Fatal("Default().PIMToggleActive should match ctrl+a")
+	}
+	for _, name := range []string{"default", "standard"} {
+		data, err := stockKeymapsFS.ReadFile("keymaps/" + name + ".json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var f keymapFile
+		if err := json.Unmarshal(data, &f); err != nil {
+			t.Fatal(err)
+		}
+		if got := f.Bindings["pim_toggle_active"]; len(got) != 1 || got[0] != "ctrl+a" {
+			t.Errorf("%s pim_toggle_active = %v, want [ctrl+a]", name, got)
+		}
+	}
+}

@@ -114,3 +114,57 @@ func TestFilterTiesKeepInputOrder(t *testing.T) {
 		t.Fatalf("equal-score matches reordered: %v", got)
 	}
 }
+
+func TestExactModePlainTermsAreSubstrings(t *testing.T) {
+	scattered := "Storage Account Contributor shared-data-archive-tier"
+	want := "Azure Kubernetes Service RBAC Reader aks-example"
+	if MatchExact("rbac reader", scattered).Matched {
+		t.Errorf("exact mode matched scattered letters in %q", scattered)
+	}
+	if !Match("rbac reader", scattered).Matched {
+		t.Fatalf("precondition: default fuzzy mode should match %q", scattered)
+	}
+	res := MatchExact("rbac reader", want)
+	if !res.Matched {
+		t.Fatalf("exact mode missed %q", want)
+	}
+	// Highlight positions are the contiguous words.
+	got := string([]rune(want)[res.Pos[0] : res.Pos[0]+4])
+	if got != "RBAC" && got != "Read" {
+		t.Errorf("first highlighted run = %q, want a contiguous word", got)
+	}
+}
+
+func TestExactModeQuoteMeansFuzzy(t *testing.T) {
+	if !MatchExact("'sbdc", "Storage Blob Data Contributor").Matched {
+		t.Error("'term should fuzzy-match in exact mode")
+	}
+	if MatchExact("sbdc", "Storage Blob Data Contributor").Matched {
+		t.Error("plain term must not fuzzy-match in exact mode")
+	}
+}
+
+func TestExactModeKeepsOperators(t *testing.T) {
+	c := "Storage Blob Data Contributor sub-prod"
+	cases := map[string]bool{
+		"^storage":              true,
+		"prod$":                 true,
+		"contributor !blob":     false,
+		"contributor !queue":    true,
+		"queue | blob":          true,
+		"^storage blob contrib": true,
+	}
+	for q, want := range cases {
+		if got := MatchExact(q, c).Matched; got != want {
+			t.Errorf("MatchExact(%q) = %v, want %v", q, got, want)
+		}
+	}
+}
+
+func TestFilterExact(t *testing.T) {
+	items := []string{"Storage Account Contributor shared-data-archive-tier", "AKS RBAC Reader aks-example"}
+	got := FilterExact("rbac reader", items, func(s string) string { return s })
+	if len(got) != 1 || got[0] != 1 {
+		t.Fatalf("FilterExact = %v, want [1]", got)
+	}
+}

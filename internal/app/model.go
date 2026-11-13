@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/appconfig"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
 	"github.com/karlssonsimon/lazyaz/internal/azure/keyvault"
+	"github.com/karlssonsimon/lazyaz/internal/azure/pim"
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/blobapp"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
@@ -96,6 +98,17 @@ type Model struct {
 	cmdPalette       commandPalette
 	connStringPrompt ui.TextInputState
 
+	// PIM role activation: the eligible-role list and, on top of it, the
+	// activation form. See pim.go.
+	pim             pimOverlay
+	pimSvc          pimService
+	pimTenants      func(context.Context) ([]azure.Tenant, error)
+	pimForm         ui.FormOverlayState
+	pimFormRole     pim.Role
+	pimFormMax      time.Duration // policy maximum; 0 = unknown
+	pimFormPrefill  string        // the Duration value the form was opened (or last clamped) with
+	pimFormFromLast bool          // the prefill came from the role's last-used duration
+
 	// pendingLoginMsg is the success toast queued by applyNewCredential,
 	// shown once the post-login subscription fetch completes.
 	pendingLoginMsg string
@@ -143,6 +156,8 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		db:               db,
 		jumpIdx:          -1,
 		credCache:        newCredentialCache(azure.NewCredentialForTenant),
+		pimSvc:           pim.NewService(),
+		pimTenants:       defaultPIMTenants,
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},
@@ -718,6 +733,14 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if paste, ok := msg.(tea.PasteMsg); ok {
 		text := paste.String()
 		switch {
+		case m.pimForm.Active:
+			if f := m.pimForm.FocusedField(); f != nil {
+				f.Insert(text)
+			}
+			return m, nil
+		case m.pim.active:
+			m.pim.insertText(text)
+			return m, nil
 		case m.cmdPalette.active:
 			ti := ui.TextInput{Value: m.cmdPalette.query, Cursor: m.cmdPalette.queryCaret}
 			ti.Insert(text)
@@ -942,6 +965,27 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.themeOverlay.Open()
 		return m, nil
 
+	case openPIMOverlayMsg:
+		return m, m.openPIMOverlay()
+
+	case pimTenantsLoadedMsg:
+		return m, m.handlePIMTenantsLoaded(msg)
+
+	case pimRolesLoadedMsg:
+		m.handlePIMRolesLoaded(msg)
+		return m, nil
+
+	case pimActiveLoadedMsg:
+		m.handlePIMActiveLoaded(msg)
+		return m, nil
+
+	case pimPolicyLoadedMsg:
+		m.handlePIMPolicyLoaded(msg)
+		return m, nil
+
+	case pimActivatedMsg:
+		return m, m.handlePIMActivated(msg)
+
 	case toggleHelpMsg:
 		if m.helpOverlay.Active {
 			m.helpOverlay.Close()
@@ -1058,6 +1102,15 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if child, ok := m.tabs[m.activeIdx].Model.(uploadConflictTab); ok && child.HasPendingUploadConflict() {
 				return m, m.forwardToActive(msg)
 			}
+		}
+
+		// PIM activation form, then the role list under it. They take
+		// every key so typing a reason or query never reaches the tab.
+		if m.pimForm.Active {
+			return m, m.handlePIMFormKey(key)
+		}
+		if m.pim.active {
+			return m, m.handlePIMListKey(key)
 		}
 
 		// Command palette overlay.
@@ -1207,6 +1260,8 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.keymap.ToggleThemePicker.Matches(key):
 			m.themeOverlay.Open()
 			return m, nil
+		case m.keymap.PIMOverlay.Matches(key):
+			return m, m.openPIMOverlay()
 		case m.keymap.ToggleHelp.Matches(key):
 			m.helpOverlay.Open("Azure TUI Help", m.activeHelpSections())
 			return m, nil
@@ -1351,6 +1406,9 @@ func (m *Model) buildCommands() []command {
 		}},
 		command{name: "Theme Picker", hint: "T", section: secApp, action: func() commandAction {
 			return commandAction{msg: openThemePickerMsg{}}
+		}},
+		command{name: "PIM: Activate role", hint: "P", section: secApp, action: func() commandAction {
+			return commandAction{msg: openPIMOverlayMsg{}}
 		}},
 		command{name: "Notifications History", hint: "N", section: secApp, action: func() commandAction {
 			return commandAction{msg: toggleNotificationsMsg{}}

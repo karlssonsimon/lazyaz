@@ -309,3 +309,23 @@ func TestHandleKey(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfigReadsPIMDefaultDuration(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"pim":{"default_duration":"2h"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadConfigFromDir(dir).PIM.DefaultDuration; got != "2h" {
+		t.Fatalf("PIM.DefaultDuration = %q, want 2h", got)
+	}
+}
+
+func TestLoadConfigPIMAbsent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadConfigFromDir(dir).PIM.DefaultDuration; got != "" {
+		t.Fatalf("PIM.DefaultDuration = %q, want empty", got)
+	}
+}

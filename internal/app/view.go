@@ -90,6 +90,14 @@ func (m Model) View() tea.View {
 		}
 		view = ui.RenderActivityOverlay(&m.activityOverlay, rows, cfg, m.styles, m.width, m.height, view)
 	}
+	// PIM takes every key while open (see updateInner), so it paints
+	// above the other overlays; the form sits on top of its list.
+	if m.pim.active {
+		view = renderPIMOverlay(&m.pim, closeHint, m.cursor, m.styles, &m.keymap, time.Now(), m.width, m.height, view)
+	}
+	if m.pimForm.Active {
+		view = ui.RenderFormOverlay(m.pimForm, m.cursor, m.styles, m.width, m.height, view)
+	}
 
 	// The upload conflict prompt is rendered LAST so it sits above
 	// every other overlay including the activity overlay — it's a blocking
@@ -160,6 +168,7 @@ func (m Model) activeHelpSections() []ui.HelpSection {
 			keymap.HelpEntry(km.NextTab, "next tab"),
 			"alt+1..9  jump to tab",
 			keymap.HelpEntry(km.ToggleThemePicker, "theme picker"),
+			keymap.HelpEntry(km.PIMOverlay, "PIM: activate role"),
 			keymap.HelpEntry(km.ToggleActivity, "activity"),
 			keymap.HelpEntry(km.ToggleHelp, "help"),
 			keymap.HelpEntry(km.Quit, "quit"),
