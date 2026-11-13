@@ -56,6 +56,10 @@ values to clipboard.
 **App Configuration** — Browse stores and key-values by label, view JSON and
 feature flags, and jump from a Key Vault reference to the secret.
 
+**PIM** — Activate your eligible Azure roles from a global overlay: search
+across all your tenants, give a reason and a duration, and get on with it.
+Roles that need MFA or a ticket point you to the portal.
+
 All of them run side by side in tabs with per-tab subscription selection.
 
 ## Navigation
@@ -72,6 +76,7 @@ All of them run side by side in tabs with per-tab subscription selection.
 | `K` | Toggle inspect panel |
 | `?` | Help |
 | `Ctrl+P` | Command palette |
+| `P` | Activate a PIM role |
 | `Ctrl+T` | New tab |
 
 ## Configuration
