@@ -141,6 +141,7 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 	cur := cursor.New()
 	cur.SetChar(" ")
 	cur.Focus() // pre-focus; Init() returns the blink cmd
+	creds := newCredentialCache(azure.NewCredentialForTenant)
 	m := Model{
 		blobSvc:          blobSvc,
 		sbSvc:            sbSvc,
@@ -155,9 +156,9 @@ func NewModel(blobSvc *blob.Service, sbSvc *servicebus.Service, kvSvc *keyvault.
 		notifier:         appshell.NewNotifier(1000),
 		db:               db,
 		jumpIdx:          -1,
-		credCache:        newCredentialCache(azure.NewCredentialForTenant),
+		credCache:        creds,
 		pimSvc:           pim.NewService(),
-		pimTenants:       defaultPIMTenants,
+		pimTenants:       defaultPIMTenants(creds),
 		themeOverlay: ui.ThemeOverlayState{
 			ActiveThemeIdx: ui.ActiveSchemeIndex(cfg),
 		},

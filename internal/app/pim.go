@@ -42,12 +42,16 @@ const (
 
 // defaultPIMTenants lists the signed-in user's tenants with the default
 // (multi-tenant) credential. This is the only PIM path that may use it.
-func defaultPIMTenants(ctx context.Context) ([]azure.Tenant, error) {
-	cred, err := azure.NewDefaultCredential()
-	if err != nil {
-		return nil, err
+// The credential is the cache's entry for no tenant, so it and its tokens
+// are reused each time the overlay opens instead of being rebuilt.
+func defaultPIMTenants(creds *credentialCache) func(context.Context) ([]azure.Tenant, error) {
+	return func(ctx context.Context) ([]azure.Tenant, error) {
+		cred, err := creds.For("")
+		if err != nil {
+			return nil, err
+		}
+		return azure.ListTenants(ctx, cred)
 	}
-	return azure.ListTenants(ctx, cred)
 }
 
 func pimDurationPrefKey(r pim.Role) string {
