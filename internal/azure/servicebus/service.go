@@ -200,8 +200,8 @@ func (s *Service) Credential() azcore.TokenCredential {
 	return s.cred
 }
 
-// clientCloseTimeout bounds closing the clients a credential swap
-// replaced.
+// clientCloseTimeout bounds a close that runs in the background: the
+// clients a credential swap replaced, or a finished peek's receiver.
 const clientCloseTimeout = 5 * time.Second
 
 // SetCredential swaps the credential and clears all cached clients so
@@ -603,12 +603,24 @@ func (s *Service) PeekQueueMessages(ctx context.Context, ns Namespace, queueName
 	})
 }
 
+// closeInBackground closes a peek's receiver without making the caller
+// wait. A peek holds no locks, so nothing depends on the link being gone,
+// and closing it is round trips the peeked messages would otherwise sit
+// behind.
+func closeInBackground(receiver *azservicebus.Receiver) {
+	safego.Go(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), clientCloseTimeout)
+		defer cancel()
+		_ = receiver.Close(ctx)
+	})
+}
+
 func (s *Service) peekQueue(ctx context.Context, client *azservicebus.Client, queueName string, maxCount int, deadLetter bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
 	receiver, err := newReceiver(client, queueName, "", deadLetter)
 	if err != nil {
 		return fmt.Errorf("create queue receiver for %s: %w", queueName, err)
 	}
-	defer receiver.Close(ctx)
+	defer closeInBackground(receiver)
 	return peekMessages(ctx, receiver, maxCount, fromSequenceNumber, send)
 }
 
@@ -631,7 +643,7 @@ func (s *Service) peekSubscription(ctx context.Context, client *azservicebus.Cli
 	if err != nil {
 		return fmt.Errorf("create subscription receiver for %s/%s: %w", topicName, subName, err)
 	}
-	defer receiver.Close(ctx)
+	defer closeInBackground(receiver)
 	return peekMessages(ctx, receiver, maxCount, fromSequenceNumber, send)
 }
 
