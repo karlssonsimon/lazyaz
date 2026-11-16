@@ -205,6 +205,10 @@ func azLoginCmd() tea.Cmd {
 // openAzLoginMsg triggers the az login / tenant picker flow.
 type openAzLoginMsg struct{}
 
+// refreshCredentialsMsg rebuilds every credential from the current az
+// session (palette command).
+type refreshCredentialsMsg struct{}
+
 // -- Model methods --
 
 // handleOpenAzLogin opens the tenant picker and starts fetching tenants.
@@ -292,6 +296,7 @@ func (m *Model) applyNewCredential(cred azcore.TokenCredential, tenantID string,
 	m.brokers.resetAll()
 	m.pendingLoginMsg = successMsg
 	m.pendingTenantID = tenantID
+	m.credTenantID = tenantID
 
 	return *m, fetchPostLoginSubsCmd(cred)
 }
@@ -362,6 +367,59 @@ func (m *Model) handlePostLoginSubs(msg postLoginSubsMsg) (Model, tea.Cmd) {
 
 	m.notifier.Push(appshell.LevelSuccess, successMsg)
 	return *m, tea.Batch(cmds...)
+}
+
+// refreshCredentials rebuilds every credential from the current az
+// session and hands the new ones to the shared services and the open
+// tabs. Credentials keep their tokens for as long as they are valid, so
+// this is how a change made outside the app is picked up: another account
+// signed in with az, or a group membership a new token has to carry.
+//
+// Unlike a login, nothing is refetched and no tab moves: each tab's
+// service gets the credential for the tenant of the subscription it is
+// already on.
+func (m *Model) refreshCredentials() tea.Cmd {
+	m.credCache.Reset()
+
+	shared, err := m.credCache.For(m.credTenantID)
+	if err != nil {
+		m.notifier.Push(appshell.LevelError, fmt.Sprintf("Failed to refresh credentials: %s", err))
+		return m.maybeStartToastTick()
+	}
+	if m.blobSvc != nil {
+		m.blobSvc.SetCredential(shared)
+	}
+	if m.sbSvc != nil {
+		m.sbSvc.SetCredential(shared)
+	}
+	if m.kvSvc != nil {
+		m.kvSvc.SetCredential(shared)
+	}
+	if m.acSvc != nil {
+		m.acSvc.SetCredential(shared)
+	}
+
+	for i := range m.tabs {
+		child, ok := m.tabs[i].Model.(credentialTab)
+		if !ok {
+			continue
+		}
+		cred := shared
+		if subTab, ok := m.tabs[i].Model.(subscriptionTab); ok {
+			if sub, has := subTab.CurrentSubscription(); has && sub.TenantID != "" {
+				tenantCred, err := m.credCache.For(sub.TenantID)
+				if err != nil {
+					m.notifier.Push(appshell.LevelError, fmt.Sprintf("Failed to refresh credentials: %s", err))
+					continue
+				}
+				cred = tenantCred
+			}
+		}
+		m.tabs[i].Model = child.WithCredential(cred)
+	}
+
+	m.notifier.Push(appshell.LevelSuccess, "Azure credentials refreshed")
+	return m.maybeStartToastTick()
 }
 
 func (m *Model) credentialForTabKind(kind TabKind) azcore.TokenCredential {

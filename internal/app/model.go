@@ -119,6 +119,11 @@ type Model struct {
 	// (initial login / az login completion) where no tenant is pinned.
 	pendingTenantID string
 
+	// credTenantID is the tenant the shared services' credential is
+	// scoped to: set by a tenant switch, empty while they hold the
+	// default credential. A credential refresh rebuilds for the same one.
+	credTenantID string
+
 	// credCache memoizes one tenant-scoped credential per tenant ID for
 	// the process lifetime. Used by CredentialFor (the CredentialResolver
 	// implementation injected into each tab) and by switchTenantCmd so
@@ -1077,6 +1082,9 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.handleOpenAzLogin()
 		return updated, cmd
 
+	case refreshCredentialsMsg:
+		return m, m.refreshCredentials()
+
 	case tenantsLoadedMsg:
 		updated, cmd := m.handleTenantsLoaded(msg)
 		toastCmd := updated.maybeStartToastTick()
@@ -1431,6 +1439,9 @@ func (m *Model) buildCommands() []command {
 	cmds = append(cmds,
 		command{name: "Azure Login / Switch Tenant", section: secApp, action: func() commandAction {
 			return commandAction{msg: openAzLoginMsg{}}
+		}},
+		command{name: "Refresh Azure Credentials", section: secApp, action: func() commandAction {
+			return commandAction{msg: refreshCredentialsMsg{}}
 		}},
 		command{name: "Theme Picker", hint: "T", section: secApp, action: func() commandAction {
 			return commandAction{msg: openThemePickerMsg{}}

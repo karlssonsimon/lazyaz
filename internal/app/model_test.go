@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -530,5 +532,74 @@ func TestActiveChildOwnsSearchKeysIgnoresPlainTabs(t *testing.T) {
 
 	if m.activeChildOwnsSearchKeys("?") {
 		t.Error("a tab without a searchable buffer claimed the search keys")
+	}
+}
+
+// A refresh rebuilds every credential: the shared services get a new one
+// for the tenant they were scoped to, and each tab's private service gets
+// a new one for its own subscription's tenant, without the tab moving.
+func TestRefreshCredentialsRebuildsSharedAndTabCredentials(t *testing.T) {
+	oldCred := testCredential{id: "old"}
+	m := NewModel(blob.NewService(oldCred), servicebus.NewService(oldCred), keyvault.NewService(oldCred), appconfig.NewService(oldCred), testConfig(), nil, keymap.Default())
+	built := map[string]int{}
+	m.credCache = newCredentialCache(func(id string) (azcore.TokenCredential, error) {
+		built[id]++
+		return testCredential{id: fmt.Sprintf("%s#%d", id, built[id])}, nil
+	})
+	m.credTenantID = "home"
+
+	sub := azure.Subscription{ID: "sub", Name: "Sub", TenantID: "other"}
+	m.tabs = nil
+	m.activeIdx = 0
+	m.addTab(TabServiceBus, "")
+	m.addTab(TabBlob, "")
+	child := m.tabs[0].Model.(sbapp.Model)
+	child.SetSubscription(sub)
+	m.tabs[0].Model = child
+	if got := serviceCredential(m.tabs[0].Model); got != (testCredential{id: "other#1"}) {
+		t.Fatalf("setup: tab credential = %#v, want the first one built for its tenant", got)
+	}
+
+	m.refreshCredentials()
+
+	if got := m.sbSvc.Credential(); got != (testCredential{id: "home#1"}) {
+		t.Errorf("shared credential = %#v, want a new one for the tenant it was scoped to", got)
+	}
+	if got := serviceCredential(m.tabs[0].Model); got != (testCredential{id: "other#2"}) {
+		t.Errorf("tab with a subscription: credential = %#v, want a rebuilt one for its tenant", got)
+	}
+	if got := serviceCredential(m.tabs[1].Model); got != (testCredential{id: "home#1"}) {
+		t.Errorf("tab without a subscription: credential = %#v, want the shared one", got)
+	}
+	if got, ok := m.tabs[0].Model.(sbapp.Model).CurrentSubscription(); !ok || got.ID != sub.ID {
+		t.Errorf("tab subscription = %#v, %v; want it left on %q", got, ok, sub.ID)
+	}
+}
+
+func TestRefreshCredentialsReportsFailure(t *testing.T) {
+	oldCred := testCredential{id: "old"}
+	m := NewModel(nil, servicebus.NewService(oldCred), nil, nil, testConfig(), nil, keymap.Default())
+	m.credCache = newCredentialCache(func(string) (azcore.TokenCredential, error) {
+		return nil, errors.New("no az session")
+	})
+
+	m.refreshCredentials()
+
+	if got := m.sbSvc.Credential(); got != oldCred {
+		t.Errorf("shared credential = %#v, want it left alone when the rebuild fails", got)
+	}
+}
+
+// A tenant switch records the tenant so a later refresh rebuilds for it.
+func TestApplyNewCredentialRecordsTenant(t *testing.T) {
+	m := NewModel(nil, nil, nil, nil, testConfig(), nil, keymap.Default())
+
+	updated, _ := m.applyNewCredential(testCredential{id: "a"}, "tenant-A", "Switched tenant")
+	if updated.credTenantID != "tenant-A" {
+		t.Errorf("credTenantID = %q after a tenant switch, want tenant-A", updated.credTenantID)
+	}
+	updated, _ = updated.applyNewCredential(testCredential{id: "b"}, "", "Logged in")
+	if updated.credTenantID != "" {
+		t.Errorf("credTenantID = %q after a login, want it cleared", updated.credTenantID)
 	}
 }

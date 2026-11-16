@@ -38,6 +38,10 @@ This usually means your credential is authenticated against a different tenant t
 1. Check that your Azure AD identity has the right role on the resource (see [Authentication](/lazyaz/authentication/) for required permissions).
 2. Try switching to the correct tenant explicitly via **Azure Login / Switch Tenant** in the command palette (`Ctrl+P`).
 
+### I signed in with `az login` in another terminal but lazyaz still uses the old account
+
+lazyaz keeps access tokens for as long as they are valid, so a change made outside the app is not picked up straight away. Open the command palette (`Ctrl+P`) and select **Refresh Azure Credentials**. It rebuilds every credential from your current `az` session without a browser sign-in, and your tabs stay where they are. Use it too when a group membership has changed and a new token has to carry it.
+
 ### How do I switch between Azure tenants?
 
 Open the command palette (`Ctrl+P`), select **Azure Login / Switch Tenant**, and pick a tenant. No browser sign-in needed — it reuses your existing session. See [Multi-Tenant Support](/lazyaz/multi-tenant/) for details.
