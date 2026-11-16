@@ -433,3 +433,55 @@ func TestListActiveAtPropagatesError(t *testing.T) {
 		t.Fatalf("err = %v, want it passed through", err)
 	}
 }
+
+// credentialFailure is the text DefaultAzureCredential returns when the
+// Azure CLI is refused a token, with entra as the CLI's error line.
+func credentialFailure(entra string) error {
+	return errors.New("DefaultAzureCredential: failed to acquire a token.\nAttempted credentials:\n" +
+		"\tEnvironmentCredential: missing environment variable AZURE_TENANT_ID\n" +
+		"\tAzureCLICredential: ERROR: " + entra + " Trace ID: 11111111-2222-3333-4444-555555555555 Correlation ID: 66666666-7777-8888-9999-000000000000 Timestamp: 2026-01-01 12:00:00Z\n" +
+		"\t\tRun the command below to authenticate interactively; additional arguments may be added as needed:\n" +
+		"\t\taz logout\n" +
+		"\t\taz login --tenant \"tenant-guid\" --scope \"https://management.azure.com/.default\"\n" +
+		"\t\t\n" +
+		"\tAzurePowerShellCredential: executable not found on path")
+}
+
+func TestErrorTextNamesRefusedSignIn(t *testing.T) {
+	tests := []struct {
+		name  string
+		entra string
+		want  string
+	}{
+		{
+			"mfa",
+			"AADSTS50076: Due to a configuration change made by your administrator, or because you moved to a new location, you must use multi-factor authentication to access 'app'.",
+			"multi-factor authentication required — run: az login --tenant tenant-guid",
+		},
+		{
+			"conditional access",
+			"AADSTS53003: Access has been blocked by Conditional Access policies. The access policy does not allow token issuance.",
+			"blocked by a Conditional Access policy",
+		},
+		{
+			"expired",
+			"AADSTS700082: The refresh token has expired due to inactivity.",
+			"sign-in expired — run: az login --tenant tenant-guid",
+		},
+		{
+			"unknown code keeps the message",
+			"AADSTS90072: User account does not exist in tenant.",
+			"AADSTS90072: User account does not exist in tenant. — run: az login --tenant tenant-guid",
+		},
+	}
+	for _, tt := range tests {
+		if got := ErrorText(credentialFailure(tt.entra)); got != tt.want {
+			t.Errorf("%s: ErrorText = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+
+	// Without a suggested command there is nothing to run.
+	if got := ErrorText(errors.New("AzureCLICredential: ERROR: AADSTS50076: MFA needed.")); got != "multi-factor authentication required" {
+		t.Errorf("no command: ErrorText = %q", got)
+	}
+}

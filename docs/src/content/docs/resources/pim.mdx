@@ -69,9 +69,12 @@ a role that waited on approval.
 Status rows at the top of the list are dimmed:
 
 - If a tenant cannot be queried, the others still load and a row names the
-  tenant and the first line of the error Azure returned, for example
-  `1 tenant could not be queried — Contoso: AuthorizationFailed: …`. With
-  several failed tenants, the row shows the count and the first error.
+  tenant and the reason, for example
+  `Contoso could not be queried: AuthorizationFailed: …`. When Azure refuses
+  the sign-in for that tenant, the row says why and how to fix it, such as
+  `multi-factor authentication required — run: az login --tenant <id>`; after
+  signing in, run **Refresh Azure Credentials** from the command palette. The
+  first three failed tenants get a row each and the rest are counted.
 - A tenant without PIM (no license for it, or not onboarded to it) cannot hold
   eligible roles. It is skipped silently and is not counted as failed.
 - If a tenant's roles load but its active assignments cannot be read, its roles

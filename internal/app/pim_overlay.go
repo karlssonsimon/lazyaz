@@ -66,6 +66,10 @@ type pimTenantNote struct {
 // pimErrorLineMax caps error detail in a status row, in runes.
 const pimErrorLineMax = 120
 
+// pimFailureRowsMax caps the rows naming failed tenants, so a user in many
+// tenants still sees roles on the first screen.
+const pimFailureRowsMax = 3
+
 // pimErrorLine is the first line of err's display text, capped at
 // pimErrorLineMax runes.
 func pimErrorLine(err error) string {
@@ -407,17 +411,27 @@ func (p *pimOverlay) refilterKeeping(prevKey string) {
 	} else if (len(p.roles) > 0 || p.activeOnly) && p.checkingActive() {
 		note("Checking which roles are active…")
 	}
-	if n := len(p.failures); n > 0 {
-		count := "1 tenant"
-		if n > 1 {
-			count = fmt.Sprintf("%d tenants", n)
+	// Each failed tenant gets its own row, since the reasons differ and
+	// some name the command that fixes them.
+	failed := make(map[string]bool, len(p.failures))
+	for i, f := range p.failures {
+		failed[f.tenant] = true
+		if i < pimFailureRowsMax {
+			note(f.tenant + " could not be queried: " + f.detail)
 		}
-		f := p.failures[0]
-		note(fmt.Sprintf("%s could not be queried — %s: %s", count, f.tenant, f.detail))
 	}
-	if len(p.activeUnknown) > 0 {
-		u := p.activeUnknown[0]
-		note("Active state unknown for " + u.tenant + ": " + u.detail)
+	if more := len(p.failures) - pimFailureRowsMax; more == 1 {
+		note("1 more tenant could not be queried")
+	} else if more > 1 {
+		note(fmt.Sprintf("%d more tenants could not be queried", more))
+	}
+	// A tenant whose roles could not be listed has no rows to mark, and
+	// its row above already says why.
+	for _, u := range p.activeUnknown {
+		if !failed[u.tenant] {
+			note("Active state unknown for " + u.tenant + ": " + u.detail)
+			break
+		}
 	}
 	settled := !p.loading && p.pending == 0
 	switch {

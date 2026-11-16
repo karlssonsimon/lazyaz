@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -272,10 +273,14 @@ func classifyActivationError(err error) *ActivationError {
 
 // ErrorText describes err for display. For an ARM error it is
 // "<code>: <message>" from the response body instead of the SDK's
-// multi-line dump, which starts with the request URL.
+// multi-line dump, which starts with the request URL. For a refused
+// sign-in it is the reason and, where signing in again helps, the command.
 func ErrorText(err error) string {
 	var re *azcore.ResponseError
 	if !errors.As(err, &re) {
+		if text, ok := signInErrorText(err.Error()); ok {
+			return text
+		}
 		return err.Error()
 	}
 	msg := armErrorMessage(re)
@@ -288,6 +293,47 @@ func ErrorText(err error) string {
 		return re.ErrorCode
 	}
 	return err.Error()
+}
+
+var (
+	// An Entra sign-in error as the Azure CLI prints it: the code, then the
+	// message up to the trace IDs that follow it on the same line.
+	entraErrorRE = regexp.MustCompile(`AADSTS(\d+): ([^\n]*?)(?: Trace ID:|\n|$)`)
+	// The tenant in the az login command the CLI suggests.
+	azLoginTenantRE = regexp.MustCompile(`az login --tenant "([^"]+)"`)
+)
+
+// signInErrorText describes a credential failure caused by Entra refusing
+// the sign-in, or reports false when text holds no such error.
+//
+// The credential's own text opens with "failed to acquire a token" and
+// buries the reason several lines down, under every credential type it
+// tried. The codes with a known cause get a short reason; the rest keep
+// Entra's message.
+func signInErrorText(text string) (string, bool) {
+	m := entraErrorRE.FindStringSubmatch(text)
+	if m == nil {
+		return "", false
+	}
+	code, message := m[1], strings.TrimSpace(m[2])
+
+	var reason string
+	switch code {
+	case "53003":
+		// The policy refuses the token outright, so signing in again
+		// does not help.
+		return "blocked by a Conditional Access policy", true
+	case "50076", "50079":
+		reason = "multi-factor authentication required"
+	case "50173", "70043", "700082":
+		reason = "sign-in expired"
+	default:
+		reason = "AADSTS" + code + ": " + message
+	}
+	if t := azLoginTenantRE.FindStringSubmatch(text); t != nil {
+		reason += " — run: az login --tenant " + t[1]
+	}
+	return reason, true
 }
 
 // armErrorMessage returns error.message from an ARM error body, or "".

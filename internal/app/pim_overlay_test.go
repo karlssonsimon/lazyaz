@@ -244,14 +244,15 @@ func TestPIMOverlayEmptyStates(t *testing.T) {
 	p.setTenantCount(g, 2)
 	p.tenantFailed(g, "Contoso", errors.New("AuthorizationFailed: no access\nmore detail"))
 	p.tenantFailed(g, "Fabrikam", errors.New("timeout"))
-	if !pimHasNote(&p, "2 tenants could not be queried — Contoso: AuthorizationFailed: no access") || pimHasNote(&p, "No eligible roles") {
+	if !pimHasNote(&p, "Contoso could not be queried: AuthorizationFailed: no access") ||
+		!pimHasNote(&p, "Fabrikam could not be queried: timeout") || pimHasNote(&p, "No eligible roles") {
 		t.Fatalf("two failures: %v", pimLabels(&p))
 	}
 
 	g = p.open()
 	p.setTenantCount(g, 1)
 	p.tenantFailed(g, "Contoso", errors.New("forbidden"))
-	if !pimHasNote(&p, "1 tenant could not be queried — Contoso: forbidden") {
+	if !pimHasNote(&p, "Contoso could not be queried: forbidden") {
 		t.Fatalf("one failure: %v", pimLabels(&p))
 	}
 
@@ -867,7 +868,7 @@ func TestPIMOverlayStatusRowsComeFirst(t *testing.T) {
 	})
 	p.tenantFailed(g, "Fabrikam", errors.New("forbidden"))
 
-	want := []string{"Loading…", "1 tenant could not be queried — Fabrikam: forbidden"}
+	want := []string{"Loading…", "Fabrikam could not be queried: forbidden"}
 	if len(p.visible) != len(want)+2 {
 		t.Fatalf("rows = %q, want two status rows then two roles", pimLabels(&p))
 	}
@@ -1059,5 +1060,45 @@ func TestPIMOverlayExactActiveFailureKeepsEstimate(t *testing.T) {
 	}
 	if pimHasNote(&p, "Checking which roles are active…") {
 		t.Errorf("notes = %q, want checking done after the failure", pimLabels(&p))
+	}
+}
+
+// Past the row cap the remaining failed tenants are only counted.
+func TestPIMOverlayCapsFailedTenantRows(t *testing.T) {
+	var p pimOverlay
+	g := p.open()
+	p.setTenantCount(g, 5)
+	for _, name := range []string{"A", "B", "C", "D"} {
+		p.tenantFailed(g, name, errors.New("forbidden"))
+	}
+	if !pimHasNote(&p, "C could not be queried: forbidden") || pimHasNote(&p, "D could not be queried: forbidden") {
+		t.Fatalf("rows = %q, want the first three tenants named", pimLabels(&p))
+	}
+	if !pimHasNote(&p, "1 more tenant could not be queried") {
+		t.Fatalf("rows = %q, want the fourth counted", pimLabels(&p))
+	}
+
+	p.tenantFailed(g, "E", errors.New("forbidden"))
+	if !pimHasNote(&p, "2 more tenants could not be queried") {
+		t.Fatalf("rows = %q, want two counted", pimLabels(&p))
+	}
+}
+
+// A tenant that could not be queried at all is reported once. Its failed
+// active-state lookup adds nothing, but another tenant's still shows.
+func TestPIMOverlayActiveUnknownSkipsFailedTenants(t *testing.T) {
+	var p pimOverlay
+	g := p.open()
+	p.setTenantCount(g, 2)
+	p.tenantFailed(g, "Contoso", errors.New("sign-in expired"))
+	p.activeStateUnknown(g, "Contoso", errors.New("sign-in expired"))
+	p.addRoles(g, []pim.Role{pimTestRole("Fabrikam", "Reader", "s")})
+	if pimHasNote(&p, "Active state unknown for Contoso: sign-in expired") {
+		t.Fatalf("rows = %q, want the failed tenant reported once", pimLabels(&p))
+	}
+
+	p.activeStateUnknown(g, "Fabrikam", errors.New("forbidden"))
+	if !pimHasNote(&p, "Active state unknown for Fabrikam: forbidden") {
+		t.Fatalf("rows = %q, want Fabrikam's active state reported", pimLabels(&p))
 	}
 }

@@ -449,7 +449,7 @@ func TestPIMTenantFailureIsCountedNotNotified(t *testing.T) {
 	if len(m.pim.failures) != 1 {
 		t.Errorf("failures = %v, want 1", m.pim.failures)
 	}
-	if !pimHasNote(&m.pim, "1 tenant could not be queried — Fabrikam: forbidden") {
+	if !pimHasNote(&m.pim, "Fabrikam could not be queried: forbidden") {
 		t.Errorf("status rows = %v, want the failed tenant and its error", pimLabels(&m.pim))
 	}
 	if len(m.pim.roles) != 1 || m.pim.roles[0].TenantID != pimTenantA.ID {
