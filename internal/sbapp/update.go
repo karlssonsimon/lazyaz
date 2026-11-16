@@ -467,14 +467,7 @@ func (m Model) handleDLQAbandon(msg dlqAbandonMsg) (Model, tea.Cmd) {
 	// otherwise this late result would wipe whatever the user opened
 	// since, including a fresh lock session on another entity.
 	if msg.locked == m.lockedMessages {
-		m.lockedMessages = nil // receiver already closed by the command
-		m.peekedMessages = nil
-		m.messageList.ResetFilter()
-		m.messageList.SetItems(nil)
-		m.messageList.Title = "Messages"
-		if m.viewingMessage {
-			m.closePreview()
-		}
+		m.resetLockedView() // receiver already closed by the command
 	}
 	if msg.err != nil {
 		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to abandon: %s", msg.err.Error()))
@@ -482,6 +475,19 @@ func (m Model) handleDLQAbandon(msg dlqAbandonMsg) (Model, tea.Cmd) {
 		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelSuccess, "Locks released")
 	}
 	return m, nil
+}
+
+// resetLockedView forgets the held locks and empties the message pane
+// they were shown in. Releasing the locks is the caller's business.
+func (m *Model) resetLockedView() {
+	m.lockedMessages = nil
+	m.peekedMessages = nil
+	m.messageList.ResetFilter()
+	m.messageList.SetItems(nil)
+	m.messageList.Title = "Messages"
+	if m.viewingMessage {
+		m.closePreview()
+	}
 }
 
 // removeLockedMessage removes a processed message from both the locked

@@ -1,6 +1,7 @@
 package sbapp
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -9,6 +10,7 @@ import (
 	"github.com/karlssonsimon/lazyaz/internal/azure/servicebus"
 	"github.com/karlssonsimon/lazyaz/internal/cache"
 	"github.com/karlssonsimon/lazyaz/internal/keymap"
+	"github.com/karlssonsimon/lazyaz/internal/safego"
 	"github.com/karlssonsimon/lazyaz/internal/ui"
 	"github.com/karlssonsimon/lazyaz/internal/vim"
 
@@ -413,10 +415,31 @@ func NewModelWithCache(svc *servicebus.Service, cfg ui.Config, stores SBStores, 
 	return m
 }
 
+// SetCredential swaps the credential on the tab's service. Messages held
+// with lock are tied to the connections the swap replaces and cannot be
+// settled afterwards, so they are released first and the locked view is
+// cleared rather than left listing messages that would only fail.
 func (m *Model) SetCredential(cred azcore.TokenCredential) {
-	if m.service != nil {
-		m.service.SetCredential(cred)
+	if m.service == nil {
+		return
 	}
+	locked := m.lockedMessages
+	if locked == nil {
+		m.service.SetCredential(cred)
+		return
+	}
+
+	m.resetLockedView()
+	closeOld := m.service.SwapCredential(cred)
+	// Abandon before the connections close: a lock whose connection has
+	// gone is only freed when the entity's lock duration runs out.
+	safego.Go(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), lockReleaseTimeout)
+		defer cancel()
+		locked.Close(ctx)
+		closeOld(ctx)
+	})
+	m.Notify(appshell.LevelInfo, "Locks released: credentials changed")
 }
 
 func (m Model) WithCredential(cred azcore.TokenCredential) tea.Model {

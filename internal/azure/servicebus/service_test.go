@@ -429,3 +429,26 @@ func (r *ReceivedMessages) completeByID(ctx context.Context, id string, complete
 	})
 	return err
 }
+
+// The swap itself is immediate; closing the replaced clients is handed
+// back so the caller can finish work on them first.
+func TestSwapCredentialSwapsAtOnceAndReturnsTheClose(t *testing.T) {
+	svc := NewService(testCredential{id: "initial"})
+	if _, err := svc.getClient("ns.servicebus.windows.net"); err != nil {
+		t.Fatalf("getClient: %v", err)
+	}
+	replacement := testCredential{id: "replacement"}
+
+	closeOld := svc.SwapCredential(replacement)
+
+	if got := svc.Credential(); got != replacement {
+		t.Errorf("Credential() = %#v, want the replacement", got)
+	}
+	svc.mu.Lock()
+	kept := len(svc.clients)
+	svc.mu.Unlock()
+	if kept != 0 {
+		t.Errorf("%d clients kept across the swap, want none", kept)
+	}
+	closeOld(context.Background())
+}

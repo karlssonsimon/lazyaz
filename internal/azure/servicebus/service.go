@@ -200,9 +200,28 @@ func (s *Service) Credential() azcore.TokenCredential {
 	return s.cred
 }
 
+// clientCloseTimeout bounds closing the clients a credential swap
+// replaced.
+const clientCloseTimeout = 5 * time.Second
+
 // SetCredential swaps the credential and clears all cached clients so
-// they are re-created with the new identity on next use.
+// they are re-created with the new identity on next use. The old clients
+// are closed in the background: closing is network I/O, and this is
+// called from the UI thread.
 func (s *Service) SetCredential(cred azcore.TokenCredential) {
+	closeOld := s.SwapCredential(cred)
+	safego.Go(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), clientCloseTimeout)
+		defer cancel()
+		closeOld(ctx)
+	})
+}
+
+// SwapCredential is SetCredential for a caller that has work to finish
+// on the old clients first, such as releasing message locks held through
+// them. The swap is immediate; the returned function closes the old
+// clients and is the caller's to run, off the UI thread.
+func (s *Service) SwapCredential(cred azcore.TokenCredential) (closeOld func(context.Context)) {
 	s.mu.Lock()
 	oldClients := s.clients
 	oldConnStrClients := s.connStrClients
@@ -213,13 +232,13 @@ func (s *Service) SetCredential(cred azcore.TokenCredential) {
 	s.generation++
 	s.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	for _, c := range oldClients {
-		_ = c.Close(ctx)
-	}
-	for _, c := range oldConnStrClients {
-		_ = c.Close(ctx)
+	return func(ctx context.Context) {
+		for _, c := range oldClients {
+			_ = c.Close(ctx)
+		}
+		for _, c := range oldConnStrClients {
+			_ = c.Close(ctx)
+		}
 	}
 }
 
@@ -527,9 +546,6 @@ func (s *Service) withFallback(ctx context.Context, ns Namespace, label string, 
 	return nil
 }
 
-// PeekQueueMessages peeks up to maxCount messages. requiresSession
-// selects the session walk for the active queue; the DLQ sub-queue is
-// never session-aware, so it always uses a plain receiver.
 // dropClients forgets the cached clients for a namespace so the next
 // call builds fresh ones, closing the old ones in the background. The
 // SDK hands back its cached AMQP connection without checking it is
@@ -573,6 +589,9 @@ func isConnectionLost(err error) bool {
 	return errors.As(err, &sbErr) && sbErr.Code == azservicebus.CodeConnectionLost
 }
 
+// PeekQueueMessages peeks up to maxCount messages. requiresSession
+// selects the session walk for the active queue; the DLQ sub-queue is
+// never session-aware, so it always uses a plain receiver.
 func (s *Service) PeekQueueMessages(ctx context.Context, ns Namespace, queueName string, maxCount int, deadLetter, requiresSession bool, fromSequenceNumber int64, send func([]PeekedMessage)) error {
 	if requiresSession && !deadLetter {
 		return s.withSessionRecovery(ctx, ns, "peek queue "+queueName, func(c *azservicebus.Client) error {
