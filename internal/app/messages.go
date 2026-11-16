@@ -80,6 +80,14 @@ type pimActiveLoadedMsg struct {
 	err        error
 }
 
+// pimSubActiveLoadedMsg carries the exact activations in the subscription
+// the overlay is scoped to.
+type pimSubActiveLoadedMsg struct {
+	gen    int
+	active []pim.ActiveInstance
+	err    error
+}
+
 type pimPolicyLoadedMsg struct {
 	gen int
 	key string // pim.Role.Key() of the role the form was opened for

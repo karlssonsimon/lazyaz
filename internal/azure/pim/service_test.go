@@ -21,6 +21,9 @@ type fakeAPI struct {
 	active      []ActiveInstance
 	activeErr   error
 	activeCalls int
+	activeAt    []ActiveInstance
+	activeAtErr error
+	activeScope string
 
 	rules         []PolicyRule
 	rulesErr      error
@@ -44,6 +47,11 @@ func (f *fakeAPI) listEligible(context.Context) ([]EligibleInstance, error) {
 func (f *fakeAPI) listActive(context.Context) ([]ActiveInstance, error) {
 	f.activeCalls++
 	return f.active, f.activeErr
+}
+
+func (f *fakeAPI) listActiveAt(_ context.Context, scope string) ([]ActiveInstance, error) {
+	f.activeScope = scope
+	return f.activeAt, f.activeAtErr
 }
 
 func (f *fakeAPI) policyRules(_ context.Context, scope, roleDefinitionID string) ([]PolicyRule, error) {
@@ -401,5 +409,27 @@ func TestErrorText(t *testing.T) {
 		if got := ErrorText(tt.err); got != tt.want {
 			t.Errorf("%s: ErrorText = %q, want %q", tt.name, got, tt.want)
 		}
+	}
+}
+
+func TestListActiveAtAsksAtTheScope(t *testing.T) {
+	want := []ActiveInstance{{Scope: "/subscriptions/sub-a", RoleDefinitionID: "/rd/x"}}
+	fake := &fakeAPI{activeAt: want}
+
+	got, err := newFakeService(fake).ListActiveAt(context.Background(), nil, "/subscriptions/sub-a")
+
+	if err != nil || len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("ListActiveAt = %+v, %v; want %+v", got, err, want)
+	}
+	if fake.activeScope != "/subscriptions/sub-a" {
+		t.Errorf("asked at %q, want the subscription scope", fake.activeScope)
+	}
+}
+
+func TestListActiveAtPropagatesError(t *testing.T) {
+	forbidden := errors.New("forbidden")
+	fake := &fakeAPI{activeAtErr: forbidden}
+	if _, err := newFakeService(fake).ListActiveAt(context.Background(), nil, "/subscriptions/sub-a"); !errors.Is(err, forbidden) {
+		t.Fatalf("err = %v, want it passed through", err)
 	}
 }

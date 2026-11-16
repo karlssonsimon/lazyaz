@@ -37,9 +37,17 @@ type pimOverlay struct {
 	// Active state arrives separately from the roles. activeByTenant holds
 	// each tenant's activations by lower-cased tenant ID, and is applied to
 	// roles arriving later. activePending counts unanswered tenants.
-	activeByTenant map[string][]pim.ActiveInstance
+	activeByTenant map[string]pim.ActiveSet
 	activePending  int
-	roles          []pim.Role
+	// The per-tenant state is an estimate rebuilt from requests. subActive
+	// is ARM's own record of what is active in sub (pim.Service.ListActiveAt),
+	// valid once subActiveKnown, and overrides the estimate for the roles
+	// it lists; see markActive. subActivePending is set while it is being
+	// fetched.
+	subActive        pim.ActiveSet
+	subActiveKnown   bool
+	subActivePending bool
+	roles            []pim.Role
 	// sub is the active tab's subscription when hasSub; the list then
 	// shows only roles that can cover it, unless showAll.
 	sub        azure.Subscription
@@ -123,11 +131,35 @@ func (p *pimOverlay) coversSub(r pim.Role) bool {
 		return false
 	}
 	scope := strings.ToLower(r.Scope)
-	sub := "/subscriptions/" + strings.ToLower(p.sub.ID)
+	sub := strings.ToLower(p.subScope())
 	if scope == sub || strings.HasPrefix(scope, sub+"/") {
 		return true
 	}
 	return !strings.HasPrefix(scope, "/subscriptions/")
+}
+
+// subScope is p.sub's ARM scope.
+func (p *pimOverlay) subScope() string { return "/subscriptions/" + p.sub.ID }
+
+// markActive sets r's active state from what is known so far: the
+// tenant's estimate, then the exact record where it lists r, whose end
+// time is the one ARM granted.
+//
+// The record only ever confirms. A role it does not list keeps its
+// estimate: ARM creates the record a few seconds after the request, so a
+// fresh activation can be missing from it, and for a role above the
+// subscription it lists only what the subscription inherits.
+func (p *pimOverlay) markActive(r *pim.Role) {
+	if set, ok := p.activeByTenant[strings.ToLower(r.TenantID)]; ok {
+		set.Apply(r)
+	}
+	// Scopes such as the root are spelled the same in every tenant.
+	if !p.subActiveKnown || !strings.EqualFold(r.TenantID, p.sub.TenantID) {
+		return
+	}
+	if end, ok := p.subActive.Lookup(*r); ok {
+		r.Active, r.ActiveUntil = true, end
+	}
 }
 
 func (p *pimOverlay) accepts(gen int) bool {
@@ -150,9 +182,7 @@ func (p *pimOverlay) addRoles(gen int, roles []pim.Role) {
 	p.pending = max(0, p.pending-1)
 	prevKey := p.selectedKey() // before roles reorder under roleIndex
 	for i := range roles {
-		if active, ok := p.activeByTenant[strings.ToLower(roles[i].TenantID)]; ok {
-			pim.NewActiveSet(active).Apply(&roles[i])
-		}
+		p.markActive(&roles[i])
 	}
 	p.roles = append(p.roles, roles...)
 	sort.SliceStable(p.roles, func(i, j int) bool {
@@ -199,22 +229,51 @@ func (p *pimOverlay) activeLoaded(gen int, tenantID string, active []pim.ActiveI
 	}
 	p.activePending = max(0, p.activePending-1)
 	if p.activeByTenant == nil {
-		p.activeByTenant = map[string][]pim.ActiveInstance{}
+		p.activeByTenant = map[string]pim.ActiveSet{}
 	}
-	key := strings.ToLower(tenantID)
-	p.activeByTenant[key] = active
-	set := pim.NewActiveSet(active)
+	p.activeByTenant[strings.ToLower(tenantID)] = pim.NewActiveSet(active)
 	for i := range p.roles {
 		if strings.EqualFold(p.roles[i].TenantID, tenantID) {
-			set.Apply(&p.roles[i])
+			p.markActive(&p.roles[i])
 		}
 	}
 	p.refilter()
 }
 
-// checkingActive reports whether some tenant's active state is still
-// unknown, so rows may lack their active marker.
-func (p *pimOverlay) checkingActive() bool { return p.activePending > 0 }
+// expectSubActive records that the exact record for p.sub is on its way.
+func (p *pimOverlay) expectSubActive() {
+	p.subActivePending = true
+	p.refilter()
+}
+
+// subActiveLoaded records the exact activations in p.sub and re-marks the
+// roles.
+func (p *pimOverlay) subActiveLoaded(gen int, active []pim.ActiveInstance) {
+	if !p.accepts(gen) {
+		return
+	}
+	p.subActivePending = false
+	p.subActive = pim.NewActiveSet(active)
+	p.subActiveKnown = true
+	for i := range p.roles {
+		p.markActive(&p.roles[i])
+	}
+	p.refilter()
+}
+
+// subActiveFailed records that the exact record could not be read. The
+// per-tenant estimate stands, so there is nothing to report.
+func (p *pimOverlay) subActiveFailed(gen int) {
+	if !p.accepts(gen) {
+		return
+	}
+	p.subActivePending = false
+	p.refilter()
+}
+
+// checkingActive reports whether some active state is still on its way,
+// so rows may lack their active marker or show an estimated time left.
+func (p *pimOverlay) checkingActive() bool { return p.activePending > 0 || p.subActivePending }
 
 // activeStateUnknown records that tenantName's activations could not be
 // read. Its roles stay listed without active markers.

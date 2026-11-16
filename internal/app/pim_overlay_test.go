@@ -915,3 +915,149 @@ func TestPIMOverlayCloseKeepsGeneration(t *testing.T) {
 		t.Errorf("gen = %d on reopen, want %d", next, g+1)
 	}
 }
+
+func pimInstance(r pim.Role, left time.Duration) pim.ActiveInstance {
+	return pim.ActiveInstance{Scope: r.Scope, RoleDefinitionID: r.RoleDefinitionID, EndTime: time.Now().Add(left)}
+}
+
+func pimRoleByKey(t *testing.T, p *pimOverlay, want pim.Role) pim.Role {
+	t.Helper()
+	for _, r := range p.roles {
+		if r.Key() == want.Key() {
+			return r
+		}
+	}
+	t.Fatalf("role %s not in the overlay", want.Label())
+	return pim.Role{}
+}
+
+// pimExactFixture is a list scoped to SUB-A in Contoso with a role in the
+// subscription, one below it, one in another subscription, one on a
+// management group, and one in another tenant.
+func pimExactFixture() (inSub, below, otherSub, mgmt, otherTenant pim.Role) {
+	inSub = pimTestRole("Contoso", "Contributor", "SUB-A")
+	below = pimTestRole("Contoso", "Reader", "SUB-A")
+	below.Scope, below.ScopeName = "/subscriptions/SUB-A/resourceGroups/rg-1", "rg-1"
+	otherSub = pimTestRole("Contoso", "Contributor", "SUB-B")
+	mgmt = pimTestRole("Contoso", "Owner", "mg")
+	mgmt.Scope, mgmt.ScopeName = "/providers/Microsoft.Management/managementGroups/mg-root", "mg-root"
+	otherTenant = pimTestRole("Fabrikam", "Contributor", "SUB-A")
+	return
+}
+
+// The exact record revives a role the estimate had ended (an activation
+// that waited on approval runs later than its request suggests) and
+// replaces an estimated end time, in the subscription and above it.
+func TestPIMOverlayExactActiveConfirmsRoles(t *testing.T) {
+	inSub, below, _, mgmt, _ := pimExactFixture()
+	var p pimOverlay
+	g := p.open()
+	p.setSubscription(pimSubA(), true)
+	p.setTenantCount(g, 1)
+	p.addRoles(g, []pim.Role{inSub, below, mgmt})
+	// The estimate: only below is active, for one more hour.
+	p.activeLoaded(g, "contoso", []pim.ActiveInstance{pimInstance(below, time.Hour)})
+
+	p.subActiveLoaded(g, []pim.ActiveInstance{
+		pimInstance(inSub, 2*time.Hour), pimInstance(below, 3*time.Hour), pimInstance(mgmt, 2*time.Hour),
+	})
+
+	now := time.Now()
+	for _, want := range []pim.Role{inSub, mgmt} {
+		if r := pimRoleByKey(t, &p, want); !r.IsActive(now) || time.Until(r.ActiveUntil) < 90*time.Minute {
+			t.Errorf("%s: active=%v until %v, want the record's two hours", want.Label(), r.Active, r.ActiveUntil)
+		}
+	}
+	if r := pimRoleByKey(t, &p, below); time.Until(r.ActiveUntil) < 150*time.Minute {
+		t.Errorf("role below the subscription ends %v, want the record's three hours over the estimate", r.ActiveUntil)
+	}
+}
+
+// A role the record does not list keeps its estimate: the record trails a
+// fresh activation, and says nothing about other subscriptions or tenants.
+func TestPIMOverlayExactActiveNeverClearsEstimate(t *testing.T) {
+	inSub, _, otherSub, mgmt, otherTenant := pimExactFixture()
+	var p pimOverlay
+	g := p.open()
+	p.setSubscription(pimSubA(), true)
+	p.setTenantCount(g, 2)
+	p.addRoles(g, []pim.Role{inSub, otherSub, mgmt})
+	p.addRoles(g, []pim.Role{otherTenant})
+	p.activeLoaded(g, "contoso", []pim.ActiveInstance{
+		pimInstance(inSub, time.Hour), pimInstance(otherSub, time.Hour), pimInstance(mgmt, time.Hour),
+	})
+	p.activeLoaded(g, "fabrikam", nil)
+
+	p.subActiveLoaded(g, nil)
+
+	now := time.Now()
+	for _, want := range []pim.Role{inSub, otherSub, mgmt} {
+		if r := pimRoleByKey(t, &p, want); !r.IsActive(now) {
+			t.Errorf("%s lost its estimate to an empty record", want.Label())
+		}
+	}
+}
+
+// The record belongs to the subscription's tenant. A role in another
+// tenant at a scope spelled the same way is not confirmed by it.
+func TestPIMOverlayExactActiveIgnoresOtherTenants(t *testing.T) {
+	_, _, _, mgmt, _ := pimExactFixture()
+	foreign := mgmt
+	foreign.TenantID, foreign.TenantName = "fabrikam", "Fabrikam"
+
+	var p pimOverlay
+	g := p.open()
+	p.setSubscription(pimSubA(), true)
+	p.setTenantCount(g, 1)
+	p.addRoles(g, []pim.Role{foreign})
+
+	p.subActiveLoaded(g, []pim.ActiveInstance{pimInstance(mgmt, time.Hour)})
+
+	if r := pimRoleByKey(t, &p, foreign); r.IsActive(time.Now()) {
+		t.Error("role in another tenant marked active from this tenant's record")
+	}
+}
+
+// The record and the estimate arrive in either order, and roles may come
+// after both; the result is the same.
+func TestPIMOverlayExactActiveAppliesInAnyOrder(t *testing.T) {
+	inSub, below, _, _, _ := pimExactFixture()
+	var p pimOverlay
+	g := p.open()
+	p.setSubscription(pimSubA(), true)
+	p.setTenantCount(g, 1)
+
+	p.subActiveLoaded(g, []pim.ActiveInstance{pimInstance(inSub, 2*time.Hour)})
+	p.activeLoaded(g, "contoso", []pim.ActiveInstance{pimInstance(below, time.Hour)})
+	p.addRoles(g, []pim.Role{inSub, below})
+
+	if r := pimRoleByKey(t, &p, inSub); !r.IsActive(time.Now()) || time.Until(r.ActiveUntil) < 90*time.Minute {
+		t.Errorf("active=%v until %v, want the record's two hours though the estimate came last", r.Active, r.ActiveUntil)
+	}
+	if r := pimRoleByKey(t, &p, below); !r.IsActive(time.Now()) {
+		t.Error("estimate for a role the record does not list was dropped")
+	}
+}
+
+func TestPIMOverlayExactActiveFailureKeepsEstimate(t *testing.T) {
+	inSub, _, _, _, _ := pimExactFixture()
+	var p pimOverlay
+	g := p.open()
+	p.setSubscription(pimSubA(), true)
+	p.expectSubActive()
+	p.setTenantCount(g, 1)
+	p.addRoles(g, []pim.Role{inSub})
+	p.activeLoaded(g, "contoso", []pim.ActiveInstance{pimInstance(inSub, time.Hour)})
+	if !pimHasNote(&p, "Checking which roles are active…") {
+		t.Fatalf("notes = %q, want still checking while the record is on its way", pimLabels(&p))
+	}
+
+	p.subActiveFailed(g)
+
+	if r := pimRoleByKey(t, &p, inSub); !r.IsActive(time.Now()) {
+		t.Error("estimate dropped when the record could not be read")
+	}
+	if pimHasNote(&p, "Checking which roles are active…") {
+		t.Errorf("notes = %q, want checking done after the failure", pimLabels(&p))
+	}
+}

@@ -61,7 +61,10 @@ every row.
 Results from each tenant appear as they arrive, with a `Loading…` row while any
 are still pending. Which roles are already active is looked up separately, from
 your recent activation requests, and a `Checking which roles are active…` row
-stays until the active markers are in.
+stays until the active markers are in. When the list is scoped to a
+subscription, lazyaz also reads that subscription's active assignments from
+Azure directly, so the time left there is the one Azure granted, including for
+a role that waited on approval.
 
 Status rows at the top of the list are dimmed:
 

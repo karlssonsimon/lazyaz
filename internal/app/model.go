@@ -1012,6 +1012,10 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handlePIMActiveLoaded(msg)
 		return m, nil
 
+	case pimSubActiveLoadedMsg:
+		m.handlePIMSubActiveLoaded(msg)
+		return m, nil
+
 	case pimPolicyLoadedMsg:
 		m.handlePIMPolicyLoaded(msg)
 		return m, nil

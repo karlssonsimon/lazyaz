@@ -18,6 +18,9 @@ type api interface {
 	listEligible(ctx context.Context) ([]EligibleInstance, error)
 	// listActive lists the caller's activations in effect now, tenant-wide.
 	listActive(ctx context.Context) ([]ActiveInstance, error)
+	// listActiveAt lists the caller's activations in effect at scope, from
+	// ARM's own record of them.
+	listActiveAt(ctx context.Context, scope string) ([]ActiveInstance, error)
 	// policyRules returns the effective rules for (scope, roleDefinitionID).
 	policyRules(ctx context.Context, scope, roleDefinitionID string) ([]PolicyRule, error)
 	activate(ctx context.Context, req activateRequest) (status string, err error)
@@ -107,6 +110,29 @@ func (s *Service) ListActive(ctx context.Context, cred azcore.TokenCredential) (
 		return nil, err
 	}
 	active, err := a.listActive(ctx)
+	if isPIMUnavailable(err) {
+		return nil, nil
+	}
+	return active, err
+}
+
+// ListActiveAt returns the caller's activations in effect at scope and
+// below it, plus those scope inherits from above, read from ARM's record
+// of them rather than rebuilt from requests as ListActive does.
+//
+// It is exact where ListActive is an estimate: it has the window ARM
+// really granted, which starts when ARM provisions the assignment and so,
+// for a request that waited on approval, later than the request. ARM
+// creates the record a few seconds after the request, so a fresh
+// activation can be missing from it. It is also the listing that takes
+// about a minute across a whole tenant, so it is for one subscription at
+// a time. cred must be the credential for the scope's tenant.
+func (s *Service) ListActiveAt(ctx context.Context, cred azcore.TokenCredential, scope string) ([]ActiveInstance, error) {
+	a, err := s.newAPI(cred)
+	if err != nil {
+		return nil, err
+	}
+	active, err := a.listActiveAt(ctx, scope)
 	if isPIMUnavailable(err) {
 		return nil, nil
 	}

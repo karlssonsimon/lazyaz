@@ -169,6 +169,50 @@ func TestListActiveRebuildsFromTenantScopeRequests(t *testing.T) {
 	}
 }
 
+// The scoped listing mixes activations with permanent assignments; only
+// activations in effect now are returned.
+func TestListActiveAtKeepsActivationsInEffect(t *testing.T) {
+	tr := &fakeTransport{status: http.StatusOK, body: `{"value":[
+		{"properties":{"scope":"/subscriptions/sub-a","roleDefinitionId":"/rd/activated","assignmentType":"Activated",
+			"startDateTime":"2000-01-01T10:00:00Z","endDateTime":"2099-01-01T12:00:00Z"}},
+		{"properties":{"scope":"/subscriptions/sub-a","roleDefinitionId":"/rd/permanent","assignmentType":"Assigned",
+			"startDateTime":"2000-01-01T10:00:00Z"}},
+		{"properties":{"scope":"/subscriptions/sub-a/resourceGroups/rg-1","roleDefinitionId":"/rd/no-end","assignmentType":"Activated",
+			"startDateTime":"2000-01-01T10:00:00Z"}},
+		{"properties":{"scope":"/subscriptions/sub-a","roleDefinitionId":"/rd/ended","assignmentType":"Activated",
+			"startDateTime":"2000-01-01T10:00:00Z","endDateTime":"2000-01-01T12:00:00Z"}},
+		{"properties":{"scope":"/subscriptions/sub-a","roleDefinitionId":"/rd/not-started","assignmentType":"Activated",
+			"startDateTime":"2099-01-01T10:00:00Z","endDateTime":"2099-01-01T12:00:00Z"}},
+		{"properties":{"roleDefinitionId":"/rd/no-scope","assignmentType":"Activated"}},
+		{}
+	]}`}
+	a, _ := newTestARMAPI(t, tr)
+
+	got, err := a.listActiveAt(context.Background(), "/subscriptions/sub-a")
+	if err != nil {
+		t.Fatalf("listActiveAt: %v", err)
+	}
+	u := tr.reqs[0].URL
+	if u.Path != "/subscriptions/sub-a/providers/Microsoft.Authorization/roleAssignmentScheduleInstances" {
+		t.Errorf("path = %q, want the instances listing at the subscription", u.Path)
+	}
+	if f := u.Query().Get("$filter"); f != "asTarget()" {
+		t.Errorf("$filter = %q, want asTarget()", f)
+	}
+	want := []ActiveInstance{
+		{Scope: "/subscriptions/sub-a", RoleDefinitionID: "/rd/activated", EndTime: time.Date(2099, 1, 1, 12, 0, 0, 0, time.UTC)},
+		{Scope: "/subscriptions/sub-a/resourceGroups/rg-1", RoleDefinitionID: "/rd/no-end"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i].Scope != want[i].Scope || got[i].RoleDefinitionID != want[i].RoleDefinitionID || !got[i].EndTime.Equal(want[i].EndTime) {
+			t.Errorf("got[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
 func TestPolicyRulesReadsEffectiveExpirationRulesForRole(t *testing.T) {
 	tr := &fakeTransport{status: http.StatusOK, body: `{"value":[
 		{"properties":{"roleDefinitionId":"/subscriptions/1/providers/Microsoft.Authorization/roleDefinitions/other",

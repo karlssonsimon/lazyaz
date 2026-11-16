@@ -84,10 +84,17 @@ func NewActiveSet(active []ActiveInstance) ActiveSet {
 	return set
 }
 
+// Lookup returns when r's activation ends (zero for no end), and whether
+// r is in the set at all.
+func (s ActiveSet) Lookup(r Role) (time.Time, bool) {
+	end, ok := s[activeMatchKey(r.Scope, r.RoleDefinitionID)]
+	return end, ok
+}
+
 // Apply sets r's active state from the set, clearing it when r is not in
 // the set.
 func (s ActiveSet) Apply(r *Role) {
-	end, ok := s[activeMatchKey(r.Scope, r.RoleDefinitionID)]
+	end, ok := s.Lookup(*r)
 	r.Active, r.ActiveUntil = ok, time.Time{}
 	if ok {
 		r.ActiveUntil = end

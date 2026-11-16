@@ -124,6 +124,10 @@ type fakePIM struct {
 	result    pim.ActivationResult
 	actErr    error
 
+	subActive      []pim.ActiveInstance
+	subActiveErr   error
+	subActiveCalls []string // "<tenant ID> <scope>"
+
 	listCalls   []string
 	listCreds   []azcore.TokenCredential
 	activeCalls []string // tenant IDs
@@ -165,6 +169,15 @@ func (f *fakePIM) ListActive(ctx context.Context, cred azcore.TokenCredential) (
 		}
 	}
 	return out, nil
+}
+
+// ListActiveAt answers with f.subActive, the exact record for whichever
+// scope is asked.
+func (f *fakePIM) ListActiveAt(_ context.Context, cred azcore.TokenCredential, scope string) ([]pim.ActiveInstance, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.subActiveCalls = append(f.subActiveCalls, cred.(testCredential).id+" "+scope)
+	return f.subActive, f.subActiveErr
 }
 
 func (f *fakePIM) MaxDuration(_ context.Context, cred azcore.TokenCredential, role pim.Role) (time.Duration, error) {
@@ -278,7 +291,7 @@ func pimDrain(t *testing.T, m Model, cmd tea.Cmd) Model {
 		for _, c := range msg {
 			m = pimDrain(t, m, c)
 		}
-	case pimTenantsLoadedMsg, pimRolesLoadedMsg, pimActiveLoadedMsg, pimPolicyLoadedMsg, pimActivatedMsg, openPIMOverlayMsg:
+	case pimTenantsLoadedMsg, pimRolesLoadedMsg, pimActiveLoadedMsg, pimSubActiveLoadedMsg, pimPolicyLoadedMsg, pimActivatedMsg, openPIMOverlayMsg:
 		var next tea.Cmd
 		m, next = pimUpdate(t, m, msg)
 		m = pimDrain(t, m, next)
@@ -978,5 +991,60 @@ func TestPIMQueriesActiveOncePerTenant(t *testing.T) {
 	}
 	if pimHasNote(&m.pim, "Checking which roles are active…") {
 		t.Errorf("still checking after every tenant answered: %v", pimLabels(&m.pim))
+	}
+}
+
+// Opened from a tab on a subscription, the overlay reads that
+// subscription's exact active state with its tenant's credential. Without
+// a subscription there is nothing to scope the query to.
+func TestPIMReadsExactActiveStateForTabSubscription(t *testing.T) {
+	role := pimRoleIn(pimTenantA, "Contributor", "sub-a")
+	fake := &fakePIM{
+		roles:     map[string][]pim.Role{pimTenantA.ID: {role}},
+		subActive: []pim.ActiveInstance{{Scope: role.Scope, RoleDefinitionID: role.RoleDefinitionID, EndTime: time.Now().Add(time.Hour)}},
+	}
+	m := newPIMTestModel(t, fake, nil, pimTenantA)
+	m.tabs[1] = Tab{ID: 101, Model: pimSubTab{sub: azure.Subscription{ID: "sub-a", Name: "sub-a", TenantID: pimTenantA.ID}}}
+	m = pimOpenWithRoles(t, m)
+
+	if want := []string{pimTenantA.ID + " /subscriptions/sub-a"}; !slices.Equal(fake.subActiveCalls, want) {
+		t.Fatalf("exact active calls = %v, want %v", fake.subActiveCalls, want)
+	}
+	if len(m.pim.roles) != 1 || !m.pim.roles[0].IsActive(time.Now()) {
+		t.Errorf("roles = %+v, want the one role marked active from the record", m.pim.roles)
+	}
+	if pimHasNote(&m.pim, "Checking which roles are active…") {
+		t.Errorf("still checking after the record arrived: %v", pimLabels(&m.pim))
+	}
+
+	idle := &fakePIM{roles: map[string][]pim.Role{pimTenantA.ID: {role}}}
+	m = newPIMTestModel(t, idle, nil, pimTenantA)
+	m = pimOpenWithRoles(t, m)
+	if len(idle.subActiveCalls) != 0 {
+		t.Errorf("exact active calls = %v without a subscription, want none", idle.subActiveCalls)
+	}
+}
+
+func TestPIMExactActiveFailureIsSilent(t *testing.T) {
+	role := pimRoleIn(pimTenantA, "Contributor", "sub-a")
+	role.Active, role.ActiveUntil = true, time.Now().Add(time.Hour)
+	fake := &fakePIM{
+		roles:        map[string][]pim.Role{pimTenantA.ID: {role}},
+		subActiveErr: errors.New("forbidden"),
+	}
+	m := newPIMTestModel(t, fake, nil, pimTenantA)
+	m.tabs[1] = Tab{ID: 101, Model: pimSubTab{sub: azure.Subscription{ID: "sub-a", Name: "sub-a", TenantID: pimTenantA.ID}}}
+	m = pimOpenWithRoles(t, m)
+
+	if !m.pim.active {
+		t.Fatal("overlay closed on a failed exact query")
+	}
+	if len(m.pim.roles) != 1 || !m.pim.roles[0].IsActive(time.Now()) {
+		t.Errorf("roles = %+v, want the estimate kept", m.pim.roles)
+	}
+	for _, v := range m.pim.visible {
+		if v.IsNote && strings.Contains(v.Label, "forbidden") {
+			t.Errorf("failure surfaced as %q, want it silent", v.Label)
+		}
 	}
 }

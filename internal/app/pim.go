@@ -21,6 +21,7 @@ import (
 type pimService interface {
 	ListEligible(ctx context.Context, cred azcore.TokenCredential, tenant azure.Tenant) ([]pim.Role, error)
 	ListActive(ctx context.Context, cred azcore.TokenCredential) ([]pim.ActiveInstance, error)
+	ListActiveAt(ctx context.Context, cred azcore.TokenCredential, scope string) ([]pim.ActiveInstance, error)
 	MaxDuration(ctx context.Context, cred azcore.TokenCredential, role pim.Role) (time.Duration, error)
 	Activate(ctx context.Context, cred azcore.TokenCredential, role pim.Role, reason string, d time.Duration) (pim.ActivationResult, error)
 }
@@ -114,17 +115,51 @@ func pimDurationHint(fromLast bool, max time.Duration, maxUnknown bool) string {
 	return strings.Join(parts, " · ")
 }
 
-// openPIMOverlay opens the role list and starts listing tenants.
+// openPIMOverlay opens the role list and starts listing tenants. When the
+// list is scoped to a subscription it also fetches that subscription's
+// exact active state, which is quick for one subscription and corrects the
+// tenant-wide estimate where the two differ.
 func (m *Model) openPIMOverlay() tea.Cmd {
 	gen := m.pim.open()
 	m.pim.setSubscription(m.activeSubscription())
 	list := m.pimTenants
-	return func() tea.Msg {
+	tenantsCmd := func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), pimFetchTimeout)
 		defer cancel()
 		tenants, err := list(ctx)
 		return pimTenantsLoadedMsg{gen: gen, tenants: tenants, err: err}
 	}
+	if !m.pim.hasSub {
+		return tenantsCmd
+	}
+	m.pim.expectSubActive()
+	return tea.Batch(tenantsCmd, m.pimListSubActiveCmd(gen, m.pim.sub.TenantID, m.pim.subScope()))
+}
+
+// pimListSubActiveCmd reads the exact activations at scope with the
+// credential of the tenant it belongs to.
+func (m *Model) pimListSubActiveCmd(gen int, tenantID, scope string) tea.Cmd {
+	svc, creds := m.pimSvc, m.credCache
+	return func() tea.Msg {
+		msg := pimSubActiveLoadedMsg{gen: gen}
+		cred, err := creds.For(tenantID)
+		if err != nil {
+			msg.err = err
+			return msg
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), pimFetchTimeout)
+		defer cancel()
+		msg.active, msg.err = svc.ListActiveAt(ctx, cred, scope)
+		return msg
+	}
+}
+
+func (m *Model) handlePIMSubActiveLoaded(msg pimSubActiveLoadedMsg) {
+	if msg.err != nil {
+		m.pim.subActiveFailed(msg.gen)
+		return
+	}
+	m.pim.subActiveLoaded(msg.gen, msg.active)
 }
 
 func (m *Model) handlePIMTenantsLoaded(msg pimTenantsLoadedMsg) tea.Cmd {

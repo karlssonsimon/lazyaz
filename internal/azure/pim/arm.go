@@ -30,14 +30,19 @@ func NewService() *Service {
 
 // armAPI implements api with the armauthorization v2 clients.
 type armAPI struct {
-	cred     azcore.TokenCredential
-	eligible *armauthorization.RoleEligibilityScheduleInstancesClient
-	requests *armauthorization.RoleAssignmentScheduleRequestsClient
-	policies *armauthorization.RoleManagementPolicyAssignmentsClient
+	cred      azcore.TokenCredential
+	eligible  *armauthorization.RoleEligibilityScheduleInstancesClient
+	instances *armauthorization.RoleAssignmentScheduleInstancesClient
+	requests  *armauthorization.RoleAssignmentScheduleRequestsClient
+	policies  *armauthorization.RoleManagementPolicyAssignmentsClient
 }
 
 func newARMAPI(cred azcore.TokenCredential, opts *arm.ClientOptions) (*armAPI, error) {
 	eligible, err := armauthorization.NewRoleEligibilityScheduleInstancesClient(cred, opts)
+	if err != nil {
+		return nil, err
+	}
+	instances, err := armauthorization.NewRoleAssignmentScheduleInstancesClient(cred, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +54,7 @@ func newARMAPI(cred azcore.TokenCredential, opts *arm.ClientOptions) (*armAPI, e
 	if err != nil {
 		return nil, err
 	}
-	return &armAPI{cred: cred, eligible: eligible, requests: requests, policies: policies}, nil
+	return &armAPI{cred: cred, eligible: eligible, instances: instances, requests: requests, policies: policies}, nil
 }
 
 func (a *armAPI) listEligible(ctx context.Context) ([]EligibleInstance, error) {
@@ -134,6 +139,49 @@ func (a *armAPI) listActive(ctx context.Context) ([]ActiveInstance, error) {
 		}
 	}
 	return activeFromRequests(reqs, time.Now()), nil
+}
+
+// listActiveAt returns the caller's activations in effect at scope, as ARM
+// itself records them: the assignment schedule instances of type
+// Activated. Asked at a subscription, ARM answers with the subscription,
+// everything below it and what it inherits from above. Permanent
+// assignments share the listing and are left out.
+func (a *armAPI) listActiveAt(ctx context.Context, scope string) ([]ActiveInstance, error) {
+	pager := a.instances.NewListForScopePager(scope, &armauthorization.RoleAssignmentScheduleInstancesClientListForScopeOptions{
+		Filter: to.Ptr("asTarget()"),
+	})
+	now := time.Now()
+	var out []ActiveInstance
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, inst := range page.Value {
+			if inst == nil || inst.Properties == nil {
+				continue
+			}
+			p := inst.Properties
+			if p.AssignmentType == nil || *p.AssignmentType != armauthorization.AssignmentTypeActivated {
+				continue
+			}
+			if deref(p.Scope) == "" || deref(p.RoleDefinitionID) == "" {
+				continue
+			}
+			if p.StartDateTime != nil && p.StartDateTime.After(now) {
+				continue
+			}
+			active := ActiveInstance{Scope: *p.Scope, RoleDefinitionID: *p.RoleDefinitionID}
+			if p.EndDateTime != nil {
+				if !p.EndDateTime.After(now) {
+					continue
+				}
+				active.EndTime = *p.EndDateTime
+			}
+			out = append(out, active)
+		}
+	}
+	return out, nil
 }
 
 // policyRules returns the effective expiration rules of the policy assigned
