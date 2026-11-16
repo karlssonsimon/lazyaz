@@ -1,6 +1,7 @@
 package pim
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -10,6 +11,10 @@ import (
 
 // MinDuration is the shortest activation the UI accepts.
 const MinDuration = 5 * time.Minute
+
+// ErrDurationTooShort is wrapped by ParseDuration's error for input that
+// parses but is below MinDuration.
+var ErrDurationTooShort = errors.New("duration is below the minimum")
 
 var (
 	userDurationRe = regexp.MustCompile(`^(\d+h)?(\d+m)?$`)
@@ -28,7 +33,7 @@ func ParseDuration(s string) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid duration %q: %w", s, err)
 	}
 	if d < MinDuration {
-		return 0, fmt.Errorf("duration %q is below the minimum of %s", s, FormatDuration(MinDuration))
+		return 0, fmt.Errorf("%w of %s: %q", ErrDurationTooShort, FormatDuration(MinDuration), s)
 	}
 	return d, nil
 }

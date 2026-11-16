@@ -18,10 +18,10 @@ import (
 // (activeOnly) lists just the roles active now, in every subscription and
 // tenant, soonest to expire first.
 //
-// Like commandPalette, rendering and cursor work on `visible`, which
-// interleaves tenant headers, role rows and trailing status rows. roleIndex
-// is parallel to visible: -1 for non-selectable rows, otherwise an index
-// into roles.
+// Like commandPalette, rendering and cursor work on `visible`, which holds
+// status rows first, then tenant headers interleaved with role rows.
+// roleIndex is parallel to visible: -1 for non-selectable rows, otherwise
+// an index into roles.
 type pimOverlay struct {
 	active     bool
 	gen        int // bumped on every open; async results carry it
@@ -47,7 +47,7 @@ type pimOverlay struct {
 	showAll    bool
 	activeOnly bool
 	visible    []ui.OverlayItem
-	roleIndex  []int // parallel to visible; -1 for headers/footer rows
+	roleIndex  []int // parallel to visible; -1 for header and status rows
 }
 
 // pimTenantNote is a tenant's name and a one-line error detail.
@@ -55,7 +55,7 @@ type pimTenantNote struct {
 	tenant, detail string
 }
 
-// pimErrorLineMax caps error detail in the overlay footer, in runes.
+// pimErrorLineMax caps error detail in a status row, in runes.
 const pimErrorLineMax = 120
 
 // pimErrorLine is the first line of err's display text, capped at
@@ -89,28 +89,18 @@ func (p *pimOverlay) open() int {
 	return gen
 }
 
+// close resets the overlay. The generation is kept so results still in
+// flight for this session are dropped.
 func (p *pimOverlay) close() {
-	p.active = false
-	p.query = ""
-	p.queryCaret = 0
-	p.cursor = 0
-	p.loading = false
-	p.pending = 0
-	p.failures = nil
-	p.activeUnknown = nil
-	p.activeByTenant = nil
-	p.activePending = 0
-	p.roles = nil
-	p.sub, p.hasSub, p.showAll = azure.Subscription{}, false, false
-	p.activeOnly = false
-	p.visible = nil
-	p.roleIndex = nil
+	*p = pimOverlay{gen: p.gen}
 }
 
 // setSubscription scopes the list to sub, the subscription the user is
-// working in. ok=false (no subscription) lists everything.
+// working in. ok=false (no subscription) lists everything, and so does a
+// subscription with no tenant (a connection-string tab's placeholder):
+// roles are matched to it by tenant, so it could never cover any.
 func (p *pimOverlay) setSubscription(sub azure.Subscription, ok bool) {
-	p.sub, p.hasSub, p.showAll = sub, ok, false
+	p.sub, p.hasSub, p.showAll = sub, ok && sub.TenantID != "", false
 	p.refilter()
 }
 
@@ -183,7 +173,7 @@ func (p *pimOverlay) addRoles(gen int, roles []pim.Role) {
 }
 
 // tenantFailed records that tenantName could not be queried, keeping the
-// first line of err for the footer.
+// first line of err for its status row.
 func (p *pimOverlay) tenantFailed(gen int, tenantName string, err error) {
 	if !p.accepts(gen) {
 		return
@@ -346,6 +336,48 @@ func (p *pimOverlay) refilterKeeping(prevKey string) {
 	p.visible = p.visible[:0]
 	p.roleIndex = p.roleIndex[:0]
 
+	// Status rows come first: the list only scrolls to keep the cursor in
+	// view and the cursor never rests on them, so below the roles they
+	// would be out of reach once the roles fill the window.
+	note := func(label string) {
+		p.visible = append(p.visible, ui.OverlayItem{Label: label, IsNote: true})
+		p.roleIndex = append(p.roleIndex, -1)
+	}
+	if p.loading || p.pending > 0 {
+		note("Loading…")
+	} else if (len(p.roles) > 0 || p.activeOnly) && p.checkingActive() {
+		note("Checking which roles are active…")
+	}
+	if n := len(p.failures); n > 0 {
+		count := "1 tenant"
+		if n > 1 {
+			count = fmt.Sprintf("%d tenants", n)
+		}
+		f := p.failures[0]
+		note(fmt.Sprintf("%s could not be queried — %s: %s", count, f.tenant, f.detail))
+	}
+	if len(p.activeUnknown) > 0 {
+		u := p.activeUnknown[0]
+		note("Active state unknown for " + u.tenant + ": " + u.detail)
+	}
+	settled := !p.loading && p.pending == 0
+	switch {
+	case p.activeOnly && settled && !p.checkingActive() && len(candidates) == 0:
+		note("No active roles")
+	case p.activeOnly:
+		if len(candidates) > 0 && len(matched) == 0 {
+			note("No matches")
+		}
+	case settled && len(p.failures) == 0 && len(p.roles) == 0:
+		note("No eligible roles")
+	case p.scoped() && settled && len(p.roles) > 0 && len(candidates) == 0:
+		note("No eligible roles in " + p.subName() + " — tab shows all subscriptions")
+	case p.scoped() && len(candidates) > 0 && len(matched) == 0:
+		note("No matches in " + p.subName() + " — tab searches all subscriptions")
+	case len(candidates) > 0 && len(matched) == 0:
+		note("No matches")
+	}
+
 	lastTenant := ""
 	for n, idx := range matched {
 		r := p.roles[idx]
@@ -360,45 +392,6 @@ func (p *pimOverlay) refilterKeeping(prevKey string) {
 			Hint:  pimRowHint(r, now),
 		})
 		p.roleIndex = append(p.roleIndex, idx)
-	}
-
-	footer := func(label string) {
-		p.visible = append(p.visible, ui.OverlayItem{Label: label, IsNote: true})
-		p.roleIndex = append(p.roleIndex, -1)
-	}
-	if p.loading || p.pending > 0 {
-		footer("Loading…")
-	} else if (len(p.roles) > 0 || p.activeOnly) && p.checkingActive() {
-		footer("Checking which roles are active…")
-	}
-	if n := len(p.failures); n > 0 {
-		count := "1 tenant"
-		if n > 1 {
-			count = fmt.Sprintf("%d tenants", n)
-		}
-		f := p.failures[0]
-		footer(fmt.Sprintf("%s could not be queried — %s: %s", count, f.tenant, f.detail))
-	}
-	if len(p.activeUnknown) > 0 {
-		u := p.activeUnknown[0]
-		footer("Active state unknown for " + u.tenant + ": " + u.detail)
-	}
-	settled := !p.loading && p.pending == 0
-	switch {
-	case p.activeOnly && settled && !p.checkingActive() && len(candidates) == 0:
-		footer("No active roles")
-	case p.activeOnly:
-		if len(candidates) > 0 && len(matched) == 0 {
-			footer("No matches")
-		}
-	case settled && len(p.failures) == 0 && len(p.roles) == 0:
-		footer("No eligible roles")
-	case p.scoped() && settled && len(p.roles) > 0 && len(candidates) == 0:
-		footer("No eligible roles in " + p.subName() + " — tab shows all subscriptions")
-	case p.scoped() && len(candidates) > 0 && len(matched) == 0:
-		footer("No matches in " + p.subName() + " — tab searches all subscriptions")
-	case len(candidates) > 0 && len(matched) == 0:
-		footer("No matches")
 	}
 
 	p.cursor = p.firstSelectable()

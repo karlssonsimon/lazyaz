@@ -408,8 +408,9 @@ func TestPIMPaletteCommandOpensOverlay(t *testing.T) {
 	if found == nil {
 		t.Fatal(`buildCommands() has no "PIM: Activate role"`)
 	}
-	if found.hint != "P" || found.section != "Application" {
-		t.Errorf("command hint=%q section=%q, want P / Application", found.hint, found.section)
+	// The hint is the bound key, so a remapped keymap shows its own.
+	if want := m.keymap.PIMOverlay.Short(); found.hint != want || found.section != "Application" {
+		t.Errorf("command hint=%q section=%q, want %s / Application", found.hint, found.section, want)
 	}
 
 	action := found.action()
@@ -436,7 +437,7 @@ func TestPIMTenantFailureIsCountedNotNotified(t *testing.T) {
 		t.Errorf("failures = %v, want 1", m.pim.failures)
 	}
 	if !pimHasNote(&m.pim, "1 tenant could not be queried — Fabrikam: forbidden") {
-		t.Errorf("footer = %v, want the failed tenant and its error", pimLabels(&m.pim))
+		t.Errorf("status rows = %v, want the failed tenant and its error", pimLabels(&m.pim))
 	}
 	if len(m.pim.roles) != 1 || m.pim.roles[0].TenantID != pimTenantA.ID {
 		t.Errorf("roles = %+v, want tenant-a's role", m.pim.roles)
@@ -457,7 +458,7 @@ func TestPIMActiveStateUnknownShownNotNotified(t *testing.T) {
 	m = pimOpenWithRoles(t, m)
 
 	if !pimHasNote(&m.pim, "Active state unknown for Contoso: forbidden") {
-		t.Errorf("footer = %v, want active state unknown for Contoso", pimLabels(&m.pim))
+		t.Errorf("status rows = %v, want active state unknown for Contoso", pimLabels(&m.pim))
 	}
 	if len(m.pim.roles) != 1 || len(m.pim.failures) != 0 {
 		t.Errorf("roles = %d failures = %v, want the role listed and no failure", len(m.pim.roles), m.pim.failures)

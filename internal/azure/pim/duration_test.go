@@ -1,6 +1,7 @@
 package pim
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -20,6 +21,21 @@ func TestParseDuration(t *testing.T) {
 	for _, in := range bad {
 		if got, err := ParseDuration(in); err == nil {
 			t.Errorf("ParseDuration(%q) = %v, nil; want error", in, got)
+		}
+	}
+}
+
+// Only input that parses but is too short carries ErrDurationTooShort, so
+// callers can tell it from input they cannot read at all.
+func TestParseDurationTooShort(t *testing.T) {
+	for _, in := range []string{"4m", "0h", "0m"} {
+		if _, err := ParseDuration(in); !errors.Is(err, ErrDurationTooShort) {
+			t.Errorf("ParseDuration(%q) error = %v, want ErrDurationTooShort", in, err)
+		}
+	}
+	for _, in := range []string{"", "abc", "90s", "2d"} {
+		if _, err := ParseDuration(in); err == nil || errors.Is(err, ErrDurationTooShort) {
+			t.Errorf("ParseDuration(%q) error = %v, want an error other than ErrDurationTooShort", in, err)
 		}
 	}
 }
