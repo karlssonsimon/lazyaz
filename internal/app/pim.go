@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
@@ -41,10 +40,6 @@ const (
 	pimFieldDuration
 )
 
-// pimDurationShapeRe mirrors pim.ParseDuration's accepted shape so the
-// validator can tell a too-short duration from an unparsable one.
-var pimDurationShapeRe = regexp.MustCompile(`^(\d+h)?(\d+m)?$`)
-
 // defaultPIMTenants lists the signed-in user's tenants with the default
 // (multi-tenant) credential. This is the only PIM path that may use it.
 func defaultPIMTenants(ctx context.Context) ([]azure.Tenant, error) {
@@ -80,8 +75,7 @@ func pimDurationValidator(max time.Duration) func(string) string {
 	return func(value string) string {
 		d, err := pim.ParseDuration(value)
 		if err != nil {
-			s := strings.ToLower(strings.TrimSpace(value))
-			if raw, perr := time.ParseDuration(s); perr == nil && pimDurationShapeRe.MatchString(s) && raw < pim.MinDuration {
+			if errors.Is(err, pim.ErrDurationTooShort) {
 				return "minimum is " + pim.FormatDuration(pim.MinDuration)
 			}
 			return "use e.g. 30m, 2h or 1h30m"

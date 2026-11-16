@@ -1407,7 +1407,7 @@ func (m *Model) buildCommands() []command {
 		command{name: "Theme Picker", hint: "T", section: secApp, action: func() commandAction {
 			return commandAction{msg: openThemePickerMsg{}}
 		}},
-		command{name: "PIM: Activate role", hint: "P", section: secApp, action: func() commandAction {
+		command{name: "PIM: Activate role", hint: m.keymap.PIMOverlay.Short(), section: secApp, action: func() commandAction {
 			return commandAction{msg: openPIMOverlayMsg{}}
 		}},
 		command{name: "Notifications History", hint: "N", section: secApp, action: func() commandAction {

@@ -107,7 +107,14 @@ func RenderOverlayList(cfg OverlayListConfig, items []OverlayItem, cursor int, s
 	var rows []string
 
 	// --- Header ---
-	rows = append(rows, renderOverlayHeader(cfg, len(items), styles, innerW))
+	// The match counter covers selectable rows only.
+	matches := 0
+	for _, item := range items {
+		if !item.IsHeader && !item.IsNote {
+			matches++
+		}
+	}
+	rows = append(rows, renderOverlayHeader(cfg, matches, styles, innerW))
 	rows = append(rows, ov.Rule.Render(strings.Repeat("─", innerW)))
 
 	// Pre-render a single empty row for padding.
@@ -456,6 +463,10 @@ func formatInt(n int) string {
 // and the rest in baseStyle, matching the way the list was filtered: fzf
 // exact mode when exact, fuzzy otherwise. Returns plain rendered string
 // when query is empty or there's no match.
+//
+// A row can be filtered on more text than its label shows, so the query as
+// a whole may not match the label. Each term is then highlighted on its
+// own, wherever it does match.
 func highlightMatch(label, query string, exact bool, matchStyle, baseStyle lipgloss.Style) string {
 	if strings.TrimSpace(query) == "" {
 		return baseStyle.Render(label)
@@ -464,13 +475,25 @@ func highlightMatch(label, query string, exact bool, matchStyle, baseStyle lipgl
 	if exact {
 		match = fuzzy.MatchExact
 	}
+	pos := map[int]bool{}
 	res := match(query, label)
-	if !res.Matched || len(res.Pos) == 0 {
-		return baseStyle.Render(label)
+	if res.Matched {
+		for _, p := range res.Pos {
+			pos[p] = true
+		}
+	} else {
+		for _, term := range strings.Fields(query) {
+			// A negated term passes by being absent; it has nothing to mark.
+			if strings.HasPrefix(term, "!") {
+				continue
+			}
+			for _, p := range match(term, label).Pos {
+				pos[p] = true
+			}
+		}
 	}
-	pos := make(map[int]bool, len(res.Pos))
-	for _, p := range res.Pos {
-		pos[p] = true
+	if len(pos) == 0 {
+		return baseStyle.Render(label)
 	}
 	// Positions are rune indices, so chunk by runes.
 	runes := []rune(label)

@@ -271,7 +271,7 @@ func TestPIMOverlayEmptyStates(t *testing.T) {
 	}
 }
 
-func TestPIMOverlayFooterRowsAreNotes(t *testing.T) {
+func TestPIMOverlayStatusRowsAreNotes(t *testing.T) {
 	var p pimOverlay
 	g := p.open()
 	p.setTenantCount(g, 2)
@@ -281,7 +281,7 @@ func TestPIMOverlayFooterRowsAreNotes(t *testing.T) {
 			continue
 		}
 		if !v.IsNote || v.IsHeader {
-			t.Errorf("footer row %q: IsNote=%v IsHeader=%v, want a note", v.Label, v.IsNote, v.IsHeader)
+			t.Errorf("status row %q: IsNote=%v IsHeader=%v, want a note", v.Label, v.IsNote, v.IsHeader)
 		}
 	}
 }
@@ -852,5 +852,66 @@ func TestRenderPIMOverlayActiveViewTitleAndHints(t *testing.T) {
 		if strings.Contains(out, unwanted) {
 			t.Fatalf("active view shows subscription toggle %q:\n%s", unwanted, out)
 		}
+	}
+}
+
+// Status rows sit above the roles: the cursor never rests on them, so below
+// a list longer than the window they would never scroll into view.
+func TestPIMOverlayStatusRowsComeFirst(t *testing.T) {
+	var p pimOverlay
+	g := p.open()
+	p.setTenantCount(g, 3)
+	p.addRoles(g, []pim.Role{
+		pimTestRole("Contoso", "Reader", "sub-a"),
+		pimTestRole("Contoso", "Owner", "sub-b"),
+	})
+	p.tenantFailed(g, "Fabrikam", errors.New("forbidden"))
+
+	want := []string{"Loading…", "1 tenant could not be queried — Fabrikam: forbidden"}
+	if len(p.visible) != len(want)+2 {
+		t.Fatalf("rows = %q, want two status rows then two roles", pimLabels(&p))
+	}
+	for i, label := range want {
+		if !p.visible[i].IsNote || p.visible[i].Label != label {
+			t.Errorf("row %d = %q, want status row %q", i, p.visible[i].Label, label)
+		}
+	}
+	if p.cursor != len(want) {
+		t.Errorf("cursor = %d, want %d (the first role)", p.cursor, len(want))
+	}
+}
+
+// A connection-string tab reports a placeholder subscription with no
+// tenant. No role can be matched to it, so the list is not scoped.
+func TestPIMOverlayIgnoresSubscriptionWithoutTenant(t *testing.T) {
+	var p pimOverlay
+	g := p.open()
+	p.setSubscription(azure.Subscription{ID: "connstring:local", Name: "local"}, true)
+	p.setTenantCount(g, 1)
+	p.addRoles(g, []pim.Role{pimTestRole("Contoso", "Reader", "sub-a")})
+
+	if p.scoped() {
+		t.Error("scoped to a subscription without a tenant")
+	}
+	if got := pimRowLabels(&p); len(got) != 1 {
+		t.Errorf("rows = %q, want the one eligible role", got)
+	}
+}
+
+func TestPIMOverlayCloseKeepsGeneration(t *testing.T) {
+	var p pimOverlay
+	g := p.open()
+	p.setTenantCount(g, 1)
+	p.addRoles(g, []pim.Role{pimTestRole("Contoso", "Reader", "sub-a")})
+	p.close()
+
+	if p.active || len(p.roles) != 0 || len(p.visible) != 0 {
+		t.Errorf("close left state behind: active=%v roles=%d visible=%d", p.active, len(p.roles), len(p.visible))
+	}
+	if p.gen != g {
+		t.Errorf("gen = %d after close, want %d", p.gen, g)
+	}
+	if next := p.open(); next != g+1 {
+		t.Errorf("gen = %d on reopen, want %d", next, g+1)
 	}
 }
