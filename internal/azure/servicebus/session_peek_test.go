@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,11 +12,14 @@ import (
 )
 
 type fakeSession struct {
-	id        string
-	seqs      []int64
-	closed    bool
-	from      *int64
-	max       int
+	id     string
+	seqs   []int64
+	closed bool
+	from   *int64
+	max    int
+	// settleMu guards completed and abandoned: like the SDK's receiver,
+	// the fake is settled from several goroutines at once.
+	settleMu  sync.Mutex
 	completed []int64
 	abandoned []int64
 	// oneAtATime mimics the SDK's real behaviour: a receive returns a
@@ -225,11 +229,15 @@ func (f *fakeSession) ReceiveMessages(_ context.Context, maxCount int, _ *azserv
 }
 
 func (f *fakeSession) CompleteMessage(_ context.Context, msg *azservicebus.ReceivedMessage, _ *azservicebus.CompleteMessageOptions) error {
+	f.settleMu.Lock()
+	defer f.settleMu.Unlock()
 	f.completed = append(f.completed, *msg.SequenceNumber)
 	return nil
 }
 
 func (f *fakeSession) AbandonMessage(_ context.Context, msg *azservicebus.ReceivedMessage, _ *azservicebus.AbandonMessageOptions) error {
+	f.settleMu.Lock()
+	defer f.settleMu.Unlock()
 	f.abandoned = append(f.abandoned, *msg.SequenceNumber)
 	return nil
 }
@@ -254,8 +262,8 @@ func TestReceiveSessionsSettlesThroughOwningSession(t *testing.T) {
 			bID = m.OperationID()
 		}
 	}
-	if err := locked.CompleteByID(context.Background(), bID); err != nil {
-		t.Fatalf("CompleteByID: %v", err)
+	if _, err := locked.CompleteByIDs(context.Background(), []string{bID}); err != nil {
+		t.Fatalf("CompleteByIDs: %v", err)
 	}
 	if len(b.completed) != 1 || b.completed[0] != 3 || len(a.completed) != 0 {
 		t.Fatalf("complete went to the wrong session: a=%v b=%v", a.completed, b.completed)

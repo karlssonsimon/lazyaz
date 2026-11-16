@@ -57,6 +57,7 @@ type sessionHandle interface {
 // bulkReceiver is what resendAll needs from its source: a plain
 // Receiver or a session handle.
 type bulkReceiver interface {
+	PeekMessages(ctx context.Context, maxMessageCount int, options *azservicebus.PeekMessagesOptions) ([]*azservicebus.ReceivedMessage, error)
 	ReceiveMessages(ctx context.Context, maxMessages int, options *azservicebus.ReceiveMessagesOptions) ([]*azservicebus.ReceivedMessage, error)
 	CompleteMessage(ctx context.Context, message *azservicebus.ReceivedMessage, options *azservicebus.CompleteMessageOptions) error
 }

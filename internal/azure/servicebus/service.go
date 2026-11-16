@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/azure"
+	"github.com/karlssonsimon/lazyaz/internal/safego"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
@@ -355,8 +356,42 @@ func (s *Service) ListNamespaces(ctx context.Context, subscriptionID string, sen
 	return nil
 }
 
+// ListEntities sends the namespace's queues, then its topics. The two
+// listings are separate ARM calls, so the topics are fetched while the
+// queues stream and handed over once the queues are done: the order stays
+// queues first, and send is only ever called from this goroutine.
 func (s *Service) ListEntities(ctx context.Context, ns Namespace, send func([]Entity)) error {
 	cred := s.Credential()
+
+	type topicsResult struct {
+		batches [][]Entity
+		err     error
+	}
+	topicsDone := make(chan topicsResult, 1)
+	safego.Go(func() {
+		var res topicsResult
+		// Deferred so the receive below is answered even if listing panics.
+		defer func() { topicsDone <- res }()
+		res.err = listTopics(ctx, cred, ns, func(batch []Entity) {
+			res.batches = append(res.batches, batch)
+		})
+	})
+
+	if err := listQueues(ctx, cred, ns, send); err != nil {
+		return err
+	}
+
+	topics := <-topicsDone
+	if topics.err != nil {
+		return topics.err
+	}
+	for _, batch := range topics.batches {
+		send(batch)
+	}
+	return nil
+}
+
+func listQueues(ctx context.Context, cred azcore.TokenCredential, ns Namespace, send func([]Entity)) error {
 	client, err := armservicebus.NewQueuesClient(ns.SubscriptionID, cred, nil)
 	if err != nil {
 		return fmt.Errorf("create queues client: %w", err)
@@ -391,7 +426,10 @@ func (s *Service) ListEntities(ctx context.Context, ns Namespace, send func([]En
 			send(batch)
 		}
 	}
+	return nil
+}
 
+func listTopics(ctx context.Context, cred azcore.TokenCredential, ns Namespace, send func([]Entity)) error {
 	topicsClient, err := armservicebus.NewTopicsClient(ns.SubscriptionID, cred, nil)
 	if err != nil {
 		return fmt.Errorf("create topics client: %w", err)
@@ -423,7 +461,6 @@ func (s *Service) ListEntities(ctx context.Context, ns Namespace, send func([]En
 			send(batch)
 		}
 	}
-
 	return nil
 }
 
@@ -619,21 +656,6 @@ func lockReceivedMessages(messages []*azservicebus.ReceivedMessage, st settler) 
 	return locked
 }
 
-func (r *ReceivedMessages) CompleteByID(ctx context.Context, id string) error {
-	if r == nil {
-		return fmt.Errorf("complete locked message %q: no locked messages", id)
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.hasAvailableMessageLocked(id) {
-		return fmt.Errorf("complete locked message %q: message ID not found", id)
-	}
-	if len(r.receivers) == 0 {
-		return fmt.Errorf("complete locked message %q: receiver is nil", id)
-	}
-	return r.completeByIDLocked(ctx, id, settleComplete)
-}
-
 // settleComplete completes a locked message through its own receiver.
 func settleComplete(ctx context.Context, msg LockedMessage) error {
 	if msg.settler == nil {
@@ -642,28 +664,87 @@ func settleComplete(ctx context.Context, msg LockedMessage) error {
 	return msg.settler.CompleteMessage(ctx, msg.raw, nil)
 }
 
-func (r *ReceivedMessages) hasAvailableMessageLocked(id string) bool {
-	for _, msg := range r.messages {
-		if msg.matchesOperationID(id) && msg.raw != nil {
-			return true
-		}
+// settleConcurrency bounds how many settlements are in flight at once.
+// Each one is a round trip to the broker, and the SDK's settlement calls
+// are safe to run concurrently on one receiver; settling one at a time
+// made every bulk action cost a round trip per message.
+const settleConcurrency = 16
+
+// settleEach calls settle for every index in [0, n), at most
+// settleConcurrency at a time, and returns each call's error by index.
+func settleEach(n int, settle func(i int) error) []error {
+	errs := make([]error, n)
+	slots := make(chan struct{}, settleConcurrency)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		slots <- struct{}{}
+		wg.Add(1)
+		safego.Go(func() {
+			defer wg.Done()
+			defer func() { <-slots }()
+			errs[i] = settle(i)
+		})
 	}
-	return false
+	wg.Wait()
+	return errs
 }
 
-func (r *ReceivedMessages) completeByIDLocked(ctx context.Context, id string, complete func(context.Context, LockedMessage) error) error {
-	for i := range r.messages {
-		msg := &r.messages[i]
-		if !msg.matchesOperationID(id) || msg.raw == nil {
-			continue
+// CompleteByIDs completes the locked messages with the given operation
+// IDs concurrently. It attempts every one, so a single failure (an expired
+// lock, say) does not leave the rest unsettled, and returns the IDs that
+// completed, in the order given, with the first error.
+func (r *ReceivedMessages) CompleteByIDs(ctx context.Context, ids []string) ([]string, error) {
+	if r == nil {
+		return nil, fmt.Errorf("complete locked messages: no locked messages")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(ids) > 0 && len(r.receivers) == 0 {
+		return nil, fmt.Errorf("complete locked message %q: receiver is nil", ids[0])
+	}
+	return r.completeIDsLocked(ctx, ids, settleComplete)
+}
+
+// completeIDsLocked is CompleteByIDs with the lock held and the settle
+// call injected. Each ID claims its own message before anything is
+// settled, so duplicate IDs settle distinct messages and the concurrent
+// settlements never share a slice element.
+func (r *ReceivedMessages) completeIDsLocked(ctx context.Context, ids []string, complete func(context.Context, LockedMessage) error) ([]string, error) {
+	claimed := make([]int, len(ids))
+	taken := make(map[int]bool, len(ids))
+	for n, id := range ids {
+		claimed[n] = -1
+		for i := range r.messages {
+			if !taken[i] && r.messages[i].raw != nil && r.messages[i].matchesOperationID(id) {
+				claimed[n] = i
+				taken[i] = true
+				break
+			}
 		}
-		if err := complete(ctx, *msg); err != nil {
+	}
+
+	errs := settleEach(len(ids), func(n int) error {
+		i := claimed[n]
+		if i < 0 {
+			return fmt.Errorf("complete locked message %q: message ID not found", ids[n])
+		}
+		if err := complete(ctx, r.messages[i]); err != nil {
 			return err
 		}
-		msg.raw = nil
+		r.messages[i].raw = nil
 		return nil
+	})
+
+	var completed []string
+	var firstErr error
+	for n, err := range errs {
+		if err == nil {
+			completed = append(completed, ids[n])
+		} else if firstErr == nil {
+			firstErr = err
+		}
 	}
-	return fmt.Errorf("complete locked message %q: message ID not found", id)
+	return completed, firstErr
 }
 
 func (m LockedMessage) matchesOperationID(id string) bool {
@@ -723,13 +804,14 @@ func (r *ReceivedMessages) Len() int {
 }
 
 func (r *ReceivedMessages) abandonAllLocked(ctx context.Context) {
-	for i := range r.messages {
+	settleEach(len(r.messages), func(i int) error {
 		msg := &r.messages[i]
 		if msg.raw != nil && msg.settler != nil {
 			_ = msg.settler.AbandonMessage(ctx, msg.raw, nil)
 			msg.raw = nil
 		}
-	}
+		return nil
+	})
 }
 
 // Close abandons all messages and closes every receiver holding locks.
@@ -960,14 +1042,7 @@ func (s *Service) RequeueLockedByID(ctx context.Context, ns Namespace, queueOrTo
 		return nil, err
 	}
 
-	completed := make([]string, 0, len(selectedIDs))
-	for _, id := range selectedIDs {
-		if err := locked.completeByIDLocked(ctx, id, settleComplete); err != nil {
-			return completed, err
-		}
-		completed = append(completed, id)
-	}
-	return completed, nil
+	return locked.completeIDsLocked(ctx, selectedIDs, settleComplete)
 }
 
 func (s *Service) sendBatch(ctx context.Context, client *azservicebus.Client, name string, messages []*azservicebus.ReceivedMessage) error {
@@ -1020,6 +1095,12 @@ func sendMessagesBatched(ctx context.Context, sender *azservicebus.Sender, messa
 // AMQP handshakes. When maxMessages > 0 the loop stops after that many
 // messages to avoid infinite cycles when a consumer immediately dead-letters
 // resent messages. Returns the number of messages successfully resent.
+//
+// The SDK reports a drained source only as a receive that sits out its
+// whole timeout. maxMessages comes from a count that can be stale, so
+// after the first round a peek checks for more before receiving again: an
+// empty source then ends the loop at once. The first round is not
+// guarded; callers that have not looked yet use hasPeekable themselves.
 func (s *Service) resendAll(ctx context.Context, client *azservicebus.Client, receiver bulkReceiver, targetName string, batchSize, maxMessages int) (int, error) {
 	sender, err := client.NewSender(targetName, nil)
 	if err != nil {
@@ -1029,16 +1110,42 @@ func (s *Service) resendAll(ctx context.Context, client *azservicebus.Client, re
 
 	total := 0
 	for {
-		receiveCtx, receiveCancel := context.WithTimeout(ctx, 15*time.Second)
-		messages, err := receiver.ReceiveMessages(receiveCtx, batchSize, &azservicebus.ReceiveMessagesOptions{
+		// Ask for no more than is still wanted: a receive that gets all it
+		// asked for returns at once instead of waiting out
+		// TimeAfterFirstMessage.
+		want := batchSize
+		if maxMessages > 0 && maxMessages-total < want {
+			want = maxMessages - total
+		}
+		if want <= 0 {
+			break
+		}
+
+		// The first receive also covers setting up the link, so it gets
+		// the longer wait.
+		timeout := 15 * time.Second
+		if total > 0 {
+			more, err := hasPeekable(ctx, receiver)
+			if err != nil {
+				return total, fmt.Errorf("peek before receive: %w", err)
+			}
+			if !more {
+				break
+			}
+			timeout = receiveRoundTimeout
+		}
+
+		receiveCtx, receiveCancel := context.WithTimeout(ctx, timeout)
+		messages, err := receiver.ReceiveMessages(receiveCtx, want, &azservicebus.ReceiveMessagesOptions{
 			TimeAfterFirstMessage: 1 * time.Second,
 		})
 		receiveCancel()
 		if err != nil && len(messages) == 0 {
-			// The SDK reports a drained source as DeadlineExceeded on the
-			// per-receive context (it never returns (nil, nil)). Anything
-			// else — auth failure, connection loss, parent cancellation —
-			// is a real error and must not be reported as success.
+			// A silent receive is DeadlineExceeded on the per-receive
+			// context (the SDK never returns (nil, nil)): what is left is
+			// not receivable. Anything else — auth failure, connection
+			// loss, parent cancellation — is a real error and must not be
+			// reported as success.
 			if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
 				break
 			}
@@ -1052,19 +1159,47 @@ func (s *Service) resendAll(ctx context.Context, client *azservicebus.Client, re
 			return total, err
 		}
 
-		// Complete originals.
-		for _, msg := range messages {
-			if err := receiver.CompleteMessage(ctx, msg, nil); err != nil {
-				return total, fmt.Errorf("complete message %s: %w", msg.MessageID, err)
-			}
-			total++
-		}
-
-		if maxMessages > 0 && total >= maxMessages {
-			break
+		n, err := completeAll(ctx, receiver, messages)
+		total += n
+		if err != nil {
+			return total, err
 		}
 	}
 	return total, nil
+}
+
+// completeAll completes messages concurrently and returns how many
+// completed, with the first error.
+func completeAll(ctx context.Context, receiver bulkReceiver, messages []*azservicebus.ReceivedMessage) (int, error) {
+	errs := settleEach(len(messages), func(i int) error {
+		return receiver.CompleteMessage(ctx, messages[i], nil)
+	})
+	completed := 0
+	var firstErr error
+	for i, err := range errs {
+		if err == nil {
+			completed++
+		} else if firstErr == nil {
+			firstErr = fmt.Errorf("complete message %s: %w", messages[i].MessageID, err)
+		}
+	}
+	return completed, firstErr
+}
+
+// firstSequenceNumber is where a peek of a whole entity starts.
+const firstSequenceNumber int64 = 1
+
+// hasPeekable reports whether the source holds any message at all. It
+// always peeks from the start: a receiver otherwise carries on from the
+// last message it peeked and would miss one that became available again
+// behind that point.
+func hasPeekable(ctx context.Context, r messagePeeker) (bool, error) {
+	from := firstSequenceNumber
+	peeked, err := r.PeekMessages(ctx, 1, &azservicebus.PeekMessagesOptions{FromSequenceNumber: &from})
+	if err != nil {
+		return false, err
+	}
+	return len(peeked) > 0, nil
 }
 
 // ResendAllFromDLQ receives all DLQ messages and resends them to the target
@@ -1086,6 +1221,14 @@ func (s *Service) resendAllFromDLQ(ctx context.Context, client *azservicebus.Cli
 		return 0, fmt.Errorf("create DLQ receiver: %w", err)
 	}
 	defer receiver.Close(ctx)
+
+	found, err := hasPeekable(ctx, receiver)
+	if err != nil {
+		return 0, fmt.Errorf("peek DLQ: %w", err)
+	}
+	if !found {
+		return 0, nil
+	}
 
 	batchSize := 50
 	if expectedCount > 0 && expectedCount < batchSize {
@@ -1165,6 +1308,13 @@ func (s *Service) ResendAllFromSource(ctx context.Context, ns Namespace, entityN
 			return fmt.Errorf("create receiver: %w", err)
 		}
 		defer receiver.Close(ctx)
+		found, err := hasPeekable(ctx, receiver)
+		if err != nil {
+			return fmt.Errorf("peek source: %w", err)
+		}
+		if !found {
+			return nil
+		}
 		n, err := s.resendAll(ctx, targetClient, receiver, targetName, batchSize, expectedCount)
 		total = n
 		return err

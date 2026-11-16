@@ -91,18 +91,18 @@ func completeDLQMarkedCmd(locked *servicebus.ReceivedMessages, markedIDs map[str
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
-		var completed []string
+		var ids []string
 		for _, msg := range locked.MessagesSnapshot() {
 			key := msg.OperationID()
-			if _, ok := markedIDs[key]; !ok {
-				continue
+			if _, ok := markedIDs[key]; ok {
+				ids = append(ids, key)
 			}
-			if err := locked.CompleteByID(ctx, key); err != nil {
-				return dlqCompleteMsg{locked: locked, completed: completed, err: err}
-			}
-			completed = append(completed, key)
 		}
-		return dlqCompleteMsg{locked: locked, completed: completed}
+		if len(ids) == 0 {
+			return dlqCompleteMsg{locked: locked}
+		}
+		completed, err := locked.CompleteByIDs(ctx, ids)
+		return dlqCompleteMsg{locked: locked, completed: completed, err: err}
 	}
 }
 

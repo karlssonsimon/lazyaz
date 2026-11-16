@@ -23,18 +23,18 @@ func (testCredential) GetToken(context.Context, policy.TokenRequestOptions) (azc
 func TestReceivedMessagesCompleteByIDRequiresReceiver(t *testing.T) {
 	locked := &ReceivedMessages{messages: []LockedMessage{{ID: "m1", raw: &azservicebus.ReceivedMessage{MessageID: "m1"}}}}
 
-	err := locked.CompleteByID(context.Background(), "m1")
+	_, err := locked.CompleteByIDs(context.Background(), []string{"m1"})
 	if err == nil || !strings.Contains(err.Error(), "receiver") {
-		t.Fatalf("CompleteByID error = %v, want helpful receiver error", err)
+		t.Fatalf("CompleteByIDs error = %v, want helpful receiver error", err)
 	}
 }
 
 func TestReceivedMessagesCompleteByIDReportsMissingID(t *testing.T) {
-	locked := &ReceivedMessages{messages: []LockedMessage{{ID: "m1"}}}
+	locked := &ReceivedMessages{messages: []LockedMessage{{ID: "m1"}}, receivers: []settler{&fakeSession{}}}
 
-	err := locked.CompleteByID(context.Background(), "missing")
-	if err == nil || !strings.Contains(err.Error(), "missing") {
-		t.Fatalf("CompleteByID error = %v, want missing ID error", err)
+	_, err := locked.CompleteByIDs(context.Background(), []string{"missing"})
+	if err == nil || !strings.Contains(err.Error(), `"missing": message ID not found`) {
+		t.Fatalf("CompleteByIDs error = %v, want missing ID error", err)
 	}
 }
 
@@ -417,13 +417,15 @@ func strPtr(v string) *string {
 	return &v
 }
 
-// completeByID is a test helper that exercises completeByIDLocked under the
-// same mutex production callers (CompleteByID, RequeueLockedByID) hold,
-// while letting tests inject a fake complete func instead of a real receiver.
+// completeByID is a test helper that completes one message through
+// completeIDsLocked under the same mutex production callers
+// (CompleteByIDs, RequeueLockedByID) hold, while letting tests inject a
+// fake complete func instead of a real receiver.
 func (r *ReceivedMessages) completeByID(ctx context.Context, id string, complete func(context.Context, *azservicebus.ReceivedMessage) error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.completeByIDLocked(ctx, id, func(ctx context.Context, msg LockedMessage) error {
+	_, err := r.completeIDsLocked(ctx, []string{id}, func(ctx context.Context, msg LockedMessage) error {
 		return complete(ctx, msg.raw)
 	})
+	return err
 }
