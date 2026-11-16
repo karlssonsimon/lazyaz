@@ -603,3 +603,42 @@ func TestApplyNewCredentialRecordsTenant(t *testing.T) {
 		t.Errorf("credTenantID = %q after a login, want it cleared", updated.credTenantID)
 	}
 }
+
+// Palette hints come from the active keymap, so a rebind (or the standard
+// keymap) shows the key that really runs the command.
+func TestPaletteHintsFollowKeymap(t *testing.T) {
+	m := NewModel(nil, nil, nil, nil, testConfig(), nil, keymap.Default())
+	m.keymap.NewTab = keymap.New("ctrl+n")
+	m.keymap.NextTab = keymap.New("ctrl+pgdown")
+	m.keymap.ToggleThemePicker = keymap.New("ctrl+t")
+	m.keymap.Jump1 = keymap.New("ctrl+1")
+	m.tabs = nil
+	m.activeIdx = 0
+	for i := 0; i < 10; i++ {
+		m.addTab(TabBlob, "")
+	}
+
+	want := map[string]string{
+		"New Tab: Service Bus":              "ctrl+n",
+		"Next Tab":                          "ctrl+pgdown",
+		"Theme Picker":                      "ctrl+t",
+		"Go to Tab 1: " + TabBlob.String():  "ctrl+1",
+		"Go to Tab 2: " + TabBlob.String():  "alt+2",
+		"Go to Tab 10: " + TabBlob.String(): "", // no key jumps past the ninth tab
+		"Quit":                              "ctrl+c",
+	}
+	seen := 0
+	for _, c := range m.buildCommands() {
+		hint, ok := want[c.name]
+		if !ok {
+			continue
+		}
+		seen++
+		if c.hint != hint {
+			t.Errorf("%q hint = %q, want %q", c.name, c.hint, hint)
+		}
+	}
+	if seen != len(want) {
+		t.Errorf("found %d of %d expected commands", seen, len(want))
+	}
+}

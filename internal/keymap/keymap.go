@@ -149,13 +149,27 @@ type Keymap struct {
 	JumpForward Binding `json:"jump_forward"`
 }
 
+// jumps lists the tab jump bindings by tab index (0-based).
+func (k Keymap) jumps() []Binding {
+	return []Binding{k.Jump1, k.Jump2, k.Jump3, k.Jump4, k.Jump5, k.Jump6, k.Jump7, k.Jump8, k.Jump9}
+}
+
 // JumpIndex returns the tab index (0-based) if key matches any Jump binding.
 func (k Keymap) JumpIndex(key string) (int, bool) {
-	jumps := []Binding{k.Jump1, k.Jump2, k.Jump3, k.Jump4, k.Jump5, k.Jump6, k.Jump7, k.Jump8, k.Jump9}
-	for i, b := range jumps {
+	for i, b := range k.jumps() {
 		if b.Matches(key) {
 			return i, true
 		}
 	}
 	return 0, false
+}
+
+// JumpBinding returns the binding that jumps to the tab at index
+// (0-based), or an empty binding when no key is reserved for it.
+func (k Keymap) JumpBinding(index int) Binding {
+	jumps := k.jumps()
+	if index < 0 || index >= len(jumps) {
+		return Binding{}
+	}
+	return jumps[index]
 }

@@ -1383,44 +1383,49 @@ func (m *Model) resizeAndTickActive() tea.Cmd {
 	return tea.Batch(resizeCmd, tickCmd)
 }
 
+// buildCommands lists the palette's commands. Each hint is the key the
+// command is bound to in the active keymap, so it stays right under the
+// standard keymap and after a rebind.
 func (m *Model) buildCommands() []command {
 	const (
 		secTabs = "Tabs"
 		secOpen = "Open Tabs"
 		secApp  = "Application"
 	)
+	km := m.keymap
+	newTab := km.NewTab.Short()
 	cmds := []command{
-		{name: "New Tab: Blob Storage", hint: "ctrl+t", section: secTabs, action: func() commandAction {
+		{name: "New Tab: Blob Storage", hint: newTab, section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabBlob}}
 		}},
-		{name: "New Tab: Service Bus", hint: "ctrl+t", section: secTabs, action: func() commandAction {
+		{name: "New Tab: Service Bus", hint: newTab, section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabServiceBus}}
 		}},
-		{name: "New Tab: Key Vault", hint: "ctrl+t", section: secTabs, action: func() commandAction {
+		{name: "New Tab: Key Vault", hint: newTab, section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabKeyVault}}
 		}},
-		{name: "New Tab: App Configuration", hint: "ctrl+t", section: secTabs, action: func() commandAction {
+		{name: "New Tab: App Configuration", hint: newTab, section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabAppConfig}}
 		}},
-		{name: "New Tab: Dashboard", hint: "ctrl+t", section: secTabs, action: func() commandAction {
+		{name: "New Tab: Dashboard", hint: newTab, section: secTabs, action: func() commandAction {
 			return commandAction{msg: tabPickerMsg{kind: TabDashboard}}
 		}},
-		{name: "New Tab: Azurite (local emulator)", hint: "ctrl+t", section: secTabs, action: func() commandAction {
+		{name: "New Tab: Azurite (local emulator)", hint: newTab, section: secTabs, action: func() commandAction {
 			return commandAction{msg: openAzuriteTabMsg{}}
 		}},
-		{name: "New Tab: Blob (connection string)", hint: "ctrl+t", section: secTabs, action: func() commandAction {
+		{name: "New Tab: Blob (connection string)", hint: newTab, section: secTabs, action: func() commandAction {
 			return commandAction{msg: openConnStringPromptMsg{}}
 		}},
-		{name: "Close Tab", hint: "ctrl+w", section: secTabs, action: func() commandAction {
+		{name: "Close Tab", hint: km.CloseTab.Short(), section: secTabs, action: func() commandAction {
 			if len(m.tabs) <= 1 {
 				return commandAction{quit: true}
 			}
 			return commandAction{msg: closeTabMsg{tabID: m.tabs[m.activeIdx].ID}}
 		}},
-		{name: "Next Tab", hint: "L", section: secTabs, action: func() commandAction {
+		{name: "Next Tab", hint: km.NextTab.Short(), section: secTabs, action: func() commandAction {
 			return commandAction{msg: nextTabMsg{}}
 		}},
-		{name: "Previous Tab", hint: "H", section: secTabs, action: func() commandAction {
+		{name: "Previous Tab", hint: km.PrevTab.Short(), section: secTabs, action: func() commandAction {
 			return commandAction{msg: prevTabMsg{}}
 		}},
 	}
@@ -1430,7 +1435,7 @@ func (m *Model) buildCommands() []command {
 		idx := i // capture
 		tab := t
 		label := fmt.Sprintf("Go to Tab %d: %s", idx+1, tab.Kind.String())
-		hint := fmt.Sprintf("alt+%d", idx+1)
+		hint := km.JumpBinding(idx).Short()
 		cmds = append(cmds, command{name: label, hint: hint, section: secOpen, action: func() commandAction {
 			return commandAction{msg: jumpTabMsg{index: idx}}
 		}})
@@ -1443,22 +1448,22 @@ func (m *Model) buildCommands() []command {
 		command{name: "Refresh Azure Credentials", section: secApp, action: func() commandAction {
 			return commandAction{msg: refreshCredentialsMsg{}}
 		}},
-		command{name: "Theme Picker", hint: "T", section: secApp, action: func() commandAction {
+		command{name: "Theme Picker", hint: km.ToggleThemePicker.Short(), section: secApp, action: func() commandAction {
 			return commandAction{msg: openThemePickerMsg{}}
 		}},
-		command{name: "PIM: Activate role", hint: m.keymap.PIMOverlay.Short(), section: secApp, action: func() commandAction {
+		command{name: "PIM: Activate role", hint: km.PIMOverlay.Short(), section: secApp, action: func() commandAction {
 			return commandAction{msg: openPIMOverlayMsg{}}
 		}},
-		command{name: "Notifications History", hint: "N", section: secApp, action: func() commandAction {
+		command{name: "Notifications History", hint: km.ToggleNotifications.Short(), section: secApp, action: func() commandAction {
 			return commandAction{msg: toggleNotificationsMsg{}}
 		}},
-		command{name: "Activity", hint: "F", section: secApp, action: func() commandAction {
+		command{name: "Activity", hint: km.ToggleActivity.Short(), section: secApp, action: func() commandAction {
 			return commandAction{msg: toggleActivityMsg{}}
 		}},
-		command{name: "Help", hint: "?", section: secApp, action: func() commandAction {
+		command{name: "Help", hint: km.ToggleHelp.Short(), section: secApp, action: func() commandAction {
 			return commandAction{msg: toggleHelpMsg{}}
 		}},
-		command{name: "Quit", hint: "ctrl+c", section: secApp, action: func() commandAction {
+		command{name: "Quit", hint: km.Quit.Short(), section: secApp, action: func() commandAction {
 			return commandAction{quit: true}
 		}},
 	)
