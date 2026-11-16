@@ -29,18 +29,26 @@ type Tenant struct {
 func SubscriptionKey(s Subscription) string { return s.ID }
 
 func NewDefaultCredential() (azcore.TokenCredential, error) {
-	return azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+	cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
 		AdditionallyAllowedTenants: []string{"*"},
 	})
+	if err != nil {
+		return nil, err
+	}
+	return newCachingCredential(cred), nil
 }
 
 // NewCredentialForTenant creates a credential scoped to the given tenant.
 // This reuses the existing az login session — no browser sign-in needed.
 func NewCredentialForTenant(tenantID string) (azcore.TokenCredential, error) {
-	return azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+	cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
 		TenantID:                   tenantID,
 		AdditionallyAllowedTenants: []string{"*"},
 	})
+	if err != nil {
+		return nil, err
+	}
+	return newCachingCredential(cred), nil
 }
 
 func ListTenants(ctx context.Context, cred azcore.TokenCredential) ([]Tenant, error) {
