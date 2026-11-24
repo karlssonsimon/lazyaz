@@ -30,6 +30,18 @@ func LineGutterWidth(totalLines, minDigits int) int {
 // the copied text. Mouse-region X for selection should be offset by
 // LineGutterWidth(totalLines, minDigits).
 func RenderLineGutter(vp viewport.Model, styles Styles, minDigits int) string {
+	return RenderLineGutterFrom(vp, styles, minDigits, 1)
+}
+
+// RenderLineGutterFrom is RenderLineGutter for a viewport that holds
+// only part of a longer document: firstLine is the document's number
+// for the viewport's first content line. A firstLine below 1 means the
+// number is not known, and the gutter is drawn without numbers rather
+// than with ones that are wrong.
+//
+// The matching width is LineGutterWidth(firstLine-1+totalLines,
+// minDigits).
+func RenderLineGutterFrom(vp viewport.Model, styles Styles, minDigits, firstLine int) string {
 	if vp.Height() <= 0 {
 		return ""
 	}
@@ -37,8 +49,12 @@ func RenderLineGutter(vp viewport.Model, styles Styles, minDigits int) string {
 		minDigits = 1
 	}
 
+	numbered := firstLine >= 1
+	if !numbered {
+		firstLine = 1
+	}
 	totalLines := vp.TotalLineCount()
-	width := digits(totalLines)
+	width := digits(firstLine - 1 + totalLines)
 	if width < minDigits {
 		width = minDigits
 	}
@@ -48,15 +64,14 @@ func RenderLineGutter(vp viewport.Model, styles Styles, minDigits int) string {
 	separator := ruleStyle.Render("│ ")
 	blank := strings.Repeat(" ", width) + " " + separator
 
-	startLine := vp.YOffset() + 1
 	rows := make([]string, 0, vp.Height())
 	for i := 0; i < vp.Height(); i++ {
-		num := startLine + i
-		if num <= totalLines {
-			rows = append(rows, numStyle.Render(fmt.Sprintf("%*d", width, num))+" "+separator)
+		line := vp.YOffset() + i
+		if numbered && line < totalLines {
+			rows = append(rows, numStyle.Render(fmt.Sprintf("%*d", width, firstLine+line))+" "+separator)
 		} else {
-			// Past content end — render blank gutter cell so the
-			// column edge stays aligned even on padding rows.
+			// Past content end, or unnumbered — render a blank gutter
+			// cell so the column edge stays aligned.
 			rows = append(rows, blank)
 		}
 	}
