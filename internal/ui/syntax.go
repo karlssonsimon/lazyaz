@@ -88,11 +88,27 @@ func DetectLexer(filename, contentType string) chroma.Lexer {
 		if i := strings.IndexByte(mime, ';'); i >= 0 {
 			mime = strings.TrimSpace(mime[:i])
 		}
+		if isGenericMimeType(mime) {
+			return lexers.Fallback
+		}
 		if l := lexers.MatchMimeType(mime); l != nil {
 			return l
 		}
 	}
 	return lexers.Fallback
+}
+
+// isGenericMimeType reports content types that say nothing about the
+// language of the text. Storage stamps them on anything uploaded without
+// an explicit type, and chroma has lexers registered for both — Nushell
+// claims text/plain and 1C:Enterprise claims application/octet-stream —
+// so matching on them would color every plain log as one of those.
+func isGenericMimeType(mime string) bool {
+	switch strings.ToLower(mime) {
+	case "text/plain", "application/octet-stream":
+		return true
+	}
+	return false
 }
 
 func (s SyntaxStyles) Highlight(filename, contentType, input string) string {
