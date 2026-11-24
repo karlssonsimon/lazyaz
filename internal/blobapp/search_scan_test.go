@@ -1,6 +1,7 @@
 package blobapp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -271,5 +272,97 @@ func TestScanForwardTerminatesOnLineLongerThanChunk(t *testing.T) {
 	}
 	if r.reads > 200 {
 		t.Errorf("%d reads for a 10KB blob at 128-byte chunks — the scan is not advancing", r.reads)
+	}
+}
+
+// A hit takes its line number from the newlines the scan passed on the
+// way, so the count has to be exact whatever the chunking: a start in
+// the middle of a line, a match many chunks away, either direction.
+func TestScanCountsNewlinesBetweenStartAndMatch(t *testing.T) {
+	data, needle := linesBlob(600, 431, "NEEDLE")
+	pattern := mustPattern(t, "NEEDLE")
+
+	for _, chunk := range []int64{64, 257, 1024, 1 << 20} {
+		s := blobScanner{reader: &fakeRangeReader{data: data}, chunk: chunk}
+
+		const from = 37
+		got, err := s.forward(context.Background(), pattern, from, int64(len(data)), 1<<20)
+		if err != nil || got.outcome != scanFound {
+			t.Fatalf("chunk %d: forward: outcome %v, err %v", chunk, got.outcome, err)
+		}
+		if want := bytes.Count(data[from:needle], []byte("\n")); got.newlines != want {
+			t.Errorf("chunk %d: forward counted %d newlines up to the match, want %d", chunk, got.newlines, want)
+		}
+
+		back := int64(len(data)) - 11
+		got, err = s.backward(context.Background(), pattern, back, 1<<20)
+		if err != nil || got.outcome != scanFound {
+			t.Fatalf("chunk %d: backward: outcome %v, err %v", chunk, got.outcome, err)
+		}
+		if got.match.Start != needle {
+			t.Fatalf("chunk %d: backward match at %d, want %d", chunk, got.match.Start, needle)
+		}
+		if want := bytes.Count(data[needle:back], []byte("\n")); got.newlines != want {
+			t.Errorf("chunk %d: backward counted %d newlines back to the match, want %d", chunk, got.newlines, want)
+		}
+	}
+}
+
+// A scan stopped by the budget reports the newlines up to where it will
+// resume, so the count carries over to the next attempt.
+func TestScanCountsNewlinesUpToResumePoint(t *testing.T) {
+	data, _ := linesBlob(600, -1, "")
+	s := blobScanner{reader: &fakeRangeReader{data: data}, chunk: 256}
+
+	got, err := s.forward(context.Background(), mustPattern(t, "NEEDLE"), 0, int64(len(data)), 1024)
+	if err != nil || got.outcome != scanBudgetSpent {
+		t.Fatalf("forward: outcome %v, err %v", got.outcome, err)
+	}
+	if want := bytes.Count(data[:got.resumeAt], []byte("\n")); got.newlines != want {
+		t.Errorf("forward counted %d newlines up to the resume point, want %d", got.newlines, want)
+	}
+
+	end := int64(len(data))
+	got, err = s.backward(context.Background(), mustPattern(t, "NEEDLE"), end, 1024)
+	if err != nil || got.outcome != scanBudgetSpent {
+		t.Fatalf("backward: outcome %v, err %v", got.outcome, err)
+	}
+	if want := bytes.Count(data[got.resumeAt:end], []byte("\n")); got.newlines != want {
+		t.Errorf("backward counted %d newlines back to the resume point, want %d", got.newlines, want)
+	}
+}
+
+// A scan starts wherever the cursor is, usually mid-line. Whether ^, $
+// or \b hold at that offset depends on the byte on the other side of
+// it, which the scan therefore has to read.
+func TestScanJudgesAnchorsAtItsStartOffset(t *testing.T) {
+	data := []byte("xabc tail\nabc tail\nabcx\nabc\n")
+
+	s := blobScanner{reader: &fakeRangeReader{data: data}, chunk: 1 << 20}
+	got, err := s.forward(context.Background(), mustPattern(t, "^abc"), 1, int64(len(data)), 1<<20)
+	if err != nil || got.outcome != scanFound {
+		t.Fatalf("forward: outcome %v, err %v", got.outcome, err)
+	}
+	if want := int64(bytes.Index(data, []byte("\nabc")) + 1); got.match.Start != want {
+		t.Errorf("^abc from the middle of a line matched at %d, want the next line start %d", got.match.Start, want)
+	}
+
+	// Scanning back from just after the "abc" of "abcx": abc$ does not
+	// hold there, the x follows.
+	from := int64(bytes.Index(data, []byte("abcx")) + 3)
+	got, err = s.backward(context.Background(), mustPattern(t, "abc$"), from, 1<<20)
+	if err != nil {
+		t.Fatalf("backward: %v", err)
+	}
+	if got.outcome == scanFound {
+		t.Errorf("abc$ matched at %d although no line before offset %d ends in abc", got.match.Start, from)
+	}
+
+	got, err = s.backward(context.Background(), mustPattern(t, "abc$"), int64(len(data)), 1<<20)
+	if err != nil || got.outcome != scanFound {
+		t.Fatalf("backward from the end: outcome %v, err %v", got.outcome, err)
+	}
+	if want := int64(len(data) - 4); got.match.Start != want {
+		t.Errorf("abc$ from the end matched at %d, want %d", got.match.Start, want)
 	}
 }

@@ -20,6 +20,9 @@ func TestCompileSearchPatternSmartcase(t *testing.T) {
 		{"digits do not trigger case sensitivity", "err0r", "ERR0R", true, 0},
 		{"regex alternation", "fatal|panic", "a panic occurred", true, 2},
 		{"anchored match", "^start", "start of line", true, 0},
+		{"^ anchors to a line, not the buffer", "^error", "info ok\nerror bad\n", true, 8},
+		{"^ does not match mid-line", "^bad", "info ok\nerror bad\n", false, 0},
+		{"$ anchors to a line end", "ok$", "info ok\nerror bad\n", true, 5},
 		{"character class", "[0-9]+", "abc 4711 def", true, 4},
 	}
 
@@ -233,5 +236,72 @@ func TestSearchFixtureOffsets(t *testing.T) {
 	}
 	if strings.Count(buf, "alpha") != 3 {
 		t.Errorf("fixture has %d occurrences of alpha, want 3", strings.Count(buf, "alpha"))
+	}
+}
+
+// A search that starts in the middle of a buffer must judge ^ and \b by
+// what really precedes that position, not by the cut.
+func TestSearchBufferForwardKeepsContextAtOffset(t *testing.T) {
+	tests := []struct {
+		name      string
+		query     string
+		haystack  string
+		from      int
+		wantStart int
+		wantFound bool
+	}{
+		{"^ does not match mid-line", "^bc", "abc\nbcd\n", 1, 4, true},
+		{"^ matches right after a newline", "^bc", "a\nbcd\n", 2, 2, true},
+		{"indentation is one match, not one per space", `^\s+x`, "    x\n  x\n", 1, 6, true},
+		{"word boundary does not hold mid-word", `\bbar`, "foobar bar", 3, 7, true},
+		{"non-boundary holds mid-word", `\Bbar`, "foobar", 3, 3, true},
+		{"overlapping match is found from inside the previous one", "aa", "aaa", 1, 1, true},
+		{"nothing after the offset", "^a", "aaa", 1, 0, false},
+		{"offset at the end of the buffer", "a", "aaa", 3, 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := CompileSearchPattern(tt.query)
+			if err != nil {
+				t.Fatalf("CompileSearchPattern(%q) failed: %v", tt.query, err)
+			}
+			got := SearchBufferForward(p, []byte(tt.haystack), tt.from)
+			if !tt.wantFound {
+				if got != nil {
+					t.Fatalf("unexpected match at %d", got.Start)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("no match for %q in %q from %d", tt.query, tt.haystack, tt.from)
+			}
+			if got.Start != tt.wantStart {
+				t.Errorf("match at %d, want %d", got.Start, tt.wantStart)
+			}
+		})
+	}
+}
+
+// Walking a buffer match by match must not re-anchor ^ behind each match.
+func TestSearchBufferAllAnchorsToLines(t *testing.T) {
+	p, err := CompileSearchPattern("^a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := SearchBufferAll(p, []byte("aaa\nbaa\naa\n"))
+	want := []SearchMatch{{Start: 0, End: 1}, {Start: 8, End: 9}}
+	if len(got) != len(want) {
+		t.Fatalf("matches = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("match %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+
+	last := SearchBufferBackward(p, []byte("aaa\nbaa\naa\n"), 8)
+	if last == nil || last.Start != 0 {
+		t.Errorf("backward match = %v, want the one at 0", last)
 	}
 }

@@ -15,6 +15,10 @@ import (
 // gigabytes, scanned one chunk at a time).
 type SearchPattern struct {
 	re *regexp.Regexp
+	// reAfter matches the query immediately after one leading rune. It
+	// answers "does a match start right here?" for a position in the
+	// middle of a buffer, where ^ and \b depend on the rune before it.
+	reAfter *regexp.Regexp
 	// Query is the text the user typed, kept for redisplay in the search
 	// bar and in messages.
 	Query string
@@ -33,6 +37,11 @@ type SearchMatch struct {
 // vim's 'ignorecase' + 'smartcase' behavior, which is what a query typed
 // into a / prompt is expected to do.
 //
+// ^ and $ anchor to lines, as they do in vim. The buffers searched are
+// many lines long — a window of a blob, a multi-megabyte scan chunk —
+// so anchoring to the buffer's ends would make ^error match only where
+// a chunk happens to begin.
+//
 // The regexp engine is RE2, so there are no backreferences, but matching
 // is linear in the input — which matters when the input is a multi-
 // megabyte chunk of somebody's log file.
@@ -41,16 +50,21 @@ func CompileSearchPattern(query string) (SearchPattern, error) {
 		return SearchPattern{}, fmt.Errorf("empty search pattern")
 	}
 
-	expr := query
+	flags := "m"
 	if !hasUpper(query) {
-		expr = "(?i)" + expr
+		flags += "i"
 	}
+	expr := "(?" + flags + ")" + query
 
 	re, err := regexp.Compile(expr)
 	if err != nil {
 		return SearchPattern{}, fmt.Errorf("invalid pattern: %w", err)
 	}
-	return SearchPattern{re: re, Query: query}, nil
+	reAfter, err := regexp.Compile(`\A(?s:.)(` + expr + `)`)
+	if err != nil {
+		return SearchPattern{}, fmt.Errorf("invalid pattern: %w", err)
+	}
+	return SearchPattern{re: re, reAfter: reAfter, Query: query}, nil
 }
 
 // Valid reports whether the pattern was compiled successfully. The zero
@@ -67,22 +81,41 @@ func (p SearchPattern) Find(data []byte, from int) *SearchMatch {
 // SearchBufferForward returns the first match starting at or after from.
 // Offsets outside the buffer are clamped; a from past the end finds
 // nothing.
+//
+// The regexp package can only search a slice from its first byte, and a
+// slice cut at from looks like the start of the text: ^ and \b hold
+// there whatever came before. Everything after the cut still sees its
+// real neighbours, so only a match at the cut itself is in doubt, and
+// that one is decided by reAfter with the preceding rune in view.
 func SearchBufferForward(p SearchPattern, data []byte, from int) *SearchMatch {
 	if !p.Valid() || len(data) == 0 {
 		return nil
 	}
-	if from < 0 {
-		from = 0
-	}
-	if from > len(data) {
-		return nil
+	if from <= 0 {
+		loc := p.re.FindIndex(data)
+		if loc == nil {
+			return nil
+		}
+		return &SearchMatch{Start: loc[0], End: loc[1]}
 	}
 
-	loc := p.re.FindIndex(data[from:])
-	if loc == nil {
-		return nil
+	for ; from <= len(data); from++ {
+		before := from - 1
+		if idx := p.reAfter.FindSubmatchIndex(data[before:]); idx != nil {
+			return &SearchMatch{Start: before + idx[2], End: before + idx[3]}
+		}
+
+		loc := p.re.FindIndex(data[from:])
+		if loc == nil {
+			return nil
+		}
+		if loc[0] > 0 {
+			return &SearchMatch{Start: from + loc[0], End: from + loc[1]}
+		}
+		// A match at the cut that reAfter rejected exists only because
+		// the cut hid what precedes it. Step past it and look again.
 	}
-	return &SearchMatch{Start: from + loc[0], End: from + loc[1]}
+	return nil
 }
 
 // SearchBufferBackward returns the last match that starts strictly
@@ -98,24 +131,19 @@ func SearchBufferBackward(p SearchPattern, data []byte, from int) *SearchMatch {
 
 	var last *SearchMatch
 	for pos := 0; pos < from; {
-		loc := p.re.FindIndex(data[pos:])
-		if loc == nil {
+		match := SearchBufferForward(p, data, pos)
+		if match == nil || match.Start >= from {
 			break
 		}
-		start := pos + loc[0]
-		if start >= from {
-			break
-		}
-		match := SearchMatch{Start: start, End: pos + loc[1]}
-		last = &match
-		pos = advance(start, pos+loc[1])
+		last = match
+		pos = advance(match.Start, match.End)
 	}
 	return last
 }
 
 // SearchBufferAll returns every match in the buffer, in order. Used to
-// highlight the matches inside the loaded window, which is small enough
-// that scanning all of it is cheap.
+// highlight the matches on screen, so the buffer is expected to be
+// small.
 func SearchBufferAll(p SearchPattern, data []byte) []SearchMatch {
 	if !p.Valid() || len(data) == 0 {
 		return nil
@@ -123,13 +151,12 @@ func SearchBufferAll(p SearchPattern, data []byte) []SearchMatch {
 
 	var matches []SearchMatch
 	for pos := 0; pos <= len(data); {
-		loc := p.re.FindIndex(data[pos:])
-		if loc == nil {
+		match := SearchBufferForward(p, data, pos)
+		if match == nil {
 			break
 		}
-		start, end := pos+loc[0], pos+loc[1]
-		matches = append(matches, SearchMatch{Start: start, End: end})
-		pos = advance(start, end)
+		matches = append(matches, *match)
+		pos = advance(match.Start, match.End)
 	}
 	return matches
 }

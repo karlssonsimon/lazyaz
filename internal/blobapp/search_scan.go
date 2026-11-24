@@ -12,6 +12,8 @@ import (
 // rather than thousands, small enough that cancelling feels immediate.
 const searchChunkBytes int64 = 4 << 20
 
+var newline = []byte{'\n'}
+
 // blobMatch is a byte range in the blob itself, as opposed to
 // ui.SearchMatch which is relative to whatever buffer was searched.
 type blobMatch struct {
@@ -34,9 +36,14 @@ const (
 )
 
 type scanResult struct {
-	outcome   scanOutcome
-	match     blobMatch
-	resumeAt  int64
+	outcome  scanOutcome
+	match    blobMatch
+	resumeAt int64
+	// newlines is how many line breaks lie between where the scan
+	// started and where it stopped — the match, or resumeAt. The scan
+	// reads those bytes anyway, and the count is what tells a hit far
+	// from the loaded window its line number.
+	newlines  int
 	bytesRead int64
 }
 
@@ -68,6 +75,10 @@ func (s blobScanner) chunkSize() int64 {
 // next chunk. That is what keeps a match spanning a chunk edge findable
 // with a regex, whose match length has no bound to overlap by.
 //
+// The first read starts one byte before `from`. A search usually starts
+// in the middle of a line, and whether ^ or \b hold at that position
+// depends on the byte in front of it.
+//
 // A line longer than one chunk cannot be kept whole. Such a chunk is
 // searched as-is and the scan moves past it, so a match straddling that
 // forced split is missed. It takes a multi-megabyte line with no newline
@@ -92,15 +103,19 @@ func (s blobScanner) forward(ctx context.Context, p ui.SearchPattern, from, blob
 			return res, nil
 		}
 
+		lead := int64(0)
+		if pos == from && from > 0 {
+			lead = 1
+		}
 		count := chunk
 		if pos+count > blobSize {
 			count = blobSize - pos
 		}
-		data, err := s.reader.ReadBlobRange(ctx, pos, count)
+		data, err := s.reader.ReadBlobRange(ctx, pos-lead, count+lead)
 		if err != nil {
 			return res, err
 		}
-		if len(data) == 0 {
+		if int64(len(data)) <= lead {
 			break
 		}
 		res.bytesRead += int64(len(data))
@@ -108,20 +123,22 @@ func (s blobScanner) forward(ctx context.Context, p ui.SearchPattern, from, blob
 		// Trim to the last newline unless this chunk runs to the end of
 		// the blob, where there is nothing left to carry over.
 		searchable := data
-		advance := int64(len(data))
-		if pos+int64(len(data)) < blobSize {
-			if idx := bytes.LastIndexByte(data, '\n'); idx >= 0 {
+		advance := int64(len(data)) - lead
+		if pos-lead+int64(len(data)) < blobSize {
+			if idx := int64(bytes.LastIndexByte(data, '\n')); idx >= lead {
 				searchable = data[:idx+1]
-				advance = int64(idx + 1)
+				advance = idx + 1 - lead
 			}
 		}
 
-		if loc := ui.SearchBufferForward(p, searchable, 0); loc != nil {
+		if loc := ui.SearchBufferForward(p, searchable, int(lead)); loc != nil {
 			res.outcome = scanFound
-			res.match = blobMatch{Start: pos + int64(loc.Start), End: pos + int64(loc.End)}
+			res.match = blobMatch{Start: pos - lead + int64(loc.Start), End: pos - lead + int64(loc.End)}
+			res.newlines += bytes.Count(searchable[lead:loc.Start], newline)
 			return res, nil
 		}
 
+		res.newlines += bytes.Count(searchable[lead:], newline)
 		pos += advance
 	}
 
@@ -135,6 +152,10 @@ func (s blobScanner) forward(ctx context.Context, p ui.SearchPattern, from, blob
 // mid-line; the skipped head becomes the tail of the next (earlier)
 // chunk, which is why hi moves to the aligned low bound rather than the
 // requested one.
+//
+// The first read runs one byte past `from`, for the same reason forward
+// starts one byte early: $ and \b at the last position searched depend
+// on the byte that follows it.
 func (s blobScanner) backward(ctx context.Context, p ui.SearchPattern, from, budget int64) (scanResult, error) {
 	res := scanResult{outcome: scanHitEnd}
 	if !p.Valid() || from <= 0 {
@@ -156,7 +177,11 @@ func (s blobScanner) backward(ctx context.Context, p ui.SearchPattern, from, bud
 		if lo < 0 {
 			lo = 0
 		}
-		data, err := s.reader.ReadBlobRange(ctx, lo, hi-lo)
+		tail := int64(0)
+		if hi == from {
+			tail = 1
+		}
+		data, err := s.reader.ReadBlobRange(ctx, lo, hi-lo+tail)
 		if err != nil {
 			return res, err
 		}
@@ -165,30 +190,39 @@ func (s blobScanner) backward(ctx context.Context, p ui.SearchPattern, from, bud
 		}
 		res.bytesRead += int64(len(data))
 
-		// Don't begin mid-line: drop everything before the first newline
-		// and let the next chunk cover it.
+		// limit is where hi falls in data; anything after it is the one
+		// byte of context, when the blob had one to give.
+		limit := int(hi - lo)
+		if limit > len(data) {
+			limit = len(data)
+		}
+
+		// Don't begin mid-line: leave everything before the first newline
+		// to the next chunk.
+		skip := 0
 		if lo > 0 {
-			if idx := bytes.IndexByte(data, '\n'); idx >= 0 {
-				lo += int64(idx + 1)
-				data = data[idx+1:]
+			if idx := bytes.IndexByte(data[:limit], '\n'); idx >= 0 {
+				skip = idx + 1
 			}
 		}
 
-		if loc := ui.SearchBufferBackward(p, data, len(data)); loc != nil {
+		if loc := ui.SearchBufferBackward(p, data[skip:], limit-skip); loc != nil {
+			start := skip + loc.Start
 			res.outcome = scanFound
-			res.match = blobMatch{Start: lo + int64(loc.Start), End: lo + int64(loc.End)}
+			res.match = blobMatch{Start: lo + int64(start), End: lo + int64(skip+loc.End)}
+			res.newlines += bytes.Count(data[start:limit], newline)
 			return res, nil
 		}
 
-		if lo >= hi {
-			// No newline in a chunk that started mid-line would leave lo
-			// unchanged and spin; step back explicitly.
-			lo = hi - chunk
-			if lo < 0 {
-				lo = 0
-			}
+		next := lo + int64(skip)
+		if next >= hi {
+			// The only newline was the chunk's last byte, so aligning
+			// left nothing to search and would not move hi; step back
+			// over the chunk instead.
+			next = lo
 		}
-		hi = lo
+		res.newlines += bytes.Count(data[next-lo:limit], newline)
+		hi = next
 	}
 
 	return res, nil
