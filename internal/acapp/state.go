@@ -35,6 +35,9 @@ type InputMode int
 
 const (
 	ModeNormal      InputMode = iota // Browsing
+	ModeConfirm                      // Save confirmation open
+	ModeForm                         // Edit form open
+	ModeActionMenu                   // Action menu open
 	ModeOverlay                      // Sub/Theme/Help overlay open
 	ModeListFilter                   // Typing a list filter
 	ModeCopyPalette                  // Copy palette overlay open
@@ -42,6 +45,12 @@ const (
 
 func (m Model) inputMode() InputMode {
 	switch {
+	case m.confirmModal.Active:
+		return ModeConfirm
+	case m.editForm.Active, m.createForm.Active, m.createFlagForm.Active:
+		return ModeForm
+	case m.actionMenu.Active:
+		return ModeActionMenu
 	case m.copyOverlay.Active:
 		return ModeCopyPalette
 	case m.SubOverlay.Active, m.ThemeOverlay.Active, m.HelpOverlay.Active:
@@ -54,8 +63,11 @@ func (m Model) inputMode() InputMode {
 }
 
 func (mode InputMode) String() string {
-	if mode == ModeListFilter {
+	switch mode {
+	case ModeListFilter:
 		return "FILTER"
+	case ModeForm:
+		return "INPUT"
 	}
 	return "NORMAL"
 }
@@ -93,9 +105,18 @@ type Model struct {
 	pendingNav  PendingNav
 	applyingNav bool
 
-	copyOverlay  ui.CopyOverlay
-	inspectPanes map[int]bool
-	cache        acCache
+	actionMenu     actionMenuState
+	copyOverlay    ui.CopyOverlay
+	editForm       ui.FormOverlayState
+	createForm     ui.FormOverlayState
+	createFlagForm ui.FormOverlayState
+	createValue    string            // a create value composed in $EDITOR
+	editTarget     appconfig.Setting // the setting the open form edits
+	externalEdit   *externalEdit     // the edit out in $EDITOR, if any
+	confirmModal   ui.ConfirmModalState
+	confirmAction  func() tea.Cmd
+	inspectPanes   map[int]bool
+	cache          acCache
 
 	clickTracker ui.ClickTracker
 	paneWidths   [3]int
@@ -248,6 +269,7 @@ func (m Model) HelpSections() []ui.HelpSection {
 		{
 			Title: "Settings",
 			Items: []string{
+				keymap.HelpEntry(km.ActionMenu, "action menu (edit, create, delete, flip a flag, yank, open reference)"),
 				keymap.HelpEntry(km.YankSecret, "yank value to clipboard"),
 				keymap.HelpEntry(km.CopyPalette, "copy palette (key, value, label, endpoint)"),
 				keymap.HelpEntry(km.OpenFocused, "in the value pane: open a Key Vault reference in a Key Vault tab"),

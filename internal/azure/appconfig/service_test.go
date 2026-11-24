@@ -112,13 +112,51 @@ func TestPickAccessKeyPrefersReadOnly(t *testing.T) {
 		nil,
 		{ConnectionString: &ro, ReadOnly: &yes},
 	}
-	if got := pickAccessKey(keys); got != ro {
+	if got := pickAccessKey(keys, false); got != ro {
 		t.Fatalf("pickAccessKey = %q, want the read-only key", got)
 	}
-	if got := pickAccessKey(keys[:1]); got != rw {
+	if got := pickAccessKey(keys[:1], false); got != rw {
 		t.Fatalf("pickAccessKey without a read-only key = %q, want the read-write one", got)
 	}
-	if got := pickAccessKey(nil); got != "" {
+	if got := pickAccessKey(nil, false); got != "" {
 		t.Fatalf("pickAccessKey(nil) = %q", got)
+	}
+	// Writes take only a read-write key.
+	if got := pickAccessKey(keys, true); got != rw {
+		t.Fatalf("pickAccessKey(readWrite) = %q, want the read-write key", got)
+	}
+	if got := pickAccessKey(keys[2:], true); got != "" {
+		t.Fatalf("pickAccessKey(readWrite) with only a read-only key = %q, want none", got)
+	}
+}
+
+func TestValidateKeyAndLabel(t *testing.T) {
+	for _, bad := range []string{"", ".", "..", "a*b", "a,b", `a\b`, ".appconfig.featureflag/x"} {
+		if ValidateKey(bad) == "" {
+			t.Errorf("ValidateKey(%q) accepted", bad)
+		}
+	}
+	for _, good := range []string{"Db/Timeout", "App:Setting", "a b", "unicode-ö"} {
+		if msg := ValidateKey(good); msg != "" {
+			t.Errorf("ValidateKey(%q) = %q", good, msg)
+		}
+	}
+	if ValidateLabel("") != "" || ValidateLabel("prod") != "" {
+		t.Error("empty and plain labels must pass")
+	}
+	if ValidateLabel("a,b") == "" {
+		t.Error("comma in label accepted")
+	}
+}
+
+func TestConflictAndLockedClassification(t *testing.T) {
+	if !IsConflict(fmt.Errorf("set k: %w", &azcore.ResponseError{StatusCode: 412})) {
+		t.Fatal("412 should be a conflict")
+	}
+	if !IsLocked(&azcore.ResponseError{StatusCode: 409}) {
+		t.Fatal("409 should mean locked")
+	}
+	if IsConflict(&azcore.ResponseError{StatusCode: 409}) || IsLocked(&azcore.ResponseError{StatusCode: 412}) {
+		t.Fatal("conflict and locked must not overlap")
 	}
 }

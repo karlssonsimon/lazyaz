@@ -59,7 +59,15 @@ func rowSuffix(s appconfig.Setting) string {
 	case s.IsKeyVaultReference():
 		parts = append(parts, "→ key vault")
 	case s.IsFeatureFlag():
-		parts = append(parts, "flag")
+		if ff, ok := appconfig.ParseFeatureFlag(s); ok {
+			state := "flag " + onOff(ff.Enabled)
+			if ff.HasFilters && ff.Enabled {
+				state += "*"
+			}
+			parts = append(parts, state)
+		} else {
+			parts = append(parts, "flag")
+		}
 	}
 	return strings.Join(parts, " · ")
 }

@@ -126,7 +126,8 @@ type Service struct {
 	cred           azcore.TokenCredential
 	mu             sync.Mutex
 	clients        map[string]*azappconfig.Client
-	connStrClients map[string]*azappconfig.Client
+	connStrClients map[string]*azappconfig.Client // read-only keys, for browsing
+	rwConnClients  map[string]*azappconfig.Client // read-write keys, only for writes
 }
 
 func NewService(cred azcore.TokenCredential) *Service {
@@ -134,6 +135,7 @@ func NewService(cred azcore.TokenCredential) *Service {
 		cred:           cred,
 		clients:        make(map[string]*azappconfig.Client),
 		connStrClients: make(map[string]*azappconfig.Client),
+		rwConnClients:  make(map[string]*azappconfig.Client),
 	}
 }
 
@@ -151,6 +153,7 @@ func (s *Service) SetCredential(cred azcore.TokenCredential) {
 	s.cred = cred
 	s.clients = make(map[string]*azappconfig.Client)
 	s.connStrClients = make(map[string]*azappconfig.Client)
+	s.rwConnClients = make(map[string]*azappconfig.Client)
 }
 
 func (s *Service) getClient(endpoint string) (*azappconfig.Client, error) {
@@ -169,12 +172,20 @@ func (s *Service) getClient(endpoint string) (*azappconfig.Client, error) {
 
 // getConnStrClient builds a client from the store's access keys, read
 // through ARM. Owner and Contributor can list keys even without the
-// App Configuration Data Reader role, which is the common gap. A
-// read-only key is preferred; stores with local authentication
-// disabled have no usable keys and the fallback reports that.
-func (s *Service) getConnStrClient(ctx context.Context, store Store) (*azappconfig.Client, error) {
+// App Configuration Data Reader role, which is the common gap. For
+// browsing a read-only key is preferred; a write asks for a read-write
+// key and gets its own cache so browsing never holds write power.
+// Stores with local authentication disabled have no usable keys and
+// the fallback reports that.
+func (s *Service) getConnStrClient(ctx context.Context, store Store, readWrite bool) (*azappconfig.Client, error) {
+	cacheFor := func() map[string]*azappconfig.Client {
+		if readWrite {
+			return s.rwConnClients
+		}
+		return s.connStrClients
+	}
 	s.mu.Lock()
-	if c, ok := s.connStrClients[store.Endpoint]; ok {
+	if c, ok := cacheFor()[store.Endpoint]; ok {
 		s.mu.Unlock()
 		return c, nil
 	}
@@ -197,8 +208,11 @@ func (s *Service) getConnStrClient(ctx context.Context, store Store) (*azappconf
 		}
 		keys = append(keys, page.Value...)
 	}
-	connStr := pickAccessKey(keys)
+	connStr := pickAccessKey(keys, readWrite)
 	if connStr == "" {
+		if readWrite {
+			return nil, fmt.Errorf("no read-write access key available for %s (local authentication may be disabled)", store.Name)
+		}
 		return nil, fmt.Errorf("no access key available for %s (local authentication may be disabled)", store.Name)
 	}
 	c, err := azappconfig.NewClientFromConnectionString(connStr, nil)
@@ -206,24 +220,32 @@ func (s *Service) getConnStrClient(ctx context.Context, store Store) (*azappconf
 		return nil, fmt.Errorf("create access key client for %s: %w", store.Name, err)
 	}
 	s.mu.Lock()
-	if existing, ok := s.connStrClients[store.Endpoint]; ok {
+	if existing, ok := cacheFor()[store.Endpoint]; ok {
 		s.mu.Unlock()
 		return existing, nil
 	}
-	s.connStrClients[store.Endpoint] = c
+	cacheFor()[store.Endpoint] = c
 	s.mu.Unlock()
 	return c, nil
 }
 
-// pickAccessKey returns a read-only key's connection string when one
-// exists, otherwise any key's.
-func pickAccessKey(keys []*armappconfiguration.APIKey) string {
+// pickAccessKey returns the connection string of a key fit for the
+// purpose: for browsing a read-only key when one exists, otherwise any;
+// for writing only a read-write key.
+func pickAccessKey(keys []*armappconfiguration.APIKey, readWrite bool) string {
 	fallback := ""
 	for _, k := range keys {
 		if k == nil || k.ConnectionString == nil || *k.ConnectionString == "" {
 			continue
 		}
-		if k.ReadOnly != nil && *k.ReadOnly {
+		ro := k.ReadOnly != nil && *k.ReadOnly
+		if readWrite {
+			if !ro {
+				return *k.ConnectionString
+			}
+			continue
+		}
+		if ro {
 			return *k.ConnectionString
 		}
 		if fallback == "" {
@@ -237,6 +259,16 @@ func pickAccessKey(keys []*armappconfiguration.APIKey) string {
 // failure, once more with an access-key client. Same shape as the
 // Service Bus connection-string fallback.
 func (s *Service) withFallback(ctx context.Context, store Store, label string, fn func(*azappconfig.Client) error) error {
+	return s.withFallbackMode(ctx, store, label, false, fn)
+}
+
+// withWriteFallback is withFallback for operations that change the
+// store: the fallback uses a read-write key.
+func (s *Service) withWriteFallback(ctx context.Context, store Store, label string, fn func(*azappconfig.Client) error) error {
+	return s.withFallbackMode(ctx, store, label, true, fn)
+}
+
+func (s *Service) withFallbackMode(ctx context.Context, store Store, label string, readWrite bool, fn func(*azappconfig.Client) error) error {
 	aad, err := s.getClient(store.Endpoint)
 	if err != nil {
 		return err
@@ -245,7 +277,7 @@ func (s *Service) withFallback(ctx context.Context, store Store, label string, f
 	if err == nil || !isAuthError(err) {
 		return err
 	}
-	fb, fbErr := s.getConnStrClient(ctx, store)
+	fb, fbErr := s.getConnStrClient(ctx, store, readWrite)
 	if fbErr != nil {
 		return fmt.Errorf("%s with AAD failed: %v; access key fallback failed: %w", label, err, fbErr)
 	}
@@ -253,6 +285,122 @@ func (s *Service) withFallback(ctx context.Context, store Store, label string, f
 		return fmt.Errorf("%s with access key fallback: %w", label, err)
 	}
 	return nil
+}
+
+// IsConflict reports a save rejected because the setting changed since
+// it was read (the ETag no longer matched).
+func IsConflict(err error) bool {
+	var re *azcore.ResponseError
+	return errors.As(err, &re) && re.StatusCode == http.StatusPreconditionFailed
+}
+
+// IsLocked reports a write rejected because the setting is read-only.
+func IsLocked(err error) bool {
+	var re *azcore.ResponseError
+	return errors.As(err, &re) && re.StatusCode == http.StatusConflict
+}
+
+// AddSetting creates a key-value that must not exist yet; an existing
+// key under the same label fails with IsConflict rather than being
+// overwritten. Returns the stored setting.
+func (s *Service) AddSetting(ctx context.Context, store Store, key, label, value, contentType string) (Setting, error) {
+	opts := &azappconfig.AddSettingOptions{}
+	if label != "" {
+		opts.Label = &label
+	}
+	if contentType != "" {
+		opts.ContentType = &contentType
+	}
+	var out Setting
+	err := s.withWriteFallback(ctx, store, "create "+key, func(client *azappconfig.Client) error {
+		resp, err := client.AddSetting(ctx, key, &value, opts)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", key, err)
+		}
+		out = fromSDK(resp.Setting)
+		return nil
+	})
+	return out, err
+}
+
+// DeleteSetting removes a key-value, conditional on the ETag it was
+// read with so a concurrent change fails with IsConflict first.
+func (s *Service) DeleteSetting(ctx context.Context, store Store, setting Setting) error {
+	opts := &azappconfig.DeleteSettingOptions{}
+	if setting.Label != "" {
+		opts.Label = &setting.Label
+	}
+	if setting.ETag != "" {
+		etag := azcore.ETag(setting.ETag)
+		opts.OnlyIfUnchanged = &etag
+	}
+	return s.withWriteFallback(ctx, store, "delete "+setting.Key, func(client *azappconfig.Client) error {
+		if _, err := client.DeleteSetting(ctx, setting.Key, opts); err != nil {
+			return fmt.Errorf("delete %s: %w", setting.Key, err)
+		}
+		return nil
+	})
+}
+
+// ValidateKey checks a key against the service's rules: not empty, not
+// "." or "..", no "*", "," or "\\", at most 10,000 characters. Returns a
+// message fit for a form field, or "".
+func ValidateKey(key string) string {
+	switch {
+	case key == "":
+		return "key is required"
+	case key == "." || key == "..":
+		return `"." and ".." are reserved`
+	case strings.ContainsAny(key, "*,\\"):
+		return `must not contain "*", "," or "\\"`
+	case len(key) > 10000:
+		return "must be at most 10,000 characters"
+	case strings.HasPrefix(key, FeatureFlagPrefix):
+		return "feature flags are created from the flag menu, not as a plain key"
+	}
+	return ""
+}
+
+// ValidateLabel checks an optional label: same character rules as a
+// key, and the service's reserved "\0" is not accepted.
+func ValidateLabel(label string) string {
+	switch {
+	case label == "":
+		return ""
+	case strings.ContainsAny(label, "*,\\"):
+		return `must not contain "*", "," or "\\"`
+	case len(label) > 256:
+		return "must be at most 256 characters"
+	}
+	return ""
+}
+
+// SetValue writes a new value for an existing setting, keeping its
+// label and content type. The write is conditional on the ETag the
+// setting was read with, so a concurrent change fails with IsConflict
+// instead of being overwritten. Returns the stored setting.
+func (s *Service) SetValue(ctx context.Context, store Store, setting Setting, value string) (Setting, error) {
+	opts := &azappconfig.SetSettingOptions{}
+	if setting.Label != "" {
+		opts.Label = &setting.Label
+	}
+	if setting.ContentType != "" {
+		opts.ContentType = &setting.ContentType
+	}
+	if setting.ETag != "" {
+		etag := azcore.ETag(setting.ETag)
+		opts.OnlyIfUnchanged = &etag
+	}
+	var out Setting
+	err := s.withWriteFallback(ctx, store, "set "+setting.Key, func(client *azappconfig.Client) error {
+		resp, err := client.SetSetting(ctx, setting.Key, &value, opts)
+		if err != nil {
+			return fmt.Errorf("set %s: %w", setting.Key, err)
+		}
+		out = fromSDK(resp.Setting)
+		return nil
+	})
+	return out, err
 }
 
 // isAuthError reports a 401 or 403 from the data plane: the identity is

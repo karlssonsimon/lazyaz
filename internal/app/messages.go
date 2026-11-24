@@ -161,6 +161,7 @@ func wrapMsg(id int, msg tea.Msg) tea.Msg {
 		dashapp.OpenBlobAccountMsg, dashapp.OpenBlobContainerMsg,
 		sbapp.OpenBlobReferenceMsg,
 		acapp.OpenKeyVaultReferenceMsg,
+		acapp.ExternalEditRequestMsg,
 		jumplist.RecordJumpMsg,
 		blobapp.ActivityAutoOpenRequestMsg:
 		return msg

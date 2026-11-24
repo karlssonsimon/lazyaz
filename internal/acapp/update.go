@@ -28,6 +28,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.copyOverlay.Active:
 			m.copyOverlay.TypeText(text)
 			return m, nil
+		case m.actionMenu.Active:
+			m.actionMenu.TypeText(text)
+			return m, nil
+		case m.editForm.Active:
+			if f := m.editForm.FocusedField(); f != nil {
+				f.Insert(text)
+			}
+			return m, nil
+		case m.createForm.Active:
+			if f := m.createForm.FocusedField(); f != nil {
+				f.Insert(text)
+			}
+			return m, nil
+		case m.createFlagForm.Active:
+			if f := m.createFlagForm.FocusedField(); f != nil {
+				f.Insert(text)
+			}
+			return m, nil
 		default:
 			return m.updateFocusedList(msg)
 		}
@@ -63,6 +81,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case settingsLoadedMsg:
 		return m.handleSettingsLoaded(msg)
 
+	case settingSavedMsg:
+		return m.handleSettingSaved(msg)
+
+	case ExternalEditDoneMsg:
+		return m.handleExternalEditDone(msg)
+
+	case settingCreatedMsg:
+		return m.handleSettingCreated(msg)
+
+	case settingDeletedMsg:
+		return m.handleSettingDeleted(msg)
+
 	case clipboardMsg:
 		if msg.err != nil {
 			m.Notify(appshell.LevelError, fmt.Sprintf("Clipboard: %s", msg.err.Error()))
@@ -79,6 +109,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.MouseClickMsg:
+		// Overlays are keyboard-only; swallow clicks under them.
 		switch m.inputMode() {
 		case ModeNormal, ModeListFilter:
 		default:
@@ -183,6 +214,35 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
 	switch m.inputMode() {
+	case ModeConfirm:
+		switch m.confirmModal.HandleKey(key) {
+		case ui.ConfirmActionConfirm:
+			act := m.confirmAction
+			m.confirmAction = nil
+			if act != nil {
+				m.StartLoading(m.focus, "Working...")
+				return m, tea.Batch(m.Spinner.Tick, act())
+			}
+		case ui.ConfirmActionCancel:
+			m.confirmAction = nil
+		}
+		return m, nil
+
+	case ModeForm:
+		switch {
+		case m.createForm.Active:
+			return m.handleCreateFormKey(key)
+		case m.createFlagForm.Active:
+			return m.handleCreateFlagFormKey(key)
+		}
+		return m.handleFormKey(key)
+
+	case ModeActionMenu:
+		if selected, act := m.actionMenu.handleKey(key, m.Keymap); selected {
+			return m.executeAction(act)
+		}
+		return m, nil
+
 	case ModeCopyPalette:
 		if target, picked := m.copyOverlay.HandleKey(key, m.Keymap); picked {
 			return m.copyToClipboard(target.Value)
@@ -275,6 +335,9 @@ func (m Model) handleNormalKey(msg tea.KeyMsg, key string) (Model, tea.Cmd) {
 		if m.focus == settingsPane {
 			return m.yankValue()
 		}
+	case m.Keymap.ActionMenu.Matches(key):
+		m.actionMenu.open(m.buildActions())
+		return m, nil
 	case m.Keymap.CopyPalette.Matches(key):
 		return m.openCopyPalette()
 	case !m.EmbeddedMode && m.Keymap.ToggleThemePicker.Matches(key):

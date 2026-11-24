@@ -111,8 +111,23 @@ func (m Model) View() tea.View {
 	bottomRule := ui.RenderHorizontalRuleBottom(m.Width, m.Styles, ticks)
 
 	view := ui.RenderCanvas(lipgloss.JoinVertical(lipgloss.Left, header, topRule, panes, bottomRule, statusBar), m.Width, m.Height, m.Styles.Bg)
+	if m.actionMenu.Active {
+		view = m.renderActionMenu(view)
+	}
 	if m.copyOverlay.Active {
 		view = ui.RenderCopyOverlay(m.copyOverlay, m.Keymap, m.Cursor, m.Styles, m.Width, m.Height, view)
+	}
+	if m.editForm.Active {
+		view = ui.RenderFormOverlay(m.editForm, m.Cursor, m.Styles, m.Width, m.Height, view)
+	}
+	if m.createForm.Active {
+		view = ui.RenderFormOverlay(m.createForm, m.Cursor, m.Styles, m.Width, m.Height, view)
+	}
+	if m.createFlagForm.Active {
+		view = ui.RenderFormOverlay(m.createFlagForm, m.Cursor, m.Styles, m.Width, m.Height, view)
+	}
+	if m.confirmModal.Active {
+		view = ui.RenderConfirmModal(m.confirmModal, m.Styles, m.Width, m.Height, view)
 	}
 	out := tea.NewView(m.RenderOverlays(view))
 	out.AltScreen = true
@@ -180,6 +195,7 @@ func (m Model) statusActions() []ui.StatusAction {
 	if m.focus == valuePane {
 		return []ui.StatusAction{
 			{Key: km.CursorDown.Short() + "/" + km.CursorUp.Short(), Label: "scroll"},
+			{Key: km.ActionMenu.Short(), Label: "actions"},
 			{Key: km.YankSecret.Short(), Label: "yank"},
 			{Key: km.CopyPalette.Short(), Label: "copy"},
 			{Key: km.NavigateLeft.Short(), Label: "back"},
@@ -196,6 +212,7 @@ func (m Model) statusActions() []ui.StatusAction {
 	}
 	if m.focus == settingsPane {
 		actions = append(actions,
+			ui.StatusAction{Key: km.ActionMenu.Short(), Label: "actions"},
 			ui.StatusAction{Key: km.YankSecret.Short(), Label: "yank"},
 			ui.StatusAction{Key: km.Inspect.Short(), Label: "inspect"},
 		)

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -962,6 +963,20 @@ func (m Model) updateInner(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openKeyVaultTabWithNav(msg.Subscription, kvapp.PendingNav{
 			VaultName: msg.VaultName,
 			ItemName:  msg.SecretName,
+		})
+
+	case acapp.ExternalEditRequestMsg:
+		// The tab prepared the file; the parent runs the editor with
+		// the terminal suspended and routes the result back to the tab
+		// that asked. Only the parent can issue the exec request: a
+		// tab's commands are wrapped for routing, which would hide it.
+		if len(msg.Argv) == 0 || len(m.tabs) == 0 {
+			return m, nil
+		}
+		tabID := m.tabs[m.activeIdx].ID
+		c := exec.Command(msg.Argv[0], msg.Argv[1:]...)
+		return m, tea.ExecProcess(c, func(err error) tea.Msg {
+			return tabMsg{tabID: tabID, inner: acapp.ExternalEditDoneMsg{Path: msg.Path, Err: err}}
 		})
 
 	case nextTabMsg:

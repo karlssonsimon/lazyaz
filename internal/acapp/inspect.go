@@ -60,6 +60,16 @@ func settingInspect(s appconfig.Setting) []ui.InspectField {
 			ui.InspectField{Label: "Secret", Value: ref.SecretName},
 		)
 	}
+	if ff, ok := appconfig.ParseFeatureFlag(s); ok {
+		state := onOff(ff.Enabled)
+		if ff.HasFilters {
+			state += " (with filters)"
+		}
+		fields = append(fields,
+			ui.InspectField{Label: "Enabled", Value: state},
+			ui.InspectField{Label: "Description", Value: ui.EmptyToDash(ff.Description)},
+		)
+	}
 	return fields
 }
 

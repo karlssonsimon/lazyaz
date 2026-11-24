@@ -6,8 +6,8 @@ description: "Browse Azure App Configuration stores from your terminal with lazy
 import { Aside } from '@astrojs/starlight/components';
 
 Browse Azure App Configuration stores without the portal: pick a store,
-scan its key-values with their labels, open a value, and follow a Key
-Vault reference into the Key Vault tab. The explorer is read-only.
+scan its key-values with their labels, open a value, edit it in place,
+and follow a Key Vault reference into the Key Vault tab.
 
 Open a tab with `Ctrl+T` → **App Configuration**, or add
 `{ "kind": "appconfig" }` to the `tabs` list in your config.
@@ -34,6 +34,7 @@ Three Miller columns, left to right:
 | `h` / `Left` / `Backspace` | Go back one column |
 | `/` | Filter the focused column by key or store name |
 | `j` / `k`, `Ctrl+D` / `Ctrl+U`, `gg` / `G` | Move, with counts, in lists and in the value pane |
+| `a` | Action menu: edit value, yank, open a Key Vault reference, refresh |
 | `y` | Yank the value to the clipboard |
 | `Y` | Copy palette: key, value, label, store endpoint, and for references the vault, secret and URI |
 | `K` | Toggle the inspect strip |
@@ -61,9 +62,87 @@ positioned on the secret. `Ctrl+O` jumps back.
 
 ## Feature flags
 
-Feature flags are key-values with a special content type. The explorer
-shows them as their JSON definition, which includes the enabled state and
-any filters. Toggling flags is not supported yet.
+Feature flags are key-values with a special content type. The list shows
+each flag's state after its name: `flag on`, `flag off`, or `flag on*` when
+filters decide who gets it. The value pane shows the JSON definition,
+which includes the filters.
+
+**Turn flag on / off** in the action menu flips the `enabled` field and
+leaves everything else in the definition, filters included, exactly as it
+was. A confirmation shows the change; turning a flag on is the
+destructive-styled prompt, since it is the one that changes behaviour for
+users. The save is conditional on the version you saw, like an edit.
+
+**Create feature flag** asks for a name, an optional label and
+description, and whether it starts on or off. The flag is created in the
+shape the portal uses, with an empty filter list, and appears in the list
+with the cursor on it.
+
+## Editing a value
+
+Press `a` on a setting, in the list or in the value pane, and choose
+**Edit value**. The form opens with the current value; `Enter` submits,
+`Esc` cancels. A confirmation then shows the old and new value, with a
+reminder that applications reading the store see the change at once.
+The key, label and content type stay as they were.
+
+The save is conditional: it carries the version tag the value was read
+with, so if someone changed the setting after you opened it, the save is
+rejected with "changed since you opened it" and nothing is overwritten.
+Refresh with `r` and edit again. A locked (read-only) setting is refused
+before the form opens; unlock it in the portal first.
+
+### Editing in your editor
+
+For JSON and multi-line values the action menu offers **Edit value in
+$EDITOR** first. lazyaz writes the value to a private temp file, pretty
+printed and named `.json` when it is JSON, suspends, and runs your editor
+on it: `$VISUAL`, then `$EDITOR`, then `vi`. When the editor exits the
+file is read back and deleted, and the same confirmation follows, this
+time with a line diff: every removed line marked `-` and every added line
+marked `+`, with line numbers. Nothing reaches the store until you answer
+`y` or `Enter` there; `Esc` cancels.
+
+The value is saved exactly as you left it in the editor, apart from a
+trailing newline the editor added. If the original was JSON and the edit
+no longer parses, nothing is saved and the error names the problem.
+
+A GUI editor must be told to wait, or it returns before you have typed
+anything: `EDITOR="code --wait"`, `EDITOR="zed --wait"`. lazyaz notices an
+editor that returned at once with the value unchanged and says so.
+
+On Windows the same variables apply. Set one for your account with
+`setx EDITOR "code --wait"` in a terminal, then open a new terminal.
+Without one, lazyaz falls back to Notepad.
+
+## Creating and deleting
+
+**Create key-value** in the action menu opens a form with key, label,
+value and content type. Key and label follow the service's rules (no
+`*`, `,` or `\\`). For a short value, type it in the field. For JSON or
+anything longer, press `ctrl+e` on the form to compose the value in your
+editor: it opens a `{}` skeleton when the content type is JSON, or your
+typed text pretty-printed if it already parses. When you close the
+editor the form is back, with the value field's help line describing
+what was composed; `ctrl+e` again reopens it, typing in the field
+replaces it. Composing valid JSON fills the content type with
+`application/json` if it was empty. Pressing `Enter` with a JSON content
+type and no value opens the editor instead of creating an empty document.
+
+A JSON content type makes lazyaz check that the value parses before
+sending it. A key that already exists under the same label is refused,
+both before the request and by the service, so nothing is overwritten.
+The new row appears at once with the cursor on it.
+
+**Delete** asks for confirmation naming the store, the key and its label,
+and shows the value one last time. The delete is conditional on the
+version the value was read with: if someone changed it in the meantime
+the delete is refused and you are asked to refresh and look again.
+Deleting a Key Vault reference removes only the pointer; the secret stays
+in the vault. There is no undo. Locked settings cannot be deleted until
+unlocked in the portal.
+
+Locking is not available yet.
 
 ## Inspect panel
 
@@ -77,10 +156,11 @@ Listing stores needs `Reader` on the subscription or resource group.
 Reading key-values needs the data-plane role `App Configuration Data
 Reader` on the store. Without it, lazyaz falls back to the store's access
 keys, which `Owner` and `Contributor` can read through ARM, preferring a
-read-only key. A store with local authentication disabled has no usable
-keys, so there the data role is required and settings fail with a 403.
+read-only key. Writing needs `App Configuration Data Owner`; the fallback
+then uses a read-write key, and only for the write itself. A store with
+local authentication disabled has no usable keys, so there the data roles
+are required.
 
 <Aside>
-Editing values, toggling feature flags, revisions and snapshots are not
-part of this first version.
+Locking, revisions and snapshots are not part of this version.
 </Aside>
