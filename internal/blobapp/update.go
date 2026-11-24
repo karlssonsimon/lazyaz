@@ -108,6 +108,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case previewWindowLoadedMsg:
 		return m.handlePreviewWindowLoaded(msg)
 
+	case previewLinesCountedMsg:
+		return m.handlePreviewLinesCounted(msg)
+
 	case previewFormatFetchedMsg:
 		return m.handlePreviewFormatFetched(msg)
 

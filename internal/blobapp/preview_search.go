@@ -29,6 +29,12 @@ type previewSearchState struct {
 	// requestID guards against a scan landing after the user has moved
 	// on, matching how preview window loads are guarded.
 	requestID int
+	// fromLine is the number of lines before the offset the scan in
+	// flight started at, when that was known. The scan counts the
+	// newlines it reads on its way, so a hit then arrives with its line
+	// number for free.
+	fromLine      int
+	fromLineKnown bool
 }
 
 // searchScanDoneMsg carries a finished scan back to Update.
@@ -36,15 +42,17 @@ type searchScanDoneMsg struct {
 	requestID int
 	blobName  string
 	outcome   scanOutcome
+	dir       ui.SearchDirection
 	match     blobMatch
 	resumeAt  int64
+	newlines  int
 	bytesRead int64
 	err       error
 }
 
-// serviceRangeReader adapts the blob service to the narrow rangeReader
-// the scanner needs, capturing the scope so the scan itself stays free
-// of account and container plumbing.
+// serviceRangeReader adapts the blob service to the narrow reader the
+// preview needs, capturing the scope so the scan and the windowing stay
+// free of account and container plumbing.
 type serviceRangeReader struct {
 	svc       *blob.Service
 	account   blob.Account
@@ -56,33 +64,31 @@ func (r serviceRangeReader) ReadBlobRange(ctx context.Context, offset, count int
 	return r.svc.ReadBlobRange(ctx, r.account, r.container, r.blobName, offset, count)
 }
 
+func (r serviceRangeReader) Properties(ctx context.Context) (blob.BlobProperties, error) {
+	return r.svc.GetBlobProperties(ctx, r.account, r.container, r.blobName)
+}
+
 // runPreviewSearch starts a scan in the given direction from `from`.
 func (m Model) runPreviewSearch(pattern ui.SearchPattern, dir ui.SearchDirection, from int64) (Model, tea.Cmd) {
 	if !m.preview.open {
 		return m, nil
 	}
-	// Formatted mode searches the in-memory document: the scanner reads
-	// the real blob, whose bytes no longer match what is on screen.
-	if m.preview.formatted {
+	// A formatted or decoded document is searched in memory: the scanner
+	// reads the real blob, whose bytes are not what is on screen.
+	if m.preview.formatted || m.preview.decoded {
 		return m.searchFormattedPreview(pattern, dir, from)
 	}
-	if m.service == nil {
+	if m.preview.source == nil {
 		return m, nil
 	}
 
 	m.preview.search.requestID++
 	m.preview.search.scanning = true
+	m.preview.search.fromLine, m.preview.search.fromLineKnown = m.previewLinesBefore(from)
 	m.StartLoading(previewPane, fmt.Sprintf("Searching %s for %s", m.preview.blobName, pattern.Query))
 
-	reader := serviceRangeReader{
-		svc:       m.service,
-		account:   m.currentAccount,
-		container: m.containerName,
-		blobName:  m.preview.blobName,
-	}
-
 	cmd := searchScanCmd(
-		reader,
+		m.preview.source,
 		pattern,
 		dir,
 		from,
@@ -122,8 +128,10 @@ func searchScanCmd(
 			requestID: requestID,
 			blobName:  blobName,
 			outcome:   res.outcome,
+			dir:       dir,
 			match:     res.match,
 			resumeAt:  res.resumeAt,
+			newlines:  res.newlines,
 			bytesRead: res.bytesRead,
 			err:       err,
 		}
@@ -147,16 +155,39 @@ func (m Model) handleSearchScanDone(msg searchScanDoneMsg) (Model, tea.Cmd) {
 
 	next := m.Keymap.SearchNext.Short()
 
+	// The scan counted the newlines between where it started and where
+	// it stopped, which gives the stopping point its line number.
+	stoppedAtLine := m.preview.search.fromLine + msg.newlines
+	if msg.dir == ui.SearchBackward {
+		stoppedAtLine = m.preview.search.fromLine - msg.newlines
+	}
+
 	switch msg.outcome {
 	case scanFound:
 		m.preview.search.resumeAt = -1
+		m.preview.snapToLineStart = false
 		m.preview.cursor = msg.match.Start
-		return m.ensurePreviewWindowAtCursor()
+		if m.preview.search.fromLineKnown {
+			m.preview.lineAnchor = previewLineAnchor{offset: msg.match.Start, line: stoppedAtLine, ok: true}
+		}
+		next, cmd := m.ensurePreviewWindowAtCursor()
+		if next.previewHoldsCursor() {
+			// The hit is in the loaded window, so the anchor can number
+			// it now. Otherwise the window on its way does that when it
+			// lands.
+			var lineCmd tea.Cmd
+			next, lineCmd = next.resolvePreviewLineBase()
+			cmd = tea.Batch(cmd, lineCmd)
+		}
+		return next, cmd
 
 	case scanBudgetSpent:
 		// Record where to pick up so the next n does not re-read what
 		// this scan already paid for.
 		m.preview.search.resumeAt = msg.resumeAt
+		if m.preview.search.fromLineKnown {
+			m.preview.lineAnchor = previewLineAnchor{offset: msg.resumeAt, line: stoppedAtLine, ok: true}
+		}
 		m.Notify(appshell.LevelWarn, fmt.Sprintf(
 			"Searched %s, no match yet — %s to continue", humanSize(msg.bytesRead), next,
 		))
@@ -237,33 +268,43 @@ func (m Model) previewMatchRanges() map[int][]ui.ColumnRange {
 		return nil
 	}
 
-	matches := ui.SearchBufferAll(pattern, m.preview.windowData)
+	// Only the lines on screen are searched. This runs on every frame,
+	// and the window is hundreds of screens long.
+	top := m.preview.viewport.YOffset()
+	height := m.preview.viewport.Height()
+	if top >= len(m.preview.lineStarts) || height <= 0 {
+		return nil
+	}
+	visibleStart := m.preview.lineStarts[top]
+	visibleEnd := len(m.preview.windowData)
+	if bottom := top + height; bottom < len(m.preview.lineStarts) {
+		visibleEnd = m.preview.lineStarts[bottom]
+	}
+
+	matches := ui.SearchBufferAll(pattern, m.preview.windowData[visibleStart:visibleEnd])
 	if len(matches) == 0 {
 		return nil
 	}
 
-	top := m.preview.viewport.YOffset()
-	height := m.preview.viewport.Height()
 	cursorLocal := int(m.preview.cursor - m.preview.windowStart)
+	// Columns are viewport-relative: the horizontal offset shifts them,
+	// and ranges scrolled out of view are dropped.
+	xoff := m.preview.viewport.XOffset()
+	width := m.preview.viewport.Width()
 
 	byRow := make(map[int][]ui.ColumnRange)
 	for _, match := range matches {
-		line := m.previewLineOf(match.Start)
+		matchStart := visibleStart + match.Start
+		matchEnd := visibleStart + match.End
+		line := m.previewLineOf(matchStart)
 		row := line - top
 		if row < 0 || row >= height {
 			continue
 		}
 
 		lineStart := m.preview.lineStarts[line]
-		if lineStart > match.Start {
-			continue
-		}
-		// Columns are viewport-relative: the horizontal offset shifts
-		// them, and ranges scrolled out of view are dropped.
-		xoff := m.preview.viewport.XOffset()
-		width := m.preview.viewport.Width()
-		startCol := ui.PlainWidth(m.preview.windowData[lineStart:match.Start]) - xoff
-		endCol := startCol + ui.PlainWidth(m.preview.windowData[match.Start:match.End])
+		startCol := ui.PlainWidth(m.preview.windowData[lineStart:matchStart]) - xoff
+		endCol := startCol + ui.PlainWidth(m.preview.windowData[matchStart:matchEnd])
 		if endCol <= 0 || startCol >= width {
 			continue
 		}
@@ -275,7 +316,7 @@ func (m Model) previewMatchRanges() map[int][]ui.ColumnRange {
 		}
 
 		style := m.Styles.SearchMatch
-		if match.Start == cursorLocal {
+		if matchStart == cursorLocal {
 			style = m.Styles.SearchMatchCurrent
 		}
 		byRow[row] = append(byRow[row], ui.ColumnRange{Start: startCol, End: endCol, Style: style})

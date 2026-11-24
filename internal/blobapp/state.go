@@ -324,19 +324,6 @@ type blobsDownloadedMsg struct {
 	err             error
 }
 
-type previewWindowLoadedMsg struct {
-	requestID   int
-	account     blob.Account
-	container   string
-	blobName    string
-	blobSize    int64
-	contentType string
-	windowStart int64
-	cursor      int64
-	data        []byte
-	err         error
-}
-
 func NewModel(svc *blob.Service, cfg ui.Config, db *cache.DB) Model {
 	return NewModelWithKeyMap(svc, cfg, keymap.Default(), db)
 }
@@ -525,6 +512,9 @@ func (m *Model) applyScheme(scheme ui.Scheme) {
 // window loads, so without this the pane keeps painting the previous
 // theme until the blob is reloaded.
 func (m *Model) rehighlightPreview() {
+	// A window on its way was highlighted with the styles in force when
+	// it was requested.
+	m.preview.restyle = m.preview.loading
 	if !m.preview.open || len(m.preview.windowData) == 0 {
 		return
 	}

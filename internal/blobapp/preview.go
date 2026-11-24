@@ -1,11 +1,7 @@
 package blobapp
 
 import (
-	"context"
-	"fmt"
 	"sort"
-	"strings"
-	"time"
 
 	"github.com/karlssonsimon/lazyaz/internal/appshell"
 	"github.com/karlssonsimon/lazyaz/internal/azure/blob"
@@ -15,13 +11,6 @@ import (
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
-)
-
-const (
-	previewBufferViewports = 10
-	previewApproxLineBytes = 96
-	previewMinWindowBytes  = int64(64 * 1024)
-	previewMaxWindowBytes  = int64(2 * 1024 * 1024)
 )
 
 type previewState struct {
@@ -38,6 +27,37 @@ type previewState struct {
 	requestID   int
 	viewport    viewport.Model
 	search      previewSearchState
+
+	// source reads the open blob; nil when there is nothing to read from.
+	source previewSource
+	// openSeq identifies this opening of a blob, so results that arrive
+	// after the preview has moved on to another one can be told apart.
+	openSeq int
+	// loading is true while a window request is in flight, for the raw
+	// byte range [loadStart, loadEnd). loadSpinner is the spinner it
+	// raised, 0 for a window fetched ahead of the view.
+	loading     bool
+	loadStart   int64
+	loadEnd     int64
+	loadSpinner int
+	// restyle marks a theme change made while a window was loading: its
+	// highlighting was baked with the previous styles.
+	restyle bool
+	// windowAnchor is the cursor offset the loaded window was built
+	// around.
+	windowAnchor int64
+	// lineBase is the number of lines before the window, which is what
+	// turns a window line into the blob's line number. It is only known
+	// when the blob was read from a counted position up to here.
+	lineBase      int
+	lineBaseKnown bool
+	// lineAnchor is the last position whose line was learned outside the
+	// window: where a search landed, or where a count finished.
+	lineAnchor    previewLineAnchor
+	countingLines bool
+	// decoded means the window is the whole blob converted from UTF-16,
+	// held in memory; its offsets are not the blob's.
+	decoded bool
 	// vcur is the window-local vim cursor; preview.cursor (the absolute
 	// byte offset) is re-derived from it after every motion.
 	vcur vim.Cursor
@@ -75,7 +95,9 @@ func newPreviewState() previewState {
 const previewGutterMinDigits = 3
 
 func (m *Model) resetPreviewState() {
+	openSeq := m.preview.openSeq
 	m.preview = newPreviewState()
+	m.preview.openSeq = openSeq
 	m.vimr.Clear()
 	if m.focus == previewPane {
 		m.transitionTo(blobsPane, false)
@@ -88,87 +110,75 @@ func (m Model) openPreview(b blob.BlobEntry) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if !m.preview.open {
-		m.preview.open = true
+	var source previewSource
+	if m.service != nil {
+		source = serviceRangeReader{
+			svc:       m.service,
+			account:   m.currentAccount,
+			container: m.containerName,
+			blobName:  b.Name,
+		}
 	}
+	return m.openPreviewFrom(b, source)
+}
+
+// openPreviewFrom opens the preview on a blob read through source.
+func (m Model) openPreviewFrom(b blob.BlobEntry, source previewSource) (Model, tea.Cmd) {
+	m.preview.open = true
+	m.preview.source = source
+	m.preview.openSeq++
 	m.preview.blobName = b.Name
 	m.preview.blobSize = b.Size
 	m.preview.contentType = b.ContentType
 	m.preview.binary = false
+	m.preview.decoded = false
 	m.preview.cursor = 0
 	m.preview.vcur = vim.Cursor{}
 	m.preview.span = vim.Span{}
 	m.preview.vimMode = false
+	m.preview.snapToLineStart = false
 	m.preview.windowStart = 0
 	m.preview.windowData = nil
+	m.preview.windowAnchor = 0
 	m.preview.lineStarts = nil
+	m.preview.loading = false
+	m.preview.loadSpinner = 0
+	m.preview.restyle = false
+	m.preview.lineBase = 0
+	m.preview.lineBaseKnown = false
+	m.preview.lineAnchor = previewLineAnchor{}
+	m.preview.countingLines = false
 	m.preview.formatted = false
 	m.preview.formatKind = ""
 	m.preview.rawStash = nil
+	// The query carries over to the next blob, as it does between vim
+	// buffers; where the last scan stopped does not.
+	m.preview.search.resumeAt = -1
+	m.preview.search.scanning = false
+	m.preview.search.requestID++
 	m.preview.rendered = m.Styles.Muted.Render("Loading preview...")
 	m.preview.viewport.SetContent(m.preview.rendered)
-	m.preview.requestID++
 	m.transitionTo(previewPane, false)
-	m.StartLoading(previewPane, fmt.Sprintf("Loading preview for %s", b.Name))
 	m.resize()
-
-	cmd := loadPreviewWindowCmd(
-		m.service,
-		m.currentAccount,
-		m.containerName,
-		b.Name,
-		0,
-		b.Size,
-		b.ContentType,
-		max(1, m.preview.viewport.Height()),
-		m.preview.requestID,
-	)
-	return m, tea.Batch(m.Spinner.Tick, cmd)
-}
-
-func (m Model) handlePreviewWindowLoaded(msg previewWindowLoadedMsg) (Model, tea.Cmd) {
-	if !m.preview.open || !m.hasAccount || !m.hasContainer {
-		return m, nil
-	}
-	if !sameAccount(m.currentAccount, msg.account) || m.containerName != msg.container || m.preview.blobName != msg.blobName {
-		return m, nil
-	}
-	if msg.requestID != m.preview.requestID {
-		return m, nil
-	}
-
-	m.ClearLoading()
-	if msg.err != nil {
-		m.ResolveSpinner(m.LoadingSpinnerID, appshell.LevelError, fmt.Sprintf("Failed to load preview for %s: %s", msg.blobName, msg.err.Error()))
-		return m, nil
-	}
-
-	m.DismissSpinner(m.LoadingSpinnerID)
-	m.preview.blobSize = msg.blobSize
-	if strings.TrimSpace(msg.contentType) != "" {
-		m.preview.contentType = msg.contentType
-	}
-	m.preview.windowStart = msg.windowStart
-	m.preview.windowData = msg.data
-	m.preview.cursor = clampInt64(msg.cursor, 0, maxInt64(0, msg.blobSize-1))
-	m.preview.binary = ui.IsProbablyBinary(msg.data)
-	m.preview.lineStarts = computeLineStarts(msg.data)
-	m.preview.rendered = renderPreviewContent(msg.data, msg.blobName, m.preview.contentType, m.preview.binary, m.Styles)
-	m.preview.viewport.SetContent(m.preview.rendered)
-	m.syncPreviewVimFromByte()
-	m.applyPendingSnap()
-	m.followPreviewCursor()
-
-	if m.preview.binary {
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Binary preview for %s (%s)", msg.blobName, humanSize(msg.blobSize)))
-	} else {
-		m.Notify(appshell.LevelInfo, fmt.Sprintf("Previewing %s (%s)", msg.blobName, humanSize(msg.blobSize)))
-	}
-
-	return m, nil
+	return m.requestPreviewWindow()
 }
 
 func (m Model) handlePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	hadFooter := m.previewHasFooter()
+	m, cmd := m.routePreviewKey(msg)
+	if m.previewHasFooter() != hadFooter {
+		// The search bar took or released the pane's footer row. The
+		// viewport has to give that row up, or its last line is drawn
+		// underneath the bar.
+		m.resize()
+		if m.previewHoldsCursor() {
+			m.followPreviewCursor()
+		}
+	}
+	return m, cmd
+}
+
+func (m Model) routePreviewKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	key := msg.String()
 
 	// While the / prompt is open it owns every key, in both modes.
@@ -341,6 +351,14 @@ func (m Model) handlePreviewVimKey(key string) (Model, tea.Cmd) {
 		m.vimr.ClearCount()
 	}
 
+	// The engine moves within the loaded lines. A vertical move with
+	// none left to go to, next to a line too long to load whole, is the
+	// preview's to make.
+	if dir := previewVerticalDirection(m.Keymap, key); dir != 0 && m.previewAtWindowEdge(m.preview.vcur.Line, dir) {
+		m.vimr.ClearCount()
+		return m.stepPreviewPastWindow(dir)
+	}
+
 	// The buffer grammar resolves in one place — vim returns an
 	// instruction, the preview applies it. A new motion or object added
 	// to the engine reaches here without this file changing.
@@ -415,8 +433,11 @@ func (m Model) handlePreviewVimKey(key string) (Model, tea.Cmd) {
 // from browse mode lands selecting.
 func (m Model) enterPreviewVimMode(withLineSelection bool) (Model, tea.Cmd) {
 	m.preview.vimMode = true
-	m.preview.vcur = vim.Cursor{Line: m.preview.viewport.YOffset()}
-	m.preview.cursor = m.previewByteFromVim()
+	// A cursor still waiting for its window keeps its destination.
+	if m.previewHoldsCursor() {
+		m.preview.vcur = vim.Cursor{Line: m.preview.viewport.YOffset()}
+		m.preview.cursor = m.previewByteFromVim()
+	}
 	if withLineSelection {
 		m.preview.span.Start(m.preview.cursor, vim.SpanLine)
 	}
@@ -427,18 +448,56 @@ func (m Model) enterPreviewVimMode(withLineSelection bool) (Model, tea.Cmd) {
 // byte cursor on the top visible line so search and vim-mode entry
 // start where the user is looking, and sliding the window near edges.
 func (m Model) browseScrollPreview(deltaLines int) (Model, tea.Cmd) {
-	if !m.preview.open || deltaLines == 0 {
+	// A cursor waiting for its window has nothing loaded to move
+	// relative to; the jump lands first.
+	if !m.preview.open || deltaLines == 0 || !m.previewHoldsCursor() {
 		return m, nil
 	}
 	vp := &m.preview.viewport
-	if deltaLines > 0 {
-		vp.ScrollDown(deltaLines)
-	} else {
-		vp.ScrollUp(-deltaLines)
+	// Going down continues from a position that has run ahead of the
+	// view; going up starts from what is on screen.
+	from := vp.YOffset()
+	if deltaLines > 0 && m.previewRunningAhead() {
+		from = m.preview.vcur.Line
 	}
-	m.preview.vcur = vim.Cursor{Line: vp.YOffset()}
+	if m.previewAtWindowEdge(from, deltaLines) {
+		return m.stepPreviewPastWindow(deltaLines)
+	}
+	target := from + deltaLines
+	if last := len(m.preview.lineStarts) - 1; target > last {
+		target = last
+	}
+	if target < 0 {
+		target = 0
+	}
+	vp.SetYOffset(target)
+
+	// The view stops at the last loaded screen. At the end of the blob
+	// that is simply the bottom. Where the blob goes on, the position
+	// runs ahead through the lines already on screen: that is what
+	// tells the window to move, and the view catches up when it lands —
+	// otherwise a window holding barely more than one screen could
+	// never be scrolled out of.
+	windowEnd := m.preview.windowStart + int64(len(m.preview.windowData))
+	if vp.YOffset() < target && windowEnd >= m.preview.blobSize {
+		target = vp.YOffset()
+	}
+	m.preview.vcur = vim.Cursor{Line: target}
 	m.preview.cursor = m.previewByteFromVim()
 	return m.ensurePreviewWindowAtCursor()
+}
+
+// previewVerticalDirection is 1 for a key that moves the cursor down by
+// lines, -1 for one that moves it up, 0 for any other key.
+func previewVerticalDirection(km keymap.Keymap, key string) int {
+	switch {
+	case km.PreviewDown.Matches(key), km.HalfPageDown.Matches(key), km.FullPageDown.Matches(key):
+		return 1
+	case km.PreviewUp.Matches(key), km.HalfPageUp.Matches(key), km.FullPageUp.Matches(key):
+		return -1
+	default:
+		return 0
+	}
 }
 
 func (m Model) jumpPreviewToTop() (Model, tea.Cmd) {
@@ -458,7 +517,7 @@ func (m Model) jumpPreviewToBottom() (Model, tea.Cmd) {
 }
 
 func (m Model) scrollPreviewView(delta int) (Model, tea.Cmd) {
-	if !m.preview.open || delta == 0 {
+	if !m.preview.open || delta == 0 || !m.previewHoldsCursor() {
 		return m, nil
 	}
 	vp := &m.preview.viewport
@@ -476,48 +535,6 @@ func (m Model) scrollPreviewView(delta int) (Model, tea.Cmd) {
 		nc = vim.MoveDown(m.previewBuf(), nc, sw.Cursor-nc.Line)
 	}
 	return m.applyPreviewCursor(nc)
-}
-
-func (m Model) ensurePreviewWindowAtCursor() (Model, tea.Cmd) {
-	windowEnd := m.preview.windowStart + int64(len(m.preview.windowData))
-	needLoad := false
-
-	if len(m.preview.windowData) == 0 || m.preview.cursor < m.preview.windowStart || m.preview.cursor >= windowEnd {
-		needLoad = true
-	}
-
-	if !needLoad && len(m.preview.lineStarts) > 0 {
-		visible := max(1, m.preview.viewport.Height())
-		local := m.previewLocalLine()
-		if m.preview.windowStart > 0 && local < visible*previewBufferViewports {
-			needLoad = true
-		}
-		if windowEnd < m.preview.blobSize && local > len(m.preview.lineStarts)-visible*(previewBufferViewports+1) {
-			needLoad = true
-		}
-	}
-
-	if needLoad {
-		m.preview.requestID++
-		m.StartLoading(previewPane, fmt.Sprintf("Loading preview window for %s", m.preview.blobName))
-		cmd := loadPreviewWindowCmd(
-			m.service,
-			m.currentAccount,
-			m.containerName,
-			m.preview.blobName,
-			m.preview.cursor,
-			m.preview.blobSize,
-			m.preview.contentType,
-			max(1, m.preview.viewport.Height()),
-			m.preview.requestID,
-		)
-		return m, tea.Batch(m.Spinner.Tick, cmd)
-	}
-
-	m.syncPreviewVimFromByte()
-	m.applyPendingSnap()
-	m.followPreviewCursor()
-	return m, nil
 }
 
 func (m Model) previewLocalLine() int {
@@ -538,100 +555,6 @@ func (m Model) previewLocalLine() int {
 	return line
 }
 
-func computeLineStarts(data []byte) []int {
-	if len(data) == 0 {
-		return []int{0}
-	}
-	starts := []int{0}
-	for i, b := range data {
-		if b == '\n' && i+1 <= len(data) {
-			starts = append(starts, i+1)
-		}
-	}
-	return starts
-}
-
-func loadPreviewWindowCmd(
-	svc *blob.Service,
-	account blob.Account,
-	containerName string,
-	blobName string,
-	cursor int64,
-	knownSize int64,
-	knownContentType string,
-	visibleLines int,
-	requestID int,
-) tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-
-		size := knownSize
-		contentType := knownContentType
-		if size <= 0 || strings.TrimSpace(contentType) == "" {
-			props, err := svc.GetBlobProperties(ctx, account, containerName, blobName)
-			if err != nil {
-				return previewWindowLoadedMsg{
-					requestID: requestID,
-					account:   account,
-					container: containerName,
-					blobName:  blobName,
-					err:       err,
-				}
-			}
-			size = props.Size
-			if strings.TrimSpace(contentType) == "" {
-				contentType = props.ContentType
-			}
-		}
-
-		windowStart, windowCount := computePreviewWindow(size, cursor, visibleLines)
-		data, err := svc.ReadBlobRange(ctx, account, containerName, blobName, windowStart, windowCount)
-		return previewWindowLoadedMsg{
-			requestID:   requestID,
-			account:     account,
-			container:   containerName,
-			blobName:    blobName,
-			blobSize:    size,
-			contentType: contentType,
-			windowStart: windowStart,
-			cursor:      cursor,
-			data:        data,
-			err:         err,
-		}
-	}
-}
-
-func computePreviewWindow(totalSize, cursor int64, visibleLines int) (int64, int64) {
-	if totalSize <= 0 {
-		return 0, 0
-	}
-
-	visibleBytes := int64(max(1, visibleLines) * previewApproxLineBytes)
-	bufferBytes := visibleBytes * previewBufferViewports
-	windowSize := visibleBytes + 2*bufferBytes
-	if windowSize < previewMinWindowBytes {
-		windowSize = previewMinWindowBytes
-	}
-	if windowSize > previewMaxWindowBytes {
-		windowSize = previewMaxWindowBytes
-	}
-	if windowSize > totalSize {
-		windowSize = totalSize
-	}
-
-	anchored := clampInt64(cursor, 0, maxInt64(0, totalSize-1))
-	start := anchored - bufferBytes
-	if start < 0 {
-		start = 0
-	}
-	if start+windowSize > totalSize {
-		start = maxInt64(0, totalSize-windowSize)
-	}
-
-	return start, windowSize
-}
-
 // previewViewportRegion returns the screen bounds of the preview
 // viewport so mouse coordinates can be translated to content positions.
 // X starts AFTER the line-number gutter so a click on a number doesn't
@@ -641,7 +564,7 @@ func (m Model) previewViewportRegion() ui.ViewportRegion {
 	for i := 0; i < previewPane; i++ {
 		previewX += m.paneWidths[i]
 	}
-	gutterW := ui.LineGutterWidth(m.preview.viewport.TotalLineCount(), previewGutterMinDigits)
+	gutterW := m.previewGutterWidth()
 
 	// Flat Miller column viewport starts one row below the title.
 	return ui.ViewportRegion{
@@ -650,19 +573,6 @@ func (m Model) previewViewportRegion() ui.ViewportRegion {
 		Width:  m.preview.viewport.Width(),
 		Height: m.preview.viewport.Height(),
 	}
-}
-
-func renderPreviewContent(data []byte, blobName, contentType string, binary bool, styles ui.Styles) string {
-	if binary {
-		return styles.Warning.Render("Binary content preview is not supported.")
-	}
-
-	if len(data) == 0 {
-		return styles.Muted.Render("(empty blob)")
-	}
-
-	text := string(data)
-	return styles.Syntax.Highlight(blobName, contentType, text)
 }
 
 func clampInt64(v, minVal, maxVal int64) int64 {

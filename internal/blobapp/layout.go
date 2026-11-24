@@ -94,7 +94,7 @@ func (m *Model) resize() {
 		// the viewport so text selection / copy doesn't include
 		// line-number characters.
 		colWidth := contentWidth(previewPane, w)
-		gutterW := ui.LineGutterWidth(m.preview.viewport.TotalLineCount(), previewGutterMinDigits)
+		gutterW := m.previewGutterWidth()
 		vpWidth := colWidth - gutterW
 		if vpWidth < 1 {
 			vpWidth = 1

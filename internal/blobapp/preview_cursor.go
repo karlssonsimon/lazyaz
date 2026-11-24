@@ -141,6 +141,11 @@ func (m Model) previewByteFromVim() int64 {
 // authoritative for Want, the byte cursor is re-derived, and the window
 // machinery takes over — its tail re-syncs and scrolls the view.
 func (m Model) applyPreviewCursor(nc vim.Cursor) (Model, tea.Cmd) {
+	// A cursor waiting for its window has nothing loaded to move
+	// relative to; the jump lands first.
+	if !m.previewHoldsCursor() {
+		return m, nil
+	}
 	m.preview.vcur = nc
 	m.preview.cursor = m.previewByteFromVim()
 	return m.ensurePreviewWindowAtCursor()
@@ -155,11 +160,14 @@ const horizontalFollowMargin = 5
 // with a fixed margin.
 func (m *Model) followPreviewCursor() {
 	vp := &m.preview.viewport
-	// Browse mode tracks the top visible line as its position, so
+	// Browse mode tracks the top visible line as its position — or a
+	// line below it while the view waits at the end of the window — so
 	// applying scrolloff there would push the view back on every
-	// scroll. The margin belongs to the vim capture only.
+	// scroll. Anywhere else the cursor was put there by a jump or a
+	// search hit, and gets its context rows like in the vim capture.
 	so := m.scrolloff
-	if !m.preview.vimMode {
+	scrollPosition := !m.preview.vimMode && m.preview.vcur.Line == vp.YOffset()
+	if scrollPosition || m.previewRunningAhead() {
 		so = 0
 	}
 	sw := ui.ScrollWindow{
@@ -169,24 +177,88 @@ func (m *Model) followPreviewCursor() {
 		Count:     len(m.preview.lineStarts),
 		Scrolloff: so,
 	}
-	vp.SetYOffset(sw.Normalize().Offset)
+	// A cursor that landed a screen or more away shares nothing with
+	// the lines on screen, so it is centered, as vim does; a nearer one
+	// scrolls the view just far enough.
+	next := sw.Normalize()
+	if vp.Height() > 0 && absInt(next.Offset-sw.Offset) >= vp.Height() {
+		next = sw.CenterOnCursor()
+	}
+	vp.SetYOffset(next.Offset)
 
-	dcol := m.previewCursorDisplayCol()
 	width := vp.Width()
 	if width <= 0 {
 		return
 	}
+	// The end is brought into view first and the start second, so when
+	// the span is wider than the pane it is the start that shows.
+	start, end := m.previewCursorSpan()
 	xoff := vp.XOffset()
-	if dcol < xoff+horizontalFollowMargin {
-		xoff = dcol - horizontalFollowMargin
+	if end+horizontalFollowMargin > xoff+width {
+		xoff = end + horizontalFollowMargin - width
+	}
+	if start-horizontalFollowMargin < xoff {
+		xoff = start - horizontalFollowMargin
 		if xoff < 0 {
 			xoff = 0
 		}
 	}
-	if dcol > xoff+width-1-horizontalFollowMargin {
-		xoff = dcol - width + 1 + horizontalFollowMargin
-	}
 	vp.SetXOffset(xoff)
+}
+
+// centerPreviewOnCursor puts the cursor line in the middle of the view,
+// as far as the ends of the window allow.
+func (m *Model) centerPreviewOnCursor() {
+	vp := &m.preview.viewport
+	sw := ui.ScrollWindow{
+		Cursor: m.preview.vcur.Line,
+		Offset: vp.YOffset(),
+		Height: vp.Height(),
+		Count:  len(m.preview.lineStarts),
+	}
+	vp.SetYOffset(sw.CenterOnCursor().Offset)
+}
+
+// previewCursorSpan is the range of display columns the horizontal
+// follow keeps in view: the cursor cell, widened to the whole match when
+// the cursor sits at the start of one. A search hit far along a line is
+// then shown whole, not as its first few columns at the pane's edge.
+func (m Model) previewCursorSpan() (start, end int) {
+	start = m.previewCursorDisplayCol()
+	end = start + 1
+
+	pattern := m.preview.search.bar.Pattern
+	if !pattern.Valid() || len(m.preview.lineStarts) == 0 {
+		return start, end
+	}
+	local := m.preview.cursor - m.preview.windowStart
+	if local < 0 || local >= int64(len(m.preview.windowData)) {
+		return start, end
+	}
+
+	lineEnd := len(m.preview.windowData)
+	if next := m.preview.vcur.Line + 1; next < len(m.preview.lineStarts) {
+		lineEnd = m.preview.lineStarts[next]
+	}
+	if int(local) >= lineEnd {
+		return start, end
+	}
+	match := ui.SearchBufferForward(pattern, m.preview.windowData[:lineEnd], int(local))
+	if match == nil || match.Start != int(local) {
+		return start, end
+	}
+	width := ui.PlainWidth(m.preview.windowData[match.Start:match.End])
+	if width > 1 {
+		end = start + width
+	}
+	return start, end
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 // previewCursorDisplayCol is the cursor's display column on its line —

@@ -208,29 +208,28 @@ func TestBlobSearchPrefix(t *testing.T) {
 	}
 }
 
-func TestComputePreviewWindow(t *testing.T) {
+func TestPreviewWindowAround(t *testing.T) {
+	const mb = int64(1024 * 1024)
+	const window = 512 * 1024
 	tests := []struct {
-		name         string
-		totalSize    int64
-		cursor       int64
-		visibleLines int
+		name      string
+		blobSize  int64
+		cursor    int64
+		wantStart int64
+		wantCount int64
 	}{
-		{name: "small blob", totalSize: 1024, cursor: 0, visibleLines: 20},
-		{name: "middle of large blob", totalSize: 10 * 1024 * 1024, cursor: 5 * 1024 * 1024, visibleLines: 30},
-		{name: "near end", totalSize: 10 * 1024 * 1024, cursor: 10*1024*1024 - 10, visibleLines: 25},
+		{name: "empty blob", blobSize: 0, cursor: 0, wantStart: 0, wantCount: 0},
+		{name: "blob smaller than a window", blobSize: 1024, cursor: 900, wantStart: 0, wantCount: 1024},
+		{name: "start of a large blob", blobSize: 10 * mb, cursor: 0, wantStart: 0, wantCount: window},
+		{name: "middle of a large blob", blobSize: 10 * mb, cursor: 5 * mb, wantStart: 5*mb - window/2, wantCount: window},
+		{name: "end of a large blob", blobSize: 10 * mb, cursor: 10*mb - 1, wantStart: 10*mb - window, wantCount: window},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			start, count := computePreviewWindow(tc.totalSize, tc.cursor, tc.visibleLines)
-			if start < 0 {
-				t.Fatalf("expected non-negative start, got %d", start)
-			}
-			if count < 0 {
-				t.Fatalf("expected non-negative count, got %d", count)
-			}
-			if start+count > tc.totalSize {
-				t.Fatalf("window exceeds blob bounds: start=%d count=%d total=%d", start, count, tc.totalSize)
+			start, count := previewWindowAround(tc.blobSize, tc.cursor, window)
+			if start != tc.wantStart || count != tc.wantCount {
+				t.Fatalf("window = [%d, +%d), want [%d, +%d)", start, count, tc.wantStart, tc.wantCount)
 			}
 		})
 	}

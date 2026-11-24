@@ -132,7 +132,7 @@ func (m Model) View() tea.View {
 				vpView = ui.HighlightLines(vpView, m.preview.viewport.Width(), ranges)
 			}
 		}
-		gutter := ui.RenderLineGutter(m.preview.viewport, m.Styles, previewGutterMinDigits)
+		gutter := ui.RenderLineGutterFrom(m.preview.viewport, m.Styles, previewGutterMinDigits, m.previewFirstLineNumber())
 		body := lipgloss.JoinHorizontal(lipgloss.Top, gutter, vpView)
 		previewFrame := frame(previewPane)
 		previewTitle := "DETAILS"

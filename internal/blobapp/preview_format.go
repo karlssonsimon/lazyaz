@@ -31,6 +31,10 @@ type previewRawStash struct {
 	blobSize    int64
 	yoffset     int
 	xoffset     int
+	// The raw window's line numbering, which the formatted document
+	// (numbered from 1) replaces while it is shown.
+	lineBase      int
+	lineBaseKnown bool
 }
 
 // previewFormatFetchedMsg carries the whole blob fetched for formatting.
@@ -67,19 +71,17 @@ func (m Model) togglePreviewFormat() (Model, tea.Cmd) {
 		return m.applyPreviewFormat(m.preview.windowData)
 	}
 
-	if m.service == nil {
+	if m.preview.source == nil {
 		m.Notify(appshell.LevelError, "Formatting needs the whole blob and no service is available")
 		return m, nil
 	}
+	// The bump orphans a window load in flight: it must not land on top
+	// of the formatted document.
 	m.preview.requestID++
+	m.preview.loading = false
+	m.preview.loadSpinner = 0
 	m.StartLoading(previewPane, fmt.Sprintf("Fetching %s to format", m.preview.blobName))
-	reader := serviceRangeReader{
-		svc:       m.service,
-		account:   m.currentAccount,
-		container: m.containerName,
-		blobName:  m.preview.blobName,
-	}
-	return m, tea.Batch(m.Spinner.Tick, formatFetchCmd(reader, m.preview.blobName, m.preview.blobSize, m.preview.requestID))
+	return m, tea.Batch(m.Spinner.Tick, formatFetchCmd(m.preview.source, m.preview.blobName, m.preview.blobSize, m.preview.requestID))
 }
 
 func formatFetchCmd(reader rangeReader, blobName string, size int64, requestID int) tea.Cmd {
@@ -130,6 +132,9 @@ func (m Model) applyPreviewFormat(raw []byte) (Model, tea.Cmd) {
 		blobSize:    m.preview.blobSize,
 		yoffset:     m.preview.viewport.YOffset(),
 		xoffset:     m.preview.viewport.XOffset(),
+
+		lineBase:      m.preview.lineBase,
+		lineBaseKnown: m.preview.lineBaseKnown,
 	}
 
 	m.preview.windowStart = 0
@@ -145,6 +150,7 @@ func (m Model) applyPreviewFormat(raw []byte) (Model, tea.Cmd) {
 	m.preview.formatKind = kind
 	m.preview.rendered = renderPreviewContent(formatted, m.preview.blobName, m.preview.contentType, false, m.Styles)
 	m.preview.viewport.SetContent(m.preview.rendered)
+	m.resize()
 	m.preview.viewport.SetYOffset(0)
 	m.preview.viewport.SetXOffset(0)
 
@@ -170,15 +176,20 @@ func (m Model) restorePreviewRaw() (Model, tea.Cmd) {
 	m.preview.cursor = st.cursor
 	m.preview.vcur = st.vcur
 	m.preview.blobSize = st.blobSize
+	m.preview.lineBase = st.lineBase
+	m.preview.lineBaseKnown = st.lineBaseKnown
 	m.preview.span.Stop()
 	m.preview.snapToLineStart = false
 	m.clearPreviewSearch()
 	m.preview.viewport.SetContent(st.rendered)
+	m.resize()
 	m.preview.viewport.SetYOffset(st.yoffset)
 	m.preview.viewport.SetXOffset(st.xoffset)
 
 	m.Notify(appshell.LevelInfo, "Raw view restored")
-	return m, nil
+	// A line count that finished while the formatted document was up
+	// could not be applied to it.
+	return m.resolvePreviewLineBase()
 }
 
 // clearPreviewSearch drops the search across a format toggle: match
@@ -225,6 +236,7 @@ func (m Model) searchFormattedPreview(pattern ui.SearchPattern, dir ui.SearchDir
 		return m, nil
 	}
 
+	m.preview.snapToLineStart = false
 	m.preview.cursor = int64(match.Start)
 	return m.ensurePreviewWindowAtCursor()
 }

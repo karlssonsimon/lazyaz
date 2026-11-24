@@ -280,18 +280,12 @@ func (m Model) yankByteRange(lo, hi int64) (Model, tea.Cmd) {
 		return m.copyYankedText(text)
 	}
 
-	if m.service == nil {
+	if m.preview.source == nil {
 		m.Notify(appshell.LevelError, "Selection reaches outside the loaded window and no service is available")
 		return m, nil
 	}
 	m.StartLoading(previewPane, fmt.Sprintf("Yanking %s", humanSize(hi-lo)))
-	reader := serviceRangeReader{
-		svc:       m.service,
-		account:   m.currentAccount,
-		container: m.containerName,
-		blobName:  m.preview.blobName,
-	}
-	return m, tea.Batch(m.Spinner.Tick, yankRangeCmd(reader, lo, hi))
+	return m, tea.Batch(m.Spinner.Tick, yankRangeCmd(m.preview.source, lo, hi))
 }
 
 func yankRangeCmd(reader rangeReader, lo, hi int64) tea.Cmd {
