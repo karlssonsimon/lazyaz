@@ -27,6 +27,20 @@ type OSDirReader struct{}
 func (OSDirReader) ReadDir(path string) ([]os.DirEntry, error) { return os.ReadDir(path) }
 func (OSDirReader) Stat(path string) (os.FileInfo, error)      { return os.Stat(path) }
 
+// StartDir picks the directory a file browser opens in: remembered when
+// it still names a directory, otherwise the process working directory.
+func StartDir(remembered string) string {
+	if remembered != "" {
+		if info, err := os.Stat(remembered); err == nil && info.IsDir() {
+			return remembered
+		}
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
+	}
+	return string(filepath.Separator)
+}
+
 // FileBrowserAction is the result action from HandleKey.
 type FileBrowserAction int
 

@@ -367,15 +367,17 @@ func validateUploadDest(value string) string {
 	return ""
 }
 
-// openUploadBrowser mounts the file browser at the current working
-// directory. Called once the destination has been confirmed; the
-// destination is already stashed on m.uploadDest by the caller.
+// lastUploadDir is the folder the upload browser was showing when it
+// last closed. Package-level so every blob tab shares it; it lives only
+// as long as the process. Only touched from Update.
+var lastUploadDir string
+
+// openUploadBrowser mounts the file browser in the folder it was last
+// closed in, or the working directory the first time. Called once the
+// destination has been confirmed; the destination is already stashed on
+// m.uploadDest by the caller.
 func (m Model) openUploadBrowser() (Model, tea.Cmd) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "/"
-	}
-	m.uploadBrowser.Open(cwd, ui.OSDirReader{}, m.Keymap)
+	m.uploadBrowser.Open(ui.StartDir(lastUploadDir), ui.OSDirReader{}, m.Keymap)
 	m.uploadBrowserActive = true
 	return m, nil
 }

@@ -548,3 +548,50 @@ func TestFinishedUploadReloadsBlobList(t *testing.T) {
 		}
 	})
 }
+
+// The upload browser reopens in the folder it was last closed in, on
+// cancel as well as confirm, and from any tab. A remembered folder that
+// no longer exists falls back to the working directory.
+func TestUploadBrowserReopensInLastFolder(t *testing.T) {
+	lastUploadDir = ""
+	t.Cleanup(func() { lastUploadDir = "" })
+
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	open := func() *Model {
+		m := NewModel(nil, testConfig, nil)
+		m.SubOverlay.Close()
+		m.hasAccount = true
+		m.hasContainer = true
+		m.focus = blobsPane
+		updated, _ := m.Update(uploadDestEnteredMsg{})
+		model := updated.(Model)
+		return &model
+	}
+
+	m := open()
+	if got := m.uploadBrowser.Cwd(); got != wd {
+		t.Fatalf("first open: cwd = %q, want working directory %q", got, wd)
+	}
+	m.uploadBrowser.Paste(sub)
+	m.Update(tea.KeyPressMsg{Code: 27, Text: "esc"})
+
+	if got := open().uploadBrowser.Cwd(); got != sub {
+		t.Fatalf("reopen in a new tab: cwd = %q, want last folder %q", got, sub)
+	}
+
+	if err := os.Remove(sub); err != nil {
+		t.Fatal(err)
+	}
+	if got := open().uploadBrowser.Cwd(); got != wd {
+		t.Fatalf("last folder gone: cwd = %q, want working directory %q", got, wd)
+	}
+}

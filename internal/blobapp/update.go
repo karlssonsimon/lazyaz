@@ -472,10 +472,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		case ui.FBActionNone:
 			return m, nil
 		case ui.FBActionCancel:
+			lastUploadDir = m.uploadBrowser.Cwd()
 			m.uploadBrowserActive = false
 			m.uploadDest = ""
 			return m, nil
 		case ui.FBActionConfirm:
+			lastUploadDir = m.uploadBrowser.Cwd()
 			m.uploadBrowserActive = false
 			dest := m.uploadDest
 			m.uploadDest = ""
