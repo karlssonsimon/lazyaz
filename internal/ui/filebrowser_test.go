@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -639,4 +640,114 @@ func namesOf(entries []os.DirEntry) []string {
 		out[i] = e.Name()
 	}
 	return out
+}
+
+// pasteTree builds root/docs/{a.txt,my file.txt,sub/} on real disk and
+// returns a browser opened at root.
+func pasteTree(t *testing.T) (root string, s *FileBrowserState) {
+	t.Helper()
+	root = t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "docs", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"a.txt", "my file.txt"} {
+		if err := os.WriteFile(filepath.Join(root, "docs", name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s = &FileBrowserState{}
+	s.Open(root, OSDirReader{}, keymap.Default())
+	return root, s
+}
+
+func focusedName(s *FileBrowserState) string {
+	v := s.VisibleEntries()
+	if len(v) == 0 {
+		return ""
+	}
+	return v[s.Cursor()].Name()
+}
+
+func TestFileBrowserPasteNavigatesToPath(t *testing.T) {
+	root, _ := pasteTree(t)
+	docs := filepath.Join(root, "docs")
+	t.Setenv("HOME", root)
+
+	cases := []struct {
+		name, paste, wantCwd, wantFocus string
+	}{
+		{"directory", docs, docs, "sub"},
+		{"trailing newline", docs + "\n", docs, "sub"},
+		{"file focuses it", filepath.Join(docs, "a.txt"), docs, "a.txt"},
+		{"single quoted", "'" + filepath.Join(docs, "my file.txt") + "'", docs, "my file.txt"},
+		{"double quoted", `"` + docs + `"`, docs, "sub"},
+		{"escaped space", filepath.Join(docs, `my\ file.txt`), docs, "my file.txt"},
+		{"file url", "file://" + filepath.ToSlash(docs) + "/my%20file.txt", docs, "my file.txt"},
+		{"tilde", "~/docs", docs, "sub"},
+		{"relative", "docs/sub", filepath.Join(docs, "sub"), ""},
+		{"first of several lines", docs + "\n" + root + "\n", docs, "sub"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &FileBrowserState{}
+			s.Open(root, OSDirReader{}, keymap.Default())
+			s.Paste(tc.paste)
+			if s.Cwd() != tc.wantCwd {
+				t.Fatalf("cwd = %q, want %q", s.Cwd(), tc.wantCwd)
+			}
+			if got := focusedName(s); got != tc.wantFocus {
+				t.Fatalf("focused = %q, want %q", got, tc.wantFocus)
+			}
+		})
+	}
+}
+
+func TestFileBrowserPasteUnknownPathStaysAndSaysSo(t *testing.T) {
+	root, s := pasteTree(t)
+	s.Paste(filepath.Join(root, "nope"))
+	if s.Cwd() != root {
+		t.Fatalf("cwd = %q, want unchanged %q", s.Cwd(), root)
+	}
+	// The header wraps on long paths, so compare with whitespace collapsed.
+	render := func() string {
+		return strings.Join(strings.Fields(RenderFileBrowser(*s, Styles{}, 120, 40, "")), " ")
+	}
+	if view := render(); !strings.Contains(view, "no such path") {
+		t.Fatalf("view does not report the bad path:\n%s", view)
+	}
+	s.HandleKey("j")
+	if strings.Contains(render(), "no such path") {
+		t.Fatal("notice still shown after the next key press")
+	}
+}
+
+func TestFileBrowserPasteKeepsMarksAndDropsFilter(t *testing.T) {
+	root, s := pasteTree(t)
+	docs := filepath.Join(root, "docs")
+	s.Paste(docs)
+	s.HandleKey("j") // a.txt
+	s.HandleKey(" ")
+	for _, k := range []string{"/", "s", "u", "enter"} {
+		s.HandleKey(k)
+	}
+	s.Paste(root)
+	if s.FilterQuery() != "" {
+		t.Fatalf("filter = %q, want cleared", s.FilterQuery())
+	}
+	if got := s.Marked(); len(got) != 1 || got[0] != filepath.Join(docs, "a.txt") {
+		t.Fatalf("marked = %v, want a.txt kept", got)
+	}
+}
+
+func TestFileBrowserPasteWhileFilteringTypesIntoFilter(t *testing.T) {
+	root, s := pasteTree(t)
+	s.HandleKey("/")
+	s.Paste("doc\n")
+	if s.Cwd() != root || s.FilterQuery() != "doc" {
+		t.Fatalf("cwd = %q filter = %q, want %q and \"doc\"", s.Cwd(), s.FilterQuery(), root)
+	}
+	s.HandleKey("backspace")
+	if s.FilterQuery() != "do" {
+		t.Fatalf("filter after backspace = %q, want \"do\"", s.FilterQuery())
+	}
 }

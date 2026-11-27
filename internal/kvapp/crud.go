@@ -189,6 +189,12 @@ func (m *Model) openCreateKeyForm() {
 	)
 }
 
+// lastCertImportDir is the folder the certificate import browser was
+// showing when it last closed. Package-level so every Key Vault tab
+// shares it; it lives only as long as the process. Only touched from
+// Update.
+var lastCertImportDir string
+
 // openImportCertBrowser launches the file picker for selecting a PFX.
 // When the user confirms a single file, the import form opens with the
 // path stashed in m.pendingCertPath.
@@ -196,12 +202,8 @@ func (m *Model) openImportCertBrowser() {
 	if !m.hasVault {
 		return
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "/"
-	}
 	m.certImportBrowser = ui.FileBrowserState{}
-	m.certImportBrowser.Open(cwd, ui.OSDirReader{}, m.Keymap)
+	m.certImportBrowser.Open(ui.StartDir(lastCertImportDir), ui.OSDirReader{}, m.Keymap)
 	m.certImportBrowserActive = true
 }
 
@@ -216,9 +218,11 @@ func (m Model) handleCertImportBrowserKey(key string) (Model, tea.Cmd) {
 	case ui.FBActionNone:
 		return m, nil
 	case ui.FBActionCancel:
+		lastCertImportDir = m.certImportBrowser.Cwd()
 		m.certImportBrowserActive = false
 		return m, nil
 	case ui.FBActionConfirm:
+		lastCertImportDir = m.certImportBrowser.Cwd()
 		m.certImportBrowserActive = false
 		if len(res.Selected) == 0 {
 			return m, nil

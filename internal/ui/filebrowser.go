@@ -2,8 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -24,6 +26,20 @@ type OSDirReader struct{}
 
 func (OSDirReader) ReadDir(path string) ([]os.DirEntry, error) { return os.ReadDir(path) }
 func (OSDirReader) Stat(path string) (os.FileInfo, error)      { return os.Stat(path) }
+
+// StartDir picks the directory a file browser opens in: remembered when
+// it still names a directory, otherwise the process working directory.
+func StartDir(remembered string) string {
+	if remembered != "" {
+		if info, err := os.Stat(remembered); err == nil && info.IsDir() {
+			return remembered
+		}
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
+	}
+	return string(filepath.Separator)
+}
 
 // FileBrowserAction is the result action from HandleKey.
 type FileBrowserAction int
@@ -54,6 +70,10 @@ type FileBrowserState struct {
 	filterQuery     string
 	filterCaret     int // rune index of the edit caret within filterQuery
 	filterInputOpen bool
+
+	// notice replaces the hint line until the next key press; it reports
+	// a pasted path that could not be opened.
+	notice string
 
 	km     keymap.Keymap
 	chords vim.Resolver
@@ -114,6 +134,7 @@ func (s *FileBrowserState) Open(startDir string, reader DirReader, km keymap.Key
 	s.filterQuery = ""
 	s.filterCaret = 0
 	s.filterInputOpen = false
+	s.notice = ""
 	s.km = km
 	s.chords.Clear()
 	s.loadEntries()
@@ -166,6 +187,7 @@ const halfPageStep = 9
 // selected paths (only populated on Confirm). Keys are matched against
 // the keymap captured at Open(); unbound keys are silently ignored.
 func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
+	s.notice = ""
 	if s.filterInputOpen {
 		return s.handleFilterInputKey(key)
 	}
@@ -294,6 +316,116 @@ func (s *FileBrowserState) handleFilterInputKey(key string) FileBrowserResult {
 	return FileBrowserResult{Action: FBActionNone}
 }
 
+// Paste handles text pasted into the browser. While the filter input is
+// open the text is inserted into the filter. Otherwise it is read as a
+// path: a directory becomes the current directory, a file moves the
+// browser to its directory with the cursor on the file. Marks are kept.
+// A path that cannot be opened leaves the browser where it is and puts
+// a notice in the hint line.
+func (s *FileBrowserState) Paste(text string) {
+	s.notice = ""
+	if s.filterInputOpen {
+		ti := TextInput{Value: s.filterQuery, Cursor: s.filterCaret}
+		ti.Insert(strings.TrimSpace(firstLine(text)))
+		s.filterQuery = ti.Value
+		s.filterCaret = ti.Cursor
+		s.cursor = 0
+		return
+	}
+	if s.reader == nil {
+		return
+	}
+	candidates := pastedPathCandidates(text, s.cwd)
+	if len(candidates) == 0 {
+		return
+	}
+	for _, p := range candidates {
+		info, err := s.reader.Stat(p)
+		if err != nil {
+			continue
+		}
+		dir, focus := p, ""
+		if !info.IsDir() {
+			dir, focus = filepath.Dir(p), filepath.Base(p)
+		}
+		s.cwd = dir
+		s.cursor = 0
+		s.visual = false
+		s.filterQuery = ""
+		s.filterCaret = 0
+		s.loadEntries()
+		for i, e := range s.entries {
+			if e.Name() == focus {
+				s.cursor = i
+				break
+			}
+		}
+		return
+	}
+	s.notice = "no such path: " + truncateMiddle(candidates[0], 40)
+}
+
+func firstLine(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+// pastedPathCandidates turns pasted text into the absolute paths it may
+// name, most literal first. It accepts what terminals and file managers
+// put on the clipboard: surrounding quotes, file:// URLs, a leading ~,
+// and backslash-escaped characters from drag-and-drop. Relative paths
+// resolve against cwd.
+func pastedPathCandidates(text, cwd string) []string {
+	p := firstLine(text)
+	if p == "" {
+		return nil
+	}
+	quoted := false
+	if n := len(p); n >= 2 && (p[0] == '\'' || p[0] == '"') && p[n-1] == p[0] {
+		p = p[1 : n-1]
+		quoted = true
+	}
+	if strings.HasPrefix(p, "file://") {
+		if u, err := url.Parse(p); err == nil && u.Path != "" {
+			return []string{filepath.Clean(filepath.FromSlash(u.Path))}
+		}
+	}
+	resolve := func(p string) string {
+		if p == "~" || strings.HasPrefix(p, "~/") {
+			if home, err := os.UserHomeDir(); err == nil {
+				p = filepath.Join(home, p[1:])
+			}
+		}
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(cwd, p)
+		}
+		return filepath.Clean(p)
+	}
+	out := []string{resolve(p)}
+	// Backslash is the separator on Windows, an escape everywhere else.
+	if !quoted && runtime.GOOS != "windows" && strings.Contains(p, "\\") {
+		if alt := resolve(unescapeBackslashes(p)); alt != out[0] {
+			out = append(out, alt)
+		}
+	}
+	return out
+}
+
+func unescapeBackslashes(p string) string {
+	var b strings.Builder
+	for i := 0; i < len(p); i++ {
+		if p[i] == '\\' && i+1 < len(p) {
+			i++
+		}
+		b.WriteByte(p[i])
+	}
+	return b.String()
+}
+
 func (s *FileBrowserState) toggleCurrentMark() {
 	visible := s.VisibleEntries()
 	if len(visible) == 0 {
@@ -346,6 +478,9 @@ func RenderFileBrowser(state FileBrowserState, styles Styles, width, height int,
 		hint = "type to filter · enter apply · esc clear"
 	} else if state.filterQuery != "" {
 		hint = "esc clear filter · / edit · enter confirm · space mark"
+	}
+	if state.notice != "" {
+		hint = state.notice
 	}
 
 	cfg := OverlayListConfig{

@@ -367,15 +367,17 @@ func validateUploadDest(value string) string {
 	return ""
 }
 
-// openUploadBrowser mounts the file browser at the current working
-// directory. Called once the destination has been confirmed; the
-// destination is already stashed on m.uploadDest by the caller.
+// lastUploadDir is the folder the upload browser was showing when it
+// last closed. Package-level so every blob tab shares it; it lives only
+// as long as the process. Only touched from Update.
+var lastUploadDir string
+
+// openUploadBrowser mounts the file browser in the folder it was last
+// closed in, or the working directory the first time. Called once the
+// destination has been confirmed; the destination is already stashed on
+// m.uploadDest by the caller.
 func (m Model) openUploadBrowser() (Model, tea.Cmd) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "/"
-	}
-	m.uploadBrowser.Open(cwd, ui.OSDirReader{}, m.Keymap)
+	m.uploadBrowser.Open(ui.StartDir(lastUploadDir), ui.OSDirReader{}, m.Keymap)
 	m.uploadBrowserActive = true
 	return m, nil
 }
@@ -472,9 +474,9 @@ func (osUploadWalker) Walk(root string, fn func(string, bool, int64, error) erro
 	})
 }
 
-// finishUpload folds the terminal uploadDoneMsg into the progress panel
-// and emits a summary notification. The panel auto-dismisses after 5s
-// via the returned tea.Tick.
+// finishUpload folds the terminal uploadDoneMsg into the progress panel,
+// emits a summary notification, and reloads the blob list so what was
+// uploaded shows up.
 func (m Model) finishUpload(msg uploadDoneMsg) (Model, tea.Cmd) {
 	// The upload is over — drop any conflict prompt still waiting for an
 	// answer (e.g. the upload was cancelled from the activity overlay).
@@ -528,6 +530,11 @@ func (m Model) finishUpload(msg uploadDoneMsg) (Model, tea.Cmd) {
 	}
 	m.Notify(level, text)
 
+	// Reload even after a cancel or partial failure: whatever did get
+	// uploaded is now in the container.
+	if msg.uploaded > 0 && m.hasAccount && m.hasContainer {
+		return m.refreshBlobs()
+	}
 	return m, nil
 }
 

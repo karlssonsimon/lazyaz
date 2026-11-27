@@ -26,6 +26,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.HelpOverlay.Active:
 			m.HelpOverlay.PasteText(text)
 			return m, nil
+		case m.certImportBrowserActive:
+			m.certImportBrowser.Paste(text)
+			return m, nil
 		case m.actionMenu.Active:
 			m.actionMenu.TypeText(text)
 			return m, nil
