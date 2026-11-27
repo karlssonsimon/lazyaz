@@ -225,3 +225,30 @@ func TestTextInputClampCursor(t *testing.T) {
 		t.Fatalf("SplitAtCursor with overflow: (%q, %q), want (abc, '')", before, after)
 	}
 }
+
+// Callers keep Value and Cursor in separate fields and rebuild the input per
+// keypress, so a caret left past the end of a replaced value reaches HandleKey.
+// Every key must treat it as sitting at the end.
+func TestTextInputCaretPastEndActsAsEnd(t *testing.T) {
+	cases := []struct {
+		key        string
+		wantValue  string
+		wantCursor int
+	}{
+		{"backspace", "abc", 3},
+		{"delete", "abcd", 4},
+		{"ctrl+w", "", 0},
+		{"left", "abcd", 3},
+		{"right", "abcd", 4},
+		{"x", "abcdx", 5},
+	}
+	for _, tc := range cases {
+		t.Run(tc.key, func(t *testing.T) {
+			ti := TextInput{Value: "abcd", Cursor: 8}
+			ti.HandleKey(tc.key)
+			if ti.Value != tc.wantValue || ti.Cursor != tc.wantCursor {
+				t.Fatalf("got (%q, %d), want (%q, %d)", ti.Value, ti.Cursor, tc.wantValue, tc.wantCursor)
+			}
+		})
+	}
+}

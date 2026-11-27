@@ -25,6 +25,7 @@ type TextInput struct {
 // the caller is responsible for (enter, tab, esc, custom shortcuts) so
 // the caller can keep its own switch concise.
 func (t *TextInput) HandleKey(key string) bool {
+	t.clampCursor()
 	switch key {
 	case "left":
 		if t.Cursor > 0 {
@@ -68,6 +69,7 @@ func (t *TextInput) Insert(s string) {
 	if s == "" {
 		return
 	}
+	t.clampCursor()
 	before, after := t.SplitAtCursor()
 	t.Value = before + s + after
 	t.Cursor += runeLen(s)
@@ -143,6 +145,19 @@ func PrepareCursor(value string, cursor int, cur cursor.Model) (before, cursorVi
 }
 
 func (t *TextInput) runeLen() int { return runeLen(t.Value) }
+
+// clampCursor pulls Cursor back into [0, RuneCount(Value)]. Callers hold
+// Value and Cursor in separate fields and can replace one without the
+// other; an out-of-range caret is treated as the nearest legal position
+// rather than indexing past the buffer.
+func (t *TextInput) clampCursor() {
+	if t.Cursor < 0 {
+		t.Cursor = 0
+	}
+	if n := t.runeLen(); t.Cursor > n {
+		t.Cursor = n
+	}
+}
 
 func (t *TextInput) deleteBefore() {
 	if t.Cursor == 0 {

@@ -640,3 +640,41 @@ func namesOf(entries []os.DirEntry) []string {
 	}
 	return out
 }
+
+// A filter that is cleared by leaving the directory must not leave its caret
+// behind: the next filter starts empty, so its caret starts at 0.
+func TestFileBrowserFilterEditsCleanlyAfterDirChangeClearedIt(t *testing.T) {
+	sub := filepath.Join("/root", "sub")
+	reader := &mapDirReader{
+		entries: map[string][]os.DirEntry{
+			"/root": {fakeDirEntry{name: "sub", isDir: true}},
+			sub:     {fakeDirEntry{name: "inner", isDir: false}},
+		},
+	}
+	leave := map[string]func(s *FileBrowserState){
+		"descend with l":     func(s *FileBrowserState) { s.HandleKey("l") },
+		"descend with enter": func(s *FileBrowserState) { s.HandleKey("enter") },
+		"go up with h":       func(s *FileBrowserState) { s.HandleKey("l"); s.HandleKey("h") },
+		"esc peels filter":   func(s *FileBrowserState) { s.HandleKey("esc") },
+	}
+	for name, clearFilter := range leave {
+		t.Run(name, func(t *testing.T) {
+			var s FileBrowserState
+			s.Open("/root", reader, keymap.Default())
+			for _, k := range []string{"/", "s", "u", "b", "enter"} {
+				s.HandleKey(k)
+			}
+			clearFilter(&s)
+			if s.FilterQuery() != "" {
+				t.Fatalf("setup: filter should be cleared, got %q", s.FilterQuery())
+			}
+
+			for _, k := range []string{"/", "i", "n", "backspace"} {
+				s.HandleKey(k)
+			}
+			if s.FilterQuery() != "i" {
+				t.Fatalf("want query %q after typing 'in' and backspace, got %q", "i", s.FilterQuery())
+			}
+		})
+	}
+}

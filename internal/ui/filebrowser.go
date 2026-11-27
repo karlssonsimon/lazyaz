@@ -111,8 +111,7 @@ func (s *FileBrowserState) Open(startDir string, reader DirReader, km keymap.Key
 	s.marked = make(map[string]bool)
 	s.visual = false
 	s.anchor = 0
-	s.filterQuery = ""
-	s.filterCaret = 0
+	s.clearFilter()
 	s.filterInputOpen = false
 	s.km = km
 	s.chords.Clear()
@@ -143,6 +142,13 @@ func (s *FileBrowserState) loadEntries() {
 	})
 	s.entries = ents
 	s.clampCursor()
+}
+
+// clearFilter drops the filter query together with its caret. The caret is a
+// rune index into the query, so the two must always be reset as a pair.
+func (s *FileBrowserState) clearFilter() {
+	s.filterQuery = ""
+	s.filterCaret = 0
 }
 
 func (s *FileBrowserState) clampCursor() {
@@ -204,7 +210,7 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 		if cur.IsDir() {
 			s.cwd = filepath.Join(s.cwd, cur.Name())
 			s.cursor = 0
-			s.filterQuery = ""
+			s.clearFilter()
 			s.loadEntries()
 		}
 	case km.OpenFocused.Matches(key):
@@ -223,7 +229,7 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 		if cur.IsDir() {
 			s.cwd = filepath.Join(s.cwd, cur.Name())
 			s.cursor = 0
-			s.filterQuery = ""
+			s.clearFilter()
 			s.loadEntries()
 			return FileBrowserResult{Action: FBActionNone}
 		}
@@ -231,7 +237,7 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 	case km.Cancel.Matches(key):
 		// Peel filter first (mirrors how the blobs pane handles esc).
 		if s.filterQuery != "" {
-			s.filterQuery = ""
+			s.clearFilter()
 			s.clampCursor()
 			return FileBrowserResult{Action: FBActionNone}
 		}
@@ -241,7 +247,7 @@ func (s *FileBrowserState) HandleKey(key string) FileBrowserResult {
 		if parent != s.cwd {
 			s.cwd = parent
 			s.cursor = 0
-			s.filterQuery = ""
+			s.clearFilter()
 			s.loadEntries()
 		}
 	case km.ToggleMark.Matches(key):
@@ -276,8 +282,7 @@ func (s *FileBrowserState) handleFilterInputKey(key string) FileBrowserResult {
 		return FileBrowserResult{Action: FBActionNone}
 	case "esc":
 		// Cancel: clear query and close the input.
-		s.filterQuery = ""
-		s.filterCaret = 0
+		s.clearFilter()
 		s.filterInputOpen = false
 		s.clampCursor()
 		return FileBrowserResult{Action: FBActionNone}
