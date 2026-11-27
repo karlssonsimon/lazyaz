@@ -30,6 +30,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.HelpOverlay.Active:
 			m.HelpOverlay.PasteText(text)
 			return m, nil
+		case m.uploadBrowserActive:
+			m.uploadBrowser.Paste(text)
+			return m, nil
 		case m.filter.inputOpen && m.focus == blobsPane:
 			ti := ui.TextInput{Value: m.filter.prefixQuery, Cursor: m.filter.prefixCaret}
 			ti.Insert(text)
