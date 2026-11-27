@@ -36,7 +36,13 @@ func (m Model) refresh() (Model, tea.Cmd) {
 	if m.focus == previewPane && m.preview.open {
 		return m.ensurePreviewWindowAtCursor()
 	}
+	return m.refreshBlobs()
+}
 
+// refreshBlobs reloads the blob list for the current container and
+// prefix, in whichever mode it is showing (load-all, prefix search, or
+// the plain hierarchy page). Callers must have a container selected.
+func (m Model) refreshBlobs() (Model, tea.Cmd) {
 	if m.blobLoadAll {
 		m.StartLoading(blobsPane, fmt.Sprintf("Loading all blobs in %s/%s", m.currentAccount.Name, m.containerName))
 		return m, tea.Batch(m.Spinner.Tick, fetchAllBlobsCmd(m.service, m.cache.blobs, m.currentAccount, m.containerName, m.prefix, m.blobs))

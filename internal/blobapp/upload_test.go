@@ -515,3 +515,36 @@ func TestUploadActivitySnapshotMapsTerminalStates(t *testing.T) {
 		t.Fatalf("waitingInput: want StatusWaitingInput, got %v", got)
 	}
 }
+
+// A finished upload must reload the blob list: the new blobs (or a new
+// folder) are otherwise invisible until the user refreshes by hand. The
+// reload targets the blob list whichever pane has focus.
+func TestFinishedUploadReloadsBlobList(t *testing.T) {
+	newModel := func(focus int) Model {
+		m := NewModel(nil, testConfig, nil)
+		m.SubOverlay.Close()
+		m.hasAccount = true
+		m.currentAccount.Name = "acct"
+		m.hasContainer = true
+		m.containerName = "cont"
+		m.focus = focus
+		return m
+	}
+
+	for name, focus := range map[string]int{"blobs focused": blobsPane, "containers focused": containersPane} {
+		t.Run(name, func(t *testing.T) {
+			updated, cmd := newModel(focus).Update(uploadDoneMsg{uploaded: 1})
+			m := updated.(Model)
+			if cmd == nil || !m.Loading || m.LoadingPane != blobsPane {
+				t.Fatalf("want blob list reload, got cmd=%v loading=%v pane=%d", cmd != nil, m.Loading, m.LoadingPane)
+			}
+		})
+	}
+
+	t.Run("nothing uploaded", func(t *testing.T) {
+		updated, cmd := newModel(blobsPane).Update(uploadDoneMsg{skipped: 1})
+		if m := updated.(Model); cmd != nil || m.LoadingPane == blobsPane {
+			t.Fatalf("want no reload when nothing was uploaded, got cmd=%v pane=%d", cmd != nil, m.LoadingPane)
+		}
+	})
+}
