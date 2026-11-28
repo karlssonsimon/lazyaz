@@ -8,7 +8,7 @@ through the Azure Portal to peek at a dead-letter queue or download a blob.
 
 📖 **Full documentation: [karlssonsimon.github.io/lazyaz](https://karlssonsimon.github.io/lazyaz)**
 
-<!-- TODO: add a GIF/screenshot here -->
+![lazyaz demo](docs/public/demo.gif)
 
 ## Install
 
